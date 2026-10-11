@@ -11,6 +11,8 @@ extends Panel
 ## of the same section.
 
 const SIZE := 58.0
+## How a quick slot's item is drawn once the last of it is used.
+const GHOST := Color(0.42, 0.42, 0.42, 0.55)
 
 var inventory: Inventory
 var index := 0
@@ -148,9 +150,14 @@ func refresh() -> void:
 	if inventory == null:
 		return
 	var id := inventory.id_at(index)
-	_icon.item = id
 	var n := inventory.count_at(index)
 	_count.text = str(n) if n > 1 else ""
+	# A quick slot run dry keeps its item: greyed out, with a 0.
+	var kept := inventory.assigned_at(index) if id == &"" else &""
+	_icon.item = id if kept == &"" else kept
+	_icon.tint = GHOST if kept != &"" else Color.WHITE
+	if kept != &"":
+		_count.text = "0"
 	# The inventory screen's description panel says what this is now.
 	tooltip_text = ""
 	_restyle()
@@ -219,6 +226,10 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	if click.button_index == MOUSE_BUTTON_LEFT and click.shift_pressed:
 		inventory.quick_move(index)
+		accept_event()
+	elif click.button_index == MOUSE_BUTTON_RIGHT and inventory.is_empty(index):
+		# An emptied quick slot: forget what it was kept for.
+		inventory.unassign(index)
 		accept_event()
 	elif click.button_index == MOUSE_BUTTON_RIGHT:
 		# Half the stack into the first empty slot of this section.

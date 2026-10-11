@@ -102,6 +102,12 @@ const SHARDS: Array[StringName] = [&"shard_crimson", &"shard_azure", &"shard_ver
 
 
 var slots: Array[Dictionary] = []
+## Quick-wheel slots keep the item they were given (slot index -> id) after
+## the last one is used: the slot shows it greyed out with a 0, and the next of
+## that item picked up goes back there. Set whenever an item lands in a quick
+## slot; cleared only by moving it out by hand, putting another item in, or
+## `unassign` (2026-10-11).
+var assigned := {}
 
 
 func _init() -> void:
@@ -112,6 +118,39 @@ func clear() -> void:
 	slots.clear()
 	for i in SIZE:
 		slots.append({})
+	assigned.clear()
+	changed.emit()
+
+
+## The item quick slot `i` belongs to, held or run out; &"" if none.
+func assigned_at(i: int) -> StringName:
+	return StringName(assigned.get(i, &""))
+
+
+## Forgets what quick slot `i` belongs to (only when it is empty).
+func unassign(i: int) -> void:
+	if is_empty(i) and assigned.has(i):
+		assigned.erase(i)
+		changed.emit()
+
+
+## May slot `i` take a new stack of `id`? Empty, of the right kind, and not a
+## quick slot kept for something else.
+func _free_for(i: int, id: StringName) -> bool:
+	if not is_empty(i) or not slot_accepts(i, id):
+		return false
+	return not assigned.has(i) or StringName(assigned[i]) == id
+
+
+## Every quick slot holding something now belongs to it. Run after any change.
+func _mark() -> void:
+	for i in range(QUICK_FIRST, HOTBAR):
+		if not is_empty(i):
+			assigned[i] = id_at(i)
+
+
+func _changed() -> void:
+	_mark()
 	changed.emit()
 
 
@@ -157,13 +196,21 @@ static func _home_order(id: StringName) -> Array:
 ## so weapons land on the weapon wheel, potions on the quick wheel, the rest in
 ## the bag.
 func migrate(old: Array) -> void:
+	assigned.clear()
 	slots.clear()
 	for i in SIZE:
 		slots.append({})
 	for s in old:
 		if s is Dictionary and not (s as Dictionary).is_empty():
 			add(StringName(s["id"]), int(s["count"]))
-	changed.emit()
+	_changed()
+
+
+## A saved game's slots and quick-slot assignments, put back as they were.
+func restore(saved_slots: Array, saved_assigned: Dictionary) -> void:
+	slots.assign(saved_slots)
+	assigned = saved_assigned.duplicate()
+	_changed()
 
 
 static func item_description(id: StringName) -> String:
@@ -216,7 +263,7 @@ func room_for(id: StringName) -> int:
 	var cap := stack_size(id)
 	var room := 0
 	for i in SIZE:
-		if is_empty(i) and slot_accepts(i, id):
+		if _free_for(i, id):
 			room += cap
 		elif id_at(i) == id:
 			room += maxi(cap - count_at(i), 0)
@@ -239,15 +286,21 @@ func add(id: StringName, amount: int) -> int:
 			var put := mini(room, left)
 			slots[i]["count"] = count_at(i) + put
 			left -= put
-	for i in _home_order(id):
+	# Its own quick slot first (kept for it while empty), then the rest.
+	var order := _home_order(id)
+	for i in range(HOTBAR - 1, QUICK_FIRST - 1, -1):
+		if assigned_at(i) == id:
+			order.erase(i)
+			order.push_front(i)
+	for i in order:
 		if left <= 0:
 			break
-		if is_empty(i):
+		if _free_for(i, id):
 			var put := mini(cap, left)
 			slots[i] = {"id": id, "count": put}
 			left -= put
 	if left != amount:
-		changed.emit()
+		_changed()
 	return amount - left
 
 
@@ -298,12 +351,16 @@ func move(from: int, to: int) -> void:
 			slots[from]["count"] = count_at(from) - put
 			if count_at(from) <= 0:
 				slots[from] = {}
-			changed.emit()
+				assigned.erase(from)
+			_changed()
 			return
 	var held := slots[from]
 	slots[from] = slots[to]
 	slots[to] = held
-	changed.emit()
+	# Taken out of a quick slot by hand into an empty one: that slot is free.
+	if slots[from].is_empty():
+		assigned.erase(from)
+	_changed()
 
 
 ## Moves half of a stack (rounded up) into an empty slot, or merges it into a
@@ -326,7 +383,7 @@ func split(from: int, to: int) -> void:
 		return
 	slots[to]["count"] = count_at(to) + put
 	slots[from]["count"] = count_at(from) - put
-	changed.emit()
+	_changed()
 
 
 ## Shift-click: sends a stack from a wheel into the bag, or from the bag onto its
@@ -356,11 +413,20 @@ func quick_move(i: int) -> void:
 			slots[j]["count"] = count_at(j) + put
 			slots[i]["count"] = count_at(i) - put
 	if count_at(i) > 0:
-		for j in range(lo, hi):
-			if is_empty(j):
+		var targets := range(lo, hi)
+		# Onto the quick wheel: the slot kept for it first.
+		for j in range(hi - 1, lo - 1, -1):
+			if assigned_at(j) == id:
+				targets.erase(j)
+				targets.push_front(j)
+		for j in targets:
+			if _free_for(j, id):
 				slots[j] = slots[i]
 				slots[i] = {}
 				break
 	if count_at(i) <= 0:
 		slots[i] = {}
-	changed.emit()
+		# Sent off the quick wheel by hand: the slot is free again.
+		if i >= QUICK_FIRST and i < HOTBAR:
+			assigned.erase(i)
+	_changed()

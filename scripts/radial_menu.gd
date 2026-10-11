@@ -159,6 +159,8 @@ func _draw() -> void:
 	for i in DIRS.size():
 		var slot := _first + i
 		var id: StringName = inv.id_at(slot)
+		# A quick slot run dry: its item greyed out with a 0.
+		var kept: StringName = inv.assigned_at(slot) if id == &"" else &""
 		var chosen := i == _choice
 		var side := CELL * (1.12 if chosen else 1.0)
 		var at: Vector2 = c + (DIRS[i] as Vector2) * RADIUS
@@ -177,6 +179,10 @@ func _draw() -> void:
 			var n := inv.count_at(slot)
 			if n > 1:
 				draw_string(_font, rect.end - Vector2(28, 8), str(n), HORIZONTAL_ALIGNMENT_RIGHT, 22, 18, INK)
+		elif kept != &"":
+			var pad := side * 0.16
+			ItemIcon.paint(self, kept, rect.grow(-pad), ItemSlot.GHOST)
+			draw_string(_font, rect.end - Vector2(28, 8), "0", HORIZONTAL_ALIGNMENT_RIGHT, 22, 18, Color(INK, 0.55))
 		else:
 			draw_string(_font, Vector2(rect.position.x, at.y + 6), "empty", HORIZONTAL_ALIGNMENT_CENTER,
 				side, 14, Color(INK, 0.35))
@@ -191,4 +197,7 @@ func _draw() -> void:
 	if _choice >= 0:
 		var chosen_id: StringName = inv.id_at(_first + _choice)
 		var label := Inventory.item_name(chosen_id) if chosen_id != &"" else "Empty"
+		var kept_id: StringName = inv.assigned_at(_first + _choice)
+		if chosen_id == &"" and kept_id != &"":
+			label = "%s (none left)" % Inventory.item_name(kept_id)
 		draw_string(_font, c + Vector2(-110, 30), label, HORIZONTAL_ALIGNMENT_CENTER, 220, 18, GOLD)

@@ -11,6 +11,11 @@ var item: StringName = &"":
 	set(value):
 		item = value
 		queue_redraw()
+## Multiplies every colour (a quick slot run dry draws its item greyed out).
+var tint := Color.WHITE:
+	set(value):
+		tint = value
+		queue_redraw()
 
 
 func _init() -> void:
@@ -21,7 +26,7 @@ func _draw() -> void:
 	var s := minf(size.x, size.y)
 	if s <= 0.0 or item == &"":
 		return
-	paint(self, item, Rect2((size - Vector2(s, s)) * 0.5, Vector2(s, s)))
+	paint(self, item, Rect2((size - Vector2(s, s)) * 0.5, Vector2(s, s)), tint)
 
 
 ## Draws `id` onto `c`, filling the square `rect`, every colour multiplied by

@@ -1362,6 +1362,7 @@ func save_state() -> Dictionary:
 		"pitch": _look_pitch,
 		"health": health,
 		"slots": inventory.slots.duplicate(true),
+		"quick_assigned": inventory.assigned.duplicate(),
 		"selected": selected_slot,
 	}
 
@@ -1376,8 +1377,7 @@ func restore_state(data: Dictionary) -> void:
 	var slots: Array = data.get("slots", [])
 	var same_layout := slots.size() == Inventory.SIZE
 	if same_layout:
-		inventory.slots.assign(slots)
-		inventory.changed.emit()
+		inventory.restore(slots, data.get("quick_assigned", {}))
 		currency_changed.emit(currency, 0)
 	elif not slots.is_empty():
 		# A save from before the wheels (the 9-slot hotbar): everything carried

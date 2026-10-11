@@ -275,9 +275,7 @@ func _prison_bays() -> Array:
 	var c: Vector2i = room["centre"]
 	var h: int = room["half"]
 	var cs: float = built.cell_size
-	var entrances := {}
-	for way in room["entrances"]:
-		entrances[way["cell"]] = true
+	var entrances := _open_ring()
 	var out := []
 	for dz in range(-h, h + 1):
 		for dx in range(-h, h + 1):
@@ -294,6 +292,43 @@ func _prison_bays() -> Array:
 			out.append({"pos": p, "xf": Transform3D(basis, Vector3(boundary.x, 0.0, boundary.z)),
 				"entrance": entrances.has(p)})
 	return out
+
+
+## The ring cells that must stay passages, not cells: every doorway's ring cell,
+## and -- when a doorway comes in at a CORNER, which has no bay of its own onto
+## the court -- the bay beside that corner as well, so the way runs corner ->
+## bay -> court. Without it the walls between cells sealed every corner
+## entrance off (measured: 3 of 3 corner entrances led nowhere). Also fills
+## `_open_pairs`, the ring-to-ring arches that must not be walled.
+var _open_pairs := {}
+
+
+func _open_ring() -> Dictionary:
+	var c: Vector2i = room["centre"]
+	var h: int = room["half"]
+	var open := {}
+	_open_pairs.clear()
+	for way in room["entrances"]:
+		var cell: Vector2i = way["cell"]
+		open[cell] = true
+		var d := cell - c
+		if absi(d.x) != h or absi(d.y) != h:
+			continue
+		# A corner: of its two ring neighbours, the one along the side the
+		# corridor did NOT come in through (that side's bay faces the court the
+		# same way, so either works; this keeps the choice fixed for a seed).
+		var step: Vector2i = load("res://scripts/module_maze.gd").DIRS[way["side"]]
+		var along := Vector2i(-signi(d.x), 0) if step.x == 0 else Vector2i(0, -signi(d.y))
+		var bay := cell + along
+		if not built.cells.has(bay):
+			bay = cell + (Vector2i(0, -signi(d.y)) if along.y == 0 else Vector2i(-signi(d.x), 0))
+		open[bay] = true
+		_open_pairs[_pair_key(cell, bay)] = true
+	return open
+
+
+static func _pair_key(a: Vector2i, b: Vector2i) -> Array:
+	return [mini(a.x, b.x), mini(a.y, b.y), maxi(a.x, b.x), maxi(a.y, b.y)]
 
 
 ## Straw, chains on the back wall, a bucket, and a prisoner, bones or (the
@@ -379,6 +414,9 @@ func _build_partitions(kit) -> void:
 				var q := p + step
 				var d := q - c
 				if maxi(absi(d.x), absi(d.y)) != h or not built.cells.has(p) or not built.cells.has(q):
+					continue
+				# A corner doorway's way through to its open bay.
+				if _open_pairs.has(_pair_key(p, q)):
 					continue
 				var mid := to_local(((built.to_world(p) as Vector3) + (built.to_world(q) as Vector3)) * 0.5)
 				var n := (global_basis.inverse() * Vector3(float(step.x), 0.0, float(step.y))).normalized()

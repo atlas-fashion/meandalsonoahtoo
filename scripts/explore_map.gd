@@ -205,6 +205,9 @@ func _input(event: InputEvent) -> void:
 			_close_editor()
 		set_full_map_open(not _full_open)
 		get_viewport().set_input_as_handled()
+		return
+	if _full_open and not editor_open():
+		_map_input(event)
 
 
 ## Public so a harness (or another system) can drive it without faking input.
@@ -219,18 +222,17 @@ func set_full_map_open(open: bool) -> void:
 	# map on screen at a time.
 	if _minimap_root != null:
 		_minimap_root.visible = not open
-	# A cursor over it: the mouse is freed and the player stops taking input
-	# while it is open (not a pause); on a pad, pad.gd's cursor.
+	# The player stops taking input while it is open (not a pause). The mouse
+	# stays captured: it moves the MAP under a cursor fixed in the middle
+	# (2026-10-11); only the mark editor frees it.
 	if _player != null and is_instance_valid(_player):
 		if open and not _took_ui:
 			_player.set("ui_open", true)
 			_took_ui = true
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		elif not open and _took_ui:
 			_player.set("ui_open", false)
 			_took_ui = false
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	Pad.want_cursor(self, open)
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if not open:
 		_close_editor()
 		_pressed = false
@@ -327,18 +329,25 @@ func _build_minimap(root: Control) -> void:
 	frame.add_theme_stylebox_override("panel", style)
 	box.add_child(frame)
 
+	# The crop turns with the player (2026-10-11): the picture is drawn
+	# MINI_SPIN_PAD larger than the frame and rotated about its middle, inside a
+	# clip 2 px in from the frame's border, so no corner ever shows past it.
+	var clip := Control.new()
+	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clip.clip_contents = true
+	clip.position = Vector2(2, 2)
+	clip.size = Vector2(MINIMAP_SIZE - 4.0, MINIMAP_SIZE - 4.0)
+	box.add_child(clip)
 	var tex := TextureRect.new()
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tex.set_anchors_preset(Control.PRESET_FULL_RECT)
 	tex.stretch_mode = TextureRect.STRETCH_SCALE
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	# A 2 px inset keeps the crop clear of the frame's own border.
-	tex.offset_left = 2
-	tex.offset_top = 2
-	tex.offset_right = -2
-	tex.offset_bottom = -2
-	box.add_child(tex)
+	var inner := MINIMAP_SIZE - 4.0
+	tex.size = Vector2(inner, inner) * MINI_SPIN_PAD
+	tex.position = (Vector2(inner, inner) - tex.size) * 0.5
+	tex.pivot_offset = tex.size * 0.5
+	clip.add_child(tex)
 	_mini_texture_rect = tex
 
 	# The player's marks, over the minimap's crop (clipped to its frame).
@@ -357,19 +366,30 @@ func _build_minimap(root: Control) -> void:
 
 
 var _mini_marks: Control = null
+## The minimap's crop is this much bigger than its frame, so it can turn.
+const MINI_SPIN_PAD := 1.45
+## How far the minimap is turned (the player's facing; heading up).
+var _mini_spin := 0.0
 
 
 func _draw_mini_marks() -> void:
-	if _atlas == null or _pins.is_empty():
+	if _atlas == null or _built == null or not is_instance_valid(_player):
 		return
 	var region := _atlas.region
 	if region.size.x <= 0.0:
 		return
-	var k := (MINIMAP_SIZE - 4.0) / region.size.x
+	var k := (MINIMAP_SIZE - 4.0) * MINI_SPIN_PAD / region.size.x
+	var c := Vector2(MINIMAP_SIZE, MINIMAP_SIZE) * 0.5
+	var me := _continuous_px(_player.global_position)
 	for pin: Dictionary in _pins:
-		var at := Vector2(2, 2) + (_pin_px(pin) - region.position) * k
+		var at := c + ((_pin_px(pin) - me) * k).rotated(-_mini_spin)
 		if Rect2(Vector2.ZERO, Vector2(MINIMAP_SIZE, MINIMAP_SIZE)).grow(-4.0).has_point(at):
 			_draw_mark(_mini_marks, at, pin["color"], int(pin.get("shape", 0)), 0.7)
+	# North, on the rim: where the map's top has turned to.
+	var north := c + Vector2(0.0, -(MINIMAP_SIZE * 0.5 - 13.0)).rotated(-_mini_spin)
+	var font := ThemeDB.fallback_font
+	_mini_marks.draw_circle(north, 9.0, Color(0.03, 0.025, 0.02, 0.85))
+	_mini_marks.draw_string(font, north + Vector2(-5.0, 5.0), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, COL_WALL)
 
 
 ## --- Currency ---------------------------------------------------------------
@@ -541,10 +561,22 @@ func _build_full_map(root: Control) -> void:
 	_full_marker.marker_size = 8.0
 	panel.add_child(_full_marker)
 
+	# The frame again, over the picture: the panel's own border is drawn under
+	# its children, and the map image covered most of it.
+	var rim := Panel.new()
+	rim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var rstyle := StyleBoxFlat.new()
+	rstyle.draw_center = false
+	rstyle.border_color = COL_WALL
+	rstyle.set_border_width_all(3)
+	rim.add_theme_stylebox_override("panel", rstyle)
+	panel.add_child(rim)
+
 	var hints := Label.new()
 	hints.name = "Hints"
 	hints.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hints.text = "Scroll / right stick: zoom      Drag: pan      Click / A: mark the map      Click a mark: edit      ` / B: close"
+	hints.text = "Mouse / left stick: move the map      Scroll / right stick: zoom      Click / A: mark here (or open the mark)      ` / B: close"
 	hints.add_theme_font_size_override("font_size", 14)
 	hints.add_theme_color_override("font_color", Color(0.82, 0.8, 0.76))
 	hints.add_theme_color_override("font_outline_color", Color(0, 0, 0))
@@ -565,7 +597,9 @@ func _position_full_panel() -> void:
 		return
 	var view: Vector2 = vp.get_visible_rect().size
 	_full_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_full_panel.position = Vector2(48.0, 40.0)
+	# Equal margins, so the panel's middle -- the map's cursor -- is the
+	# screen's middle, where the crosshair is.
+	_full_panel.position = Vector2(48.0, 48.0)
 	_full_panel.size = view - Vector2(96.0, 96.0)
 	_full_side = minf(_full_panel.size.x, _full_panel.size.y)
 	_layout_full_texture()
@@ -606,6 +640,8 @@ func _layout_full_texture() -> void:
 		else CanvasItem.TEXTURE_FILTER_LINEAR
 	_full_texture_rect.size = Vector2(_img_w, _img_h) * scale
 	_full_texture_rect.position = _px_to_panel(Vector2.ZERO)
+	# The mark under the cursor is the one a click would open.
+	_hover_pin = _pin_at(_full_panel.size * 0.5)
 	if _pin_layer != null:
 		_pin_layer.queue_redraw()
 
@@ -616,6 +652,45 @@ func _zoom_at(factor: float, at: Vector2) -> void:
 	_zoom = clampf(_zoom * factor, ZOOM_MIN, ZOOM_MAX)
 	_centre_px = keep - (at - _full_panel.size * 0.5) / _full_display_scale()
 	_layout_full_texture()
+
+
+## The open map (2026-10-11): the cursor is fixed in the middle of the panel --
+## the screen's centre, where the crosshair always is -- and the MAP moves under
+## it. Mouse movement drags the map along (the mouse is captured), the wheel
+## zooms about the cursor, a left click marks the spot under it (or opens the
+## mark there). The pad does the same in `_pad_map` (left stick / d-pad pan,
+## right stick zoom) and A marks.
+func _map_input(event: InputEvent) -> void:
+	var motion := event as InputEventMouseMotion
+	if motion != null:
+		_centre_px += motion.relative * MOUSE_PAN / _full_display_scale()
+		_layout_full_texture()
+		get_viewport().set_input_as_handled()
+		return
+	var button := event as InputEventMouseButton
+	if button != null:
+		if button.pressed and (button.button_index == MOUSE_BUTTON_WHEEL_UP or button.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			_zoom_at(ZOOM_STEP if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / ZOOM_STEP,
+				_full_panel.size * 0.5)
+		elif button.pressed and button.button_index == MOUSE_BUTTON_LEFT:
+			_click_map(_full_panel.size * 0.5)
+		get_viewport().set_input_as_handled()
+		return
+	var pad := event as InputEventJoypadButton
+	if pad != null and pad.pressed:
+		if pad.button_index == JOY_BUTTON_A:
+			_click_map(_full_panel.size * 0.5)
+			get_viewport().set_input_as_handled()
+		elif pad.button_index in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT]:
+			# Panned in _pad_map; kept from the quick items.
+			get_viewport().set_input_as_handled()
+
+
+## Mouse travel to map travel, in screen pixels.
+const MOUSE_PAN := 1.0
+const CURSOR_RADIUS := 9.0
+## The pad: a full push pans this many screen pixels a second.
+const PAD_PAN := 720.0
 
 
 func _on_map_input(event: InputEvent) -> void:
@@ -702,6 +777,21 @@ func _draw_full_marks() -> void:
 			_pin_layer.draw_rect(box, Color(pin["color"], 0.9), false, 1.5)
 			_pin_layer.draw_string(font, box.position + Vector2(7, 17), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 				Color(0.95, 0.92, 0.85))
+	# The cursor: the game's crosshair (a ring and a dot, hud.gd), fixed in the
+	# middle; the map moves under it. Corner brackets close in over a mark.
+	var c := _pin_layer.size * 0.5
+	var ring := CURSOR_RADIUS
+	_pin_layer.draw_arc(c, ring, 0.0, TAU, 40, Color(0, 0, 0, 0.7), 4.0, true)
+	_pin_layer.draw_arc(c, ring, 0.0, TAU, 40, Color(1, 1, 1, 0.95), 1.8, true)
+	_pin_layer.draw_circle(c, 2.6, Color(0, 0, 0, 0.7))
+	_pin_layer.draw_circle(c, 1.8, Color(1, 1, 1, 0.95))
+	if _hover_pin >= 0:
+		var r := ring + 7.0
+		for q: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+			var corner := c + q * r
+			for leg: Vector2 in [Vector2(-q.x, 0), Vector2(0, -q.y)]:
+				_pin_layer.draw_line(corner, corner + leg * 6.0, Color(0, 0, 0, 0.7), 4.0, true)
+				_pin_layer.draw_line(corner, corner + leg * 6.0, Color(1, 1, 1, 0.95), 1.8, true)
 
 
 ## One mark: a pin (head and point), a cross, or a ring, outlined in black.
@@ -832,6 +922,8 @@ func _open_editor(index: int, world: Vector2) -> void:
 		_editor_title.text = "New mark"
 	_editor_delete.visible = index >= 0
 	_editor.visible = true
+	# The editor is worked with the pointer (or, on a pad, by focus).
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_restyle_editor()
 	# The note box first: typing (or, on a pad, the on-screen keyboard) at once.
 	_editor_note.grab_focus.call_deferred()
@@ -871,10 +963,13 @@ func _delete_pin() -> void:
 func _close_editor() -> void:
 	if _editor == null:
 		return
+	var was_open := _editor.visible
 	_editor.visible = false
 	_editing = -1
 	_editor_note.release_focus()
 	Pad.hide_keyboard()
+	if was_open and _full_open:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if _pin_layer != null:
 		_pin_layer.queue_redraw()
 
@@ -916,25 +1011,23 @@ func _pad_map(delta: float) -> void:
 		return
 	var zoom := Input.get_axis(&"look_down", &"look_up")
 	if absf(zoom) > 0.15:
-		var at := _full_panel.size * 0.5
-		if Pad.cursor_active():
-			at = Pad.cursor_pos - _full_panel.global_position
-		_zoom_at(exp(zoom * PAD_ZOOM_RATE * delta), at)
-	if Pad.cursor_active():
-		var local: Vector2 = Pad.cursor_pos - _full_panel.global_position
-		var push := Vector2.ZERO
-		var edge := 26.0
-		if local.x < edge:
-			push.x = -1.0
-		elif local.x > _full_panel.size.x - edge:
-			push.x = 1.0
-		if local.y < edge:
-			push.y = -1.0
-		elif local.y > _full_panel.size.y - edge:
-			push.y = 1.0
-		if push != Vector2.ZERO:
-			_centre_px += push * 520.0 * delta / _full_display_scale()
-			_layout_full_texture()
+		_zoom_at(exp(zoom * PAD_ZOOM_RATE * delta), _full_panel.size * 0.5)
+	# Left stick (and the d-pad, and W/A/S/D) moves the map under the cursor.
+	var pan := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
+	var dpad := Vector2(float(Input.is_joy_button_pressed(_pad_device(), JOY_BUTTON_DPAD_RIGHT))
+		- float(Input.is_joy_button_pressed(_pad_device(), JOY_BUTTON_DPAD_LEFT)),
+		float(Input.is_joy_button_pressed(_pad_device(), JOY_BUTTON_DPAD_DOWN))
+		- float(Input.is_joy_button_pressed(_pad_device(), JOY_BUTTON_DPAD_UP)))
+	if dpad != Vector2.ZERO:
+		pan = dpad.normalized()
+	if pan.length() > 0.12:
+		_centre_px += pan * PAD_PAN * delta / _full_display_scale()
+		_layout_full_texture()
+
+
+func _pad_device() -> int:
+	var pads := Input.get_connected_joypads()
+	return pads[0] if not pads.is_empty() else 0
 
 
 ## --- Reveal ------------------------------------------------------------------
@@ -1074,11 +1167,14 @@ func _update_marker_transforms() -> void:
 	if _built == null or not is_instance_valid(_player):
 		return
 	var angle := _facing_angle()
-	_mini_marker.rotation = angle
+	# Heading up: the arrow always points up and the map turns under it.
+	_mini_spin = angle
+	_mini_marker.rotation = 0.0
+	_mini_texture_rect.rotation = -angle
 
 	if _atlas != null:
 		var px := _continuous_px(_player.global_position)
-		var half: float = MINIMAP_SPAN_M * 0.5 / _built.cell_size * float(PPC)
+		var half: float = MINIMAP_SPAN_M * 0.5 / _built.cell_size * float(PPC) * MINI_SPIN_PAD
 		_atlas.region = Rect2(px.x - half, px.y - half, half * 2.0, half * 2.0)
 
 	if _mini_marks != null:

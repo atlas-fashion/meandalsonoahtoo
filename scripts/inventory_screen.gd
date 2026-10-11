@@ -21,10 +21,13 @@ extends CanvasLayer
 ##   shift-click     send a stack between the bag and its wheel
 ##   right-click     split a stack in half
 ##
-## On a controller (2026-10-10): a cursor (pad.gd `want_cursor`) -- the left
-## stick / d-pad moves it, A is the mouse button (click, or hold to drag), X
-## sends the stack under it between the bag and its wheel, LB / RB change
-## category, B / Y close.
+## On a controller (2026-10-11): no cursor. The d-pad and left stick step the
+## highlight from slot to slot by where they sit on screen (held, it repeats),
+## A lifts the highlighted stack and A again drops it on the slot then
+## highlighted (move / merge / swap, as a drag), A on the same slot puts it
+## back; X sends the stack between the bag and its wheel, LB / RB change
+## category, B puts a lifted stack back or closes, Y closes. The mouse keeps
+## its own pointer and hover.
 ##
 ## The screen is laid out in the 1280 x 720 canvas the project stretches, so
 ## it fits at any resolution. Created by hud.gd once the player exists.
@@ -114,13 +117,16 @@ func set_open(open: bool) -> void:
 		return
 	visible = open
 	_set_hovered(-1)
+	_drop_lift()
+	_left_stick = Vector2.ZERO
+	_stick_dir = Vector2.ZERO
 	player.ui_open = open
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
-	# On a pad, a cursor to work it with (pad.gd): the stick moves it, A clicks
-	# and drags.
-	Pad.want_cursor(self, open)
 	if open:
 		_refresh()
+		# Opened from the pad: something is highlighted to start from.
+		if Pad.using_pad:
+			_set_hovered(int(player.selected_slot))
 
 
 func _process(_delta: float) -> void:
@@ -131,11 +137,12 @@ func _process(_delta: float) -> void:
 	if get_tree().paused or player == null or player.in_cutscene or player.get("_dead"):
 		visible = false
 		_set_hovered(-1)
-		Pad.want_cursor(self, false)
+		_drop_lift()
 		if player != null:
 			player.ui_open = false
 		return
 	_update_bars()
+	_pad_stick(_delta)
 
 
 func _input(event: InputEvent) -> void:
@@ -149,7 +156,10 @@ func _input(event: InputEvent) -> void:
 	if not visible:
 		return
 	if event.is_action_pressed("ui_cancel"):
-		set_open(false)
+		if _lifted >= 0:
+			_drop_lift()
+		else:
+			set_open(false)
 		get_viewport().set_input_as_handled()
 		return
 	# Q / E step through the categories. Taken here, before anything in the
@@ -173,6 +183,26 @@ func _input(event: InputEvent) -> void:
 					player.inventory.quick_move(_hovered)
 				get_viewport().set_input_as_handled()
 				return
+			JOY_BUTTON_A:
+				_pad_select()
+				get_viewport().set_input_as_handled()
+				return
+			JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT:
+				var step := {JOY_BUTTON_DPAD_UP: Vector2.UP, JOY_BUTTON_DPAD_DOWN: Vector2.DOWN,
+					JOY_BUTTON_DPAD_LEFT: Vector2.LEFT, JOY_BUTTON_DPAD_RIGHT: Vector2.RIGHT}
+				_pad_step(step[pad.button_index])
+				get_viewport().set_input_as_handled()
+				return
+	# The stick is read in _process (it repeats while held); its motion goes to
+	# nothing else while the screen is up.
+	var stick := event as InputEventJoypadMotion
+	if stick != null:
+		if stick.axis == JOY_AXIS_LEFT_X:
+			_left_stick.x = stick.axis_value
+		elif stick.axis == JOY_AXIS_LEFT_Y:
+			_left_stick.y = stick.axis_value
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("interact"):
 		get_viewport().set_input_as_handled()
 		return
@@ -196,6 +226,92 @@ func _refresh() -> void:
 	_coins_value.text = _thousands(player.currency)
 	_potions_value.text = str(player.inventory.count(&"health_potion"))
 	_describe()
+
+
+# --- The pad -----------------------------------------------------------------------
+
+## The slot whose stack the pad has lifted (A), or -1.
+var _lifted := -1
+var _stick_wait := 0.0
+var _stick_dir := Vector2.ZERO
+var _left_stick := Vector2.ZERO
+const STICK_FIRST := 0.32
+const STICK_REPEAT := 0.13
+
+
+## Moves the highlight to the nearest slot whose centre lies in `dir` from the
+## highlighted slot, judged on screen: straight on counts far more than off to
+## the side, so a row or column is followed before a diagonal.
+func _pad_step(dir: Vector2) -> void:
+	if _hovered < 0:
+		_set_hovered(int(player.selected_slot))
+		return
+	var from := _slot_centre(_hovered)
+	var best := -1
+	var best_score := INF
+	for i in _slots.size():
+		if i == _hovered or not _slots[i].is_visible_in_tree():
+			continue
+		var d := _slot_centre(i) - from
+		var ahead := d.dot(dir)
+		if ahead < 4.0:
+			continue
+		var side := absf(d.dot(Vector2(-dir.y, dir.x)))
+		var score := ahead + side * 2.5
+		if score < best_score:
+			best_score = score
+			best = i
+	if best >= 0:
+		_set_hovered(best)
+
+
+func _slot_centre(i: int) -> Vector2:
+	var r := _slots[i].get_global_rect()
+	return r.position + r.size * 0.5
+
+
+## The left stick: one step on the push, then repeating while it is held.
+func _pad_stick(delta: float) -> void:
+	# The stick itself (from its motion events), not the move actions: those
+	# carry W/A/S/D too.
+	var v := _left_stick
+	var dir := Vector2.ZERO
+	if v.length() > 0.55:
+		dir = Vector2(signf(v.x), 0.0) if absf(v.x) > absf(v.y) else Vector2(0.0, signf(v.y))
+	if dir == Vector2.ZERO:
+		_stick_dir = Vector2.ZERO
+		return
+	if dir != _stick_dir:
+		_stick_dir = dir
+		_stick_wait = STICK_FIRST
+		_pad_step(dir)
+		return
+	_stick_wait -= delta
+	if _stick_wait <= 0.0:
+		_stick_wait = STICK_REPEAT
+		_pad_step(dir)
+
+
+## A: lift the highlighted stack, or drop the lifted one on the highlighted slot.
+func _pad_select() -> void:
+	if _hovered < 0:
+		_set_hovered(int(player.selected_slot))
+		return
+	if _lifted < 0:
+		if not player.inventory.is_empty(_hovered):
+			_lifted = _hovered
+			_slots[_lifted].modulate = Color(1.0, 0.86, 0.55, 0.55)
+		return
+	var from := _lifted
+	_drop_lift()
+	if from != _hovered:
+		player.inventory.move(from, _hovered)
+
+
+func _drop_lift() -> void:
+	if _lifted >= 0 and _lifted < _slots.size():
+		_slots[_lifted].modulate = Color.WHITE
+	_lifted = -1
 
 
 func _set_hovered(i: int) -> void:
