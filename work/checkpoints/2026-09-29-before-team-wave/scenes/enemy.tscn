@@ -1,0 +1,45 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://models/ossuary_skeleton_rigged.glb" id="2_skeleton"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
+radius = 0.35
+height = 1.8
+
+[node name="Enemy" type="CharacterBody3D"]
+collision_layer = 5
+collision_mask = 513
+script = ExtResource("1_enemy")
+move_speed = 4.5
+vision_cone_degrees = 120.0
+sight_needs_line_of_sight = true
+sight_memory = 4.5
+wanders = true
+wander_speed = 1.1
+attack_cooldown = 0.0
+can_normal = true
+normal_range = 1.5
+normal_cooldown = 3.0
+slam_cooldown = 10.0
+tint_albedo = false
+walk_anim_speed = 1.45
+run_anim_speed = 3.56
+run_anim_threshold = 2.4
+
+[node name="Visual" type="Node3D" parent="."]
+
+[node name="Model" parent="Visual" instance=ExtResource("2_skeleton")]
+transform = Transform3D(-0.94, 0, 0, 0, 0.94, 0, 0, 0, -0.94, 0, 0, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_1")
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
+radius = 0.4
+height = 1.8
+path_desired_distance = 0.6
+target_desired_distance = 1.0
+avoidance_enabled = true
+max_speed = 17.0

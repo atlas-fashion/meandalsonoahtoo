@@ -1,0 +1,53 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/death_burst.gd" id="1_burst"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_core"]
+radius = 0.5
+height = 1.0
+radial_segments = 14
+rings = 7
+
+[sub_resource type="StandardMaterial3D" id="Mat_core"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(1, 0.65, 0.301961, 0.901961)
+emission_enabled = true
+emission = Color(1, 0.65, 0.301961, 1)
+emission_energy_multiplier = 3.0
+disable_receive_shadows = true
+
+[sub_resource type="TorusMesh" id="TorusMesh_ring"]
+inner_radius = 0.42
+outer_radius = 0.5
+rings = 28
+ring_segments = 5
+
+[sub_resource type="StandardMaterial3D" id="Mat_ring"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(1, 0.792157, 0.462745, 0.850980)
+emission_enabled = true
+emission = Color(1, 0.792157, 0.462745, 1)
+emission_energy_multiplier = 2.6
+disable_receive_shadows = true
+
+[node name="DeathBurst" type="Node3D"]
+script = ExtResource("1_burst")
+
+[node name="Core" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+mesh = SubResource("SphereMesh_core")
+surface_material_override/0 = SubResource("Mat_core")
+
+[node name="Ring" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+mesh = SubResource("TorusMesh_ring")
+surface_material_override/0 = SubResource("Mat_ring")
+
+[node name="Flash" type="OmniLight3D" parent="."]
+light_energy = 9.0
+shadow_enabled = false
+omni_range = 8.0

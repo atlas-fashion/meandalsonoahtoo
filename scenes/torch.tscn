@@ -1,0 +1,194 @@
+[gd_scene load_steps=20 format=3]
+
+[ext_resource type="Script" path="res://scripts/torch.gd" id="1_torch"]
+[ext_resource type="Shader" path="res://shaders/torch_flame.gdshader" id="2_flame"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.07, 0.064, 0.06, 1)
+metallic = 0.6
+roughness = 0.72
+
+[sub_resource type="StandardMaterial3D" id="Mat_wood"]
+albedo_color = Color(0.2, 0.115, 0.055, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_pitch"]
+albedo_color = Color(0.05, 0.036, 0.026, 1)
+roughness = 1.0
+emission_enabled = true
+emission = Color(1, 0.3, 0.05, 1)
+emission_energy_multiplier = 0.12
+
+[sub_resource type="BoxMesh" id="Mesh_plate"]
+size = Vector3(0.14, 0.3, 0.03)
+
+[sub_resource type="BoxMesh" id="Mesh_arm"]
+size = Vector3(0.035, 0.035, 0.3)
+
+[sub_resource type="TorusMesh" id="Mesh_ring"]
+inner_radius = 0.042
+outer_radius = 0.062
+rings = 12
+ring_segments = 6
+
+[sub_resource type="CylinderMesh" id="Mesh_handle"]
+top_radius = 0.036
+bottom_radius = 0.026
+height = 0.55
+radial_segments = 10
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_head"]
+top_radius = 0.058
+bottom_radius = 0.046
+height = 0.17
+radial_segments = 12
+rings = 2
+
+[sub_resource type="ShaderMaterial" id="Mat_flame"]
+render_priority = 1
+shader = ExtResource("2_flame")
+shader_parameter/halo = false
+shader_parameter/brightness = 1.6
+shader_parameter/speed = 1.9
+
+[sub_resource type="QuadMesh" id="Mesh_flame"]
+size = Vector2(0.44, 0.72)
+center_offset = Vector3(0, 0.36, 0)
+
+[sub_resource type="ShaderMaterial" id="Mat_halo"]
+shader = ExtResource("2_flame")
+shader_parameter/halo = true
+shader_parameter/brightness = 1.6
+shader_parameter/speed = 1.9
+
+[sub_resource type="QuadMesh" id="Mesh_halo"]
+size = Vector2(1.2, 1.2)
+
+[sub_resource type="Gradient" id="Grad_ember"]
+offsets = PackedFloat32Array(0, 0.35, 1)
+colors = PackedColorArray(1, 0.75, 0.3, 1, 1, 0.38, 0.06, 1, 0.5, 0.05, 0.01, 0)
+
+[sub_resource type="GradientTexture1D" id="Tex_ember"]
+gradient = SubResource("Grad_ember")
+
+[sub_resource type="ParticleProcessMaterial" id="Proc_ember"]
+emission_shape = 1
+emission_sphere_radius = 0.06
+direction = Vector3(0, 1, 0)
+spread = 18.0
+initial_velocity_min = 0.5
+initial_velocity_max = 1.1
+gravity = Vector3(0, 0.25, 0)
+damping_min = 0.4
+damping_max = 0.8
+turbulence_enabled = true
+turbulence_noise_strength = 0.6
+turbulence_noise_scale = 1.6
+scale_min = 0.5
+scale_max = 1.0
+color_ramp = SubResource("Tex_ember")
+
+[sub_resource type="StandardMaterial3D" id="Mat_ember"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+albedo_color = Color(2, 1.2, 0.6, 1)
+disable_fog = true
+
+[sub_resource type="QuadMesh" id="Mesh_ember"]
+material = SubResource("Mat_ember")
+size = Vector2(0.025, 0.025)
+
+[node name="Torch" type="Node3D"]
+script = ExtResource("1_torch")
+
+[node name="Plate" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.015)
+visibility_range_end = 26.0
+visibility_range_end_margin = 5.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Mesh_plate")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="Arm" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, -0.17)
+visibility_range_end = 26.0
+visibility_range_end_margin = 5.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Mesh_arm")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="Ring" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, -0.33)
+visibility_range_end = 26.0
+visibility_range_end_margin = 5.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Mesh_ring")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="Handle" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 0.9396926, 0.3420201, 0, -0.3420201, 0.9396926, 0, 0.0, -0.345)
+visibility_range_end = 26.0
+visibility_range_end_margin = 5.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Mesh_handle")
+surface_material_override/0 = SubResource("Mat_wood")
+
+[node name="Head" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 0.9396926, 0.3420201, 0, -0.3420201, 0.9396926, 0, 0.33, -0.465)
+visibility_range_end = 30.0
+visibility_range_end_margin = 5.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Mesh_head")
+surface_material_override/0 = SubResource("Mat_pitch")
+
+[node name="Halo" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -0.5)
+visibility_range_end = 44.0
+visibility_range_end_margin = 8.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Mesh_halo")
+surface_material_override/0 = SubResource("Mat_halo")
+
+[node name="Flame" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.37, -0.49)
+visibility_range_end = 44.0
+visibility_range_end_margin = 8.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Mesh_flame")
+surface_material_override/0 = SubResource("Mat_flame")
+
+[node name="Embers" type="GPUParticles3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, -0.49)
+cast_shadow = 0
+visibility_range_end = 18.0
+visibility_range_end_margin = 4.0
+amount = 6
+lifetime = 1.4
+randomness = 0.6
+visibility_aabb = AABB(-0.6, -0.2, -0.6, 1.2, 2.2, 1.2)
+process_material = SubResource("Proc_ember")
+draw_pass_1 = SubResource("Mesh_ember")
+
+[node name="Light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, -0.58)
+light_color = Color(1, 0.5, 0.2, 1)
+light_energy = 1.35
+omni_range = 10.0
+distance_fade_enabled = true
+distance_fade_begin = 22.0
+distance_fade_length = 8.0
+light_specular = 0.3

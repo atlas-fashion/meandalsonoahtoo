@@ -1,0 +1,276 @@
+[gd_scene load_steps=21 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://scripts/weak_point.gd" id="2_weak_point"]
+[ext_resource type="PackedScene" path="res://scenes/death_burst.tscn" id="3_burst"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_weak"]
+radius = 0.5
+
+[sub_resource type="SphereMesh" id="SphereMesh_weak"]
+radius = 0.44
+height = 0.88
+radial_segments = 16
+rings = 8
+
+[sub_resource type="StandardMaterial3D" id="Mat_weak"]
+albedo_color = Color(1, 0.309804, 0.243137, 1)
+emission_enabled = true
+emission = Color(1, 0.113725, 0.0862745, 1)
+emission_energy_multiplier = 5.0
+rim_enabled = true
+rim = 1.0
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_boss"]
+radius = 1.2
+height = 5.0
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_boss"]
+radius = 1.2
+height = 5.0
+radial_segments = 32
+
+[sub_resource type="StandardMaterial3D" id="Mat_boss"]
+albedo_color = Color(0.317647, 0.109804, 0.317647, 1)
+metallic = 0.35
+roughness = 0.55
+emission_enabled = true
+emission = Color(0.317647, 0.109804, 0.317647, 1)
+emission_energy_multiplier = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_haft"]
+size = Vector3(0.17, 3.2, 0.17)
+
+[sub_resource type="StandardMaterial3D" id="Mat_haft"]
+albedo_color = Color(0.0862745, 0.0627451, 0.0588235, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_blade"]
+size = Vector3(1.9, 1.5, 0.15)
+
+[sub_resource type="StandardMaterial3D" id="Mat_blade"]
+albedo_color = Color(0.164706, 0.164706, 0.188235, 1)
+metallic = 0.85
+roughness = 0.3
+emission_enabled = true
+emission = Color(0.686275, 0.113725, 0.113725, 1)
+emission_energy_multiplier = 0.8
+
+[sub_resource type="Animation" id="Animation_idle"]
+resource_name = "idle"
+length = 3.0
+loop_mode = 1
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("WeaponPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 1.5, 3),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(-0.174533, 0, -0.20944), Vector3(-0.10472, 0.0523599, -0.261799), Vector3(-0.174533, 0, -0.20944)]
+}
+
+[sub_resource type="Animation" id="Animation_windup"]
+resource_name = "windup"
+length = 1.0
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("WeaponPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2, 1),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(-0.174533, 0, -0.20944), Vector3(-0.436332, 0, -0.139626), Vector3(1.082104, -0.20944, -0.383972)]
+}
+
+[sub_resource type="Animation" id="Animation_slam"]
+resource_name = "slam"
+length = 1.0
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("WeaponPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.3, 1),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(1.082104, -0.20944, -0.383972), Vector3(-1.780236, 0.244346, -0.10472), Vector3(-1.69297, 0.20944, -0.10472)]
+}
+
+[sub_resource type="Animation" id="Animation_spin"]
+resource_name = "spin"
+length = 1.0
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("WeaponPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.18, 0.85, 1),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector3(1.082104, -0.20944, -0.383972), Vector3(-1.48353, 0, -1.48353), Vector3(-1.48353, 0, -1.48353), Vector3(-1.0472, 0, -1.22173)]
+}
+
+[sub_resource type="Animation" id="Animation_lunge"]
+resource_name = "lunge"
+length = 1.0
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("WeaponPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.15, 0.9, 1),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector3(1.082104, -0.20944, -0.383972), Vector3(-1.5708, -0.05236, 0.10472), Vector3(-1.5708, -0.05236, 0.10472), Vector3(-1.39626, 0, -0.0872665)]
+}
+
+[sub_resource type="Animation" id="Animation_recover"]
+resource_name = "recover"
+length = 1.0
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("WeaponPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 1),
+"transitions": PackedFloat32Array(1, 1),
+"update": 0,
+"values": [Vector3(-1.69297, 0.20944, -0.10472), Vector3(-0.174533, 0, -0.20944)]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_boss"]
+_data = {
+&"idle": SubResource("Animation_idle"),
+&"lunge": SubResource("Animation_lunge"),
+&"recover": SubResource("Animation_recover"),
+&"slam": SubResource("Animation_slam"),
+&"spin": SubResource("Animation_spin"),
+&"windup": SubResource("Animation_windup")
+}
+
+[node name="Boss" type="CharacterBody3D" groups=["boss"]]
+collision_layer = 5
+collision_mask = 513
+script = ExtResource("1_enemy")
+max_health = 2000.0
+move_speed = 5.2
+acceleration = 14.0
+stop_distance = 1.0
+aggro_range = 34.0
+leash_radius = 15.0
+attack_trigger_range = 8.0
+windup_time = 0.95
+recover_time = 1.55
+attack_damage = 30.0
+can_slam = true
+can_spin = true
+can_lunge = true
+slam_speed = 17.0
+slam_duration = 0.5
+slam_range = 1.5
+spin_duration = 0.9
+spin_range = 4.2
+spin_turns = 3.0
+lunge_speed = 30.0
+lunge_duration = 0.95
+lunge_range = 1.8
+dormant_range = 0.0
+summon_at = Array[float]([1500.0, 1000.0, 500.0])
+summon_time = 1.9
+max_poise = 280.0
+poise_damage_ratio = 1.0
+stagger_time = 4.0
+poise_regen = 6.0
+poise_regen_delay = 6.0
+weak_point_damage = 0.15
+death_burst = ExtResource("3_burst")
+burst_radius = 5.0
+burst_color = Color(1, 0.301961, 0.203922, 1)
+announce_death = true
+base_glow = 0.25
+knockback_damping = 22.0
+knockback_resistance = 0.85
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+mesh = SubResource("CapsuleMesh_boss")
+surface_material_override/0 = SubResource("Mat_boss")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+shape = SubResource("CapsuleShape3D_boss")
+
+[node name="WeakPoint" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, -1.02)
+collision_layer = 4
+collision_mask = 0
+script = ExtResource("2_weak_point")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="WeakPoint"]
+mesh = SubResource("SphereMesh_weak")
+surface_material_override/0 = SubResource("Mat_weak")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WeakPoint"]
+shape = SubResource("SphereShape3D_weak")
+
+[node name="Glow" type="OmniLight3D" parent="WeakPoint"]
+light_color = Color(1, 0.219608, 0.172549, 1)
+light_energy = 3.6
+omni_range = 7.0
+shadow_enabled = false
+
+[node name="WeaponPivot" type="Node3D" parent="."]
+transform = Transform3D(0.978148, -0.203762, 0.0413147, 0.207912, 0.958818, -0.194432, 0, 0.198669, 0.980067, 1.5, 3.1, -0.2)
+
+[node name="Haft" type="MeshInstance3D" parent="WeaponPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+mesh = SubResource("BoxMesh_haft")
+surface_material_override/0 = SubResource("Mat_haft")
+
+[node name="Blade" type="MeshInstance3D" parent="WeaponPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.15, 0)
+mesh = SubResource("BoxMesh_blade")
+surface_material_override/0 = SubResource("Mat_blade")
+
+[node name="Aura" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.4, 0)
+light_color = Color(1, 0.352941, 0.309804, 1)
+light_energy = 2.6
+omni_range = 14.0
+distance_fade_enabled = true
+distance_fade_begin = 28.0
+distance_fade_length = 8.0
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
+radius = 1.2
+height = 5.0
+path_desired_distance = 1.2
+target_desired_distance = 3.0
+avoidance_enabled = true
+max_speed = 17.0
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {
+&"": SubResource("AnimationLibrary_boss")
+}

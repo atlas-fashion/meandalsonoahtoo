@@ -1,0 +1,434 @@
+[gd_scene load_steps=19 format=3]
+
+[ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
+[ext_resource type="Shader" path="res://shaders/dash_streaks.gdshader" id="2_dash"]
+[ext_resource type="Shader" path="res://shaders/damage_direction.gdshader" id="3_damage"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_dash"]
+shader = ExtResource("2_dash")
+shader_parameter/strength = 0.0
+shader_parameter/tint = Color(0.760784, 0.858824, 1, 1)
+shader_parameter/lean = Vector2(0, 0)
+shader_parameter/aspect = 1.777
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.0784314, 0.0862745, 0.101961, 0.75)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0, 0, 0, 0.552941)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_fill"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.788235, 0.235294, 0.254902, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dodge"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.407843, 0.705882, 0.898039, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_trail"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.937255, 0.803922, 0.247059, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_slam"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(1, 0.529412, 0.223529, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gain"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.317647, 0.831373, 0.431373, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_rally"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.937255, 0.803922, 0.247059, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_clear"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_boss"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.635294, 0.145098, 0.219608, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_poise_bg"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.0784314, 0.0862745, 0.101961, 0.75)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_poise"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.615686, 0.678431, 0.87451, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_perf"]
+content_margin_left = 8.0
+content_margin_top = 5.0
+content_margin_right = 8.0
+content_margin_bottom = 5.0
+bg_color = Color(0.0392157, 0.0431373, 0.0549020, 0.627451)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_damage"]
+shader = ExtResource("3_damage")
+shader_parameter/strength = 0.0
+shader_parameter/bearing = 0.0
+shader_parameter/spread = 0.6
+shader_parameter/tint = Color(1, 0.0901961, 0.0705882, 1)
+shader_parameter/core_tint = Color(1, 0.717647, 0.619608, 1)
+shader_parameter/aspect = 1.777
+shader_parameter/halo = 0.22
+
+[node name="HUD" type="CanvasLayer" groups=["hud"]]
+script = ExtResource("1_hud")
+
+[node name="DashStreaks" type="ColorRect" parent="."]
+visible = false
+material = SubResource("ShaderMaterial_dash")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+
+[node name="DamageMark" type="ColorRect" parent="."]
+visible = false
+material = SubResource("ShaderMaterial_damage")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+
+[node name="Crosshair" type="Control" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Dot" type="ColorRect" parent="Crosshair"]
+mouse_filter = 2
+offset_left = -1.0
+offset_top = -1.0
+offset_right = 1.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.741176)
+
+[node name="Up" type="ColorRect" parent="Crosshair"]
+mouse_filter = 2
+offset_left = -1.0
+offset_top = -9.0
+offset_right = 1.0
+offset_bottom = -4.0
+color = Color(1, 1, 1, 0.470588)
+
+[node name="Down" type="ColorRect" parent="Crosshair"]
+mouse_filter = 2
+offset_left = -1.0
+offset_top = 4.0
+offset_right = 1.0
+offset_bottom = 9.0
+color = Color(1, 1, 1, 0.470588)
+
+[node name="Left" type="ColorRect" parent="Crosshair"]
+mouse_filter = 2
+offset_left = -9.0
+offset_top = -1.0
+offset_right = -4.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.470588)
+
+[node name="Right" type="ColorRect" parent="Crosshair"]
+mouse_filter = 2
+offset_left = 4.0
+offset_top = -1.0
+offset_right = 9.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.470588)
+
+[node name="Banner" type="VBoxContainer" parent="."]
+mouse_filter = 2
+modulate = Color(1, 1, 1, 0)
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -380.0
+offset_top = 168.0
+offset_right = 380.0
+offset_bottom = 254.0
+grow_horizontal = 2
+grow_vertical = 1
+theme_override_constants/separation = 6
+
+[node name="BannerTitle" type="Label" parent="Banner"]
+theme_override_colors/font_color = Color(0.976471, 0.913725, 0.827451, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.784314)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 44
+text = "THE WARDEN HAS FALLEN"
+horizontal_alignment = 1
+
+[node name="BannerSub" type="Label" parent="Banner"]
+theme_override_colors/font_color = Color(0.588235, 0.878431, 0.635294, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.705882)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 21
+text = "+5 health potions"
+horizontal_alignment = 1
+
+[node name="PerfPanel" type="PanelContainer" parent="."]
+mouse_filter = 2
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 184.0
+offset_bottom = 10.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_perf")
+
+[node name="PerfLabel" type="Label" parent="PerfPanel"]
+theme_override_colors/font_color = Color(0.678431, 0.819608, 0.709804, 1)
+theme_override_font_sizes/font_size = 13
+text = "FPS"
+
+[node name="BossGroup" type="VBoxContainer" parent="."]
+visible = false
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -260.0
+offset_top = 28.0
+offset_right = 260.0
+offset_bottom = 97.0
+grow_horizontal = 2
+grow_vertical = 1
+theme_override_constants/separation = 5
+
+[node name="BossLabel" type="Label" parent="BossGroup"]
+theme_override_colors/font_color = Color(0.956863, 0.847059, 0.858824, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.784314)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 19
+text = "THE WARDEN"
+horizontal_alignment = 1
+
+[node name="BossStack" type="Control" parent="BossGroup"]
+custom_minimum_size = Vector2(520, 22)
+
+[node name="BossTrailBar" type="ProgressBar" parent="BossGroup/BossStack"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_trail")
+max_value = 1500.0
+value = 1500.0
+show_percentage = false
+
+[node name="BossBar" type="ProgressBar" parent="BossGroup/BossStack"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/background = SubResource("StyleBoxEmpty_clear")
+theme_override_styles/fill = SubResource("StyleBoxFlat_boss")
+max_value = 1500.0
+value = 1500.0
+show_percentage = false
+
+[node name="PoiseBar" type="ProgressBar" parent="BossGroup"]
+custom_minimum_size = Vector2(520, 8)
+theme_override_styles/background = SubResource("StyleBoxFlat_poise_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_poise")
+max_value = 280.0
+value = 0.0
+show_percentage = false
+
+[node name="HealthGroup" type="VBoxContainer" parent="."]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 28.0
+offset_top = -82.0
+offset_right = 348.0
+offset_bottom = -28.0
+grow_vertical = 0
+theme_override_constants/separation = 6
+
+[node name="HealthLabel" type="Label" parent="HealthGroup"]
+theme_override_colors/font_color = Color(0.921569, 0.933333, 0.945098, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.705882)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 18
+text = "100 / 100"
+
+[node name="HealthStack" type="Control" parent="HealthGroup"]
+custom_minimum_size = Vector2(320, 20)
+
+[node name="RallyBar" type="ProgressBar" parent="HealthGroup/HealthStack"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_rally")
+max_value = 100.0
+value = 100.0
+show_percentage = false
+
+[node name="GainBar" type="ProgressBar" parent="HealthGroup/HealthStack"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/background = SubResource("StyleBoxEmpty_clear")
+theme_override_styles/fill = SubResource("StyleBoxFlat_gain")
+max_value = 100.0
+value = 100.0
+show_percentage = false
+
+[node name="HealthBar" type="ProgressBar" parent="HealthGroup/HealthStack"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/background = SubResource("StyleBoxEmpty_clear")
+theme_override_styles/fill = SubResource("StyleBoxFlat_fill")
+max_value = 100.0
+value = 100.0
+show_percentage = false
+
+[node name="DodgeBar" type="ProgressBar" parent="HealthGroup"]
+custom_minimum_size = Vector2(320, 7)
+theme_override_styles/background = SubResource("StyleBoxFlat_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_dodge")
+max_value = 1.0
+step = 0.01
+value = 1.0
+show_percentage = false
+
+[node name="SlamBar" type="ProgressBar" parent="HealthGroup"]
+custom_minimum_size = Vector2(320, 7)
+theme_override_styles/background = SubResource("StyleBoxFlat_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_slam")
+max_value = 1.0
+step = 0.01
+value = 1.0
+show_percentage = false
+
+[node name="Slots" type="HBoxContainer" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -604.0
+offset_top = -96.0
+offset_right = -28.0
+offset_bottom = -28.0
+grow_horizontal = 0
+grow_vertical = 0
+alignment = 2
+theme_override_constants/separation = 8
+
+[node name="Toast" type="Label" parent="."]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 28.0
+offset_top = -150.0
+offset_right = 528.0
+offset_bottom = -122.0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.988235, 0.921569, 0.686275, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.705882)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 17
+text = ""

@@ -1,0 +1,370 @@
+[gd_scene load_steps=24 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/torch.gd" id="2_torch"]
+[ext_resource type="PackedScene" path="res://models/player_sword.glb" id="3_sword"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_haft"]
+size = Vector3(0.065, 0.52, 0.065)
+
+[sub_resource type="StandardMaterial3D" id="Mat_haft"]
+albedo_color = Color(0.180392, 0.129412, 0.0901961, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="BoxMesh_wrap"]
+size = Vector3(0.12, 0.16, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="Mat_wrap"]
+albedo_color = Color(0.113725, 0.0823529, 0.0627451, 1)
+roughness = 1.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_flame"]
+radius = 0.14
+height = 0.34
+radial_segments = 12
+rings = 7
+
+[sub_resource type="StandardMaterial3D" id="Mat_flame"]
+shading_mode = 0
+albedo_color = Color(1, 0.670588, 0.309804, 1)
+emission_enabled = true
+emission = Color(1, 0.588235, 0.215686, 1)
+emission_energy_multiplier = 3.4
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="TorusMesh" id="TorusMesh_wave"]
+inner_radius = 0.82
+outer_radius = 1.0
+rings = 48
+ring_segments = 5
+
+[sub_resource type="StandardMaterial3D" id="Mat_wave"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.501961, 0.803922, 1, 0.8)
+cull_mode = 2
+
+[sub_resource type="TorusMesh" id="TorusMesh_slam"]
+inner_radius = 0.72
+outer_radius = 1.0
+rings = 48
+ring_segments = 5
+
+[sub_resource type="StandardMaterial3D" id="Mat_slam"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.529412, 0.223529, 0.85)
+cull_mode = 2
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_hitbox"]
+size = Vector3(0.5, 2.2, 0.5)
+
+[sub_resource type="Animation" id="Animation_idle"]
+resource_name = "idle"
+length = 3.0
+loop_mode = 1
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Head/SwordPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 1.5, 3),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(-1.113895, 0, -0.244346), Vector3(-1.068895, 0.0279253, -0.282346), Vector3(-1.113895, 0, -0.244346)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Head/SwordPivot:position")
+tracks/1/interp = 2
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 1.5, 3),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(0.34, -0.85, -0.35), Vector3(0.34, -0.838, -0.352), Vector3(0.34, -0.85, -0.35)]
+}
+
+[sub_resource type="Animation" id="Animation_slash"]
+resource_name = "slash"
+length = 0.5
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Head/SwordPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.09, 0.3, 0.5),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector3(-1.113895, 0, -0.244346), Vector3(-0.95, -1.4, -0.48), Vector3(-1.05, 1.45, 0.28), Vector3(-1.113895, 0, -0.244346)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Head/SwordPivot:position")
+tracks/1/interp = 2
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.09, 0.3, 0.5),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector3(0.34, -0.85, -0.35), Vector3(0.5, -0.78, -0.2), Vector3(-0.14, -0.88, -0.54), Vector3(0.34, -0.85, -0.35)]
+}
+tracks/2/type = "method"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath(".")
+tracks/2/keys = {
+"times": PackedFloat32Array(0.1, 0.33),
+"transitions": PackedFloat32Array(1, 1),
+"values": [{
+"args": [],
+"method": &"_hitbox_on"
+}, {
+"args": [],
+"method": &"_hitbox_off"
+}]
+}
+
+[sub_resource type="Animation" id="Animation_chop"]
+resource_name = "chop"
+length = 0.5
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Head/SwordPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.09, 0.3, 0.5),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector3(-1.113895, 0, -0.244346), Vector3(-0.95, 1.4, -0.02), Vector3(-1.05, -1.45, -0.56), Vector3(-1.113895, 0, -0.244346)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Head/SwordPivot:position")
+tracks/1/interp = 2
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.09, 0.3, 0.5),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector3(0.34, -0.85, -0.35), Vector3(0.1, -0.78, -0.2), Vector3(0.64, -0.88, -0.54), Vector3(0.34, -0.85, -0.35)]
+}
+tracks/2/type = "method"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath(".")
+tracks/2/keys = {
+"times": PackedFloat32Array(0.1, 0.33),
+"transitions": PackedFloat32Array(1, 1),
+"values": [{
+"args": [],
+"method": &"_hitbox_on"
+}, {
+"args": [],
+"method": &"_hitbox_off"
+}]
+}
+
+[sub_resource type="Animation" id="Animation_dive"]
+resource_name = "dive"
+length = 0.42
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Head/SwordPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.12, 0.42),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(-1.113895, 0, -0.244346), Vector3(-0.15, -0.09, -0.175), Vector3(-1.95, 0.175, -0.087)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Head/SwordPivot:position")
+tracks/1/interp = 2
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.12, 0.42),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(0.34, -0.85, -0.35), Vector3(0.36, -0.76, -0.3), Vector3(0.3, -0.95, -0.62)]
+}
+
+[sub_resource type="Animation" id="Animation_run"]
+resource_name = "run"
+length = 0.72
+loop_mode = 1
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Head/SwordPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.18, 0.36, 0.54, 0.72),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1),
+"update": 0,
+"values": [Vector3(-1.024, 0.16, -0.134), Vector3(-1.166, -0.03, -0.354), Vector3(-1.024, -0.16, -0.134), Vector3(-1.166, 0.03, -0.354), Vector3(-1.024, 0.16, -0.134)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Head/SwordPivot:position")
+tracks/1/interp = 2
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.18, 0.36, 0.54, 0.72),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1),
+"update": 0,
+"values": [Vector3(0.34, -0.83, -0.35), Vector3(0.34, -0.875, -0.34), Vector3(0.34, -0.83, -0.35), Vector3(0.34, -0.875, -0.34), Vector3(0.34, -0.83, -0.35)]
+}
+
+[sub_resource type="Animation" id="Animation_jump"]
+resource_name = "jump"
+length = 1.2
+loop_mode = 1
+step = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Head/SwordPivot:rotation")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.6, 1.2),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(-0.956, -0.1, -0.13), Vector3(-0.911, -0.06, -0.09), Vector3(-0.956, -0.1, -0.13)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Head/SwordPivot:position")
+tracks/1/interp = 2
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.6, 1.2),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(0.34, -0.8, -0.32), Vector3(0.34, -0.785, -0.31), Vector3(0.34, -0.8, -0.32)]
+}
+
+[sub_resource type="StandardMaterial3D" id="Mat_sweep"]
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1, 0.741176, 0.384314, 1)
+disable_receive_shadows = true
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_1"]
+_data = {
+&"chop": SubResource("Animation_chop"),
+&"dive": SubResource("Animation_dive"),
+&"idle": SubResource("Animation_idle"),
+&"jump": SubResource("Animation_jump"),
+&"run": SubResource("Animation_run"),
+&"slash": SubResource("Animation_slash")
+}
+
+[node name="Player" type="CharacterBody3D" groups=["player"]]
+collision_mask = 257
+script = ExtResource("1_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_1")
+
+[node name="Head" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+
+[node name="Camera3D" type="Camera3D" parent="Head"]
+
+[node name="TorchHand" type="Node3D" parent="Head"]
+transform = Transform3D(0.965926, 0.150384, -0.21131, 0, 0.814116, 0.580703, 0.258819, -0.560986, 0.788392, -0.95, -0.86, -0.1)
+script = ExtResource("2_torch")
+base_energy = 4.6
+flicker_amount = 0.22
+flicker_speed = 2.2
+light_range = 22.0
+gutter_chance = 0.18
+gutter_depth = 0.3
+
+[node name="Haft" type="MeshInstance3D" parent="Head/TorchHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.16, 0)
+mesh = SubResource("BoxMesh_haft")
+surface_material_override/0 = SubResource("Mat_haft")
+
+[node name="Wrap" type="MeshInstance3D" parent="Head/TorchHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+mesh = SubResource("BoxMesh_wrap")
+surface_material_override/0 = SubResource("Mat_wrap")
+
+[node name="Flame" type="MeshInstance3D" parent="Head/TorchHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.57, 0)
+mesh = SubResource("SphereMesh_flame")
+surface_material_override/0 = SubResource("Mat_flame")
+
+[node name="Light" type="OmniLight3D" parent="Head/TorchHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.62, 0)
+light_color = Color(1, 0.792157, 0.556863, 1)
+light_energy = 4.6
+light_specular = 0.4
+shadow_enabled = true
+omni_range = 22.0
+
+[node name="SwordPivot" type="Node3D" parent="Head"]
+transform = Transform3D(0.970296, -0.106591, 0.217173, 0.241922, 0.427512, -0.870935, 0, 0.8977, 0.4406, 0.34, -0.85, -0.35)
+
+[node name="Sword" parent="Head/SwordPivot" instance=ExtResource("3_sword")]
+
+[node name="Hitbox" type="Area3D" parent="Head/SwordPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, 0)
+collision_layer = 0
+collision_mask = 4
+monitoring = false
+monitorable = false
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Head/SwordPivot/Hitbox"]
+shape = SubResource("BoxShape3D_hitbox")
+
+[node name="SweepTrail" type="MeshInstance3D" parent="."]
+visible = false
+cast_shadow = 0
+material_override = SubResource("Mat_sweep")
+
+[node name="Shockwave" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.2, 0, 0, 0, 0.2, 0, 0, 0, 0.2, 0, 0.12, 0)
+mesh = SubResource("TorusMesh_wave")
+surface_material_override/0 = SubResource("Mat_wave")
+
+[node name="SlamRing" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.25, 0, 0.1, 0)
+mesh = SubResource("TorusMesh_slam")
+surface_material_override/0 = SubResource("Mat_slam")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {
+&"": SubResource("AnimationLibrary_1")
+}

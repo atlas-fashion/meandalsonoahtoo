@@ -1,0 +1,180 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://scripts/mimic.gd" id="1_mimic"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_body"]
+size = Vector3(1.3, 0.75, 0.9)
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.396078, 0.258824, 0.145098, 1)
+roughness = 0.8
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_body"]
+size = Vector3(1.3, 0.75, 0.9)
+
+[sub_resource type="BoxMesh" id="BoxMesh_lid"]
+size = Vector3(1.36, 0.18, 0.96)
+
+[sub_resource type="StandardMaterial3D" id="Mat_lid"]
+albedo_color = Color(0.815686, 0.639216, 0.258824, 1)
+metallic = 0.7
+roughness = 0.35
+emission_enabled = true
+emission = Color(0.588235, 0.443137, 0.129412, 1)
+emission_energy_multiplier = 0.3
+
+[sub_resource type="TorusMesh" id="TorusMesh_marker"]
+inner_radius = 0.86
+outer_radius = 1.0
+rings = 40
+ring_segments = 5
+
+[sub_resource type="StandardMaterial3D" id="Mat_marker"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.290196, 0.223529, 0)
+cull_mode = 2
+no_depth_test = true
+
+[sub_resource type="TorusMesh" id="TorusMesh_impact"]
+inner_radius = 0.7
+outer_radius = 1.0
+rings = 36
+ring_segments = 5
+
+[sub_resource type="StandardMaterial3D" id="Mat_impact"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.807843, 0.529412, 0)
+cull_mode = 2
+
+[sub_resource type="BoxMesh" id="BoxMesh_tooth"]
+size = Vector3(0.115, 0.17, 0.085)
+
+[sub_resource type="StandardMaterial3D" id="Mat_teeth"]
+albedo_color = Color(0.905882, 0.878431, 0.803922, 1)
+roughness = 0.45
+
+[node name="Mimic" type="CharacterBody3D" groups=["mimic"]]
+collision_layer = 5
+collision_mask = 513
+script = ExtResource("1_mimic")
+
+[node name="Body" type="Node3D" parent="."]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.375, 0)
+mesh = SubResource("BoxMesh_body")
+surface_material_override/0 = SubResource("Mat_body")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.375, 0)
+shape = SubResource("BoxShape3D_body")
+
+[node name="RoomLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+light_color = Color(1, 0.831373, 0.615686, 1)
+light_energy = 2.4
+omni_range = 16.0
+distance_fade_enabled = true
+distance_fade_begin = 26.0
+distance_fade_length = 8.0
+
+[node name="LidPivot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, -0.45)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="LidPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.09, 0.45)
+mesh = SubResource("BoxMesh_lid")
+surface_material_override/0 = SubResource("Mat_lid")
+
+[node name="UpperTeeth" type="Node3D" parent="LidPivot"]
+
+[node name="T0" type="MeshInstance3D" parent="LidPivot/UpperTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.52, -0.06, 0.84)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="T1" type="MeshInstance3D" parent="LidPivot/UpperTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3467, -0.06, 0.84)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="T2" type="MeshInstance3D" parent="LidPivot/UpperTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1733, -0.06, 0.84)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="T3" type="MeshInstance3D" parent="LidPivot/UpperTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, 0.84)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="T4" type="MeshInstance3D" parent="LidPivot/UpperTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1733, -0.06, 0.84)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="T5" type="MeshInstance3D" parent="LidPivot/UpperTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3467, -0.06, 0.84)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="T6" type="MeshInstance3D" parent="LidPivot/UpperTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.52, -0.06, 0.84)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="LowerTeeth" type="Node3D" parent="Body"]
+
+[node name="B0" type="MeshInstance3D" parent="Body/LowerTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.52, 0.83, 0.39)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="B1" type="MeshInstance3D" parent="Body/LowerTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3467, 0.83, 0.39)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="B2" type="MeshInstance3D" parent="Body/LowerTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1733, 0.83, 0.39)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="B3" type="MeshInstance3D" parent="Body/LowerTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.83, 0.39)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="B4" type="MeshInstance3D" parent="Body/LowerTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1733, 0.83, 0.39)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="B5" type="MeshInstance3D" parent="Body/LowerTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3467, 0.83, 0.39)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="B6" type="MeshInstance3D" parent="Body/LowerTeeth"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.52, 0.83, 0.39)
+mesh = SubResource("BoxMesh_tooth")
+surface_material_override/0 = SubResource("Mat_teeth")
+
+[node name="LandingMarker" type="MeshInstance3D" parent="."]
+visible = false
+mesh = SubResource("TorusMesh_marker")
+surface_material_override/0 = SubResource("Mat_marker")
+
+[node name="ImpactRing" type="MeshInstance3D" parent="."]
+visible = false
+mesh = SubResource("TorusMesh_impact")
+surface_material_override/0 = SubResource("Mat_impact")
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
+radius = 0.7
+height = 1.0
+path_desired_distance = 0.8
+target_desired_distance = 1.2
+max_speed = 2.6

@@ -1,0 +1,55 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/chest.gd" id="1_chest"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_body"]
+size = Vector3(1.3, 0.75, 0.9)
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.396078, 0.258824, 0.145098, 1)
+roughness = 0.8
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_body"]
+size = Vector3(1.3, 0.75, 0.9)
+
+[sub_resource type="BoxMesh" id="BoxMesh_lid"]
+size = Vector3(1.36, 0.18, 0.96)
+
+[sub_resource type="StandardMaterial3D" id="Mat_lid"]
+albedo_color = Color(0.815686, 0.639216, 0.258824, 1)
+metallic = 0.7
+roughness = 0.35
+emission_enabled = true
+emission = Color(0.588235, 0.443137, 0.129412, 1)
+emission_energy_multiplier = 0.3
+
+[node name="Chest" type="Node3D"]
+script = ExtResource("1_chest")
+
+[node name="Body" type="StaticBody3D" parent="."]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.375, 0)
+mesh = SubResource("BoxMesh_body")
+surface_material_override/0 = SubResource("Mat_body")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.375, 0)
+shape = SubResource("BoxShape3D_body")
+
+[node name="RoomLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+light_color = Color(1, 0.831373, 0.615686, 1)
+light_energy = 2.4
+omni_range = 16.0
+distance_fade_enabled = true
+distance_fade_begin = 26.0
+distance_fade_length = 8.0
+
+[node name="LidPivot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, -0.45)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="LidPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.09, 0.45)
+mesh = SubResource("BoxMesh_lid")
+surface_material_override/0 = SubResource("Mat_lid")

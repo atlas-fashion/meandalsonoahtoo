@@ -1,0 +1,80 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/cell_door.gd" id="1_door"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_bar"]
+size = Vector3(0.09, 2.85, 0.09)
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.0862745, 0.0784314, 0.0745098, 1)
+metallic = 0.7
+roughness = 0.62
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_blocker"]
+size = Vector3(2.1, 2.85, 0.16)
+
+[node name="CellDoor" type="Node3D"]
+script = ExtResource("1_door")
+
+[node name="Bars" type="Node3D" parent="."]
+
+[node name="B0" type="MeshInstance3D" parent="Bars"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.84, 1.425, 0)
+cast_shadow = 0
+visibility_range_end = 40.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_bar")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="B1" type="MeshInstance3D" parent="Bars"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.42, 1.425, 0)
+cast_shadow = 0
+visibility_range_end = 40.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_bar")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="B2" type="MeshInstance3D" parent="Bars"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.425, 0)
+cast_shadow = 0
+visibility_range_end = 40.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_bar")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="B3" type="MeshInstance3D" parent="Bars"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.42, 1.425, 0)
+cast_shadow = 0
+visibility_range_end = 40.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_bar")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="B4" type="MeshInstance3D" parent="Bars"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.84, 1.425, 0)
+cast_shadow = 0
+visibility_range_end = 40.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_bar")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="Rail" type="MeshInstance3D" parent="Bars"]
+transform = Transform3D(19.5, 0, 0, 0, 0.7, 0, 0, 0, 1, 0, 2.78, 0)
+cast_shadow = 0
+visibility_range_end = 40.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_bar")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="Blocker" type="StaticBody3D" parent="."]
+collision_layer = 3
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Blocker"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.425, 0)
+shape = SubResource("BoxShape3D_blocker")

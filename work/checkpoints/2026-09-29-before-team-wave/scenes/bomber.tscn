@@ -1,0 +1,67 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/bomber.gd" id="1_bomber"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_1"]
+radius = 0.45
+
+[sub_resource type="SphereMesh" id="SphereMesh_1"]
+radius = 0.45
+height = 0.9
+radial_segments = 12
+rings = 6
+
+[sub_resource type="StandardMaterial3D" id="Mat_bomber"]
+albedo_color = Color(1, 0.443137, 0.109804, 1)
+metallic = 0.2
+roughness = 0.5
+emission_enabled = true
+emission = Color(1, 0.443137, 0.109804, 1)
+emission_energy_multiplier = 1.1
+
+[sub_resource type="SphereMesh" id="SphereMesh_blast"]
+radius = 1.0
+height = 2.0
+radial_segments = 16
+rings = 8
+
+[sub_resource type="StandardMaterial3D" id="Mat_blast"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.647059, 0.270588, 0)
+cull_mode = 2
+
+[node name="Bomber" type="CharacterBody3D" groups=["bomber"]]
+collision_layer = 5
+collision_mask = 513
+motion_mode = 1
+script = ExtResource("1_bomber")
+fuse_time = 1.2
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_1")
+surface_material_override/0 = SubResource("Mat_bomber")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("SphereShape3D_1")
+
+[node name="Blast" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01, 0, 0, 0)
+visible = false
+mesh = SubResource("SphereMesh_blast")
+surface_material_override/0 = SubResource("Mat_blast")
+
+[node name="Light" type="OmniLight3D" parent="."]
+light_color = Color(1, 0.443137, 0.109804, 1)
+light_energy = 1.1
+omni_range = 7.0
+distance_fade_enabled = true
+distance_fade_begin = 20.0
+distance_fade_length = 6.0
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
+radius = 0.45
+height = 1.0
+path_desired_distance = 2.75
+target_desired_distance = 2.5
+max_speed = 13.0

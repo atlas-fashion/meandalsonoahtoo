@@ -1,0 +1,96 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/torch.gd" id="1_torch"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_chain"]
+size = Vector3(0.07, 2.4, 0.07)
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.0666667, 0.0627451, 0.0588235, 1)
+metallic = 0.6
+roughness = 0.8
+
+[sub_resource type="TorusMesh" id="TorusMesh_ring"]
+inner_radius = 0.62
+outer_radius = 0.78
+rings = 14
+ring_segments = 6
+
+[sub_resource type="BoxMesh" id="BoxMesh_arm"]
+size = Vector3(1.5, 0.06, 0.06)
+
+[sub_resource type="SphereMesh" id="SphereMesh_flame"]
+radius = 0.11
+height = 0.26
+radial_segments = 8
+rings = 5
+
+[sub_resource type="StandardMaterial3D" id="Mat_flame"]
+shading_mode = 0
+albedo_color = Color(1, 0.72549, 0.407843, 1)
+emission_enabled = true
+emission = Color(1, 0.603922, 0.243137, 1)
+emission_energy_multiplier = 2.4
+
+[node name="Chandelier" type="Node3D"]
+script = ExtResource("1_torch")
+base_energy = 0.85
+flicker_amount = 0.5
+flicker_speed = 1.9
+light_range = 13.0
+gutter_chance = 0.55
+gutter_depth = 0.65
+
+[node name="Chain" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+visibility_range_end = 30.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_chain")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="Ring" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(0.994522, 0.104528, 0, -0.104528, 0.994522, 0, 0, 0, 1, 0, 0, 0)
+visibility_range_end = 30.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("TorusMesh_ring")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="Arm" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 0, 0, 1, 0, 0.06, 0)
+visibility_range_end = 30.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_arm")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="BrokenArm" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(0.0616285, -0.230101, 0.971182, 0.239118, 0.943655, 0.208403, -0.968979, 0.238306, 0.0714455, 0.36, -0.28, 0.2)
+visibility_range_end = 30.0
+visibility_range_end_margin = 6.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BoxMesh_arm")
+surface_material_override/0 = SubResource("Mat_iron")
+
+[node name="Flame" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.52, 0.18, 0)
+visibility_range_end = 48.0
+visibility_range_end_margin = 8.0
+visibility_range_fade_mode = 1
+mesh = SubResource("SphereMesh_flame")
+surface_material_override/0 = SubResource("Mat_flame")
+
+[node name="Light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+light_color = Color(1, 0.717647, 0.454902, 1)
+light_energy = 0.85
+omni_range = 13.0
+distance_fade_enabled = true
+distance_fade_begin = 22.0
+distance_fade_length = 8.0

@@ -1,0 +1,65 @@
+[gd_scene format=3 uid="uid://dm2rxjyqhcw8x"]
+
+[ext_resource type="PackedScene" path="res://scenes/maze.tscn" id="1_maze"]
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
+[ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3_hud"]
+[ext_resource type="Texture2D" uid="uid://bcpe3v84t7mmx" path="res://textures/sky_panorama.png" id="4_sky"]
+[ext_resource type="Script" uid="uid://worruayry8ah" path="res://tools/benchmark.gd" id="5_bench"]
+[ext_resource type="Script" uid="uid://dww8nshn8d28w" path="res://scripts/pause_menu.gd" id="6_pause"]
+
+[sub_resource type="PanoramaSkyMaterial" id="Sky_red"]
+panorama = ExtResource("4_sky")
+energy_multiplier = 1.15
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("Sky_red")
+
+[sub_resource type="Environment" id="Environment_dark"]
+background_mode = 2
+sky = SubResource("Sky_1")
+ambient_light_source = 2
+ambient_light_color = Color(0.113725, 0.121569, 0.176471, 1)
+ambient_light_energy = 0.38
+tonemap_mode = 3
+tonemap_white = 4.0
+ssao_enabled = true
+ssao_radius = 1.5
+ssao_intensity = 2.5
+glow_enabled = true
+glow_intensity = 1.1
+glow_strength = 1.1
+glow_bloom = 0.15
+glow_hdr_threshold = 0.85
+fog_enabled = true
+fog_light_color = Color(0.0470588, 0.0509804, 0.0784314, 1)
+fog_light_energy = 0.4
+fog_density = 0.008
+fog_sky_affect = 0.0
+adjustment_enabled = true
+adjustment_brightness = 0.95
+adjustment_contrast = 1.12
+adjustment_saturation = 0.92
+
+[node name="Main" type="Node3D" unique_id=1914748838]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1779371851 groups=["world_environment"]]
+environment = SubResource("Environment_dark")
+
+[node name="MoonLight" type="DirectionalLight3D" parent="." unique_id=163076538]
+transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75, 0.433013, 0, 12, 0)
+light_color = Color(0.556863, 0.639216, 0.839216, 1)
+light_energy = 0.07
+light_specular = 0.0
+
+[node name="Maze" parent="." unique_id=820398320 instance=ExtResource("1_maze")]
+
+[node name="Player" parent="." unique_id=1410571730 instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+
+[node name="HUD" parent="." unique_id=1021502971 instance=ExtResource("3_hud")]
+
+[node name="Benchmark" type="Node" parent="." unique_id=844484132]
+script = ExtResource("5_bench")
+
+[node name="PauseMenu" type="CanvasLayer" parent="." unique_id=39896355]
+script = ExtResource("6_pause")

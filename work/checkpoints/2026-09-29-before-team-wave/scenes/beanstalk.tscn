@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://coxif6oqwnjm6"]
+
+[ext_resource type="Script" uid="uid://dnj1tth5xxdt5" path="res://scripts/beanstalk.gd" id="1_stalk"]
+[ext_resource type="Shader" uid="uid://b248ow7bki26w" path="res://shaders/beanstalk.gdshader" id="2_shader"]
+
+[node name="Beanstalk" type="Node3D" unique_id=944076129]
+script = ExtResource("1_stalk")
+shader = ExtResource("2_shader")
+
+[node name="Stalk" type="MeshInstance3D" parent="." unique_id=1711210761]
+
+[node name="Trunk" type="StaticBody3D" parent="." unique_id=38559906]
+collision_layer = 3
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Trunk" unique_id=1266925987]
