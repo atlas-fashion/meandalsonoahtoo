@@ -894,6 +894,15 @@ func _build_mine() -> void:
 			cable.position = (a + b) * 0.5
 			cable.basis = Basis(Quaternion(Vector3.UP, (b - a).normalized()))
 			add_child(cable)
+	# The workbench (2026-10-11): front right, its front toward the middle of
+	# the court, behind the wardens' patch. Gold crystals buy weapon and armor
+	# levels there. Solid, and built before the bake.
+	var bench := Node3D.new()
+	bench.name = "Workbench"
+	bench.set_script(load("res://scripts/workbench.gd"))
+	bench.position = Vector3(_span - 2.0, 0.0, _span - 3.4)
+	bench.rotation.y = -PI * 0.5
+	add_child(bench)
 
 
 ## A lump of rock: a coarse sphere pushed in and out by noise and shaded FLAT,

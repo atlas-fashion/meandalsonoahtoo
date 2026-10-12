@@ -370,9 +370,10 @@ func _stats_for(id: StringName) -> Array:
 		&"sword":
 			return [
 				"Attack", [
-					["Cut", str(roundi(player.attack_damage))],
-					["Spin", "%d all round" % roundi(player.attack_damage)],
-					["Slam", str(roundi(player.slam_damage))],
+					["Level", str(player.weapon_level(&"sword"))],
+					["Cut", str(roundi(player.attack_damage * player.weapon_damage_scale(&"sword")))],
+					["Spin", "%d all round" % roundi(player.attack_damage * player.weapon_damage_scale(&"sword"))],
+					["Slam", str(roundi(player.slam_damage * player.weapon_damage_scale(&"sword")))],
 					["Slam reach", "%.1f m" % player.slam_radius],
 					["Slam cooldown", "%d s" % roundi(player.slam_cooldown)],
 					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],
@@ -391,13 +392,15 @@ func _stats_for(id: StringName) -> Array:
 			]
 		&"spear":
 			var s = player.spear
+			var k: float = player.weapon_damage_scale(&"spear")
 			return [
 				"Attack", [
-					["Stab", str(roundi(s.STAB_DAMAGE))],
+					["Level", str(player.weapon_level(&"spear"))],
+					["Stab", str(roundi(s.STAB_DAMAGE * k))],
 					["Stab rate", "%.2f s" % s.STAB_EVERY],
-					["Dash", str(roundi(s.DASH_DAMAGE))],
+					["Dash", str(roundi(s.DASH_DAMAGE * k))],
 					["Dash cooldown", "%.1f s" % s.DASH_COOLDOWN],
-					["Throw blast", str(roundi(s.BLAST_DAMAGE))],
+					["Throw blast", str(roundi(s.BLAST_DAMAGE * k))],
 					["Blast reach", "%.1f m" % s.BLAST_RADIUS],
 					["Throw cooldown", "%d s" % roundi(s.THROW_COOLDOWN)],
 					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],

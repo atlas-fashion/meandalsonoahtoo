@@ -105,6 +105,13 @@ var _tether_mesh: ImmediateMesh
 static var _mats := {}
 
 
+## The workbench's level for the spear (player.gd `weapon_damage_scale`).
+func _scale() -> float:
+	if player != null and player.has_method("weapon_damage_scale"):
+		return player.call("weapon_damage_scale", &"spear")
+	return 1.0
+
+
 func setup(p: CharacterBody3D) -> void:
 	player = p
 	name = "Spear"
@@ -381,7 +388,7 @@ func _stab_strike() -> void:
 			continue
 		if player._is_blocked(eye, body):
 			continue
-		body.take_damage(STAB_DAMAGE, fwd)
+		body.take_damage(STAB_DAMAGE * _scale(), fwd)
 		player.knock(body, Vector3(fwd.x, 0.0, fwd.z).normalized() * 3.0, 0.1, STAB_STAGGER)
 		player.hit_landed.emit(body)
 		struck = true
@@ -405,7 +412,7 @@ func _dash_strike() -> void:
 		if body == null or _dash_hit.has(body) or not body.has_method("take_damage") or body.has_method("swat"):
 			continue
 		_dash_hit[body] = true
-		body.take_damage(DASH_DAMAGE, fwd)
+		body.take_damage(DASH_DAMAGE * _scale(), fwd)
 		# Thrown aside, off the line of the charge.
 		var side := player.global_basis.x
 		var to := body.global_position - player.global_position
@@ -578,7 +585,7 @@ func _explode(at: Vector3) -> void:
 		# Full damage within a metre -- the struck body's centre is ~0.9 m from
 		# the point on its surface the spear hit -- falling to half at the edge.
 		var falloff := 1.0 - 0.5 * clampf((dist - 1.0) / (BLAST_RADIUS - 1.0), 0.0, 1.0)
-		body.take_damage(BLAST_DAMAGE * falloff, away)
+		body.take_damage(BLAST_DAMAGE * falloff * _scale(), away)
 		player.knock(body, Vector3(away.x, 0.0, away.z).normalized() * BLAST_PUSH * falloff
 			+ Vector3(0.0, 4.0, 0.0), 0.6, BLAST_STAGGER)
 		if body.has_method("alert"):

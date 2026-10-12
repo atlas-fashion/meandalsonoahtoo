@@ -4,7 +4,9 @@ extends Node3D
 ## a dead end. Aim at it and press E ("interact") to attune it; the player then
 ## rises here when they die, until another anchor is attuned. Only one is ever
 ## active -- `maze.gd` keeps track (`_on_anchor_attuned`) and switches the old
-## one off.
+## one off. Any anchor can be attuned again at any time, the active one
+## included: every attuning saves the map as it is now (what a death keeps),
+## and the player always rises at the one attuned last (2026-10-11).
 ##
 ## Asleep it glows faintly cold; attuned the crystal and runes blaze teal and it
 ## gives off light (one light, on the active anchor only).
@@ -70,17 +72,19 @@ func _process(delta: float) -> void:
 		if _player == null:
 			return
 	var to := _player.global_position - global_position
-	_near = not active and Vector2(to.x, to.z).length() <= REACH and absf(to.y) < 2.0 \
+	_near = Vector2(to.x, to.z).length() <= REACH and absf(to.y) < 2.0 \
 		and Interact.looked_at(self, 3.4, 0.1)
+	_prompt.text = "E   Save progress" if active else "E   Attune"
 	_prompt.visible = _near
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _near or active or not Interact.pressed(event):
+	if not _near or not Interact.pressed(event):
 		return
 	if _player == null or _player.get("in_cutscene") or _player.get("_dead"):
 		return
 	get_viewport().set_input_as_handled()
+	var again := active
 	_near = false
 	_prompt.visible = false
 	attuned.emit(self)
@@ -89,7 +93,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_player._guard_flash(_crystal.global_position, TEAL, true)
 	var hud := get_tree().get_first_node_in_group("hud")
 	if hud != null and hud.has_method("announce"):
-		hud.announce("ANCHOR ATTUNED", "You will rise here when you fall")
+		if again:
+			hud.announce("PROGRESS BOUND", "What you have charted is kept")
+		else:
+			hud.announce("ANCHOR ATTUNED", "You will rise here when you fall")
 
 
 func _apply_look() -> void:

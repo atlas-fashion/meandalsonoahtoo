@@ -1363,6 +1363,8 @@ func save_state() -> Dictionary:
 		"health": health,
 		"slots": inventory.slots.duplicate(true),
 		"quick_assigned": inventory.assigned.duplicate(),
+		"weapon_levels": weapon_levels.duplicate(),
+		"armor_level": armor_level,
 		"selected": selected_slot,
 	}
 
@@ -1374,6 +1376,8 @@ func restore_state(data: Dictionary) -> void:
 	_look_pitch = float(data.get("pitch", 0.0))
 	health = clampf(float(data.get("health", max_health)), 1.0, max_health)
 	health_changed.emit(health, max_health)
+	weapon_levels = (data.get("weapon_levels", {}) as Dictionary).duplicate()
+	armor_level = int(data.get("armor_level", 1))
 	var slots: Array = data.get("slots", [])
 	var same_layout := slots.size() == Inventory.SIZE
 	if same_layout:
@@ -1939,7 +1943,7 @@ func _start_attack() -> void:
 	if _attacking and _pose_time < _bite_end():
 		return
 	_attacking = true
-	_stroke_damage = attack_damage
+	_stroke_damage = attack_damage * weapon_damage_scale(&"sword")
 	_hit_this_swing.clear()
 	_blade_prev.clear()
 	# Index 0 sweeps right to left, index 1 back from left to right.
@@ -1992,7 +1996,7 @@ func _start_spin() -> void:
 	if _pose_kind == &"spin" and not _spin_released():
 		return
 	_attacking = true
-	_stroke_damage = attack_damage
+	_stroke_damage = attack_damage * weapon_damage_scale(&"sword")
 	_trail_on = false
 	_hit_this_swing.clear()
 	_blade_prev.clear()
@@ -3226,7 +3230,7 @@ func _land_slam() -> void:
 		away.y = 0.0
 		var direction := away.normalized() if away.length_squared() > 0.0001 else -global_basis.z
 		if body.has_method("take_damage"):
-			body.take_damage(slam_damage, direction)
+			body.take_damage(slam_damage * weapon_damage_scale(&"sword"), direction)
 			hit_landed.emit(body)
 		knock(body, direction * slam_push, slam_stun, slam_stagger_chance)
 
@@ -3675,6 +3679,59 @@ func dodge_charge() -> float:
 	return _ghost_meter
 
 ## `attacker`, when given, is whoever struck the blow: a parry throws it back.
+## --- Upgrades (the crystal mine's workbench, workbench.gd, 2026-10-11) -----------
+##
+## Gold crystals buy levels. A weapon's level scales everything it deals by
+## `UPGRADE_DAMAGE` a level (sword: cut, spin, slam; spear: stab, dash, blast);
+## armor takes `ARMOR_STEP` a level off every hit and beam (`damage_negation`).
+## Small steps on purpose. Levels start at 1 and are saved with the game.
+
+const UPGRADE_DAMAGE := 0.08
+const ARMOR_STEP := 0.04
+const UPGRADE_MAX := 10
+## The weapons the workbench can work on.
+const UPGRADABLE: Array[StringName] = [&"sword", &"spear"]
+
+var weapon_levels := {}
+var armor_level := 1
+
+
+func weapon_level(id: StringName) -> int:
+	return int(weapon_levels.get(id, 1))
+
+
+func weapon_damage_scale(id: StringName) -> float:
+	return 1.0 + UPGRADE_DAMAGE * float(weapon_level(id) - 1)
+
+
+## The share of every hit the armor takes off (0 at level 1).
+func damage_negation() -> float:
+	return ARMOR_STEP * float(armor_level - 1)
+
+
+## Gold crystals to go from `level` to the next: 3, 5, 7, 10, 15, 23, 34...
+static func upgrade_cost(level: int) -> int:
+	return int(round(3.0 * pow(1.5, float(level - 1))))
+
+
+## Pays for and takes one level of `what` (a weapon id, or &"armor"). False if
+## it is at the top or there are not enough crystals.
+func upgrade(what: StringName) -> bool:
+	var level := armor_level if what == &"armor" else weapon_level(what)
+	if level >= UPGRADE_MAX:
+		return false
+	var cost := upgrade_cost(level)
+	if inventory.count(&"gold_crystal") < cost:
+		return false
+	inventory.remove(&"gold_crystal", cost)
+	if what == &"armor":
+		armor_level += 1
+	else:
+		weapon_levels[what] = level + 1
+	inventory_changed.emit()
+	return true
+
+
 func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 		attacker: Node3D = null) -> void:
 	if _dead or (in_cutscene and not _cutscene_hurts) or is_hidden():
@@ -3699,6 +3756,8 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 	# A ghost is mostly not there: it takes only ghost_damage_taken of a hit.
 	if _ghosting:
 		amount *= ghost_damage_taken
+	# The armor (workbench upgrades).
+	amount *= 1.0 - damage_negation()
 	if amount <= 0.0:
 		return
 	_mark_damage(amount, _from_direction)
@@ -3751,7 +3810,7 @@ func beam_hit(dps: float, delta: float, blow: Vector3) -> void:
 	var guarded := _guard(blow) != 0
 	_beam_until = now + BEAM_LINGER
 	_beam_guarded = guarded
-	var amount := dps * delta
+	var amount := dps * delta * (1.0 - damage_negation())
 	if guarded:
 		amount *= block_damage_taken
 	if _ghosting:
