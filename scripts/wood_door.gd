@@ -263,6 +263,7 @@ func restore_opened() -> void:
 		var leaf := get_node_or_null(leaf_name) as Node3D
 		if leaf != null:
 			leaf.visible = false
+	_drop_frame()
 	door_opened.emit()
 
 
@@ -286,7 +287,8 @@ func _clear_behind(from: Vector3, out: Vector3, want: float) -> float:
 ## old gate's two leaves split straight across, 2 and 3.
 func _split_for(leaf_name: String, mi: MeshInstance3D) -> Array:
 	if mi.name == "Boards":
-		return [2, 3, 0.55, true]
+		# 3 x 3 with the pointed head one piece: 7 uneven pieces (was 2 x 3 -> 5).
+		return [3, 3, 0.5, true]
 	return [1, 2 if leaf_name == "LeafL" else 3, 0.0, false]
 
 
@@ -298,7 +300,7 @@ func _burst(out: Vector3) -> void:
 	var push := -out
 	var impact := global_position + Vector3(0.0, IMPACT_HEIGHT, 0.0)
 	var effects: bool = Graphics.effects
-	# Five big pieces -- the door splits, it does not shatter (_split_for).
+	# A handful of big pieces -- the door splits, it does not shatter (_split_for).
 	for leaf_name in ["LeafL", "LeafR"]:
 		var leaf := get_node_or_null(leaf_name) as Node3D
 		if leaf == null:
@@ -313,7 +315,22 @@ func _burst(out: Vector3) -> void:
 	DEBRIS.crumble(_pieces, effects)
 	if effects:
 		DEBRIS.dust(get_parent() as Node3D, impact, push)
+	_drop_frame()
 	_shove(impact)
+
+
+## The brick kit's door carries its own stone frame round the leaf, and with the
+## leaf cut out of it the frame is hollow inside. Once the door is broken the
+## frame and its jambs go too, leaving the corridor's own (complete) brick arch.
+func _drop_frame() -> void:
+	if get_node_or_null("Boards") == null and get_node_or_null("LeafL/Boards") == null:
+		return
+	var frame := get_node_or_null("GateFrame") as Node3D
+	if frame != null:
+		frame.visible = false
+	var jambs := get_node_or_null("Jambs") as CollisionObject3D
+	if jambs != null:
+		jambs.collision_layer = 0
 
 
 ## Everything that can be hurt within SHOVE_RADIUS of the boot (the damageable

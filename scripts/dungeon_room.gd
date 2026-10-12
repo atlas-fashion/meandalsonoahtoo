@@ -177,18 +177,20 @@ func _build_vacant() -> void:
 ## arcade behind it is walled off from its neighbours ("wall" + "wall_top" in
 ## every ring-to-ring arch) into a cell. The bays at the room's doorways stay
 ## open: they are the way in. Over the court a band of brick wall rises from
-## the arches to DOME_BASE and the Tripo dome ("prison_dome") stands on it, its
-## corners closed by a dark stone ring; the dome's oculus is open to the red
-## sky, with a red beam falling through it onto the generator. A Tripo torch on
-## every arch, and gibbet cages hang from the dome.
+## the arches to DOME_BASE and the Tripo dome ("prison_dome") springs from just
+## outside it, wide enough to span the corners. A Tripo torch on every arch.
+## (2026-10-11: the first dome was lopsided and open at the top, its corners
+## closed by an untextured ring; replaced by a second Tripo dome turned inside
+## out. The skylight beam and the hanging gibbets are gone; the gates are a
+## second Tripo pass, full of bars.)
 const BAY_GATE_IN := 0.5
 const BAY_DEEP := 4.85
 const BAND_BASE := 5.0
 const BAND_FRONT := 0.62
 const DOME_BASE := 8.35
-const DOME_RADIUS := 8.5
-const GATE_HALF := 1.68
-const GIBBETS := 4
+## The dome's height as a share of its radius (the model rises 1.49 x it).
+const DOME_RISE := 0.62
+const GATE_HALF := 1.64
 
 
 func _build_prison() -> void:
@@ -246,7 +248,7 @@ func _build_domed_prison() -> void:
 		db.collision_layer = 1
 		db.collision_mask = 0
 		add_child(db)
-		_add_shape(db, Vector3(GATE_HALF * 2.0, 3.6, 0.15), xf * Vector3(0.0, 1.8, BAY_GATE_IN))
+		_add_shape(db, Vector3(GATE_HALF * 2.0, 4.6, 0.15), xf * Vector3(0.0, 2.3, BAY_GATE_IN))
 		(db.get_child(0) as CollisionShape3D).rotation = xf.basis.get_euler()
 		(db.get_child(0) as CollisionShape3D).disabled = true
 		cell["door_body"] = db
@@ -262,7 +264,6 @@ func _build_domed_prison() -> void:
 	for c in _cells:
 		var foot: Vector3 = (c["centre"] as Vector3)
 		_pipe(Vector3(0.0, 0.07, 0.0), foot.lerp(Vector3.ZERO, (BAY_DEEP * 0.5 + BAY_GATE_IN) / foot.length()))
-	_hang_gibbets()
 	_drop_sky_lights()
 	if maze != null and maze.has_signal("level_built"):
 		maze.connect("level_built", _arm_doors, CONNECT_ONE_SHOT)
@@ -436,10 +437,11 @@ func _build_partitions(kit) -> void:
 				body.add_child(cs)
 
 
-## The band of wall over the arches, the dark stone ring closing the corners,
-## the dome, and the beam through its oculus.
+## The band of wall over the arches and the dome over everything.
 func _build_dome_hall(kit) -> void:
-	var band_len := float(built.cell_size) + 0.1
+	# Overlapping a little: end to end, the wall pieces' ragged ends left dark
+	# slots between them.
+	var band_len := float(built.cell_size) + 0.7
 	for bay in _prison_bays():
 		var xf: Transform3D = bay["xf"]
 		var mi := MeshInstance3D.new()
@@ -448,133 +450,34 @@ func _build_dome_hall(kit) -> void:
 		mi.transform = Transform3D(b, xf * Vector3(0.0, BAND_BASE, BAND_FRONT))
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
-	var half := _span - BAND_FRONT + 0.4
-	var ring := MeshInstance3D.new()
-	ring.name = "DomeRing"
-	ring.mesh = _ring_mesh(half, DOME_RADIUS - 0.25, 0.35)
-	var level = load("res://scripts/module_level.gd")
-	var stone: StandardMaterial3D = (level._synth_arch_material(tint) as StandardMaterial3D).duplicate()
-	stone.vertex_color_use_as_albedo = false
-	ring.material_override = stone
-	ring.position.y = DOME_BASE
-	add_child(ring)
+	# The dome (Tripo, turned inside out in build_brick_kit.py): wide enough to
+	# span the hall's CORNERS, so it springs from just outside the band and
+	# every view up meets wall or dome -- no flat ring round it. Centred on the
+	# hall by construction, closed at the top (no skylight).
+	var inner := _span - BAND_FRONT
+	var radius := inner * sqrt(2.0) + 0.3
 	var dome := MeshInstance3D.new()
 	dome.name = "Dome"
 	dome.mesh = kit.standalone("prison_dome")
-	dome.transform = Transform3D(Basis().scaled(Vector3.ONE * DOME_RADIUS), Vector3(0.0, DOME_BASE, 0.0))
+	dome.transform = Transform3D(Basis().scaled(Vector3(radius, radius * DOME_RISE, radius)),
+		Vector3(0.0, DOME_BASE, 0.0))
 	dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(dome)
-	var top := DOME_BASE + DOME_RADIUS * 1.32
-	# Embers' glow up under the dome, so its ribs read out of the dark.
+	# Embers' glow up under the dome, so its brick and ribs read out of the dark.
 	for k in 4:
 		var a := TAU * (float(k) + 0.5) / 4.0
 		var up := OmniLight3D.new()
 		up.light_color = Color(1.0, 0.32, 0.14)
 		up.light_energy = 4.0
-		up.omni_range = 11.0
+		up.omni_range = 13.0
 		up.omni_attenuation = 1.1
 		up.light_specular = 0.0
 		up.shadow_enabled = false
 		up.distance_fade_enabled = true
 		up.distance_fade_begin = 45.0
 		up.distance_fade_length = 10.0
-		up.position = Vector3(cos(a) * 5.5, DOME_BASE + 1.2, sin(a) * 5.5)
+		up.position = Vector3(cos(a) * 5.5, DOME_BASE + 2.0, sin(a) * 5.5)
 		add_child(up)
-	# The red sky's light pours through the oculus onto the generator.
-	var beam := SpotLight3D.new()
-	beam.light_color = Color(1.0, 0.28, 0.14)
-	beam.light_energy = 26.0
-	beam.spot_range = top + 4.0
-	beam.spot_angle = 13.0
-	beam.spot_angle_attenuation = 0.7
-	beam.light_specular = 0.0
-	beam.shadow_enabled = false
-	beam.position = Vector3(0.0, top + 2.0, 0.0)
-	beam.rotation.x = -PI * 0.5
-	add_child(beam)
-	var shaft := MeshInstance3D.new()
-	shaft.name = "LightShaft"
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = DOME_RADIUS * 0.17
-	cyl.bottom_radius = 2.4
-	cyl.height = top
-	cyl.radial_segments = 24
-	cyl.rings = 1
-	cyl.cap_top = false
-	cyl.cap_bottom = false
-	var glow := StandardMaterial3D.new()
-	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	glow.cull_mode = BaseMaterial3D.CULL_DISABLED
-	glow.albedo_color = Color(1.0, 0.22, 0.1, 0.028)
-	glow.disable_receive_shadows = true
-	cyl.material = glow
-	shaft.mesh = cyl
-	shaft.position.y = top * 0.5
-	shaft.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(shaft)
-
-
-## A flat square plate with a round hole: `half` the square, `radius` the hole.
-func _ring_mesh(half: float, radius: float, thick: float) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var steps := 64
-	for face: float in [0.0, thick]:
-		for i in steps:
-			var a0 := TAU * float(i) / float(steps)
-			var a1 := TAU * float(i + 1) / float(steps)
-			var c0 := Vector3(cos(a0), 0.0, sin(a0))
-			var c1 := Vector3(cos(a1), 0.0, sin(a1))
-			var s0 := c0 * (half / maxf(absf(c0.x), absf(c0.z)))
-			var s1 := c1 * (half / maxf(absf(c1.x), absf(c1.z)))
-			var y := Vector3(0.0, face, 0.0)
-			st.set_normal(Vector3.DOWN if face == 0.0 else Vector3.UP)
-			for v in [c0 * radius, s0, s1, c0 * radius, s1, c1 * radius]:
-				st.add_vertex(v + y)
-	return st.commit()
-
-
-## Gibbet cages hanging from the dome on long chains, each with what is left of
-## its prisoner.
-func _hang_gibbets() -> void:
-	var iron := _mat(&"iron")
-	for k in GIBBETS:
-		var a := TAU * (float(k) + 0.5) / float(GIBBETS) + _rng.randf_range(-0.3, 0.3)
-		var r := _rng.randf_range(4.2, 5.6)
-		var bottom := _rng.randf_range(3.6, 5.2)
-		var at := Vector3(cos(a) * r, bottom, sin(a) * r)
-		var g := Node3D.new()
-		g.name = "Gibbet%d" % k
-		g.position = at
-		g.rotation.y = _rng.randf() * TAU
-		add_child(g)
-		for b in 8:
-			var ba := TAU * float(b) / 8.0
-			var bar := _cyl(0.02, 1.9, 4, iron)
-			bar.position = Vector3(cos(ba) * 0.42, 0.95, sin(ba) * 0.42)
-			g.add_child(bar)
-		for y: float in [0.03, 1.0, 1.9]:
-			var hoop := _cyl(0.45, 0.05, 16, iron)
-			hoop.position.y = y
-			g.add_child(hoop)
-		var chain := _cyl(0.025, 14.0, 4, iron)
-		chain.position.y = 1.9 + 7.0
-		g.add_child(chain)
-		var body: Node3D = SKELETON_MODEL.instantiate()
-		body.transform = Transform3D(Basis.from_scale(Vector3(-0.82, 0.82, -0.82)) * Basis(Vector3.RIGHT, 0.15),
-			Vector3(0.0, 0.08, 0.0))
-		g.add_child(body)
-		var players := body.find_children("*", "AnimationPlayer", true, false)
-		if not players.is_empty():
-			var anim := players[0] as AnimationPlayer
-			if anim.has_animation(&"idle"):
-				anim.get_animation(&"idle").loop_mode = Animation.LOOP_LINEAR
-				anim.play(&"idle", -1.0, _rng.randf_range(0.3, 0.5))
-				anim.seek(_rng.randf_range(0.0, anim.current_animation_length), true)
-		EYES.attach(g)
-
 
 ## The room is roofed now: the court's sky lights go.
 func _drop_sky_lights() -> void:

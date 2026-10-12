@@ -494,7 +494,7 @@ def main():
     built.append(build_wood("wood_support", 2.4, True))
     built.append(build_wood("wood_planks", 1.6, False))
     built.append(build_wood("wood_crate", 0.95, False))
-    built.append(build_dome())
+    built.append(build_dome_inside())
     built.extend(build_jail_gate())
     door = build_arch("door")
     # Thinned before it is split, so the leaf's edge and the frame's still meet.
@@ -727,7 +727,7 @@ def cut_torch_mount(pillar):
 ## each axis: its open base faces +x (radius ~0.5) and the oculus collar -x
 ## (radius ~0.1-0.2). Stood up (oculus at the top), its base at z = 0 and
 ## scaled to radius 1, so the room scales it to whatever it covers.
-def build_dome():
+def build_dome_first_pass():
     ob = import_piece("prison_dome")
     strip_rubble(ob, 0.02)
     apply(ob, Matrix.Rotation(math.radians(90.0), 4, "Y"))
@@ -752,7 +752,7 @@ def build_dome():
 JAIL_GATE = (3.36, 4.55)
 
 
-def build_jail_gate():
+def build_jail_gate_first_pass():
     ob = import_piece("prison_cell")
     strip_rubble(ob, 0.01)
 
@@ -783,6 +783,68 @@ def build_jail_gate():
     apply(right, move(-half, 0, 0))
     log("  jail gate: %d + %d faces, raw %.3f x %.3f" % (len(left.data.polygons),
         len(right.data.polygons), hi[0] - lo[0], hi[2] - lo[2]))
+    return left, right
+
+
+## The prison's dome, second Tripo pass (2026-10-11): "prison_dome2" came back a
+## symmetrical closed ribbed dome -- but an EXTERIOR, on a solid base disc. The
+## disc is cut away and every face turned to face inward, so its brick lines a
+## ceiling seen from below. Normalised: base flange radius 1, base at z = 0,
+## centred on its own axis. Exported as "prison_dome" (replacing the lopsided
+## first pass, whose collar sat half a radius off its base).
+def build_dome_inside():
+    ob = import_piece("prison_dome2")
+    strip_rubble(ob, 0.02)
+    p = points(ob)
+    z0, z1 = p[:, 2].min(), p[:, 2].max()
+    cx = (p[:, 0].min() + p[:, 0].max()) * 0.5
+    cy = (p[:, 1].min() + p[:, 1].max()) * 0.5
+    r = max(p[:, 0].max() - p[:, 0].min(), p[:, 1].max() - p[:, 1].min()) * 0.5
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    low = z0 + 0.04 * (z1 - z0)
+    floor = [f for f in bm.faces if f.normal.z < -0.6 and all(v.co.z < low for v in f.verts)]
+    bmesh.ops.delete(bm, geom=floor, context="FACES")
+    bmesh.ops.reverse_faces(bm, faces=bm.faces[:], flip_multires=False)
+    bm.to_mesh(ob.data)
+    bm.free()
+    apply(ob, scale(1.0 / r, 1.0 / r, 1.0 / r) @ move(-cx, -cy, -z0))
+    ob.name = "prison_dome"
+    q = points(ob)
+    log("  dome (inside): %d base faces cut, radius %.3f raw -> 1, height %.2f"
+        % (len(floor), r, q[:, 2].max()))
+    return ob
+
+
+## The cells' gate, second Tripo pass: "jail_gate" is a flat pointed-arch gate
+## filled with bars (raw: thin along x, width along y, height along z, a little
+## plinth at its foot). Faced like the other pieces (front to Godot +Z), fitted
+## inside the brick arch's opening (probed: 3.32 m between the legs to 3.3 m,
+## apex 4.8 m) with a hair of clearance, 0.2 m deep, and split down the middle
+## into two leaves with their origins on their hinges. Replaces the first
+## pass's gate cut from Tripo's cell hut, whose bars were sparse and broken.
+JAIL_GATE = (3.28, 4.74, 0.2)
+
+
+def build_jail_gate():
+    ob = import_piece("jail_gate")
+    strip_rubble(ob, 0.01)
+    apply(ob, rot_z(-90.0))
+    p = points(ob)
+    lo, hi = p.min(axis=0), p.max(axis=0)
+    sx = JAIL_GATE[0] / (hi[0] - lo[0])
+    sz = JAIL_GATE[1] / (hi[2] - lo[2])
+    sd = JAIL_GATE[2] / (hi[1] - lo[1])
+    apply(ob, scale(sx, sd, sz) @ move(-(lo[0] + hi[0]) * 0.5, -(lo[1] + hi[1]) * 0.5, -lo[2]))
+    left = duplicate(ob, "jail_gate_l")
+    right = ob
+    right.name = "jail_gate_r"
+    clip(left, (0, 0, 0), (-1, 0, 0))
+    clip(right, (0, 0, 0), (1, 0, 0))
+    half = JAIL_GATE[0] * 0.5
+    apply(left, move(half, 0, 0))
+    apply(right, move(-half, 0, 0))
+    log("  jail gate: %d + %d faces" % (len(left.data.polygons), len(right.data.polygons)))
     return left, right
 
 

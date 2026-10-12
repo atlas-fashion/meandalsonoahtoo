@@ -4163,7 +4163,9 @@ func _respawn() -> void:
 	_land_kick = 0.0
 	_scene_crush = 0.0
 	hands_busy = false
-	_reset_inventory()
+	# The inventory is exactly as it was at death (2026-10-11): no topping the
+	# potions back up. `_reset_inventory` only runs for a new game now.
+	inventory_changed.emit()
 	health_changed.emit(health, max_health)
 	respawned.emit()
 	# Held in the black until the frames settle, like a new game's: the world
@@ -4172,11 +4174,9 @@ func _respawn() -> void:
 	_begin_wake(true)
 
 
-## At the start: the sword (weapon wheel, up), the starting consumables (quick
-## wheel, up), the spear (weapon wheel, right). On respawn
-## each consumable is topped back up to its starting count -- in the slot the
-## player last kept it in, so a rearranged inventory stays arranged -- while
-## the sword, the coins and everything else carried are kept.
+## A new game: the sword (weapon wheel, up), the starting consumables (quick
+## wheel, up), the spear (weapon wheel, right). Not run on respawn any more --
+## the player rises with what they died with (2026-10-11).
 func _reset_inventory(first_time := false) -> void:
 	if first_time:
 		inventory.clear()

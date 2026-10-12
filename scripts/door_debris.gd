@@ -28,6 +28,9 @@ const DISSOLVE := preload("res://shaders/debris_dissolve.gdshader")
 ## Each piece crumbles to nothing this long after the break, at random.
 const CRUMBLE_MIN := 1.0
 const CRUMBLE_MAX := 3.0
+## How hard a kicked door's pieces are thrown away from the player, m/s.
+const LAUNCH_MIN := 10.0
+const LAUNCH_MAX := 15.0
 const CRUMBLE_TIME := 0.55
 static var _dissolve_mats := {}
 static var _noise: NoiseTexture2D
@@ -317,10 +320,12 @@ static func shatter(leaf_mesh: MeshInstance3D, parent: Node3D, push: Vector3, im
 		parent.add_child(body)
 		body.global_transform = Transform3D(xf.basis, xf * (p["centre"] as Vector3))
 		# Nearest the boot flies hardest; the far corners mostly drop.
-		var near := clampf(1.4 - body.global_position.distance_to(impact) / 1.6, 0.35, 1.4)
-		body.linear_velocity = push * randf_range(4.0, 7.5) * near \
-			+ Vector3.UP * randf_range(0.4, 2.2) \
-			+ (body.global_position - impact).normalized() * randf_range(0.5, 1.8)
+		var near := clampf(1.4 - body.global_position.distance_to(impact) / 1.6, 0.6, 1.4)
+		# Thrown hard down the corridor, away from the boot (2026-10-11: they
+		# used to drop within a metre of the door).
+		body.linear_velocity = push * randf_range(LAUNCH_MIN, LAUNCH_MAX) * near \
+			+ Vector3.UP * randf_range(1.2, 3.4) \
+			+ (body.global_position - impact).normalized() * randf_range(0.8, 2.4)
 		body.angular_velocity = Vector3(randf_range(-9, 9), randf_range(-5, 5), randf_range(-9, 9))
 		bodies.append(body)
 	return bodies
