@@ -1202,7 +1202,7 @@ static func _build_brick_door(door: Node3D) -> void:
 	frame.name = "GateFrame"
 	frame.mesh = BrickLevel.standalone("door_frame")
 	frame.position = Vector3(0.0, 0.0, BRICK_DOOR_LEAF)
-	frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	frame.visibility_range_end = 60.0
 	door.add_child(frame)
 	var leaf := Node3D.new()
@@ -1212,7 +1212,7 @@ static func _build_brick_door(door: Node3D) -> void:
 	boards.name = "Boards"
 	boards.mesh = BrickLevel.standalone("door_leaf")
 	boards.position = Vector3(0.0, 0.0, BRICK_DOOR_LEAF)
-	boards.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	boards.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	boards.visibility_range_end = 60.0
 	leaf.add_child(boards)
 	# The blocker over the leaf (layers 1 + 2, armed after the bake: wood_door.gd).
@@ -1883,9 +1883,12 @@ static func _hang_torch(holder: Node3D, scene: PackedScene, at: Vector3,
 		light.omni_attenuation = TORCH_ATTENUATION
 		# No specular: a glossy hotspot on the stone reads as a lamp.
 		light.light_specular = 0.0
-		# Wall torches have never cast shadows in this game; the hand torch is
-		# the only shadow caster, and shadows here were measured as worthless.
-		light.shadow_enabled = false
+		# Torches cast shadows -- only near the camera: `Graphics` sets
+		# `distance_fade_shadow` from its shadow-distance knob for every light
+		# carrying this meta, and switches them off on Potato. The torch's own
+		# mount casts none, or it would shade its own light.
+		light.shadow_enabled = true
+		light.set_meta("torch_shadow", true)
 		light.light_color = TORCH_COLOUR
 	return torch
 

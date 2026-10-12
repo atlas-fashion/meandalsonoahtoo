@@ -78,12 +78,16 @@ func _environment() -> Environment:
 	return null
 
 
+## Wall torches casting shadows, and out to how far (`Graphics.shadow_distance`
+## via each light's `distance_fade_shadow`).
 func _torch_shadows() -> String:
-	for p in get_tree().get_nodes_in_group("player"):
-		var l := p.find_child("Light", true, false) as OmniLight3D
-		if l != null:
-			return str(l.shadow_enabled)
-	return "?"
+	var casting := 0
+	var reach := 0.0
+	for l in get_tree().root.find_children("Light", "OmniLight3D", true, false):
+		if l.has_meta("torch_shadow") and (l as OmniLight3D).shadow_enabled:
+			casting += 1
+			reach = (l as OmniLight3D).distance_fade_shadow
+	return "%d torches to %.0f m" % [casting, reach] if casting > 0 else "off"
 
 
 func _floor_under(where: Vector3) -> Vector3:

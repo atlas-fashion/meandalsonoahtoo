@@ -390,6 +390,6 @@ func _part(mesh: Mesh, xf: Transform3D, mat: Material, parent: Node3D = self) ->
 	mi.mesh = mesh
 	mi.material_override = mat
 	mi.transform = xf
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	parent.add_child(mi)
 	return mi

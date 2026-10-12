@@ -32,6 +32,11 @@ extends RefCounted
 const ModuleMaze := preload("res://scripts/module_maze.gd")
 const KIT := "res://models/brick/brick_kit.glb"
 
+## Pieces that do NOT cast shadows. The floor and its bed only ever have light
+## from above, and the lid and skirts are outside the corridor where no torch
+## can see them -- in a shadow pass they would be drawn for nothing.
+const NO_SHADOW := ["floor", "bed", "cap", "skirt"]
+
 const WALL_FACE := 1.9
 const WALL_HEIGHT := 3.5
 const WALL_DEPTH := 1.0
@@ -519,7 +524,8 @@ static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view
 			mmi.position = origin
 			mmi.visibility_range_end = view_range + 4.0 * out.cell_size * 0.708
 			mmi.visibility_range_end_margin = out.cell_size
-			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mmi.cast_shadow = (GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if piece in NO_SHADOW
+				else GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 			holder.add_child(mmi)
 			counts[piece] = int(counts.get(piece, 0)) + list.size()
 	holder.set_meta("counts", counts)

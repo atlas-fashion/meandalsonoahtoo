@@ -427,4 +427,4 @@ func _build_collision() -> void:
 	lcs.position = Vector3(0.0, BOARD * 0.5, (WIDTH + 0.1) * 0.5)
 	lid_body.add_child(lcs)
 	for node in find_children("*", "GeometryInstance3D", true, false):
-		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON

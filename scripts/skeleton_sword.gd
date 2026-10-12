@@ -79,7 +79,7 @@ func _ready() -> void:
 	_len_fore = b.distance_to(c)
 	_model = MeshInstance3D.new()
 	_model.mesh = _mesh(kind)
-	_model.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_model.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_model.visibility_range_end = SEEN
 	_model.visibility_range_end_margin = 4.0
 	add_child(_model)

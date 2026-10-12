@@ -424,7 +424,7 @@ func _build_cart() -> void:
 	add_child(_rope)
 	for mi in find_children("*", "GeometryInstance3D", true, false):
 		var g := mi as GeometryInstance3D
-		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		# Nothing in these corridors is seen 50 m off.
 		g.visibility_range_end = CART_SEEN
 		g.visibility_range_end_margin = 4.0

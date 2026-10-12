@@ -496,11 +496,16 @@ var _full_graph = null
 ## on this hardware, which is why it is a knob and not a constant.
 ## 1.1 since 2026-10-10, second pass ("way too dark... more torches, but way
 ## less bright"): many dim torches rather than a few bright ones.
+## Torches cast shadows since 2026-10-12 (CLAUDE.md section 33). 1.5 was tried
+## then -- every stretch got a torch in sight -- and measured 59 fps against 73
+## and 1.5-3x the old brightness; 1.1 kept.
 @export_range(0.0, 2.0) var module_torch_density := 1.1
 ## 2.3 under the old pale torch colour; raised with the move to fire orange so the
 ## corridors keep their brightness (orange carries ~18% less luminance).
-## 1.3 since 2026-10-10 (many dim torches with wide soft reach; was 2.8).
-@export var module_torch_energy := 1.3
+## 1.3 since 2026-10-10 (many dim torches with wide soft reach; was 2.8);
+## 1.4 since 2026-10-12 with shadows: measured back within ~20% of the old
+## brightness at every benchmark station.
+@export var module_torch_energy := 1.4
 ## Scales the baseline visibility between torches. 0 is pitch black.
 ## 0.3 since 2026-10-10 (0.12 was too dark to see by).
 @export_range(0.0, 3.0) var module_ambient := 0.3
@@ -801,7 +806,7 @@ func _build_module_level() -> void:
 	# place_torches hangs from the list place_doors leaves in _module_level.
 	var doors: Node3D = builder.place_doors(holder, _module_level)
 	# The dead end the player wakes in is a jail cell, its door the one above.
-	load("res://scripts/jail_cell.gd").build(holder, _module_level)
+	load("res://scripts/jail_cell.gd").build(holder, _module_level, module_torch_energy)
 	var torches: Node3D = builder.place_torches(holder, _module_level,
 		module_torch_density * detail, module_torch_energy)
 	var windows: Node3D = builder.place_windows(

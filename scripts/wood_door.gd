@@ -428,7 +428,7 @@ func _part(parent: Node3D, mesh: Mesh, at: Vector3) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.position = at
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	parent.add_child(mi)
 
 

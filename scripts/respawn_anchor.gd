@@ -175,8 +175,8 @@ func _build() -> void:
 	_crystal.position = Vector3(0.0, CRYSTAL_HEIGHT, 0.0)
 	add_child(_crystal)
 
-	for mi in [plinth, obelisk, runes, _crystal]:
-		(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# The stone casts torch shadows; the glowing crystal does not.
+	_crystal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	_light = OmniLight3D.new()
 	_light.light_color = TEAL

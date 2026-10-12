@@ -39,7 +39,7 @@ var _wall_items: Array[Node3D] = []
 
 
 ## Builds the cell in `built`'s spawn dead end. Null when the spawn is not in one.
-static func build(parent: Node3D, built) -> Node3D:
+static func build(parent: Node3D, built, torch_energy := 1.3) -> Node3D:
 	if built.spawn_door.is_empty():
 		return null
 	# The brick kit's dead end (brick_level.gd): walls 1.9 m out, its corner
@@ -65,6 +65,13 @@ static func build(parent: Node3D, built) -> Node3D:
 	jail.global_basis = Basis.looking_at(-out, Vector3.UP)
 	jail.global_position = built.to_world(cell)
 	jail.call("_dress")
+	# Its own torch, on the left wall in the front half (bed and shackles are
+	# on the back wall, the tally marks on the right). Before torches cast
+	# shadows the cell was lit through its walls by the corridor's; with them it
+	# measured 30x darker than before -- black.
+	var level = load("res://scripts/module_level.gd")
+	level._hang_torch(jail, load(level.TORCH_SCENE), Vector3(-FACE, built.height * level.TORCH_HEIGHT, 0.5),
+		Vector3.LEFT, torch_energy * 0.6, level.TORCH_RANGE)
 	return jail
 
 
