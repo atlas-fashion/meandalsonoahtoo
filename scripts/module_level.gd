@@ -127,17 +127,18 @@ const COURT_Y_OFFSET := -0.02
 
 ## --- Atmosphere -------------------------------------------------------------
 ##
-## Torchlight is wide and slow to fall off, so pools of light overlap into
-## gloom instead of ending at an edge. `omni_attenuation` below 1 is what does
-## most of that work.
+## Torchlight falls off physically (attenuation 1.0, since 2026-10-12): a pool
+## round each torch, the stretch between them down to the base light. The
+## earlier soft falloff (0.4) also carried light 20 m through stone.
 ## Fire orange. The earlier (1.0, 0.76, 0.50) read as a pale lamp. Orange has
 ## ~18% less luminance, which Maze.module_torch_energy makes back up.
 const TORCH_COLOUR := Color(1.0, 0.5, 0.2)
 const TORCH_ENERGY := 10.0
-## 20 m / 0.4 since 2026-10-10: many dim torches with wide, soft pools that
-## overlap, rather than a few bright ones each lighting a hard circle.
-const TORCH_RANGE := 20.0
-const TORCH_ATTENUATION := 0.4
+## 20 m / 0.4 from 2026-10-10 (wide soft pools); 14 m / 1.0 since 2026-10-12
+## (darker, realistic). At 1.0 a torch adds little past ~12 m: 14 vs 20 m lost
+## 10-25% between torches, and won 73.1 -> 79.4 fps (CLAUDE.md section 34).
+const TORCH_RANGE := 14.0
+const TORCH_ATTENUATION := 1.0
 ## Height up the wall, as a fraction of the module.
 const TORCH_HEIGHT := 0.46
 ## Roughly one torch per this many corridor cells. Omni light count is a
@@ -151,9 +152,10 @@ const TORCH_EVERY := 2
 ## between the two. The courtyard sky lights carry the rest.
 const ROOM_TORCH_EVERY := 3
 
-## Ambient is a floor on visibility, not a light source. It stays COOL so the
-## darkness reads as gloom against warm fire, and it costs nothing.
-const AMBIENT_COLOUR := Color(0.16, 0.175, 0.225)
+## Ambient is a floor on visibility, not a light source, and costs nothing.
+## Only faintly cool: at (0.16, 0.175, 0.225) the dark read blue, and blue
+## ambient under the orange fire turned near walls magenta.
+const AMBIENT_COLOUR := Color(0.17, 0.175, 0.19)
 const AMBIENT_ENERGY := 7.0
 const FOG_COLOUR := Color(0.035, 0.035, 0.045)
 const FOG_DENSITY := 0.030

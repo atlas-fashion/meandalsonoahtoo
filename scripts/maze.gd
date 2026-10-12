@@ -503,12 +503,15 @@ var _full_graph = null
 ## 2.3 under the old pale torch colour; raised with the move to fire orange so the
 ## corridors keep their brightness (orange carries ~18% less luminance).
 ## 1.3 since 2026-10-10 (many dim torches with wide soft reach; was 2.8);
-## 1.4 since 2026-10-12 with shadows: measured back within ~20% of the old
-## brightness at every benchmark station.
-@export var module_torch_energy := 1.4
-## Scales the baseline visibility between torches. 0 is pitch black.
-## 0.3 since 2026-10-10 (0.12 was too dark to see by).
-@export_range(0.0, 3.0) var module_ambient := 0.3
+## 1.4 with shadows; 1.3 since 2026-10-12 with the physical falloff ("darker,
+## realistic and immersive"): about half the old brightness beside a torch.
+@export var module_torch_energy := 1.3
+## The base light: where no torch reaches, the player can BARELY see. ACES
+## crushes low ambient to black -- 0.3 (and 0.12 before it) measured 0.0005
+## with every torch off, i.e. there was no base light at all. 1.1 reads about
+## 0.008-0.012: floor slabs and brick courses just visible, black a few metres
+## off. 1.6 was plainly lit, 0.8 near black.
+@export_range(0.0, 3.0) var module_ambient := 1.1
 ## Barred windows with red light coming through. Each one is a light, so this
 ## is on the same per-pixel budget as the torches.
 @export_range(0.0, 2.0) var module_window_density := 1.0
