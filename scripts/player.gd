@@ -585,62 +585,8 @@ signal hidden_changed(hidden: bool)
 const HIDE_LOOK_YAW := 0.95
 const HIDE_LOOK_PITCH := 0.6
 
-## Peeking out of a hiding place: hold "jump" (Space) while hidden and the lid
-## lifts so the player can see out (`hiding_spot.gd` follows `peek_amount()`).
-## Limited like ghost mode: the bar drains over `peek_duration` while peeking
-## and refills over `peek_refill` otherwise (in hiding or out); run dry, the key
-## must be let go before it peeks again.
-@export_group("Peeking")
-@export var peek_duration := 3.0
-@export var peek_refill := 4.0
-@export_range(0.0, 1.0) var peek_min_start := 0.12
-## Seconds for the lid to lift or settle.
-@export var peek_ease_time := 0.2
-@export_group("")
-
 var _hidden_in: Node3D = null
 var _hide_yaw := 0.0
-var _peek_meter := 1.0
-var _peeking := false
-var _peek_locked := false
-var _peek := 0.0
-
-
-func is_peeking() -> bool:
-	return _peeking
-
-
-## How far the lid is lifted, 0 shut to 1 fully peeking (eased).
-func peek_amount() -> float:
-	return _peek
-
-
-## The peek bar, 0 empty to 1 full.
-func peek_charge() -> float:
-	return _peek_meter
-
-
-func peek_ready() -> bool:
-	return not _peek_locked and _peek_meter >= peek_min_start
-
-
-func _update_peek(delta: float) -> void:
-	var held := is_hidden() and not ui_open and _action_held(&"jump")
-	if not held:
-		_peek_locked = false
-	var want := held and not _peek_locked
-	if _peeking and not want:
-		_peeking = false
-	elif not _peeking and want and _peek_meter >= peek_min_start:
-		_peeking = true
-	if _peeking:
-		_peek_meter = maxf(_peek_meter - delta / maxf(peek_duration, 0.01), 0.0)
-		if _peek_meter <= 0.0:
-			_peeking = false
-			_peek_locked = true
-	else:
-		_peek_meter = minf(_peek_meter + delta / maxf(peek_refill, 0.01), 1.0)
-	_peek = move_toward(_peek, 1.0 if _peeking else 0.0, delta / maxf(peek_ease_time, 0.01))
 
 
 func is_hidden() -> bool:
@@ -670,8 +616,6 @@ func hide_in(spot: Node3D, at: Vector3, yaw: float) -> void:
 func leave_hiding(at: Vector3, yaw: float) -> void:
 	var was := is_hidden()
 	_hidden_in = null
-	_peeking = false
-	_peek = 0.0
 	global_position = at
 	velocity = Vector3.ZERO
 	rotation.y = yaw
@@ -1597,7 +1541,6 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	_update_peek(delta)
 	if is_hidden():
 		velocity = Vector3.ZERO
 		return

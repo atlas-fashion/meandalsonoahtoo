@@ -475,64 +475,6 @@ func _build_dread() -> void:
 	_blood = _full_screen_rect("Blood", "res://shaders/blood_screen.gdshader")
 	(_blood.material as ShaderMaterial).set_shader_parameter("seed", randf() * 50.0)
 	_slats = _full_screen_rect("HideSlats", "res://shaders/hide_slats.gdshader")
-	_build_peek_bar()
-
-
-## The peek bar, in the middle under the crosshair while the player is hidden:
-## drains while they peek (Space) and refills, in the ghost bar's colours.
-const PEEK_BAR_WIDTH := 240.0
-var _peek_box: Control
-var _peek_fill: ColorRect
-
-
-func _build_peek_bar() -> void:
-	_peek_box = Control.new()
-	_peek_box.name = "PeekBar"
-	_peek_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_peek_box.anchor_left = 0.5
-	_peek_box.anchor_right = 0.5
-	_peek_box.anchor_top = 0.5
-	_peek_box.anchor_bottom = 0.5
-	_peek_box.offset_left = -PEEK_BAR_WIDTH * 0.5
-	_peek_box.offset_right = PEEK_BAR_WIDTH * 0.5
-	_peek_box.offset_top = 56.0
-	_peek_box.offset_bottom = 96.0
-	_peek_box.visible = false
-	add_child(_peek_box)
-	var label := Label.new()
-	label.text = "PEEK  -  hold Space"
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.position = Vector2(0.0, 0.0)
-	label.size = Vector2(PEEK_BAR_WIDTH, 20.0)
-	label.add_theme_font_size_override("font_size", 14)
-	label.add_theme_color_override("font_color", Color(0.82, 0.86, 0.9, 0.85))
-	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
-	label.add_theme_constant_override("shadow_offset_x", 1)
-	label.add_theme_constant_override("shadow_offset_y", 1)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_peek_box.add_child(label)
-	var back := ColorRect.new()
-	back.color = Color(0.0, 0.0, 0.0, 0.6)
-	back.position = Vector2(-1.0, 23.0)
-	back.size = Vector2(PEEK_BAR_WIDTH + 2.0, 9.0)
-	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_peek_box.add_child(back)
-	_peek_fill = ColorRect.new()
-	_peek_fill.position = Vector2(0.0, 24.0)
-	_peek_fill.size = Vector2(PEEK_BAR_WIDTH, 7.0)
-	_peek_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_peek_box.add_child(_peek_fill)
-
-
-func _update_peek_bar(hidden: bool) -> void:
-	if _peek_box == null:
-		return
-	if _peek_box.visible != hidden:
-		_peek_box.visible = hidden
-	if not hidden or not _player.has_method("peek_charge"):
-		return
-	_peek_fill.size.x = PEEK_BAR_WIDTH * clampf(_player.peek_charge(), 0.0, 1.0)
-	_peek_fill.color = dodge_ready_color if _player.peek_ready() else dodge_charging_color
 
 
 ## A full-screen shader rect at the back of the HUD, drawn once at load so its
@@ -564,7 +506,6 @@ func _update_dread(delta: float) -> void:
 	var size := get_viewport().get_visible_rect().size
 	var aspect := size.x / maxf(size.y, 1.0)
 	var hidden: bool = _player.has_method("is_hidden") and _player.is_hidden()
-	_update_peek_bar(hidden)
 	if _slats != null and not _slats.has_meta("warming") and _slats.visible != hidden:
 		_slats.visible = hidden
 		(_slats.material as ShaderMaterial).set_shader_parameter("aspect", aspect)

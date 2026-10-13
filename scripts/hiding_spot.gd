@@ -3,14 +3,19 @@ extends Node3D
 ## A hiding place (2026-10-10; it was a stone sarcophagus with a skeleton in it):
 ## a hauling cart of the kind the convoys push (convoy.gd), left against a
 ## corridor wall -- a big wooden barrow with a wheel at one end, handles at the
-## other and a plank LID on hinges along its back edge. Nobody is in it: it can
-## be used from the start.
+## other and a plank LID on hinges along its back edge.
 ##
-## E ("interact") aimed at it walks the player up, swings the lid open, lies them
-## down in the tray and shuts the lid over them -- `player.hide_in()`, so nothing
-## can see or hurt them and the Remnant (`stalker.gd`) loses them. Holding Space
-## peeks (`player.peek_amount()`): the lid lifts a hand's breadth on its hinges
-## and the head comes up to the gap. E again climbs back out in front of it.
+## Since 2026-10-12 a cart starts SHUT and has to be searched first: E ("Search")
+## walks the player up and swings the lid open on whatever is inside -- usually
+## nothing, sometimes a few coins or bone fragments, now and then a health
+## potion, which rise out and fly to the player (`ItemDrop.give`). The lid then
+## stays open, and only a searched cart can be hidden in: E ("Hide") lies the
+## player down in the tray and lets the lid down onto its stop, `LID_SLIT`
+## short of shut -- the slit along the front is the view out (there is no
+## peeking any more). `player.hide_in()`, so nothing can see or hurt them and
+## the Remnant (`stalker.gd`) loses them. E again climbs out, the lid left open.
+## The lid is drawn on both faces: one-sided, its underside was invisible from
+## inside, and a hidden player looked straight through it.
 ##
 ## Placed by `maze._place_hiding_spots` before the navmesh bake. Local +X runs
 ## along the wall, +Z out into the corridor; the origin is on the floor at the
@@ -39,16 +44,28 @@ const REACH := 2.5
 ## The player stands this far out from its front to use it, and is put there
 ## on climbing out.
 const STEP_OUT := 1.0
-## The lid turns about its hinge (the back edge, along X): shut, lifted for a
-## peek, and swung open to climb in or out (short of upright: the wall is
-## only a hand's breadth behind).
-const LID_PEEK := -0.3
+## The lid turns about its hinge (the back edge, along X): resting on its stop
+## over a hidden player, the slit along the front open; and swung open (short
+## of upright: the wall is only a hand's breadth behind).
+const LID_SLIT := -0.08
 const LID_OPEN := -1.42
 const LID_TIME := 0.35
+const LID_SEARCH_TIME := 0.7
 
-enum State { EMPTY, OCCUPIED }
+## What a search finds: odds of each outcome (the rest is nothing), and how many.
+const FIND_COINS := 0.19
+const FIND_BONES := 0.19
+const FIND_POTION := 0.15
+const COINS_MIN := 3
+const COINS_MAX := 7
+const BONES_MIN := 1
+const BONES_MAX := 3
 
-var state := State.EMPTY
+enum State { SHUT, OPEN, OCCUPIED }
+
+var state := State.SHUT
+## Opened and looked in. Saved (maze "carts"); only a searched cart hides anyone.
+var searched := false
 ## Set by the maze (kept for it; a cart has nobody in it).
 var maze: Node = null
 var skeleton_scene: PackedScene = null
@@ -62,7 +79,7 @@ var _lid: Node3D
 
 func _ready() -> void:
 	_build()
-	_prompt = Interact.prompt("E   Hide", Vector3(0.0, HEIGHT, WIDTH * 0.5))
+	_prompt = Interact.prompt("E   Search", Vector3(0.0, HEIGHT, WIDTH * 0.5))
 	add_child(_prompt)
 
 
@@ -77,17 +94,26 @@ func facing_yaw() -> float:
 	return atan2(-out.x, -out.z)
 
 
+## Searched and free to hide in.
 func is_empty() -> bool:
-	return true
+	return searched
 
 
 func is_occupied() -> bool:
 	return state == State.OCCUPIED
 
 
-## Saves from the sarcophagus days list the emptied ones; every cart is empty.
+## Old saves listed every cart under "coffins" (they were all usable); that list
+## means nothing for searching, so it is ignored.
 func restore_emptied() -> void:
 	pass
+
+
+## A save says this one was searched: open, nothing in it.
+func restore_searched() -> void:
+	searched = true
+	state = State.OPEN
+	_set_lid(LID_OPEN)
 
 
 func _set_lid(angle: float) -> void:
@@ -100,16 +126,15 @@ func _process(_delta: float) -> void:
 		if _player == null:
 			return
 	if state == State.OCCUPIED and not _busy and _player.call("hidden_in") != self:
-		# Taken out some other way (a respawn).
-		state = State.EMPTY
-		_set_lid(0.0)
-	if state == State.OCCUPIED and not _busy:
-		_follow_peek()
-	var usable := state == State.EMPTY and not _busy
+		# Taken out some other way (a respawn): left open, as they found it.
+		state = State.OPEN
+		_set_lid(LID_OPEN)
+	var usable := state != State.OCCUPIED and not _busy
 	if not usable:
 		_near = false
 		_prompt.visible = false
 		return
+	_prompt.text = "E   Hide" if state == State.OPEN else "E   Search"
 	var to := _player.global_position - global_position
 	var in_front := to.dot(global_basis.z) > 0.2
 	_near = in_front and Vector2(to.x, to.z).length() <= REACH + WIDTH * 0.5 and absf(to.y) < 1.5 \
@@ -123,21 +148,80 @@ func _unhandled_input(event: InputEvent) -> void:
 	if state == State.OCCUPIED and _player.call("hidden_in") == self:
 		get_viewport().set_input_as_handled()
 		_climb_out()
-	elif _near and state == State.EMPTY:
+	elif _near and state == State.SHUT:
+		get_viewport().set_input_as_handled()
+		_search()
+	elif _near and state == State.OPEN:
 		get_viewport().set_input_as_handled()
 		_climb_in()
 
 
+# --- Searching ------------------------------------------------------------------
+
+func _search() -> void:
+	_busy = true
+	_near = false
+	_prompt.visible = false
+	_player.begin_cutscene(true)
+	_player.scene_look_at(global_transform * Vector3(0.0, HEIGHT * 0.6, 0.0), 9.0)
+	await _step_up()
+	if not _still_alive():
+		return
+	# Into the tray as the lid comes up.
+	_player.scene_look_at(global_transform * Vector3(0.0, TRAY_FLOOR, 0.1), 6.0)
+	var t := create_tween()
+	t.tween_method(_set_lid, _lid.rotation.x, LID_OPEN, LID_SEARCH_TIME) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await t.finished
+	if not _still_alive():
+		return
+	searched = true
+	state = State.OPEN
+	await get_tree().create_timer(0.25).timeout
+	_give(_roll())
+	_player.end_cutscene()
+	_busy = false
+
+
+## [item id, how many], or [] for nothing.
+static func _roll() -> Array:
+	var r := randf()
+	if r < FIND_POTION:
+		return [&"health_potion", 1]
+	r -= FIND_POTION
+	if r < FIND_COINS:
+		return [&"coins", randi_range(COINS_MIN, COINS_MAX)]
+	r -= FIND_COINS
+	if r < FIND_BONES:
+		return [&"bone_fragment", randi_range(BONES_MIN, BONES_MAX)]
+	return []
+
+
+func _give(find: Array) -> void:
+	if find.is_empty():
+		var hud := get_tree().get_first_node_in_group("hud")
+		if hud != null and hud.has_method("_show_toast"):
+			hud.call("_show_toast", "Empty")
+		return
+	var id: StringName = find[0]
+	var count: int = find[1]
+	var inside := global_transform * Vector3(0.0, TRAY_FLOOR + 0.12, 0.0)
+	var inventory = _player.get("inventory")
+	var fits: int = mini(count, inventory.room_for(id)) if inventory != null else 0
+	var item_drop = load("res://scripts/item_drop.gd")
+	if fits > 0:
+		item_drop.give(get_parent(), inside, id, fits)
+	if count > fits:
+		# No room: what is left pops out onto the floor, to be taken later.
+		item_drop.spawn(get_parent(), global_transform * Vector3(0.0, HEIGHT + 0.2, WIDTH * 0.5 + 0.3), id, count - fits)
+
+
 # --- Hiding ---------------------------------------------------------------------
 
-## Eye heights inside: lying (below the rim, the lid shut over it) and peeking
-## (up at the gap the lifted lid leaves along the front), and how far in from
-## the front.
-const EYE_LOW := HEIGHT - 0.14
-const EYE_HIGH := HEIGHT + 0.06
-const EYE_Z := WIDTH * 0.5 - 0.24
-var _body_low := Vector3.ZERO
-var _body_high := Vector3.ZERO
+## The eye, lying in the tray: just under the rim, in the middle of the tray,
+## so the view out is the slit between the front board and the lid's edge.
+const EYE := Vector3(0.0, HEIGHT - 0.04, 0.0)
+var _body_at := Vector3.ZERO
 
 
 func _climb_in() -> void:
@@ -149,30 +233,15 @@ func _climb_in() -> void:
 	await _step_up()
 	if not _still_alive():
 		return
-	var t := create_tween()
-	t.tween_method(_set_lid, _lid.rotation.x, LID_OPEN, LID_TIME) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	await t.finished
-	if not _still_alive():
-		return
 	_player.end_cutscene()
-	# Lying in it with the lid shut, eyes below the rim. Peeking (Space,
-	# `player.peek_amount()`) lifts the lid and the head with it.
 	var head_height: float = _player.head.position.y if _player.get("head") != null else 1.6
-	_body_low = global_transform * Vector3(0.0, EYE_LOW, EYE_Z) - Vector3(0.0, head_height, 0.0)
-	_body_high = global_transform * Vector3(0.0, EYE_HIGH, EYE_Z) - Vector3(0.0, head_height, 0.0)
-	_player.hide_in(self, _body_low, facing_yaw())
+	_body_at = global_transform * EYE - Vector3(0.0, head_height, 0.0)
+	_player.hide_in(self, _body_at, facing_yaw())
 	state = State.OCCUPIED
 	var shut := create_tween()
-	shut.tween_method(_set_lid, LID_OPEN, 0.0, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	shut.tween_method(_set_lid, _lid.rotation.x, LID_SLIT, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	await shut.finished
 	_busy = false
-
-
-func _follow_peek() -> void:
-	var k: float = _player.peek_amount()
-	_set_lid(LID_PEEK * k)
-	_player.global_position = _body_low.lerp(_body_high, k)
 
 
 func _climb_out() -> void:
@@ -182,12 +251,7 @@ func _climb_out() -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await t.finished
 	_player.leave_hiding(front_point(), facing_yaw())
-	state = State.EMPTY
-	# Let fall shut behind them.
-	var shut := create_tween()
-	shut.tween_interval(0.25)
-	shut.tween_method(_set_lid, LID_OPEN, 0.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	await shut.finished
+	state = State.OPEN
 	_busy = false
 
 
@@ -204,8 +268,8 @@ func _still_alive() -> bool:
 	if is_instance_valid(_player) and not _player.get("_dead"):
 		return true
 	_busy = false
-	state = State.EMPTY
-	_set_lid(0.0)
+	state = State.OPEN if searched else State.SHUT
+	_set_lid(LID_OPEN if searched else 0.0)
 	if is_instance_valid(_player) and _player.in_cutscene:
 		_player.end_cutscene()
 	return false
@@ -362,6 +426,7 @@ func _build() -> void:
 	var lid_mesh := MeshInstance3D.new()
 	lid_mesh.mesh = _lid_mesh
 	_lid.add_child(lid_mesh)
+	_both_sides(lid_mesh)
 	_build_collision()
 
 
@@ -390,6 +455,24 @@ func _build_kit(kit_body: Mesh) -> void:
 	lid_mesh.mesh = BRICK.standalone("cart_lid")
 	lid_mesh.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5).scaled(Vector3.ONE * CART_SCALE), Vector3.ZERO)
 	_lid.add_child(lid_mesh)
+	_both_sides(lid_mesh)
+
+
+## Its own copies of the lid's materials, drawn from both sides: from inside the
+## cart the boards are seen from below, and one-sided they were not drawn at all.
+static var _two_sided := {}
+
+
+func _both_sides(mi: MeshInstance3D) -> void:
+	for s in mi.mesh.get_surface_count():
+		var m := mi.mesh.surface_get_material(s) as BaseMaterial3D
+		if m == null:
+			continue
+		if not _two_sided.has(m):
+			var copy := m.duplicate() as BaseMaterial3D
+			copy.cull_mode = BaseMaterial3D.CULL_DISABLED
+			_two_sided[m] = copy
+		mi.set_surface_override_material(s, _two_sided[m])
 
 
 func _build_collision() -> void:

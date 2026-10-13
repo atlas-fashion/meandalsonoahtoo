@@ -1092,8 +1092,10 @@ func save_state() -> Dictionary:
 		func(n: Node) -> bool: return n.get("opened") == true)
 	data["cages"] = _indices(_nodes_with("res://scripts/bone_cage.gd"),
 		func(n: Node) -> bool: return n.get("looted") == true)
-	data["coffins"] = _indices(_nodes_with("res://scripts/hiding_spot.gd"),
-		func(n: Node) -> bool: return n.call("is_empty") or n.call("is_occupied"))
+	# Hiding carts opened and searched (2026-10-12). A new key: the old
+	# "coffins" listed every cart, and would read as all of them searched.
+	data["carts"] = _indices(_nodes_with("res://scripts/hiding_spot.gd"),
+		func(n: Node) -> bool: return n.get("searched") == true)
 	var puzzles: Array = []
 	for p in _puzzles:
 		puzzles.append(p.call("save_state"))
@@ -1116,10 +1118,10 @@ func restore_world(data: Dictionary) -> void:
 	for i in data.get("cages", []):
 		if int(i) < cages.size():
 			cages[int(i)].call("restore_looted")
-	var coffins := _nodes_with("res://scripts/hiding_spot.gd")
-	for i in data.get("coffins", []):
-		if int(i) < coffins.size():
-			coffins[int(i)].call("restore_emptied")
+	var carts := _nodes_with("res://scripts/hiding_spot.gd")
+	for i in data.get("carts", []):
+		if int(i) < carts.size():
+			carts[int(i)].call("restore_searched")
 	var a := int(data.get("anchor", -1))
 	if a >= 0 and a < _anchors.size():
 		for other in _anchors:

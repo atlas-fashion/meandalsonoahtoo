@@ -31,31 +31,31 @@ const PRESET_NAMES := ["Ultra", "High", "Medium", "Low", "Potato", "Custom"]
 const PRESETS := {
 	Preset.ULTRA: {
 		"render_scale": 1.0, "msaa": 2, "shadows": 2, "shadow_atlas": 4096,
-		"shadow_distance": 14.0, "ssao": true, "glow": true, "fog": true, "effects": true,
+		"torch_lights": 16.0, "ssao": true, "glow": true, "fog": true, "effects": true,
 		"light_detail": 1.15, "view_distance": 1.25, "texture_detail": 2,
 		"lod_threshold": 1.0, "anim_quality": 2, "npc_detail": 1.25,
 	},
 	Preset.HIGH: {
 		"render_scale": 1.0, "msaa": 1, "shadows": 2, "shadow_atlas": 4096,
-		"shadow_distance": 12.0, "ssao": true, "glow": true, "fog": true, "effects": true,
+		"torch_lights": 12.0, "ssao": true, "glow": true, "fog": true, "effects": true,
 		"light_detail": 1.0, "view_distance": 1.0, "texture_detail": 2,
 		"lod_threshold": 1.0, "anim_quality": 2, "npc_detail": 1.0,
 	},
 	Preset.MEDIUM: {
 		"render_scale": 0.8, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
-		"shadow_distance": 10.0, "ssao": false, "glow": true, "fog": true, "effects": true,
+		"torch_lights": 10.0, "ssao": false, "glow": true, "fog": true, "effects": true,
 		"light_detail": 1.0, "view_distance": 1.0, "texture_detail": 2,
 		"lod_threshold": 2.0, "anim_quality": 1, "npc_detail": 0.9,
 	},
 	Preset.LOW: {
 		"render_scale": 0.62, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
-		"shadow_distance": 8.0, "ssao": false, "glow": false, "fog": true, "effects": true,
+		"torch_lights": 8.0, "ssao": false, "glow": false, "fog": true, "effects": true,
 		"light_detail": 0.9, "view_distance": 0.9, "texture_detail": 2,
 		"lod_threshold": 4.0, "anim_quality": 1, "npc_detail": 0.75,
 	},
 	Preset.POTATO: {
 		"render_scale": 0.45, "msaa": 0, "shadows": 0, "shadow_atlas": 256,
-		"shadow_distance": 0.0, "ssao": false, "glow": false, "fog": false, "effects": false,
+		"torch_lights": 6.0, "ssao": false, "glow": false, "fog": false, "effects": false,
 		"light_detail": 0.7, "view_distance": 0.75, "texture_detail": 0,
 		"lod_threshold": 8.0, "anim_quality": 0, "npc_detail": 0.55,
 	},
@@ -71,10 +71,11 @@ var msaa := 0
 ## (`SHADOW_DUAL_PARABOLOID`) instead of a six-sided cube.
 var shadows := 1
 var shadow_atlas := 2048
-## How far from the camera a wall torch still casts its shadow (Light3D
-## `distance_fade_shadow`). A shadow is a pass over the geometry in the light's
-## range, so this is the lever on how many torches pay for one.
-var shadow_distance := 8.0
+## How many wall torches give light at once, nearest the camera first
+## (torch.gd `_rank`); every one of them casts a shadow, so torchlight never
+## passes through a wall. The rest keep their flames and give no light. A
+## shadow is a pass over the geometry in the light's range: this is the lever.
+var torch_lights := 8.0
 var ssao := false
 var glow := false
 var fog := true
@@ -210,15 +211,13 @@ func _apply_viewport() -> void:
 	vp.msaa_3d = msaa
 	vp.mesh_lod_threshold = lod_threshold
 	vp.positional_shadow_atlas_size = shadow_atlas
-	# The atlas's slots ARE the cap on how many torches cast at once: a light
-	# that gets no slot casts nothing, and Godot hands the slots to the lights
-	# covering most of the screen. Measured on the RTX 3060, Ultra, 3440x1440:
-	# uncapped at 12 m 50.8 fps (chest room 22.4), capped at 8 59.4 (39.0).
-	# Soft gets two quadrants of four (8 torches), Hard one (4).
+	# A light with no slot in the atlas casts no shadow -- and then lights
+	# through walls. torch.gd keeps at most `torch_lights` (20 on the slider)
+	# lit, plus a few fading out at the edge of the set, so there are 24 slots:
+	# 4 + 4 large ones for the torches covering most of the screen, 16 smaller.
 	vp.positional_shadow_atlas_quad_0 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_4
-	vp.positional_shadow_atlas_quad_1 = (Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_4 if shadows >= 2
-		else Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED)
-	vp.positional_shadow_atlas_quad_2 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
+	vp.positional_shadow_atlas_quad_1 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_4
+	vp.positional_shadow_atlas_quad_2 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_16
 	vp.positional_shadow_atlas_quad_3 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
 	vp.use_occlusion_culling = true
 	# FXAA is far cheaper than MSAA and is what keeps the low presets from
@@ -296,11 +295,10 @@ func _apply_light(l: Light3D) -> void:
 		})
 	var saved: Dictionary = l.get_meta("gfx_light")
 	# Only lights that were authored to cast shadows are candidates; this never
-	# switches one on that the artist left off. Wall torches (meta
-	# "torch_shadow") also need a shadow distance to cast at all.
+	# switches one on that the artist left off.
 	var torch := l.has_meta("torch_shadow")
 	if saved["shadow"]:
-		l.shadow_enabled = shadows > 0 and (not torch or shadow_distance > 0.0)
+		l.shadow_enabled = shadows > 0
 	if l is OmniLight3D and saved["range"] > 0.0:
 		(l as OmniLight3D).omni_range = float(saved["range"]) * light_detail
 	if saved["fade_enabled"]:
@@ -317,11 +315,11 @@ func _apply_light(l: Light3D) -> void:
 		l.distance_fade_enabled = false
 		l.distance_fade_begin = float(saved["fade_begin"])
 		l.distance_fade_length = float(saved.get("fade_length", l.distance_fade_length))
-	if torch and l.shadow_enabled:
-		# Past this the torch keeps lighting but stops casting, and its slot in
-		# the shadow atlas goes to a nearer one.
-		l.distance_fade_shadow = minf(shadow_distance,
-			l.distance_fade_begin + l.distance_fade_length)
+	if torch:
+		# torch.gd decides which torches are lit; a distance fade on top would
+		# only switch a torch's SHADOW off before its light (with the old
+		# `distance_fade_shadow`), which is light through walls again.
+		l.distance_fade_enabled = false
 		if l is OmniLight3D:
 			(l as OmniLight3D).omni_shadow_mode = (OmniLight3D.SHADOW_CUBE if shadows >= 2
 				else OmniLight3D.SHADOW_DUAL_PARABOLOID)
@@ -388,7 +386,7 @@ func _materials_of(g: GeometryInstance3D) -> Array:
 # ---------------------------------------------------------------------------
 const SAVE_PATH := "user://graphics.cfg"
 const KEYS := [
-	"render_scale", "msaa", "shadows", "shadow_atlas", "shadow_distance", "ssao", "glow", "fog",
+	"render_scale", "msaa", "shadows", "shadow_atlas", "torch_lights", "ssao", "glow", "fog",
 	"effects", "light_detail", "view_distance", "texture_detail",
 	"lod_threshold", "anim_quality", "npc_detail", "vsync", "fps_cap",
 ]

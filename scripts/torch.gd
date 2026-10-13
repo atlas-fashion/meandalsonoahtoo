@@ -60,6 +60,29 @@ static var _camera_frame := -1
 static var chill := 0.0
 const ICE_LIGHT := Color(0.42, 0.72, 1.0)
 
+## --- Only shadowed torches give light (2026-10-12) ------------------------------
+##
+## Torchlight must never pass through stone, and a light lights through walls
+## unless it casts a shadow -- but every shadow costs passes over the geometry,
+## so only so many can cast. The torches hung by `module_level._hang_torch`
+## (light meta "torch_shadow") are therefore RANKED by distance from the camera
+## every RANK_PERIOD frames, and only the nearest `Graphics.torch_lights` give
+## light at all; every one of those casts. The rest keep their flame and halo
+## and give none. A torch fades over LIT_FADE metres of distance at the edge of
+## the set, so pools come and go smoothly as the player walks.
+static var _managed: Array = []
+static var _rank_frame := -1
+const RANK_PERIOD := 4
+const LIT_FADE := 4.0
+## How fast a pool follows its target (fraction a second).
+const LIT_EASE := 2.5
+## The positional shadow atlas's slots (graphics_settings `_apply_viewport`).
+const SHADOW_SLOTS := 24
+## The nearest-N set this torch belongs to: 1 lit, 0 dark, between at the edge.
+var _lit := 0.0
+var _lit_target := 0.0
+var _is_managed := false
+
 var _noise := FastNoiseLite.new()
 var _time := 0.0
 var _gutter := 0.0
@@ -105,6 +128,66 @@ func _ready() -> void:
 		if gfx != null:
 			_apply_effects(gfx)
 			gfx.changed.connect(_apply_effects.bind(gfx))
+	# Deferred: `_hang_torch` tags the light after adding the torch to the tree.
+	_register.call_deferred()
+
+
+func _register() -> void:
+	if not is_instance_valid(light) or not light.has_meta("torch_shadow"):
+		return
+	_is_managed = true
+	_managed.append(self)
+	# Dark until the first ranking says otherwise.
+	_lit = 0.0
+	light.visible = false
+
+
+func _exit_tree() -> void:
+	if _is_managed:
+		_managed.erase(self)
+
+
+## Ranks every managed torch by distance from the camera and sets each one's
+## target: only the nearest `Graphics.torch_lights` give light.
+static func _rank(camera_at: Vector3, limit: int) -> void:
+	var distances := PackedFloat32Array()
+	distances.resize(_managed.size())
+	for i in _managed.size():
+		distances[i] = (_managed[i]._fixed_position as Vector3).distance_to(camera_at)
+	var cut := INF
+	if limit <= 0:
+		cut = -INF
+	elif _managed.size() > limit:
+		var sorted := distances.duplicate()
+		sorted.sort()
+		# The first torch left out sits exactly at the cut: target 0.
+		cut = sorted[limit]
+	var fading: Array = []
+	var alight := 0
+	for i in _managed.size():
+		var t = _managed[i]
+		t._lit_target = clampf((cut - distances[i]) / LIT_FADE, 0.0, 1.0)
+		if t._lit_target <= 0.0 and not t._in_range:
+			# It will not process again until it is near: put it out now.
+			t._lit = 0.0
+			t.light.visible = false
+		if t._lit > 0.0 or t._lit_target > 0.0:
+			alight += 1
+			if t._lit_target < t._lit:
+				fading.append([distances[i], t])
+	# Never more lit than the atlas has slots (Graphics: 24): a lit torch with
+	# no slot casts nothing and lights through walls. After a jump (a respawn)
+	# the old set would still be fading out as the new one fades in; the
+	# furthest of those go out at once instead.
+	if alight > SHADOW_SLOTS:
+		fading.sort_custom(func(a, b): return a[0] > b[0])
+		for f in fading:
+			if alight <= SHADOW_SLOTS:
+				break
+			f[1]._lit = 0.0
+			f[1]._lit_target = 0.0
+			f[1].light.visible = false
+			alight -= 1
 
 
 var _effects_on := true
@@ -155,6 +238,13 @@ func _process(delta: float) -> void:
 	# runs on one frame in CULL_PERIOD with the phase spread across instances.
 	# Worst case a torch is a tenth of a second late noticing the player, which
 	# is not perceptible on a light that is flickering anyway.
+	var now_frame := Engine.get_process_frames()
+	if _is_managed and now_frame != _rank_frame and now_frame % RANK_PERIOD == 0:
+		_rank_frame = now_frame
+		var cam := _shared_camera()
+		var gfx := get_node_or_null("/root/Graphics")
+		if cam != null:
+			_rank(cam.global_position, int(gfx.get("torch_lights")) if gfx != null else 12)
 	if (Engine.get_process_frames() + _cull_phase) % CULL_PERIOD == 0:
 		var camera := _shared_camera()
 		if camera == null:
@@ -188,7 +278,13 @@ func _process(delta: float) -> void:
 	var wobble := _noise.get_noise_1d(_time * 12.0)
 	var factor := clampf(1.0 + wobble * flicker_amount - _gutter, 0.08, 2.0)
 
-	light.light_energy = base_energy * factor
+	var lit := 1.0
+	if _is_managed:
+		_lit = move_toward(_lit, _lit_target, delta * LIT_EASE)
+		lit = _lit
+		if light.visible != (_lit > 0.001):
+			light.visible = _lit > 0.001
+	light.light_energy = base_energy * factor * lit
 	# The fire leans and shifts: the light moves with it.
 	light.position = _light_home + Vector3(_noise.get_noise_2d(_time * 7.0, 31.0),
 		_noise.get_noise_2d(_time * 9.0, 57.0) * 0.6, _noise.get_noise_2d(_time * 7.0, 83.0)) * sway

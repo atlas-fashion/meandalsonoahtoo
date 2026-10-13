@@ -83,6 +83,15 @@ static func spawn(parent: Node, at: Vector3, item: StringName, amount := 1) -> N
 	return drop
 
 
+## Spawned already taken: it lifts from `at` and flies straight to the player,
+## as a picked-up drop does (a searched cart's contents). The caller checks
+## `Inventory.room_for` first; this does not.
+static func give(parent: Node, at: Vector3, item: StringName, amount := 1) -> Node3D:
+	var drop := spawn(parent, at, item, amount)
+	drop.set_meta("fly", true)
+	return drop
+
+
 func _ready() -> void:
 	_visual = _make_visual(id)
 	add_child(_visual)
@@ -110,6 +119,10 @@ func _process(delta: float) -> void:
 		# On the first frame, not in `_ready`: `spawn` adds the drop to the tree
 		# BEFORE it sets its position, so in `_ready` it is still at the origin.
 		_placed = true
+		if has_meta("fly"):
+			_player = get_tree().get_first_node_in_group("player") as Node3D
+			_take_off()
+			return
 		_escape_solid()
 		var ground := _world_ray(global_position, global_position - Vector3(0.0, 40.0, 0.0))
 		_home_found = not ground.is_empty()
@@ -422,6 +435,27 @@ func _make_visual(item: StringName) -> Node3D:
 			_add_model(holder, SKULL_MODEL, 0.2, Vector3.RIGHT)
 		&"bone_fragment":
 			_add_bone(holder)
+		&"coins":
+			# A short stack of gold coins, a little askew.
+			var gold := StandardMaterial3D.new()
+			gold.albedo_color = Color(0.6, 0.44, 0.17)
+			gold.metallic = 0.6
+			gold.roughness = 0.35
+			gold.emission_enabled = true
+			gold.emission = Color(0.5, 0.35, 0.1)
+			gold.emission_energy_multiplier = 0.6
+			var coin := CylinderMesh.new()
+			coin.top_radius = 0.035
+			coin.bottom_radius = 0.035
+			coin.height = 0.008
+			coin.radial_segments = 12
+			coin.rings = 1
+			for k in 4:
+				var c := MeshInstance3D.new()
+				c.mesh = coin
+				c.material_override = gold
+				c.position = Vector3(randf_range(-0.008, 0.008), 0.009 * k, randf_range(-0.008, 0.008))
+				holder.add_child(c)
 		_:
 			var ball := MeshInstance3D.new()
 			var sphere := SphereMesh.new()
