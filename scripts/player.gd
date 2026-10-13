@@ -638,6 +638,7 @@ func end_cutscene() -> void:
 	_scene_walk_target = null
 	_scene_look = null
 	scene_frame(0.0, 0.0)
+	scene_lean(Vector3.ZERO, 9.0)
 
 
 ## --- Scene camera ----------------------------------------------------------------
@@ -669,8 +670,22 @@ func scene_frame(zoom_degrees: float, roll_degrees: float, rate := 3.0) -> void:
 	_scene_frame_rate = rate
 
 
+## Moves the eye off its rest in a scene (body space: +X right, +Y up, -Z
+## forward) -- leaning in over the rim of a cart, crouching to a lock --
+## eased on the real clock. `end_cutscene` eases it home.
+var _scene_lean := Vector3.ZERO
+var _scene_lean_goal := Vector3.ZERO
+var _scene_lean_rate := 5.0
+
+
+func scene_lean(offset: Vector3, rate := 5.0) -> void:
+	_scene_lean_goal = offset
+	_scene_lean_rate = rate
+
+
 func _update_scene_camera() -> void:
 	var real := minf(get_process_delta_time() / maxf(Engine.time_scale, 0.001), 0.1)
+	_scene_lean = _scene_lean.lerp(_scene_lean_goal, 1.0 - exp(-_scene_lean_rate * real))
 	var k := 1.0 - exp(-_scene_frame_rate * real)
 	_scene_zoom = lerpf(_scene_zoom, _scene_zoom_goal, k)
 	_scene_roll = lerpf(_scene_roll, _scene_roll_goal, k)
@@ -1152,7 +1167,7 @@ func _update_head(delta: float) -> void:
 	effort.x += wake.z + 38.0 * crushed
 	effort.y += wake.y - 25.0 * crushed
 	effort.z += wake.x + 1.35 * crushed
-	head.position = _head_rest + _bob_offset + shake_offset \
+	head.position = _head_rest + _bob_offset + shake_offset + _scene_lean \
 		- Vector3(0, landing_bob_height * land + jump_bob_height * push + slam_crouch_depth * crouch + effort.z,
 			spear_effort_push * _stab_k)
 	# Look is added untouched, never smoothed -- lagging the crosshair behind
@@ -4164,6 +4179,8 @@ func _respawn() -> void:
 	_was_grounded = true
 	_land_kick = 0.0
 	_scene_crush = 0.0
+	_scene_lean = Vector3.ZERO
+	_scene_lean_goal = Vector3.ZERO
 	hands_busy = false
 	# The inventory is exactly as it was at death (2026-10-11): no topping the
 	# potions back up. `_reset_inventory` only runs for a new game now.

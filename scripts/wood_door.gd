@@ -263,7 +263,16 @@ func restore_opened() -> void:
 		var leaf := get_node_or_null(leaf_name) as Node3D
 		if leaf != null:
 			leaf.visible = false
+	_show_reveal()
 	door_opened.emit()
+
+
+## The brick door frame's opening is lined only once the door is gone
+## (module_level `_door_reveal_mesh`): the lining runs where the door stood.
+func _show_reveal() -> void:
+	var reveal := get_node_or_null("GateFrame/Reveal") as Node3D
+	if reveal != null:
+		reveal.visible = true
 
 
 ## Real-time tweens: the slow motion must not slow the camera work.
@@ -311,6 +320,7 @@ func _burst(out: Vector3) -> void:
 				_pieces.append_array(DEBRIS.shatter(mi, get_parent() as Node3D, push, impact,
 					cut[0], cut[1], cut[2], cut[3]))
 		leaf.visible = false
+	_show_reveal()
 	DEBRIS.crumble(_pieces, effects)
 	if effects:
 		DEBRIS.dust(get_parent() as Node3D, impact, push)

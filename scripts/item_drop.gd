@@ -60,6 +60,8 @@ var _escapes := 0
 
 # The flight to the player.
 var _flying := false
+## Given (`give`), lying still until its `fly_wait` runs out.
+var _lie_in_wait := false
 var _flight := 0.0
 var _from := Vector3.ZERO
 var _via := Vector3.ZERO
@@ -86,9 +88,12 @@ static func spawn(parent: Node, at: Vector3, item: StringName, amount := 1) -> N
 ## Spawned already taken: it lifts from `at` and flies straight to the player,
 ## as a picked-up drop does (a searched cart's contents). The caller checks
 ## `Inventory.room_for` first; this does not.
-static func give(parent: Node, at: Vector3, item: StringName, amount := 1) -> Node3D:
+## `wait`: it first lies where it is that long, so it can be seen (in a cart's
+## tray, as the player looks in), then goes.
+static func give(parent: Node, at: Vector3, item: StringName, amount := 1, wait := 0.0) -> Node3D:
 	var drop := spawn(parent, at, item, amount)
 	drop.set_meta("fly", true)
+	drop.set_meta("fly_wait", wait)
 	return drop
 
 
@@ -120,9 +125,20 @@ func _process(delta: float) -> void:
 		# BEFORE it sets its position, so in `_ready` it is still at the origin.
 		_placed = true
 		if has_meta("fly"):
-			_player = get_tree().get_first_node_in_group("player") as Node3D
-			_take_off()
+			# Lying as a dropped one settles: a random turn, resting on its
+			# own underside (`give` is handed the floor + 4 cm).
+			_visual.rotation = Vector3(0.0, randf() * TAU, 0.0) + _rest_tilt(id)
+			global_position.y += -_visual_bounds_y() - 0.035
+			_lie_in_wait = true
+	if _lie_in_wait:
+		var wait: float = get_meta("fly_wait", 0.0)
+		if wait > 0.0:
+			set_meta("fly_wait", wait - delta)
 			return
+		_lie_in_wait = false
+		_player = get_tree().get_first_node_in_group("player") as Node3D
+		_take_off()
+		return
 		_escape_solid()
 		var ground := _world_ray(global_position, global_position - Vector3(0.0, 40.0, 0.0))
 		_home_found = not ground.is_empty()
