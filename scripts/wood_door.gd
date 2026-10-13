@@ -263,7 +263,6 @@ func restore_opened() -> void:
 		var leaf := get_node_or_null(leaf_name) as Node3D
 		if leaf != null:
 			leaf.visible = false
-	_drop_frame()
 	door_opened.emit()
 
 
@@ -315,22 +314,7 @@ func _burst(out: Vector3) -> void:
 	DEBRIS.crumble(_pieces, effects)
 	if effects:
 		DEBRIS.dust(get_parent() as Node3D, impact, push)
-	_drop_frame()
 	_shove(impact)
-
-
-## The brick kit's door carries its own stone frame round the leaf, and with the
-## leaf cut out of it the frame is hollow inside. Once the door is broken the
-## frame and its jambs go too, leaving the corridor's own (complete) brick arch.
-func _drop_frame() -> void:
-	if get_node_or_null("Boards") == null and get_node_or_null("LeafL/Boards") == null:
-		return
-	var frame := get_node_or_null("GateFrame") as Node3D
-	if frame != null:
-		frame.visible = false
-	var jambs := get_node_or_null("Jambs") as CollisionObject3D
-	if jambs != null:
-		jambs.collision_layer = 0
 
 
 ## Everything that can be hurt within SHOVE_RADIUS of the boot (the damageable

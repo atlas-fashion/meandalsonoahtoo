@@ -1196,9 +1196,16 @@ static func _gate_door_parts() -> Dictionary:
 	return parts
 
 
+static var _frame_both_sides := {}
+
+
 ## Brick kit: the Tripo arched door (`door_frame` + `door_leaf` from the brick
 ## kit) set in the arch on the boundary. One leaf ("LeafL"; wood_door.gd takes
-## either) that the kick breaks; the stone frame stays.
+## either) that the kick breaks; the stone frame and its jambs stay
+## (2026-10-12: the kick used to hide them, and the arch went with the door).
+## The frame was hollow where the leaf was cut out of it -- from the far side
+## the opening's inner faces were missing -- so its stone is drawn from both
+## sides.
 static func _build_brick_door(door: Node3D) -> void:
 	var frame := MeshInstance3D.new()
 	frame.name = "GateFrame"
@@ -1206,6 +1213,14 @@ static func _build_brick_door(door: Node3D) -> void:
 	frame.position = Vector3(0.0, 0.0, BRICK_DOOR_LEAF)
 	frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	frame.visibility_range_end = 60.0
+	for s in frame.mesh.get_surface_count():
+		var m := frame.mesh.surface_get_material(s) as BaseMaterial3D
+		if m != null:
+			if not _frame_both_sides.has(m):
+				var copy := m.duplicate() as BaseMaterial3D
+				copy.cull_mode = BaseMaterial3D.CULL_DISABLED
+				_frame_both_sides[m] = copy
+			frame.set_surface_override_material(s, _frame_both_sides[m])
 	door.add_child(frame)
 	var leaf := Node3D.new()
 	leaf.name = "LeafL"
