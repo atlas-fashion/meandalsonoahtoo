@@ -3153,3 +3153,7 @@ grand stair from ONE doorway up to a throne hall above the corridor roofs.
   Measured: the Tripo cart's tray floor is at 0.78 m (`KIT_TRAY_FLOOR`; the old
   `TRAY_FLOOR` 0.52 put the find under the boards). Death mid-scene: no hands,
   no letterbox, no lean left, weapon back, the cart left unsearched.
+- **The drawn hands were removed** (2026-10-12, at the user's request): no
+  forearms or hands in the cart search; the reach is a plain 0.4 s beat of the
+  view leaning in. Everything else in the scene is unchanged (measured 2.6 s,
+  finds delivered, no extra meshes on the cart).

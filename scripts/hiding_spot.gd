@@ -125,7 +125,6 @@ func _set_lid(angle: float) -> void:
 
 
 func _process(_delta: float) -> void:
-	_update_hands()
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player") as Node3D
 		if _player == null:
@@ -164,12 +163,11 @@ func _unhandled_input(event: InputEvent) -> void:
 # --- Searching ------------------------------------------------------------------
 ##
 ## A short scene (2026-10-12, "longer and more cinematic"): letterbox; the player
-## steps right up to the cart, crouches a little and reaches -- two forearms
-## come up into view and the hands hook under the lid's front edge -- the lid
-## sticks, gives with a jolt, and is heaved up and over, the hands riding it
-## until it is past upright and let go; the view rises and leans in over the rim
-## to look down into the tray at what is (or is not) lying there; and then
-## control comes straight back as the find lifts out and flies to the player.
+## steps right up to the cart, crouches a little and reaches for the lid --
+## it sticks, gives with a jolt, and is heaved up and over; the view rises
+## and leans in over the rim to look down into the tray at what is (or is
+## not) lying there; and then control comes straight back as the find lifts
+## out and flies to the player. (Drawn hands were tried and removed.)
 
 ## Where the player stands to search: closer than for hiding, at the board.
 const SEARCH_STAND := 0.55
@@ -178,13 +176,6 @@ const REACH_TIME := 0.4
 const STICK_TIME := 0.38
 const HEAVE_TIME := 0.8
 const PEER_TIME := 0.6
-## The lid's angle at which the hands let go of it.
-const LET_GO := -1.0
-
-var _hands: Array = []
-var _reach := 0.0
-var _gripping := false
-var _strain := 0.0
 
 
 func _search() -> void:
@@ -200,24 +191,19 @@ func _search() -> void:
 	await _step_up(SEARCH_STAND)
 	if not _still_alive(bars):
 		return
-	# Reach: down a little and in, the arms coming up into view.
+	# Reach: down a little and in.
 	_player.scene_lean(Vector3(0.0, -0.14, -0.1), 6.0)
 	_player.scene_look_at(_lid_edge(), 8.0)
 	_player.scene_frame(3.0, 0.0, 3.0)
-	_show_hands(true)
-	var r := create_tween().set_ignore_time_scale(true)
-	r.tween_property(self, "_reach", 1.0, REACH_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	await r.finished
-	_gripping = true
-	# It sticks: a lift of a finger's width that drops back, the arms straining.
-	_strain = 1.0
+	await get_tree().create_timer(REACH_TIME, true, false, true).timeout
+	# It sticks: a lift of a finger's width that drops back.
 	var s := create_tween().set_ignore_time_scale(true)
 	s.tween_method(_set_lid, 0.0, -0.11, STICK_TIME * 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	s.tween_method(_set_lid, -0.11, -0.02, STICK_TIME * 0.55).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	await s.finished
 	if not _still_alive(bars):
 		return
-	# It gives: a jolt through the arms and the view.
+	# It gives: a jolt through the view.
 	_player.set("_shake", maxf(float(_player.get("_shake")), 0.18))
 	# The heave: up and over, the view rising and leaning in over the rim to
 	# the tray as the lid comes up.
@@ -231,14 +217,12 @@ func _search() -> void:
 	var h := create_tween().set_ignore_time_scale(true)
 	h.tween_method(_set_lid, _lid.rotation.x, LID_OPEN, HEAVE_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	await h.finished
-	_strain = 0.0
 	if not _still_alive(bars):
 		return
 	if find.is_empty():
 		_toast("Empty")
 	await get_tree().create_timer(PEER_TIME, true, false, true).timeout
 	# Seen: straight back to the player.
-	_show_hands(false)
 	load("res://scripts/wood_door.gd").letterbox_out(bars)
 	_player.end_cutscene()
 	_player.set("hands_busy", false)
@@ -286,137 +270,6 @@ static func _roll() -> Array:
 	if r < FIND_BONES:
 		return [&"bone_fragment", randi_range(BONES_MIN, BONES_MAX)]
 	return []
-
-
-# --- The hands --------------------------------------------------------------------
-##
-## Two forearms in dark sleeves and two hands, built from primitives, placed each
-## frame from a shoulder point beside and below the eye to a grip on the lid's
-## front edge -- so they reach out of the bottom of the view, hook the edge and
-## ride it up. While gripping they tremble with the strain.
-
-static var _arm_parts := {}
-
-
-static func _arm_materials() -> Dictionary:
-	if not _arm_parts.is_empty():
-		return _arm_parts
-	var sleeve := StandardMaterial3D.new()
-	sleeve.albedo_color = Color(0.26, 0.19, 0.13)
-	sleeve.roughness = 1.0
-	var skin := StandardMaterial3D.new()
-	skin.albedo_color = Color(0.58, 0.42, 0.33)
-	skin.roughness = 0.75
-	_arm_parts = {"sleeve": sleeve, "skin": skin}
-	return _arm_parts
-
-
-func _make_arm() -> Node3D:
-	var mats := _arm_materials()
-	var arm := Node3D.new()
-	arm.top_level = true
-	var sleeve := MeshInstance3D.new()
-	sleeve.name = "Sleeve"
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.042
-	cyl.bottom_radius = 0.05
-	cyl.height = 1.0
-	cyl.radial_segments = 10
-	cyl.rings = 1
-	sleeve.mesh = cyl
-	sleeve.material_override = mats["sleeve"]
-	arm.add_child(sleeve)
-	# The hand, in its own frame: -Z along the forearm, fingers forward and
-	# curling down over the edge, palm under.
-	var hand := Node3D.new()
-	hand.name = "Hand"
-	arm.add_child(hand)
-	var palm := MeshInstance3D.new()
-	var pb := BoxMesh.new()
-	pb.size = Vector3(0.1, 0.036, 0.11)
-	palm.mesh = pb
-	palm.material_override = mats["skin"]
-	palm.position = Vector3(0.0, 0.0, -0.04)
-	hand.add_child(palm)
-	for i in 4:
-		var finger := MeshInstance3D.new()
-		var fb := BoxMesh.new()
-		fb.size = Vector3(0.021, 0.021, 0.085)
-		finger.mesh = fb
-		finger.material_override = mats["skin"]
-		finger.position = Vector3(-0.036 + 0.024 * float(i), 0.012, -0.12)
-		finger.rotation.x = 0.45
-		hand.add_child(finger)
-	var thumb := MeshInstance3D.new()
-	var tb := BoxMesh.new()
-	tb.size = Vector3(0.02, 0.02, 0.06)
-	thumb.mesh = tb
-	thumb.material_override = mats["skin"]
-	thumb.position = Vector3(0.05, -0.008, -0.05)
-	thumb.rotation.y = -0.6
-	hand.add_child(thumb)
-	for mi in arm.find_children("*", "MeshInstance3D", true, false):
-		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return arm
-
-
-func _show_hands(on: bool) -> void:
-	if on and _hands.is_empty():
-		for side: float in [-1.0, 1.0]:
-			var arm := _make_arm()
-			arm.set_meta("side", side)
-			add_child(arm)
-			_hands.append(arm)
-		_reach = 0.0
-		_gripping = false
-	elif not on:
-		for arm in _hands:
-			if is_instance_valid(arm):
-				arm.queue_free()
-		_hands.clear()
-		_gripping = false
-
-
-func _update_hands() -> void:
-	if _hands.is_empty():
-		return
-	var cam := get_viewport().get_camera_3d()
-	if cam == null:
-		return
-	# Let go once the lid is past upright: the arms drop back out of view.
-	if _gripping and _lid.rotation.x < LET_GO:
-		_gripping = false
-		var drop := create_tween().set_ignore_time_scale(true)
-		drop.tween_property(self, "_reach", 0.0, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	var t := float(Time.get_ticks_msec()) / 1000.0
-	for arm: Node3D in _hands:
-		var side: float = arm.get_meta("side")
-		var shoulder := cam.global_transform * Vector3(side * 0.3, -0.55, 0.12)
-		# The fingertips hook under the lid's front edge; the hand lies in front
-		# of it, where the eye can see it, not behind the board.
-		var tips := _lid.to_global(Vector3(side * 0.34, -0.04, WIDTH + 0.06))
-		var grip := tips + (shoulder - tips).normalized() * 0.15
-		var rest := shoulder + (grip - shoulder).normalized() * 0.2
-		var k := _reach * _reach * (3.0 - 2.0 * _reach)
-		var wrist := rest.lerp(grip, k)
-		if _strain > 0.0:
-			wrist += Vector3(sin(t * 47.0 + side), sin(t * 53.0), cos(t * 41.0)) * 0.004 * _strain
-		var along := wrist - shoulder
-		var length := maxf(along.length(), 0.05)
-		var dir := along / length
-		var basis := Basis.looking_at(dir, Vector3.UP)
-		arm.global_transform = Transform3D(basis, shoulder)
-		var sleeve := arm.get_node("Sleeve") as Node3D
-		# The cylinder stands along its Y: lay it along -Z, from the shoulder
-		# to the wrist.
-		sleeve.transform = Transform3D(Basis(Vector3.RIGHT, -PI * 0.5) * Basis.from_scale(Vector3(1.0, length, 1.0)),
-			Vector3(0.0, 0.0, -length * 0.5))
-		var hand := arm.get_node("Hand") as Node3D
-		# Level, pointing into the cart, palm down: the fingers curl up under the
-		# lid's edge. Turned with the arm the palm faced the camera.
-		hand.global_transform = Transform3D(Basis.looking_at(-global_basis.z, Vector3.UP),
-			shoulder + dir * length)
-		arm.visible = _reach > 0.02
 
 
 # --- Hiding ---------------------------------------------------------------------
@@ -472,8 +325,6 @@ func _still_alive(bars: CanvasLayer = null) -> bool:
 	if is_instance_valid(_player) and not _player.get("_dead"):
 		return true
 	_busy = false
-	_strain = 0.0
-	_show_hands(false)
 	if bars != null and is_instance_valid(bars):
 		load("res://scripts/wood_door.gd").letterbox_out(bars)
 	state = State.OPEN if searched else State.SHUT
