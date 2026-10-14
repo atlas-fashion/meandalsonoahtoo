@@ -71,7 +71,7 @@ func _part(mesh: Mesh, at: Vector3) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.position = at
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	mi.visibility_range_end = 45.0
 	mi.visibility_range_end_margin = 6.0
 	_bars.add_child(mi)

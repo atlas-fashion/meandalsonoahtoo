@@ -1,6 +1,6 @@
 extends RefCounted
 
-## Builds the dark blood-red / wispy-cloud sky and wires it onto an
+## Builds the night sky with the red moon (shaders/sky_clouds.gdshader) and wires it onto an
 ## Environment. One call: `SkySetup.apply(env)`.
 ##
 ## Deliberately does nothing to ambient lighting. The level's own

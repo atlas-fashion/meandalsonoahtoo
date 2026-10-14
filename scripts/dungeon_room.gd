@@ -239,7 +239,7 @@ func _build_domed_prison() -> void:
 			add_child(hinge)
 			var leaf := MeshInstance3D.new()
 			leaf.mesh = kit.standalone("jail_gate_l" if side < 0.0 else "jail_gate_r")
-			leaf.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			leaf.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			hinge.add_child(leaf)
 			cell["door" if side < 0.0 else "door2"] = hinge
 		# One blocker over the whole opening (bars do not stop sight: layer 1),
@@ -427,7 +427,7 @@ func _build_partitions(kit) -> void:
 					var mi := MeshInstance3D.new()
 					mi.mesh = kit.standalone(piece[0])
 					mi.transform = Transform3D(basis, at + Vector3(0.0, piece[1], 0.0))
-					mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 					add_child(mi)
 				var shape := BoxShape3D.new()
 				shape.size = Vector3(4.2, 5.0, 1.0)
@@ -448,7 +448,7 @@ func _build_dome_hall(kit) -> void:
 		mi.mesh = kit.standalone("wall")
 		var b := xf.basis * Basis().scaled(Vector3(band_len / 5.2, 1.0, 1.0))
 		mi.transform = Transform3D(b, xf * Vector3(0.0, BAND_BASE, BAND_FRONT))
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(mi)
 	# The dome (Tripo, turned inside out in build_brick_kit.py): wide enough to
 	# span the hall's CORNERS, so it springs from just outside the band and
@@ -461,7 +461,7 @@ func _build_dome_hall(kit) -> void:
 	dome.mesh = kit.standalone("prison_dome")
 	dome.transform = Transform3D(Basis().scaled(Vector3(radius, radius * DOME_RISE, radius)),
 		Vector3(0.0, DOME_BASE, 0.0))
-	dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	add_child(dome)
 	# Embers' glow up under the dome, so its brick and ribs read out of the dark.
 	for k in 4:
@@ -682,7 +682,7 @@ func _bars(key: StringName, width: float) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _meshes[full]
 	mi.material_override = _mat(&"iron")
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	return mi
 
 
@@ -819,7 +819,7 @@ func _build_mine() -> void:
 		mi.mesh = _rock_mesh(k % 4)
 		mi.material_override = stone
 		mi.transform = Transform3D(Basis(Vector3.UP, _rng.randf_range(-0.5, 0.5)).scaled(size), at)
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(mi)
 		# A box inside the lump, short of its front, so nothing walks into the rock.
 		_add_shape(rock_body, Vector3(size.x * 1.5, size.y * 1.6, size.z * 1.3), at - Vector3(0.0, 0.0, size.z * 0.2))
@@ -1005,7 +1005,7 @@ func _build_drill(x: float, face_z: float) -> Dictionary:
 	cone.material_override = iron
 	cone.rotation.x = -PI * 0.5
 	cone.position.z = -0.3 - BIT_LENGTH * 0.5
-	cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	bit.add_child(cone)
 	# The flutes: thin blades wound round the cone, so the spin can be seen.
 	for k in 10:
@@ -1052,7 +1052,7 @@ func _build_heap(at: Vector3) -> void:
 		var s := _rng.randf_range(0.18, 0.42)
 		mi.transform = Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(s, s * 0.8, s)),
 			at + Vector3(_rng.randf_range(-0.6, 0.6), s * 0.3, _rng.randf_range(-0.5, 0.5)))
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(mi)
 	_solid(self, Vector3(1.4, 0.6, 1.2), at + Vector3(0.0, 0.3, 0.0))
 	# The rails, from the heap back toward the way in, and the cart on them.
@@ -1116,7 +1116,7 @@ func _make_miner(cell: Dictionary) -> void:
 			sk.add_child(hold)
 			var pick := MeshInstance3D.new()
 			pick.mesh = preload("res://scripts/skeleton_sword.gd")._mesh(&"pick")
-			pick.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			pick.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			hold.add_child(pick)
 	var ap := model.find_children("*", "AnimationPlayer", true, false)
 	if not ap.is_empty():
@@ -1730,7 +1730,7 @@ func _box(parent: Node3D, size: Vector3, at: Vector3, mat: Material) -> MeshInst
 	mi.mesh = box
 	mi.material_override = mat
 	mi.position = at
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	parent.add_child(mi)
 	return mi
 
@@ -1764,7 +1764,7 @@ func _cyl(radius: float, height: float, segments: int, mat: Material) -> MeshIns
 	cyl.rings = 1
 	mi.mesh = cyl
 	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	return mi
 
 
@@ -1777,7 +1777,7 @@ func _sphere(radius: float, mat: Material) -> MeshInstance3D:
 	s.rings = 5
 	mi.mesh = s
 	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	return mi
 
 

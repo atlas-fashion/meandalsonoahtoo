@@ -420,7 +420,7 @@ func _box(parent: Node3D, size: Vector3, at: Vector3, mat: Material) -> MeshInst
 	mi.mesh = box
 	mi.material_override = mat
 	mi.position = at
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	parent.add_child(mi)
 	return mi
 
@@ -436,7 +436,7 @@ func _cyl(radius: float, height: float, segments: int, mat: Material) -> MeshIns
 	mi.mesh = cyl
 	mi.material_override = mat
 	mi.rotation.x = PI * 0.5
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	return mi
 
 
@@ -449,7 +449,7 @@ func _sphere(radius: float, mat: Material) -> MeshInstance3D:
 	s.rings = 5
 	mi.mesh = s
 	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	return mi
 
 
@@ -462,7 +462,7 @@ func _octa(width: float, height: float, mat: Material) -> MeshInstance3D:
 	s.rings = 2
 	mi.mesh = s
 	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	return mi
 
 

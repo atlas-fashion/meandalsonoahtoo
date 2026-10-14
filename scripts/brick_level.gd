@@ -32,10 +32,16 @@ extends RefCounted
 const ModuleMaze := preload("res://scripts/module_maze.gd")
 const KIT := "res://models/brick/brick_kit.glb"
 
-## Pieces that do NOT cast shadows. The floor and its bed only ever have light
-## from above, and the lid and skirts are outside the corridor where no torch
-## can see them -- in a shadow pass they would be drawn for nothing.
-const NO_SHADOW := ["floor", "bed", "cap", "skirt"]
+## Pieces that do NOT cast shadows: the floor and its bed only ever have light
+## from above.
+const NO_SHADOW := ["floor", "bed"]
+## The lid and skirts DO cast, for the moon (2026-10-14): the Tripo vault has a
+## few real holes in it, which the lid covers, and the moon would shine through
+## them. No torch can see them (they are outside the corridor), so they are on
+## their own visual layer, which `module_level._hang_torch` leaves out of every
+## torch's `shadow_caster_mask` -- they cost no torch shadow pass.
+const MOON_ONLY := ["cap", "skirt"]
+const MOON_ONLY_LAYER := 1 << 12
 
 const WALL_FACE := 1.9
 const WALL_HEIGHT := 3.5
@@ -307,6 +313,21 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 		# pieces shows rock, never sky, and from a court it is the arcade's roof.
 		if not out.skylights.has(cell.pos):
 			add.call("cap", Transform3D(Basis(), centre + Vector3(0.0, CAP_Y, 0.0)))
+		else:
+			# Over a skylight, a frame of lid round the shaft (2026-10-14): with
+			# no lid at all, the vault's own small holes let the moon through
+			# beside the shaft. Four strips of the same 6.02 m slab, scaled,
+			# leaving a hole just outside the shaft's liner.
+			var hx := 0.7
+			var hz := 1.4
+			var full := 3.01
+			for s: float in [-1.0, 1.0]:
+				var side_w := full - hx
+				add.call("cap", Transform3D(basis * Basis.from_scale(Vector3(side_w / 6.02, 1.0, 1.0)),
+					centre + basis * Vector3(s * (hx + side_w * 0.5), CAP_Y, 0.0)))
+				var end_l := full - hz
+				add.call("cap", Transform3D(basis * Basis.from_scale(Vector3(hx * 2.0 / 6.02, 1.0, end_l / 6.02)),
+					centre + basis * Vector3(0.0, CAP_Y, s * (hz + end_l * 0.5))))
 
 		# Sides.
 		for side in ModuleMaze.ORDER:
@@ -526,6 +547,8 @@ static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view
 			mmi.visibility_range_end_margin = out.cell_size
 			mmi.cast_shadow = (GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if piece in NO_SHADOW
 				else GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+			if piece in MOON_ONLY:
+				mmi.layers = MOON_ONLY_LAYER
 			holder.add_child(mmi)
 			counts[piece] = int(counts.get(piece, 0)) + list.size()
 	holder.set_meta("counts", counts)

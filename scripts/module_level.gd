@@ -1686,10 +1686,17 @@ const SKY_LIGHT_HEIGHT := 8.5
 const SKY_ENERGY := 0.3
 
 
-static func place_room_lights(parent: Node3D, out: Built) -> Node3D:
+## Since 2026-10-14 the courts are lit by the red MOON (maze `_setup_moon`), a
+## directional light with real shadows, and this places NOTHING: it returns
+## the empty holder, which the prison and puzzle rooms still look in. Pass
+## `faked := true` for the old red omnis.
+static func place_room_lights(parent: Node3D, out: Built, faked := false) -> Node3D:
 	var holder := Node3D.new()
 	holder.name = "RoomSkyLights"
 	parent.add_child(holder)
+	if not faked:
+		holder.set_meta("light_count", 0)
+		return holder
 	var placed := 0
 	for room in out.rooms:
 		# The boss hall lights itself (boss_hall.gd); its ground is a stairwell.
@@ -1978,6 +1985,9 @@ static func _hang_torch(holder: Node3D, scene: PackedScene, at: Vector3,
 		# mount casts none, or it would shade its own light.
 		light.shadow_enabled = true
 		light.set_meta("torch_shadow", true)
+		# The lid and skirts outside the corridor cast for the moon only.
+		light.shadow_caster_mask &= ~BrickLevel.MOON_ONLY_LAYER
+		light.light_cull_mask &= ~BrickLevel.MOON_ONLY_LAYER
 		light.light_color = TORCH_COLOUR
 	return torch
 
@@ -2391,6 +2401,11 @@ static func _pick_skylights(out: Built, meshes: Dictionary) -> void:
 ## Dresses every skylight cell: a stone liner round the shaft, iron bars across
 ## it and a red spotlight above it. `density` scales how many are LIT (the
 ## light is the per-pixel cost); the opening and its bars are always there.
+## The old red spotlight under each skylight. Off since the moon (2026-10-14)
+## shines down the shafts for real.
+const SKYLIGHT_SPOTS := false
+
+
 static func place_skylights(parent: Node3D, out: Built, density: float = 1.0) -> Node3D:
 	var holder := Node3D.new()
 	holder.name = "ModuleSkylights"
@@ -2462,10 +2477,16 @@ static func place_skylights(parent: Node3D, out: Built, density: float = 1.0) ->
 			var r := _window_part(sky, rung, Vector3(0.0, bar_y, z))
 			r.rotation.z = PI * 0.5
 		var s := _window_part(sky, spine, Vector3(0.0, bar_y + 0.06, 0.0))
+		# The moon comes down the shaft: the liner and bars throw their shadows
+		# (the grate's bars striping the pool of moonlight on the floor).
+		for part in sky.get_children():
+			if part is GeometryInstance3D:
+				(part as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		s.rotation.x = PI * 0.5
 
 		placed += 1
-		if density <= 0.0 or placed % lit_every != 0:
+		# The moon shines down the shaft now (2026-10-14): no fake spotlight.
+		if not SKYLIGHT_SPOTS or density <= 0.0 or placed % lit_every != 0:
 			continue
 		# Above the opening, pointing straight down: a pool of red on the floor
 		# under the shaft. Shadowless, like every dressing light here, so the

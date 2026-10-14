@@ -299,6 +299,15 @@ func _apply_light(l: Light3D) -> void:
 	var torch := l.has_meta("torch_shadow")
 	if saved["shadow"]:
 		l.shadow_enabled = shadows > 0
+	if l.has_meta("moon"):
+		# The red moon (maze `_setup_moon`) lights the courts and skylights
+		# only because its shadows stop it at every roof. Without shadows it
+		# would light every corridor through the stone, so it goes out.
+		l.visible = shadows > 0
+		(l as DirectionalLight3D).directional_shadow_mode = (
+			DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if shadows >= 2
+			else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS)
+		return
 	if l is OmniLight3D and saved["range"] > 0.0:
 		(l as OmniLight3D).omni_range = float(saved["range"]) * light_detail
 	if saved["fade_enabled"]:

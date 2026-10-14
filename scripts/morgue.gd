@@ -230,7 +230,7 @@ func _sprawl(sk: Skeleton3D, amount: float) -> void:
 func _make_dead(model: Node3D) -> void:
 	for node in model.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		for i in mi.mesh.get_surface_count():
 			var src := mi.mesh.surface_get_material(i)
 			if src == null:
@@ -504,7 +504,7 @@ func _loose_skull(at: Vector3) -> void:
 	skull.position = at + Vector3(0.0, 0.09, 0.0)
 	for node in skull.find_children("*", "MeshInstance3D", true, false):
 		(node as MeshInstance3D).material_override = _mat(&"bone")
-		(node as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		(node as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
 
 # --- Geometry helpers -----------------------------------------------------------------
@@ -522,7 +522,7 @@ func _edge_box(parent: Node3D, a: Vector2, b: Vector2, thick: float, deep: float
 	mi.material_override = mat
 	mi.position = Vector3(mid.x, mid.y, 0.0) + off
 	mi.rotation.z = atan2(along.y, along.x)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	parent.add_child(mi)
 
 

@@ -1,6 +1,8 @@
 shader_type sky;
 
-// Dark blood-red sky with drifting, wispy, dark-grey cloud deck.
+// Night sky (2026-10-14; it was a dark blood-red sky): near-black with stars,
+// a big red moon drawn where the MoonLight comes from (LIGHT0_DIRECTION), its
+// glow, and a drifting, wispy cloud deck that catches the moon's light.
 //
 // The clouds are three noise layers at different frequencies/speeds/wind
 // directions, sheared a little by pitch so they separate as the camera looks
@@ -52,19 +54,21 @@ render_mode use_quarter_res_pass;
 // it was: at the same energy multiplier and grade, a zenith of 0.2 read as
 // black and 0.78 as a flat, bright, saturated red. The asked-for "darker
 // red" sits between them: 0.46 zenith, 0.78 horizon, checked in game.
-uniform vec4 zenith_color : source_color = vec4(0.46, 0.085, 0.065, 1.0);
-uniform vec4 horizon_color : source_color = vec4(0.78, 0.17, 0.10, 1.0);
-uniform vec4 ground_color : source_color = vec4(0.02, 0.01, 0.01, 1.0);
+// Night (2026-10-14): near-black, faintly blue at the zenith, a little warmer
+// at the horizon; the red comes from the moon and its glow, not the sky.
+uniform vec4 zenith_color : source_color = vec4(0.012, 0.014, 0.03, 1.0);
+uniform vec4 horizon_color : source_color = vec4(0.06, 0.035, 0.045, 1.0);
+uniform vec4 ground_color : source_color = vec4(0.005, 0.004, 0.006, 1.0);
 
 // Distinctly DARKER than the sky around them -- smoke against a glow, not a
 // same-value grey that only reads by hue -- but NOT so dark that a stretch
 // of full cloud cover reads as a hole punched in the sky rather than smoke.
 // (0.11 did exactly that once the sky itself got bright: solid-looking
 // black patches, not grey wisps.)
-uniform vec4 cloud_color : source_color = vec4(0.52, 0.50, 0.52, 1.0);
-uniform vec4 cloud_shadow_color : source_color = vec4(0.24, 0.23, 0.24, 1.0);
+uniform vec4 cloud_color : source_color = vec4(0.05, 0.045, 0.055, 1.0);
+uniform vec4 cloud_shadow_color : source_color = vec4(0.012, 0.011, 0.015, 1.0);
 // Warm rim where the horizon glow catches the underside of the deck.
-uniform vec4 cloud_glow_color : source_color = vec4(0.95, 0.32, 0.20, 1.0);
+uniform vec4 cloud_glow_color : source_color = vec4(0.12, 0.03, 0.03, 1.0);
 
 // --- cloud shape / motion ----------------------------------------------------
 uniform float cloud_cover : hint_range(0.0, 1.0) = 0.42;
@@ -85,6 +89,20 @@ uniform float cloud_speed : hint_range(0.0, 0.3) = 0.020;
 // light in the level -- the courtyards are lit by placed sky-light omnis,
 // not by this shader).
 uniform vec3 light_direction = vec3(0.45, 0.7, 0.2);
+
+// --- the red moon (2026-10-14) -----------------------------------------------
+// Drawn where the scene's DirectionalLight3D ("MoonLight", set up by maze.gd
+// `_setup_moon`) comes from: LIGHT0_DIRECTION. Big and stylised -- several
+// times the real moon's 0.25 degrees -- and far brighter than the sky, because
+// the whole sky is drawn at `background_energy_multiplier` 0.3 through ACES.
+uniform vec4 moon_color : source_color = vec4(1.0, 0.06, 0.025, 1.0);
+// Angular radius, radians (0.06 ~ 3.4 degrees).
+uniform float moon_size = 0.06;
+uniform float moon_intensity = 7.0;
+// The red haze round it, in the sky and on the clouds' edges.
+uniform float moon_glow = 1.6;
+uniform float star_density : hint_range(0.0, 1.0) = 0.35;
+uniform float star_intensity = 2.2;
 
 // --- internal --------------------------------------------------------------
 float _hash(vec2 p) {
@@ -179,10 +197,66 @@ vec3 _gradient(vec3 dir) {
 	return mix(base, ground_color.rgb, below_t);
 }
 
+// Angle between a view direction and the moon, radians.
+float _moon_angle(vec3 dir) {
+	return acos(clamp(dot(dir, LIGHT0_DIRECTION), -1.0, 1.0));
+}
+
+// The haze round the moon: a wide red glow and a tight bright corona.
+vec3 _moon_haze(vec3 dir) {
+	if (!LIGHT0_ENABLED) {
+		return vec3(0.0);
+	}
+	float a = _moon_angle(dir);
+	float wide = exp(-a * 3.2) * 0.09;
+	float corona = exp(-max(a - moon_size, 0.0) * 30.0) * 0.6;
+	return moon_color.rgb * (wide + corona) * moon_glow;
+}
+
+// The disc: limb darkened and mottled with darker "seas".
+vec3 _moon_disc(vec3 dir) {
+	if (!LIGHT0_ENABLED) {
+		return vec3(0.0);
+	}
+	float a = _moon_angle(dir);
+	if (a > moon_size * 1.05) {
+		return vec3(0.0);
+	}
+	vec3 n = LIGHT0_DIRECTION;
+	vec3 t = normalize(cross(n, abs(n.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+	vec3 b = cross(n, t);
+	vec2 local = vec2(dot(dir, t), dot(dir, b)) / sin(moon_size);
+	float r2 = dot(local, local);
+	float edge = 1.0 - smoothstep(0.93, 1.0, sqrt(r2));
+	float limb = 1.0 - 0.45 * r2;
+	float seas = smoothstep(0.42, 0.68, _value_noise(local * 2.2 + 3.7)) * 0.45
+		+ smoothstep(0.5, 0.8, _value_noise(local * 6.0 + 1.3)) * 0.2;
+	return moon_color.rgb * moon_intensity * edge * limb * (1.0 - seas);
+}
+
+// Sparse pinpoint stars on a grid of cells round the dome.
+float _stars(vec3 dir) {
+	if (dir.y < 0.03) {
+		return 0.0;
+	}
+	vec3 p = dir * 260.0;
+	vec3 cell = floor(p);
+	float h = _hash(cell.xy + cell.z * 17.31);
+	float keep = 1.0 - 0.012 * star_density;
+	if (h < keep) {
+		return 0.0;
+	}
+	float d = length(fract(p) - 0.5);
+	float twinkle = 0.75 + 0.25 * sin(TIME * (1.0 + h * 3.0) + h * 40.0);
+	return smoothstep(0.32, 0.0, d) * (h - keep) / (1.0 - keep) * twinkle
+		* smoothstep(0.03, 0.25, dir.y);
+}
+
 // The one expensive path: full gradient + all three warped cloud layers. Only called from the quarter-res pass (and the rare
 // cubemap capture, which is not a per-frame cost).
-vec3 _compute_full(vec3 dir) {
-	vec3 base = _gradient(dir);
+vec3 _compute_full(vec3 dir, out float cover) {
+	vec3 base = _gradient(dir) + _moon_haze(dir);
+	cover = 0.0;
 	if (dir.y <= 0.02) {
 		return base;
 	}
@@ -223,6 +297,11 @@ vec3 _compute_full(vec3 dir) {
 	// Warm horizon glow bleeds into the lit undersides, low in the sky only.
 	float rim = clamp(1.0 - dir.y * 2.2, 0.0, 1.0) * lit;
 	cloud_rgb = mix(cloud_rgb, cloud_glow_color.rgb, rim * 0.35);
+	// Clouds drifting near the moon: their thin edges catch its red light.
+	if (LIGHT0_ENABLED) {
+		float near = exp(-_moon_angle(dir) * 4.0);
+		cloud_rgb += moon_color.rgb * near * (0.25 + lit * 0.9) * moon_glow;
+	}
 	cloud_rgb *= cloud_brightness;
 
 	// The new projection has no singularity to hide, so clouds are visible
@@ -230,17 +309,28 @@ vec3 _compute_full(vec3 dir) {
 	// band `_gradient()` uses to blend into the horizon/ground, so the
 	// cloud deck does not appear to hang below the horizon line.
 	float edge_fade = smoothstep(-0.05, 0.15, dir.y);
-	return mix(base, cloud_rgb, coverage * edge_fade);
+	cover = coverage * edge_fade;
+	return mix(base, cloud_rgb, cover);
 }
 
 void sky() {
 	if (AT_QUARTER_RES_PASS || AT_CUBEMAP_PASS) {
-		COLOR = _compute_full(EYEDIR);
+		float cover;
+		COLOR = _compute_full(EYEDIR, cover);
+		// How much cloud is in front: the full-res pass hides the moon's
+		// disc and the stars behind it.
+		ALPHA = 1.0 - cover;
 	} else {
 		// Screen-resolution pass: reuse the quarter-res buffer instead of
 		// redoing the noise work. `QUARTER_RES_COLOR` arrives already
 		// bilinearly upsampled to this pixel, which is fine -- the gradient
 		// and the cloud coverage are both low-frequency across the dome.
-		COLOR = QUARTER_RES_COLOR.rgb;
+		// The moon's disc and the stars are sharp, so they are drawn here,
+		// at full resolution, behind the clouds.
+		float clear = QUARTER_RES_COLOR.a;
+		COLOR = QUARTER_RES_COLOR.rgb
+			+ _moon_disc(EYEDIR) * mix(0.12, 1.0, clear)
+			+ vec3(0.85, 0.85, 1.0) * _stars(EYEDIR) * star_intensity * clear
+				* (1.0 - exp(-_moon_angle(EYEDIR) * 2.5));
 	}
 }

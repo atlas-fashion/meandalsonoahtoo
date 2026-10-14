@@ -123,6 +123,10 @@ static func build(parent: Node3D, out, tint: float, detail: float, torch_energy:
 	var stone := ModuleLevel._synth_arch_material(tint).duplicate() as StandardMaterial3D
 	# These meshes carry no vertex colours; with it on they render black.
 	stone.vertex_color_use_as_albedo = false
+	# Lit by the moon since 2026-10-14, not by energy-10 sky lights: these
+	# textures average ~0.12 against the courts' flagstones at 0.41, so the hall
+	# read nearly black. About 3x in linear light (1.65 on the sRGB colour).
+	stone.albedo_color = stone.albedo_color * 1.65
 	var paving := _paving(tint)
 
 	var world := _body(root, "HallFloor", LAYER_WORLD)
@@ -298,25 +302,8 @@ static func build(parent: Node3D, out, tint: float, detail: float, torch_energy:
 			ModuleLevel._hang_torch(torches, TORCH, f.p(s * (sw * 0.5 - 0.12), sy, sv),
 				f.across * s, torch_energy, ModuleLevel.TORCH_RANGE)
 
-	# The sky over the hall, as over the courts (see place_room_lights).
-	var sky := Node3D.new()
-	sky.name = "HallSkyLights"
-	root.add_child(sky)
-	for i in 2:
-		for j in 2:
-			var light := OmniLight3D.new()
-			light.light_color = ModuleLevel.SKY_LIGHT_COLOUR
-			light.light_energy = HALL_SKY_ENERGY
-			light.omni_range = maxf(hw, (depth - wall) * 0.5) * 1.5
-			light.omni_attenuation = 0.75
-			light.light_specular = 0.0
-			light.shadow_enabled = false
-			light.distance_fade_enabled = true
-			light.distance_fade_begin = 55.0
-			light.distance_fade_length = 15.0
-			sky.add_child(light)
-			light.global_position = f.p((float(i) - 0.5) * hw, y_top + ModuleLevel.SKY_LIGHT_HEIGHT,
-				v_in + (depth - wall) * (0.25 + 0.5 * float(j)))
+	# No sky lights over the hall (2026-10-14): the red moon (maze `_setup_moon`)
+	# lights it, with real shadows, and the hall is open to the sky.
 
 	_add_mesh(root, "HallWalls", _merged(walls, stone))
 	_add_mesh(root, "Stair", _merged(floors, stone))
@@ -409,7 +396,7 @@ static func _add_mesh(parent: Node3D, name: String, mesh: Mesh) -> MeshInstance3
 	var mi := MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = mesh
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	parent.add_child(mi)
 	return mi
 
@@ -424,7 +411,9 @@ static func _paving(tint: float) -> StandardMaterial3D:
 	mat.uv1_triplanar = true
 	mat.uv1_world_triplanar = true
 	mat.uv1_scale = Vector3.ONE * ModuleLevel.COURT_SCALE
-	mat.albedo_color = Color(0.72 * tint, 0.72 * tint, 0.74 * tint)
+	# 1.25 (was 0.72, under energy-10 sky lights): ~3x in linear light, so the
+	# moonlit hall floor reads like the courts' flagstones.
+	mat.albedo_color = Color(1.25 * tint, 1.25 * tint, 1.28 * tint)
 	mat.roughness = 0.95
 	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	return mat

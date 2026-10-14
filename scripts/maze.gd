@@ -1799,6 +1799,66 @@ func _apply_module_environment(builder) -> void:
 	var sky_setup = load("res://scripts/sky_setup.gd")
 	if sky_setup != null:
 		sky_setup.apply(env)
+	_setup_moon()
+
+
+## --- The red moon (2026-10-14) -------------------------------------------------
+##
+## The courts, the boss hall and the floors under the skylights are lit by a
+## blood-red moon: the scene's "MoonLight" DirectionalLight3D, set up here,
+## with real shadows, so it reaches only what is open to the sky and every
+## pillar, arch, bar and body throws its shadow. It replaces the red omnis that
+## used to fake a sky over each court and the spotlight under each skylight.
+## The sky shader draws the moon's disc in the light's own direction
+## (LIGHT0_DIRECTION), so what you see and what lights you agree.
+##
+## High in the sky: the skylights' shafts are 1.65 m deep through a 1.0 x 2.4 m
+## opening, so the light only reaches the floor below them from a steep angle.
+## Diagonal in azimuth so neither corridor direction loses its pool.
+const MOON_ELEVATION := 72.0
+const MOON_AZIMUTH := 45.0
+const MOON_COLOUR := Color(1.0, 0.16, 0.09)
+@export var moon_energy := 2.4
+## Directional shadows only reach this far; past it the moon would light
+## everything it faces, roofs or no roofs. Chunks are culled at
+## `module_view_range` (70 m) plus a block's half diagonal, so the shadow must
+## reach past that.
+const MOON_SHADOW_DISTANCE := 95.0
+
+
+func _setup_moon() -> void:
+	var moon: DirectionalLight3D = null
+	for n in get_tree().root.find_children("*", "DirectionalLight3D", true, false):
+		moon = n as DirectionalLight3D
+		break
+	if moon == null:
+		push_warning("maze: no DirectionalLight3D in the scene; no moon")
+		return
+	var el := deg_to_rad(MOON_ELEVATION)
+	var az := deg_to_rad(MOON_AZIMUTH)
+	var toward := Vector3(cos(el) * sin(az), sin(el), cos(el) * cos(az))
+	# A directional light shines down its -Z.
+	moon.global_basis = Basis.looking_at(-toward, Vector3.UP)
+	moon.light_color = MOON_COLOUR
+	moon.light_energy = moon_energy
+	moon.light_specular = 0.2
+	moon.shadow_enabled = true
+	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	moon.directional_shadow_max_distance = MOON_SHADOW_DISTANCE
+	moon.directional_shadow_blend_splits = true
+	moon.directional_shadow_fade_start = 0.95
+	moon.shadow_bias = 0.04
+	moon.shadow_normal_bias = 1.2
+	moon.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY
+	# Graphics._apply_light: off with shadows off (Potato), where it would light
+	# every corridor through its roof.
+	moon.set_meta("moon", true)
+	# Graphics read this light's settings at startup (no shadow then): forget
+	# them, so it records the moon as authored here.
+	moon.remove_meta("gfx_light")
+	var gfx := get_node_or_null("/root/Graphics")
+	if gfx != null:
+		gfx.call("_apply_to_node", moon)
 
 
 ## Puts the sealed doorways and the screen wipe in place.
@@ -2818,7 +2878,9 @@ var _room_sky_lights: Node3D = null
 
 
 func _keep_sky_lights_off_rock() -> void:
-	if _room_sky_lights == null:
+	# No sky omnis since the moon (2026-10-14): the rock is moonlit like the
+	# rest of the court, and needs no fill of its own.
+	if _room_sky_lights == null or _room_sky_lights.get_child_count() == 0:
 		return
 	for light in _room_sky_lights.find_children("*", "Light3D", true, false):
 		(light as Light3D).light_cull_mask &= ~ROCK_VISUAL_LAYER
