@@ -1,23 +1,30 @@
 extends CharacterBody3D
 
-## A fast orange flyer that closes on the player and detonates. It never deals
-## contact damage -- the only threat is the explosion, and it telegraphs that by
-## blinking for the whole fuse.
+## A fast orange flyer that throws itself at the player's FACE (2026-10-14).
 ##
-## A sword does nothing to it: the blade (and the slam) pass straight through.
-## The only answer is E ("interact") within `swat_reach` -- the player drives
-## the sword's HAFT into it (`player.haft_strike`), and it is knocked away and
-## pops without going off. That works on a lit one riding the player too.
+## It chases, and once it has a clear line to the player (the sight layer, which
+## shut doors are on -- so it never goes off behind one) and is within
+## LUNGE_RANGE it flares for WINDUP and lunges. Reaching the face is a BLOW,
+## through the player's guard like any other enemy's:
+##   - PARRIED: it is thrown back and SHATTERS -- no explosion, no harm done.
+##   - blocked: the usual `block_damage_taken` of the blow, and it sticks;
+##   - unguarded: the blow, and it sticks.
+## Stuck on the face it covers the view, blinking ever faster for FACE_FUSE,
+## then explodes -- again a blow through the guard (block 10%, parry nothing) --
+## and shatters into burning pieces with a fireball.
+##
+## It has `max_health` 50 and every weapon hurts it; killed, it shatters
+## harmlessly. A parry is the clean answer. (Before this it ignored weapons and
+## was struck with the sword's haft on E; that prompt is gone, and nothing calls
+## `player.haft_strike` any more.)
 
 signal died
 signal fuse_started
 signal detonated
 
-@export var max_health := 10.0
-## How near the player's eyes it must be for E to strike it.
-@export var swat_reach := 2.6
-## Struck by the haft, it shatters: how hard the pieces are thrown the way it
-## was hit, and outward from its centre.
+@export var max_health := 50.0
+## Thrown back by a parry or a kill, its pieces fly the way it was hit and
+## outward from its centre this hard.
 @export var shatter_push := 5.5
 @export var shatter_burst := 3.5
 
@@ -37,22 +44,22 @@ signal detonated
 ## How often a dormant bomber checks whether the player has come closer.
 @export var dormant_poll := 0.4
 
-@export_group("Fuse")
-## Gap at which it latches on and lights the fuse, edge to edge.
-@export var trigger_range := 0.9
-@export var fuse_time := 3.0
-## Once lit it latches on and follows, so backing away no longer saves you --
-## killing it does. Fast enough to keep up with a run, not with a dodge.
-@export var stick_speed := 14.0
+@export_group("Attack")
+## From this far (centre to eye), with a clear line, it winds up and lunges.
+@export var lunge_range := 3.4
+@export var windup := 0.4
+@export var lunge_speed := 15.0
+## The blow of it reaching the face.
+@export var latch_damage := 8.0
+## Stuck on the face this long before it goes off.
+@export var face_fuse := 1.8
 @export var explosion_damage := 50.0
-@export var explosion_radius := 3.5
-## The blast only reaches a player on roughly the same level as the bomber.
-@export var max_height_difference := 1.5
 ## Blinks per second at the start of the fuse and at the very end.
 @export var blink_rate_start := 3.0
 @export var blink_rate_end := 16.0
 ## Brightness of the flash at the moment of detonation.
 @export var blast_light_energy := 9.0
+@export var blast_radius := 3.5
 
 @export_group("Colours")
 @export var base_color := Color(1.0, 0.443137, 0.109804)
@@ -63,6 +70,29 @@ signal detonated
 @export_group("Navigation")
 @export var repath_interval := 0.2
 
+## Where on the face it sits: this far in front of the eye, this far below the
+## view's centre, drawn at FACE_SCALE (a 0.9 m ball at arm's length would be
+## the whole screen; this covers the middle of it).
+const FACE_DIST := 0.78
+const FACE_DROP := 0.16
+const FACE_SCALE := 0.62
+## On the face its glow and its light are turned down: at full blink, right at
+## the camera, it burnt to a flat white disc and its light blew out every wall
+## in view (measured in a screenshot).
+const FACE_GLOW := 0.35
+const FACE_LIGHT := 0.25
+## And it blinks hot orange, not white: albedo plus emission at the white blink
+## colour saturated it to a flat disc with no shape.
+const FACE_HOT := 0.4
+## Reaching within this of the face point counts as contact.
+const FACE_REACH := 0.55
+## A lunge that has not connected after this long gives up and chases again.
+const LUNGE_GIVE_UP := 0.7
+## Seconds between attacks after one is called off.
+const RECOVER := 0.8
+
+enum { CHASE, WINDUP, LUNGE, FACE }
+
 @onready var mesh: MeshInstance3D = $MeshInstance3D
 @onready var shape: CollisionShape3D = $CollisionShape3D
 @onready var light: OmniLight3D = $Light
@@ -72,8 +102,14 @@ signal detonated
 @onready var agent: NavigationAgent3D = get_node_or_null("NavigationAgent3D")
 
 var health := 0.0
+## Lit: stuck on the face, fuse running (kept for anything that asked before).
 var fusing := false
+## The health bar hides while it is on the face (enemy_health_bar.gd reads it).
+var scripted := false
 
+var _state := CHASE
+var _state_time := 0.0
+var _recover := 0.0
 var _material: StandardMaterial3D
 var _blast_material: StandardMaterial3D
 var _dying := false
@@ -84,17 +120,18 @@ var _next_repath := 0.0
 ## Cached rather than looked up every frame.
 var _player: Node3D = null
 var _body_radius := 0.45
-var _target_radius := -1.0
 var _flash_tween: Tween
 ## Asleep: too far from the player to be worth simulating.
 var _dormant := false
 var _next_dormant_check := 0.0
-var _prompt: Interact.Prompt
+## Set by the player's `guarded` signal while our blow is being dealt.
+var _parried := false
 ## Shattered pieces in flight: [node, velocity, rotation, spin axis, spin rate].
 var _shards: Array = []
 var _shard_time := 0.0
 var _shard_material: StandardMaterial3D
 var _shard_ray := PhysicsRayQueryParameters3D.new()
+var _sight := PhysicsRayQueryParameters3D.new()
 
 const SHARD_COUNT := 10
 ## The inner face of each piece sits at this fraction of the radius, so the
@@ -106,14 +143,13 @@ const SHARD_GRAVITY := 14.0
 ## Pieces cut once per source mesh and shared by every bomber, so the first
 ## shatter does not stall on cutting them.
 static var _shard_cache := {}
-## Within reach of the player's eyes, with nothing in between.
-var _near := false
-var _sight := PhysicsRayQueryParameters3D.new()
 
 
 func _ready() -> void:
 	health = max_health
 	_bob = randf() * TAU
+	# Placed on the face after the player has moved the camera this frame.
+	process_priority = 10
 	var active := mesh.get_active_material(0)
 	if active is StandardMaterial3D:
 		_material = (active as StandardMaterial3D).duplicate()
@@ -128,58 +164,73 @@ func _ready() -> void:
 		_blast_material.albedo_color.a = 0.0
 	blast.scale = Vector3.ONE * 0.01
 	_paint(base_color, base_glow)
-	# No health bar: nothing can wear it down -- it is struck away or it goes off.
-	_prompt = Interact.prompt("E   Strike", Vector3(0.0, 0.55, 0.0))
-	add_child(_prompt)
+	preload("res://scripts/enemy_health_bar.gd").attach(self)
 	_sight.collision_mask = 2
+	set_process(false)
 	_warm_up.call_deferred()
+
 
 func _physics_process(delta: float) -> void:
 	if _dying:
 		return
-
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player") as Node3D
+		if _player != null and _player.has_signal("guarded") \
+				and not _player.is_connected("guarded", _on_player_guarded):
+			_player.connect("guarded", _on_player_guarded)
 	var player := _player
 	if player == null:
 		return
-	_update_near(player)
 
-	# Dormancy: with dozens of these hovering around the map, simulating the
-	# ones nobody can see is the bulk of the physics budget. A sleeping bomber
-	# costs one distance check every dormant_poll seconds. Never sleeps once the
-	# fuse is lit, so a primed one always gets to go off.
-	if not fusing and _update_dormancy():
+	if _state == FACE:
+		_tick_fuse(delta)
 		return
-
-	if _target_radius < 0.0:
-		_target_radius = _player_radius(player)
+	# Dormancy: with dozens of these hovering around the map, simulating the
+	# ones nobody can see is the bulk of the physics budget. Never mid-attack.
+	if _state == CHASE and _update_dormancy():
+		return
 
 	_bob += delta * bob_speed
-	var to_player := player.global_position - global_position
-	var flat := Vector3(to_player.x, 0.0, to_player.z)
-	var gap := flat.length() - _body_radius - _target_radius
+	_state_time += delta
+	_recover = maxf(_recover - delta, 0.0)
+	var eye := _eye(player)
+	var to_eye := eye - global_position
 
-	if fusing:
-		# Latched on: ride the player rather than hovering where it caught them.
-		# Collision keeps it just outside their capsule, so it reads as stuck to
-		# them.
-		var attach := player.global_position + Vector3(0, hover_height, 0) - global_position
-		if attach.length() > 0.05:
-			velocity = attach.normalized() * stick_speed
-		else:
-			velocity = Vector3.ZERO
-		move_and_slide()
-		_tick_fuse(delta, player)
-		return
+	match _state:
+		WINDUP:
+			# Hang back and swell, facing the player: the tell.
+			velocity = velocity.move_toward(Vector3.ZERO, acceleration * 2.0 * delta)
+			move_and_slide()
+			var k := clampf(_state_time / windup, 0.0, 1.0)
+			_paint(base_color.lerp(blink_color, k), lerpf(base_glow, blink_glow, k))
+			mesh.scale = Vector3.ONE * (1.0 + 0.18 * sin(k * PI))
+			if _state_time >= windup:
+				if _can_attack(player, eye) and to_eye.length() < lunge_range * 1.6:
+					_set_state(LUNGE)
+				else:
+					_call_off()
+			return
+		LUNGE:
+			var face := _face_point(player)
+			var to_face := face - global_position
+			if to_face.length() <= FACE_REACH:
+				_hit_face(player)
+				return
+			if _state_time > LUNGE_GIVE_UP or not _can_attack(player, eye):
+				_call_off()
+				return
+			velocity = to_face.normalized() * lunge_speed
+			move_and_slide()
+			return
 
+	# CHASE.
+	var flat := Vector3(to_eye.x, 0.0, to_eye.z)
 	if flat.length() > aggro_range:
 		velocity = velocity.move_toward(Vector3.ZERO, acceleration * delta)
 		move_and_slide()
 		return
-
-	if gap <= trigger_range:
-		_light_fuse()
+	if _recover <= 0.0 and to_eye.length() <= lunge_range and _can_attack(player, eye):
+		_set_state(WINDUP)
 		return
 
 	# Route around walls when a navmesh is available; the path is flat, so the
@@ -200,11 +251,13 @@ func _physics_process(delta: float) -> void:
 			# Ignore a waypoint we are already on top of; its direction is noise.
 			if step.length() > 0.5:
 				heading = step.normalized()
-
+	# Hold off a little short of the player rather than pressing into them.
+	var speed := move_speed
+	if flat.length() < lunge_range * 0.8:
+		speed = 0.0
 	var wanted_height := player.global_position.y + hover_height + sin(_bob) * bob_amount
 	var climb := clampf(wanted_height - global_position.y, -1.0, 1.0)
-
-	var desired := heading * move_speed
+	var desired := heading * speed
 	desired.y = climb * move_speed * 0.8
 	velocity = velocity.move_toward(desired, acceleration * delta)
 	if flat.length_squared() > 0.001:
@@ -212,52 +265,129 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 
-func _update_near(player: Node3D) -> void:
-	var eye := player.global_position + Vector3(0.0, 1.6, 0.0)
-	var near := global_position.distance_squared_to(eye) <= swat_reach * swat_reach
-	if near:
-		_sight.from = eye
-		_sight.to = global_position
-		_sight.exclude = [player.get_rid(), get_rid()]
-		near = get_world_3d().direct_space_state.intersect_ray(_sight).is_empty()
-	# The crosshair has to be on it -- except once it is lit and latched on,
-	# riding the player's shoulders where the view often cannot reach it.
-	if near and not fusing:
-		near = Interact.looked_at(self, swat_reach + 0.6, 0.15)
-	_near = near
-	if _prompt.visible != near:
-		_prompt.visible = near
+func _set_state(s: int) -> void:
+	_state = s
+	_state_time = 0.0
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not _near or _dying or not Interact.pressed(event):
+## The attack was not on: back to chasing, and a beat before the next try.
+func _call_off() -> void:
+	_set_state(CHASE)
+	_recover = RECOVER
+	mesh.scale = Vector3.ONE
+	_paint(base_color, base_glow)
+
+
+func _eye(player: Node3D) -> Vector3:
+	var cam: Camera3D = player.get("camera")
+	if cam != null and cam.is_inside_tree():
+		return cam.global_position
+	return player.global_position + Vector3(0.0, 1.6, 0.0)
+
+
+## Where it sits stuck on the face.
+func _face_point(player: Node3D) -> Vector3:
+	var cam: Camera3D = player.get("camera")
+	if cam == null or not cam.is_inside_tree():
+		return player.global_position + Vector3(0.0, 1.5, 0.0)
+	var basis := cam.global_basis.orthonormalized()
+	return cam.global_position - basis.z * FACE_DIST - basis.y * FACE_DROP
+
+
+## A player it can go for: alive, not hidden or in a scene, and in plain sight
+## -- the line runs on the sight layer, which a shut door blocks.
+func _can_attack(player: Node3D, eye: Vector3) -> bool:
+	if player.get("_dead") == true or player.get("in_cutscene") == true:
+		return false
+	if player.has_method("is_hidden") and player.is_hidden():
+		return false
+	_sight.from = global_position
+	_sight.to = eye
+	_sight.exclude = [player.get_rid(), get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(_sight).is_empty()
+
+
+## Contact: a blow through the guard. Parried, it is thrown off and shatters;
+## otherwise it sticks.
+func _hit_face(player: Node3D) -> void:
+	var blow := (_eye(player) - global_position).normalized()
+	_parried = false
+	if player.has_method("take_damage"):
+		player.take_damage(latch_damage, blow, self)
+	if _parried:
+		_burst(-blow)
 		return
-	if _player != null and _player.has_method("haft_strike") and _player.haft_strike(self):
-		get_viewport().set_input_as_handled()
+	_set_state(FACE)
+	fusing = true
+	scripted = true
+	_fuse_left = face_fuse
+	_blink_phase = 0.0
+	velocity = Vector3.ZERO
+	shape.set_deferred(&"disabled", true)
+	mesh.scale = Vector3.ONE * FACE_SCALE
+	set_process(true)
+	fuse_started.emit()
 
 
-## Struck by the haft: the fuse goes out and it SHATTERS -- the sphere breaks
-## into chunks that burst out the way it was hit, tumble, bounce off the stone
-## and shrink away. No explosion, no damage to anyone.
-func swat(direction: Vector3) -> void:
-	if _dying:
+func _on_player_guarded(parried: bool, attacker: Node3D) -> void:
+	if attacker == self and parried:
+		_parried = true
+
+
+func _tick_fuse(delta: float) -> void:
+	var player := _player
+	if player == null or not is_instance_valid(player) or player.get("_dead") == true \
+			or (player.get("in_cutscene") == true):
+		# Nothing to go off on: it lets go and breaks.
+		_burst(Vector3.UP)
+		return
+	_fuse_left -= delta
+	# The blink speeds up as it runs out, so the urgency reads without a number.
+	var progress := clampf(1.0 - _fuse_left / face_fuse, 0.0, 1.0)
+	_blink_phase += delta * lerpf(blink_rate_start, blink_rate_end, progress)
+	var lit := fmod(_blink_phase, 1.0) < 0.5
+	_paint(base_color.lerp(blink_color, FACE_HOT) if lit else base_color.darkened(0.25),
+		(blink_glow if lit else base_glow) * FACE_GLOW)
+	light.light_energy *= FACE_LIGHT / FACE_GLOW
+	if _fuse_left <= 0.0:
+		_detonate(player)
+
+
+## Goes off in the player's face: a blow through the guard, then it shatters in
+## a fireball. Parried, the guard takes all of it.
+func _detonate(player: Node3D) -> void:
+	var blow := (_eye(player) - global_position).normalized()
+	_dying = true
+	fusing = false
+	if player.has_method("take_damage"):
+		player.take_damage(explosion_damage, blow, self)
+	detonated.emit()
+	_shatter(-blow, true)
+	_play_blast()
+	died.emit()
+
+
+## Killed or parried: it shatters, with no explosion and no harm done.
+func _burst(direction: Vector3) -> void:
+	if _dying and _shards.size() > 0:
 		return
 	_dying = true
 	fusing = false
-	_near = false
-	_prompt.visible = false
+	scripted = false
+	died.emit()
+	_shatter(direction.normalized() if direction.length_squared() > 1e-6 else Vector3.UP, false)
+
+
+func _shatter(direction: Vector3, burning: bool) -> void:
 	shape.set_deferred(&"disabled", true)
 	set_physics_process(false)
-	died.emit()
-	_shatter(direction.normalized())
-
-
-func _shatter(direction: Vector3) -> void:
 	mesh.visible = false
 	_shard_material = _make_shard_material()
 	_shard_ray.collision_mask = 2
 	_shard_ray.exclude = [get_rid()]
 	var frame := mesh.global_transform
+	var push := shatter_push * (1.8 if burning else 1.0)
+	var burst := shatter_burst * (1.8 if burning else 1.0)
 	for piece in _pieces(mesh.mesh):
 		var shard := MeshInstance3D.new()
 		shard.mesh = piece[0]
@@ -266,13 +396,14 @@ func _shatter(direction: Vector3) -> void:
 		shard.top_level = true
 		add_child(shard)
 		var rot := frame.basis.orthonormalized()
-		shard.global_transform = Transform3D(rot, frame * piece[1])
+		var scale := frame.basis.get_scale().x
+		shard.global_transform = Transform3D(rot.scaled(Vector3.ONE * scale), frame * piece[1])
 		var outward: Vector3 = rot * piece[2]
-		var velocity := outward * shatter_burst * randf_range(0.7, 1.3) \
-			+ direction * shatter_push * randf_range(0.6, 1.3) \
+		var velocity := outward * burst * randf_range(0.7, 1.3) \
+			+ direction * push * randf_range(0.6, 1.3) \
 			+ Vector3(0.0, randf_range(1.0, 3.0), 0.0)
 		var axis := Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), randf_range(-1.0, 1.0))
-		_shards.append([shard, velocity, rot, axis.normalized() if axis.length_squared() > 1e-4 else Vector3.UP,
+		_shards.append([shard, velocity, rot.scaled(Vector3.ONE * scale), axis.normalized() if axis.length_squared() > 1e-4 else Vector3.UP,
 			randf_range(6.0, 14.0)])
 	_shard_time = 0.0
 	set_process(true)
@@ -281,10 +412,11 @@ func _shatter(direction: Vector3) -> void:
 	tween.tween_property(_shard_material, "albedo_color", base_color, 0.35)
 	tween.tween_property(_shard_material, "emission", base_color, 0.35)
 	tween.tween_property(_shard_material, "emission_energy_multiplier", base_glow, 0.5)
-	# One flash from its own light, dying with the burst.
-	light.light_color = blink_color
-	light.light_energy = blink_glow * 2.0
-	tween.tween_property(light, "light_energy", 0.0, 0.3)
+	if not burning:
+		# One flash from its own light, dying with the burst.
+		light.light_color = blink_color
+		light.light_energy = blink_glow * 2.0
+		tween.tween_property(light, "light_energy", 0.0, 0.3)
 
 
 func _make_shard_material() -> StandardMaterial3D:
@@ -328,8 +460,17 @@ func _warm_up() -> void:
 
 
 func _process(delta: float) -> void:
+	# Stuck on the face: placed every frame after the camera has moved, so it
+	# rides the view without lagging a frame behind it.
+	if _state == FACE and not _dying and _player != null and is_instance_valid(_player):
+		global_position = _face_point(_player)
+		var cam: Camera3D = _player.get("camera")
+		if cam != null:
+			global_basis = cam.global_basis.orthonormalized()
+		return
 	if _shards.is_empty():
-		set_process(false)
+		if not _dying:
+			set_process(false)
 		return
 	_shard_time += delta
 	var size := clampf((SHARD_LIFE - _shard_time) / SHARD_SHRINK, 0.0, 1.0)
@@ -355,6 +496,7 @@ func _process(delta: float) -> void:
 		shard.global_transform = Transform3D(rot.scaled(Vector3.ONE * maxf(size, 0.001)), to)
 	if _shard_time >= SHARD_LIFE:
 		queue_free()
+
 
 
 ## The sphere cut into SHARD_COUNT chunks: each triangle goes to the nearest of
@@ -462,6 +604,7 @@ static func _edge_key(a: Vector3, b: Vector3) -> String:
 	var sb := str(b.snapped(Vector3.ONE * 1e-4))
 	return sa + sb if sa < sb else sb + sa
 
+
 ## True when this frame's simulation should be skipped entirely.
 func _update_dormancy() -> bool:
 	if dormant_range <= 0.0 or _player == null:
@@ -478,89 +621,50 @@ func _update_dormancy() -> bool:
 	return _dormant
 
 
-func _light_fuse() -> void:
-	fusing = true
-	_fuse_left = fuse_time
-	_blink_phase = 0.0
-	fuse_started.emit()
-
-
-func _tick_fuse(delta: float, player: Node3D) -> void:
-	_fuse_left -= delta
-	# The blink speeds up as it runs out, so the urgency reads without a number.
-	var progress := clampf(1.0 - _fuse_left / fuse_time, 0.0, 1.0)
-	_blink_phase += delta * lerpf(blink_rate_start, blink_rate_end, progress)
-	var lit := fmod(_blink_phase, 1.0) < 0.5
-	_paint(blink_color if lit else base_color, blink_glow if lit else base_glow)
-
-	if _fuse_left <= 0.0:
-		_detonate(player)
-
-
-func _detonate(player: Node3D) -> void:
-	# Only the player is hurt: everything else here shares its collision layers
-	# and a blast that killed the whole pack would read as a bug.
-	if player.has_method("take_damage"):
-		var separation := global_position.distance_to(player.global_position + Vector3(0, 0.9, 0))
-		# It hovers a fixed amount above whoever it is chasing, so its own
-		# height minus that offset is the floor it is fighting on. If the player
-		# has climbed away from it, the blast does not reach.
-		var own_level := global_position.y - hover_height
-		var level_gap: float = absf(own_level - player.global_position.y)
-		if separation <= explosion_radius and level_gap <= max_height_difference:
-			player.take_damage(explosion_damage, global_position.direction_to(player.global_position))
-	detonated.emit()
-	_play_blast()
-
-
-## The body vanishes and a fireball takes its place, swelling to the blast
-## radius and fading out. Only then is the node freed.
+## The fireball where it went off, swelling and fading round its pieces.
 func _play_blast() -> void:
-	_dying = true
-	_near = false
-	_prompt.visible = false
-	shape.disabled = true
-	set_physics_process(false)
-	mesh.visible = false
 	# Hidden in the scene rather than merely scaled down to nothing: a shrunken
 	# mesh is still submitted every frame, and with dozens of these hovering
 	# around the map that was a sphere's worth of geometry each, for nothing.
 	blast.visible = true
-
 	var tween := create_tween().set_parallel(true)
 	if _blast_material != null:
 		_blast_material.albedo_color.a = 0.9
 		tween.tween_property(_blast_material, "albedo_color:a", 0.0, 0.45) \
 			.set_ease(Tween.EASE_IN)
 	blast.scale = Vector3.ONE * 0.15
-	tween.tween_property(blast, "scale", Vector3.ONE * explosion_radius, 0.4) \
+	tween.tween_property(blast, "scale", Vector3.ONE * blast_radius * 0.6, 0.4) \
 		.set_ease(Tween.EASE_OUT)
 	# A hard flash of light that dies with the fireball.
 	light.light_color = blink_color
 	light.light_energy = blast_light_energy
-	light.omni_range = explosion_radius * 2.0
+	light.omni_range = blast_radius * 2.0
 	tween.tween_property(light, "light_energy", 0.0, 0.45)
 
-	tween.chain().tween_callback(queue_free)
-	died.emit()
 
-
-## Blades and blasts pass through it -- only the haft strike (`swat`) works.
-## Kept so anything that deals damage generically can still call it.
-func take_damage(_amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void:
-	pass
-
-
-## Shoved like any other enemy, which also buys time by pushing it out of range.
-func apply_knockback(impulse: Vector3, _stun_time := 0.25) -> void:
+## Every weapon hurts it; at nothing it shatters, harmlessly.
+func take_damage(amount: float, from_direction: Vector3 = Vector3.ZERO) -> void:
 	if _dying:
+		return
+	health -= amount
+	_flash()
+	if health <= 0.0:
+		_burst(from_direction if from_direction.length_squared() > 1e-6 else Vector3.UP)
+
+
+## Shoved like any other enemy -- except stuck on a face, where nothing but a
+## kill gets it off.
+func apply_knockback(impulse: Vector3, _stun_time := 0.25) -> void:
+	if _dying or _state == FACE:
 		return
 	velocity.x += impulse.x
 	velocity.z += impulse.z
+	if _state != CHASE:
+		_call_off()
 
 
 func _flash() -> void:
-	if _material == null or fusing:
+	if _material == null or _state == FACE:
 		return
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
@@ -577,20 +681,3 @@ func _paint(colour: Color, glow: float) -> void:
 			_material.emission_energy_multiplier = glow
 	light.light_color = colour
 	light.light_energy = glow
-
-
-func _die() -> void:
-	_dying = true
-	died.emit()
-	shape.disabled = true
-	set_physics_process(false)
-	var tween := create_tween()
-	tween.tween_property(self, "scale", Vector3.ONE * 0.01, 0.2).set_ease(Tween.EASE_IN)
-	tween.tween_callback(queue_free)
-
-
-func _player_radius(player: Node) -> float:
-	var collider := player.get_node_or_null("CollisionShape3D") as CollisionShape3D
-	if collider != null and collider.shape is CapsuleShape3D:
-		return (collider.shape as CapsuleShape3D).radius
-	return 0.4

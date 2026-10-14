@@ -299,6 +299,12 @@ variants share their source's textures) from the eight raw Tripo pieces in
   the door split into `door_frame` / `door_leaf`, and the cage wall's gate
   `cage_door`. The splits are cut AFTER the source piece is decimated, so the
   parts still meet.
+- **The door's stone is its own Tripo piece** (2026-10-14):
+  `brick_kit_raw/door_arch.glb`, the user's door photo edited to an empty arch
+  (`tools/tripo_image.ps1`, 5 credits) then image to model (40 credits).
+  `build_door_arch` fits it to the old frame's outside (legs to +-1.8 m, 5.0 m
+  tall, 1.12 m deep about the leaf's middle); its opening came out +-0.93 m,
+  0.84 at 3.25 m, 0.64 at 3.6 m. `door_frame` is still exported as a fallback.
 - **The floor is Tripo's wet retexture** (2026-10-14):
   `models/source/brick_kit_raw/floor_wet.glb`. First `tools/tripo_image.ps1`
   (seedream, 5 credits, task 293e33be-...) edited the user's floor photo

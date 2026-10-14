@@ -263,16 +263,7 @@ func restore_opened() -> void:
 		var leaf := get_node_or_null(leaf_name) as Node3D
 		if leaf != null:
 			leaf.visible = false
-	_show_reveal()
 	door_opened.emit()
-
-
-## The brick door frame's opening is lined only once the door is gone
-## (module_level `_door_reveal_mesh`): the lining runs where the door stood.
-func _show_reveal() -> void:
-	var reveal := get_node_or_null("GateFrame/Reveal") as Node3D
-	if reveal != null:
-		reveal.visible = true
 
 
 ## Real-time tweens: the slow motion must not slow the camera work.
@@ -291,11 +282,13 @@ func _clear_behind(from: Vector3, out: Vector3, want: float) -> float:
 
 
 ## How a leaf breaks: [cols, rows, slant, merge top]. The brick kit's single
-## Tripo leaf ("Boards") splinters into 5 uneven pieces along slanted cuts; the
-## old gate's two leaves split straight across, 2 and 3.
+## Tripo leaf ("Boards") splinters along slanted cuts into 24 smaller pieces
+## (2026-10-14, at the user's request; was 7), or the old 7 without
+## `Graphics.effects`. The old gate's two leaves split straight across, 2 and 3.
 func _split_for(leaf_name: String, mi: MeshInstance3D) -> Array:
 	if mi.name == "Boards":
-		# 3 x 3 with the pointed head one piece: 7 uneven pieces (was 2 x 3 -> 5).
+		if Graphics.effects:
+			return [4, 6, 0.35, false]
 		return [3, 3, 0.5, true]
 	return [1, 2 if leaf_name == "LeafL" else 3, 0.0, false]
 
@@ -308,7 +301,7 @@ func _burst(out: Vector3) -> void:
 	var push := -out
 	var impact := global_position + Vector3(0.0, IMPACT_HEIGHT, 0.0)
 	var effects: bool = Graphics.effects
-	# A handful of big pieces -- the door splits, it does not shatter (_split_for).
+	# Splintered into pieces (_split_for).
 	for leaf_name in ["LeafL", "LeafR"]:
 		var leaf := get_node_or_null(leaf_name) as Node3D
 		if leaf == null:
@@ -320,7 +313,6 @@ func _burst(out: Vector3) -> void:
 				_pieces.append_array(DEBRIS.shatter(mi, get_parent() as Node3D, push, impact,
 					cut[0], cut[1], cut[2], cut[3]))
 		leaf.visible = false
-	_show_reveal()
 	DEBRIS.crumble(_pieces, effects)
 	if effects:
 		DEBRIS.dust(get_parent() as Node3D, impact, push)

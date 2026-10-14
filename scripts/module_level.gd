@@ -1199,84 +1199,60 @@ static func _gate_door_parts() -> Dictionary:
 
 
 static var _frame_both_sides := {}
-
-## The brick door frame is a shell: its opening has a reveal only on a lip at
-## the front and one at the back, and between them -- where the Tripo door sat --
-## a slot runs back 0.8 m to walls 1.75 m out and a ceiling at 4.96. With the
-## door kicked out, that slot was a hollow you looked into and, from some
-## angles, through. This lining closes it: the opening's outline, measured with
-## rays against the frame mesh (frame-local; half-width by height, the lips'
-## edge + 1.2 cm so they cover its ends), extruded across the slot.
-const DOOR_REVEAL := [
-	Vector2(0.962, -0.05), Vector2(0.962, 3.0), Vector2(0.952, 3.1),
-	Vector2(0.919, 3.2), Vector2(0.878, 3.3), Vector2(0.834, 3.4),
-	Vector2(0.784, 3.5), Vector2(0.708, 3.6), Vector2(0.652, 3.7),
-	Vector2(0.58, 3.8), Vector2(0.5, 3.9), Vector2(0.389, 4.0),
-	Vector2(0.274, 4.1), Vector2(0.151, 4.2), Vector2(0.0, 4.322),
-]
-## Across the slot, overlapping each lip a few centimetres (measured: slot from
-## z -0.33 to -0.92 at the crown, -0.47 to -0.83 at the jambs).
-const DOOR_REVEAL_Z := Vector2(-0.27, -0.97)
-static var _door_reveal: ArrayMesh
+## The leaf drawn this much larger than the door piece made it (x, y), so it
+## fills `door_arch`'s opening with its edges in the stone.
+const LEAF_FIT := Vector3(1.05, 1.03, 1.0)
 
 
-static func _door_reveal_mesh() -> ArrayMesh:
-	if _door_reveal != null:
-		return _door_reveal
-	var outline: Array[Vector2] = []
-	for p: Vector2 in DOOR_REVEAL:
-		outline.append(Vector2(-p.x, p.y))
-	for i in range(DOOR_REVEAL.size() - 2, -1, -1):
-		outline.append(DOOR_REVEAL[i])
+## The door piece's leaf has a pinhole through it (the same on every door: one
+## mesh). The old frame stood behind it; the open arch does not, and light
+## showed through (measured: ~60 px per view from one side, every door). A
+## dark sheet in the leaf's own middle plane, inset from its outline, so it
+## only ever shows through a hole.
+const LEAF_OUTLINE := [Vector2(0.97, 0.0), Vector2(0.97, 3.05), Vector2(0.89, 3.25),
+	Vector2(0.74, 3.45), Vector2(0.59, 3.65), Vector2(0.46, 3.85), Vector2(0.24, 4.05),
+	Vector2(0.0, 4.25)]
+const LEAF_BACKING_INSET := 0.05
+static var _leaf_backing: ArrayMesh
+
+
+static func _leaf_backing_mesh(plane_z: float) -> ArrayMesh:
+	if _leaf_backing != null:
+		return _leaf_backing
+	var outline := PackedVector2Array()
+	for p: Vector2 in LEAF_OUTLINE:
+		outline.append(Vector2(-maxf(p.x - LEAF_BACKING_INSET, 0.0), maxf(p.y - LEAF_BACKING_INSET, 0.02)))
+	for i in range(LEAF_OUTLINE.size() - 2, -1, -1):
+		var p: Vector2 = LEAF_OUTLINE[i]
+		outline.append(Vector2(maxf(p.x - LEAF_BACKING_INSET, 0.0), maxf(p.y - LEAF_BACKING_INSET, 0.02)))
+	var tris := Geometry2D.triangulate_polygon(outline)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var zf := DOOR_REVEAL_Z.x
-	var zb := DOOR_REVEAL_Z.y
-	for i in outline.size() - 1:
-		var a := outline[i]
-		var b := outline[i + 1]
-		# Facing into the opening: the outline runs up the left jamb, over the
-		# point and down the right, so inward is the edge turned clockwise.
-		var along := (b - a).normalized()
-		var n := Vector3(along.y, -along.x, 0.0)
-		var quad := [Vector3(a.x, a.y, zf), Vector3(b.x, b.y, zf), Vector3(b.x, b.y, zb), Vector3(a.x, a.y, zb)]
-		# Clockwise seen from inside the opening: Godot's front face. Wound the
-		# other way the lining showed its back face, normal flipped outward,
-		# and rendered black.
-		for k: int in [0, 1, 2, 0, 2, 3]:
-			st.set_normal(n)
-			st.add_vertex(quad[k])
-	# Grey blocks and dark mortar, like the frame's own stone (the arch material,
-	# stone_plain, read as flat dark plaster beside it). Mapped in the frame's
-	# own space, so the courses line up the same on every door; the texture's 8
-	# courses to a tile, at a 2.4 m tile, are about the frame's block size.
+	st.set_normal(Vector3.BACK)
+	for i in tris:
+		st.add_vertex(Vector3(outline[i].x, outline[i].y, plane_z))
 	var m := StandardMaterial3D.new()
-	m.albedo_texture = load("res://textures/stone_grey_albedo.png")
-	m.normal_enabled = true
-	m.normal_texture = load("res://textures/stone_brick_normal.png")
-	m.normal_scale = 1.2
-	m.uv1_triplanar = true
-	m.uv1_scale = Vector3.ONE / 2.4
-	m.albedo_color = Color(1.25 * STONE_CAST.r, 1.25 * STONE_CAST.g, 1.25 * STONE_CAST.b)
-	m.roughness = 0.95
-	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	m.albedo_color = Color(0.07, 0.045, 0.03)
+	m.roughness = 1.0
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	st.set_material(m)
-	_door_reveal = st.commit()
-	return _door_reveal
+	_leaf_backing = st.commit()
+	return _leaf_backing
 
-
-## Brick kit: the Tripo arched door (`door_frame` + `door_leaf` from the brick
-## kit) set in the arch on the boundary. One leaf ("LeafL"; wood_door.gd takes
-## either) that the kick breaks; the stone frame and its jambs stay
-## (2026-10-12: the kick used to hide them, and the arch went with the door).
-## The frame was hollow where the leaf was cut out of it -- from the far side
-## the opening's inner faces were missing -- so its stone is drawn from both
-## sides.
+## Brick kit: the Tripo arched door set in the arch on the boundary. The STONE is
+## `door_arch` (2026-10-14): Tripo's arch built on its own with no door in it,
+## so its jambs and soffit are its own stone and a kicked door leaves a whole
+## arch. (It used to be `door_frame`, cut from the door piece: hollow where the
+## leaf had been, lined by a strip in another texture.) The leaf is the door
+## piece's (`door_leaf`), drawn LEAF_FIT larger so its edges tuck into the new
+## arch's jambs and head. One leaf ("LeafL"; wood_door.gd takes either) that
+## the kick breaks; the stone and its jambs stay. Stone drawn from both sides.
 static func _build_brick_door(door: Node3D) -> void:
 	var frame := MeshInstance3D.new()
 	frame.name = "GateFrame"
-	frame.mesh = BrickLevel.standalone("door_frame")
+	frame.mesh = BrickLevel.standalone("door_arch")
+	if frame.mesh == null:
+		frame.mesh = BrickLevel.standalone("door_frame")
 	frame.position = Vector3(0.0, 0.0, BRICK_DOOR_LEAF)
 	frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	frame.visibility_range_end = 60.0
@@ -1289,14 +1265,6 @@ static func _build_brick_door(door: Node3D) -> void:
 				_frame_both_sides[m] = copy
 			frame.set_surface_override_material(s, _frame_both_sides[m])
 	door.add_child(frame)
-	var lining := MeshInstance3D.new()
-	lining.name = "Reveal"
-	lining.mesh = _door_reveal_mesh()
-	lining.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	lining.visibility_range_end = 60.0
-	# It runs through where the door stands: shown only once the door is broken.
-	lining.visible = false
-	frame.add_child(lining)
 	var leaf := Node3D.new()
 	leaf.name = "LeafL"
 	door.add_child(leaf)
@@ -1304,9 +1272,16 @@ static func _build_brick_door(door: Node3D) -> void:
 	boards.name = "Boards"
 	boards.mesh = BrickLevel.standalone("door_leaf")
 	boards.position = Vector3(0.0, 0.0, BRICK_DOOR_LEAF)
+	boards.scale = LEAF_FIT
 	boards.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	boards.visibility_range_end = 60.0
 	leaf.add_child(boards)
+	var backing := MeshInstance3D.new()
+	backing.name = "Backing"
+	backing.mesh = _leaf_backing_mesh(boards.mesh.get_aabb().get_center().z)
+	backing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	backing.visibility_range_end = 60.0
+	boards.add_child(backing)
 	# The blocker over the leaf (layers 1 + 2, armed after the bake: wood_door.gd).
 	var body := StaticBody3D.new()
 	body.name = "Blocker"

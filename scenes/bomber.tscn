@@ -8,8 +8,8 @@ radius = 0.45
 [sub_resource type="SphereMesh" id="SphereMesh_1"]
 radius = 0.45
 height = 0.9
-radial_segments = 12
-rings = 6
+radial_segments = 24
+rings = 12
 
 [sub_resource type="StandardMaterial3D" id="Mat_bomber"]
 albedo_color = Color(1, 0.443137, 0.109804, 1)
@@ -36,7 +36,6 @@ collision_layer = 5
 collision_mask = 513
 motion_mode = 1
 script = ExtResource("1_bomber")
-fuse_time = 1.2
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = SubResource("SphereMesh_1")

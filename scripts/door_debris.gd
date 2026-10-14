@@ -288,6 +288,10 @@ static func shatter(leaf_mesh: MeshInstance3D, parent: Node3D, push: Vector3, im
 		cols: int, rows: int, slant := 0.0, merge_top := false) -> Array:
 	var bodies := []
 	var xf := leaf_mesh.global_transform
+	# A body takes no scale, so the leaf's (module_level LEAF_FIT) goes on each
+	# piece's mesh and box instead.
+	var sc := xf.basis.get_scale()
+	var turn := xf.basis.orthonormalized()
 	# The boards' plane: the old gate's measured one, or (a thick Tripo leaf) the
 	# middle of the leaf mesh itself.
 	var plane := BOARD_PLANE if slant <= 0.0 else leaf_mesh.mesh.get_aabb().get_center().z
@@ -305,6 +309,7 @@ static func shatter(leaf_mesh: MeshInstance3D, parent: Node3D, push: Vector3, im
 			draw.set_surface_override_material(s, _dissolve_for((p["mesh"] as Mesh).surface_get_material(s)))
 		draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		draw.visibility_range_end = 40.0
+		draw.scale = sc
 		body.add_child(draw)
 		var shape := CollisionShape3D.new()
 		var box := BoxShape3D.new()
@@ -313,12 +318,12 @@ static func shatter(leaf_mesh: MeshInstance3D, parent: Node3D, push: Vector3, im
 		# bands and the latch, up to 0.47 m deep, and a box that deep stood every
 		# chunk up on end like a post. 8 cm, centred on the boards' plane --
 		# thin, but not so thin it tunnels through the floor.
-		box.size = Vector3(size.x, size.y, BOARD_THICK)
+		box.size = Vector3(size.x * sc.x, size.y * sc.y, BOARD_THICK)
 		shape.shape = box
-		shape.position = Vector3(0.0, 0.0, plane - (p["centre"] as Vector3).z)
+		shape.position = Vector3(0.0, 0.0, (plane - (p["centre"] as Vector3).z) * sc.z)
 		body.add_child(shape)
 		parent.add_child(body)
-		body.global_transform = Transform3D(xf.basis, xf * (p["centre"] as Vector3))
+		body.global_transform = Transform3D(turn, xf * (p["centre"] as Vector3))
 		# Nearest the boot flies hardest; the far corners mostly drop.
 		var near := clampf(1.4 - body.global_position.distance_to(impact) / 1.6, 0.6, 1.4)
 		# Thrown hard down the corridor, away from the boot (2026-10-11: they

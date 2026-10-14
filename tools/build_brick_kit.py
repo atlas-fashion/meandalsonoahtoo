@@ -71,7 +71,7 @@ ORM_PX = 1024
 ## slabs where it used to draw one 15k module, so the pieces are thinned.
 BUDGET = {
     "wall": 7000, "wall_top": 4000, "wall_niche": 7000, "wall_cage": 8000,
-    "pillar": 1500, "pillar_torch": 2200, "arch": 6000, "door": 8000,
+    "pillar": 1500, "pillar_torch": 2200, "arch": 6000, "door": 8000, "door_arch": 8000,
     "floor": 1500, "vault": 7000,
     "door_frame": 99999, "door_leaf": 99999, "cage_door": 99999, "torch_mount": 99999,
     "cart_body": 6000, "cart_wheels": 2400, "cart_lid": 1500,
@@ -576,6 +576,8 @@ def main():
     decimate(door, BUDGET["door"])
     built.append(door)
     built.extend(split_door(door))
+    if os.path.exists(os.path.join(RAW, "door_arch.glb")):
+        built.append(build_door_arch())
     built.append(build_floor())
 
     barrel = build_vault()
@@ -609,6 +611,50 @@ def main():
     bpy.ops.export_scene.gltf(filepath=OUT, use_selection=True, export_format="GLB",
                               export_image_format="JPEG", export_jpeg_quality=90)
     log("wrote", OUT, "%.1f MB" % (os.path.getsize(OUT) / 1e6))
+
+
+## --- The empty door arch (2026-10-14) ---------------------------------------
+##
+## Tripo built it on its own, without a door: the user's door photo edited to an
+## empty passage (tools/tripo_image.ps1), then image to model. The kicked door
+## used to leave the door piece's frame, which has no stone inside its opening
+## (the leaf was cut out of it), lined by a strip in another texture; this arch
+## carries its own jambs and soffit in its own stone. Fitted to the old frame's
+## outside -- legs out to DOOR_ARCH_OUTER, DOOR_ARCH_TOP tall -- and to its depth
+## behind the face, so it seals against the corridor's arch the same way.
+## Raw: you look through it along x; its width runs along y.
+DOOR_ARCH_OUTER = 1.8
+DOOR_ARCH_TOP = 5.0
+DOOR_ARCH_DEPTH = 1.12
+DOOR_ARCH_MID = 0.58
+
+
+def build_door_arch():
+    ob = import_piece("door_arch")
+    strip_rubble(ob)
+    apply(ob, rot_z(-90.0))
+    p = points(ob)
+    z0, z1 = p[:, 2].min(), p[:, 2].max()
+    mid = band(p, 2, z0 + 0.1 * (z1 - z0), z0 + 0.5 * (z1 - z0))
+    x0, x1 = np.percentile(mid[:, 0], 1), np.percentile(mid[:, 0], 99)
+    y0, y1 = np.percentile(mid[:, 1], 2), np.percentile(mid[:, 1], 98)
+    sx = 2.0 * DOOR_ARCH_OUTER / (x1 - x0)
+    sz = DOOR_ARCH_TOP / (z1 - z0)
+    sy = DOOR_ARCH_DEPTH / (y1 - y0)
+    apply(ob, move(0.0, DOOR_ARCH_MID, 0.0) @ scale(sx, sy, sz)
+          @ move(-(x0 + x1) * 0.5, -(y0 + y1) * 0.5, -z0))
+    log("  door arch: scale %.2f x %.2f x %.2f (raw depth %.3f)" % (sx, sy, sz, y1 - y0))
+    q = points(ob)
+    for h in (1.0, 2.0, 2.75, 3.25, 3.6, 4.0, 4.2, 4.4):
+        b = band(q, 2, h - 0.06, h + 0.06)
+        b = band(b, 1, DOOR_ARCH_MID - 0.3, DOOR_ARCH_MID + 0.3)
+        xs = np.sort(b[:, 0])
+        gaps = np.diff(xs)
+        if len(gaps):
+            i = int(np.argmax(gaps))
+            log("    door arch at %.2f m: outer %.2f..%.2f  opening %.2f..%.2f"
+                % (h, xs[0], xs[-1], xs[i], xs[i + 1]))
+    return ob
 
 
 ## The door piece's wooden leaf, ray-mapped from the front at DOOR_SCALE: 1.9 m
