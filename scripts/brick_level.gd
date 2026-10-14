@@ -112,7 +112,15 @@ static func meshes(tint: float) -> Dictionary:
 			if mat == null or fixed.has(mat):
 				continue
 			fixed[mat] = true
+			var rough := mat.roughness_texture
 			_fix_material(mat, tint)
+			if String(mi.name) == "floor" and rough != null:
+				# The damp floor (Tripo's retexture, 2026-10-14) keeps its own
+				# roughness map -- 0.79-0.91, a faint sheen that varies over
+				# the stone -- where every other piece is flattened to 0.95.
+				# It only shows while damp.gd switches the floor's specular on.
+				mat.roughness_texture = rough
+				mat.roughness = 1.0
 		_meshes[String(mi.name)] = mesh
 	scene.free()
 	return _meshes

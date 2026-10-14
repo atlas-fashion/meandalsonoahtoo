@@ -299,3 +299,27 @@ variants share their source's textures) from the eight raw Tripo pieces in
   the door split into `door_frame` / `door_leaf`, and the cage wall's gate
   `cage_door`. The splits are cut AFTER the source piece is decimated, so the
   parts still meet.
+- **The floor is Tripo's damp retexture** (2026-10-14):
+  `models/source/brick_kit_raw/floor_damp.glb`, made by
+  `./tools/tripo_texture.ps1 -Source 7b41eb15-e4ce-4f27-8bf5-28915ac730f6
+  -Model v3.5-20260815 -Prompt "Damp dungeon floor of large worn flagstones..."`
+  (task 358d150a-98f8-41e8-a2e8-3c735ae49a83, 20 credits). Same mesh and UVs
+  as `floor.glb`, new colour and roughness; its own normal map is nearly flat,
+  so `build_floor` grafts `floor.glb`'s normal map onto it (`relief_normal`).
+  Delete `floor_damp.glb` to build the original floor again.
+
+# Retexturing with Tripo
+
+```
+./tools/tripo_texture.ps1 -Source <task id | model.glb> -Prompt "..." -Out models/x.glb
+```
+
+The v3 `/models/texture` endpoint. Pass the task id of the Tripo generation
+when there is one: Tripo keeps its UVs. The id of an old generation is in the
+usage log (`GET /v3/account/usage`), and a kit texture's file name ends in it
+(`brick_kit_Color_<task id>.jpg`). Traps: the v3 API is on
+`openapi.tripo3d.ai` -- the `.com` host in Tripo's docs answers our key with
+401; `-Model` must be one of v2.5-20250123 / v3.0-20250812 / v3.5-20260815
+(the generator's v3.1-20260211 is refused, free); `$Input` is a PowerShell
+automatic variable, so the parameter is `-Source`. Every new texture the kit
+export brings imports as `compress/mode=0`: patch to 2 and re-import.

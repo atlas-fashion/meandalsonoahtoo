@@ -334,8 +334,41 @@ def build_arch(name="arch"):
     return ob
 
 
+def relief_normal(ob, source):
+    """Swap ob's normal map for the one in RAW/source.glb.
+
+    The damp floor (2026-10-14) is Tripo's retexture of the floor task
+    (tools/tripo_texture.ps1): same mesh, same UVs, new colour and roughness --
+    but its normal map is nearly flat (0.475..0.522 against the original's
+    0.32..0.68), and the carved relief lives in the original's. The UVs match,
+    so the original's normal map fits the new texture exactly."""
+    before = set(bpy.data.images)
+    keep = set(bpy.context.scene.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(RAW, source + ".glb"))
+    for o in list(set(bpy.context.scene.objects) - keep):
+        bpy.data.objects.remove(o)
+    normal = None
+    for im in set(bpy.data.images) - before:
+        if "normal" in im.name.lower():
+            normal = im
+    if normal is None:
+        log("    relief_normal: no normal map in %s" % source)
+        return
+    for mat in ob.data.materials:
+        for node in mat.node_tree.nodes:
+            if node.type == "NORMAL_MAP":
+                for link in node.inputs["Color"].links:
+                    if link.from_node.type == "TEX_IMAGE":
+                        log("    normal map %s -> %s" % (link.from_node.image.name, normal.name))
+                        link.from_node.image = normal
+
+
 def build_floor():
-    ob = import_piece("floor")
+    damp = os.path.exists(os.path.join(RAW, "floor_damp.glb"))
+    ob = import_piece("floor_damp" if damp else "floor")
+    if damp:
+        ob.name = "floor"
+        relief_normal(ob, "floor")
     strip_rubble(ob, 0.1)
     p = points(ob)
     mid = band(p, 2, -0.02, 0.02)

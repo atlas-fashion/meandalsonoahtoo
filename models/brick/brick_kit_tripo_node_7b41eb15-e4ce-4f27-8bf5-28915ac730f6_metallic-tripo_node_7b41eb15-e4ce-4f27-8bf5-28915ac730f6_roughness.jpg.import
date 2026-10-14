@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://0jh74ullnidb"
-path.s3tc="res://.godot/imported/brick_kit_ORM_7b41eb15-e4ce-4f27-8bf5-28915ac730f6.jpg-caa3dc3742713eea329079272337d92f.s3tc.ctex"
+uid="uid://dkkms4os6a7r7"
+path.s3tc="res://.godot/imported/brick_kit_tripo_node_7b41eb15-e4ce-4f27-8bf5-28915ac730f6_metallic-tripo_node_7b41eb15-e4ce-4f27-8bf5-28915ac730f6_roughness.jpg-209b749918fdbdce78892d5bf77c7eee.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "41c421caf5d99728a020293a7d6ce6e0"
+"md5": "4f04212f6ca77388ef6999fb9435f705"
 }
 
 [deps]
 
-source_file="res://models/brick/brick_kit_ORM_7b41eb15-e4ce-4f27-8bf5-28915ac730f6.jpg"
-dest_files=["res://.godot/imported/brick_kit_ORM_7b41eb15-e4ce-4f27-8bf5-28915ac730f6.jpg-caa3dc3742713eea329079272337d92f.s3tc.ctex"]
+source_file="res://models/brick/brick_kit_tripo_node_7b41eb15-e4ce-4f27-8bf5-28915ac730f6_metallic-tripo_node_7b41eb15-e4ce-4f27-8bf5-28915ac730f6_roughness.jpg"
+dest_files=["res://.godot/imported/brick_kit_tripo_node_7b41eb15-e4ce-4f27-8bf5-28915ac730f6_metallic-tripo_node_7b41eb15-e4ce-4f27-8bf5-28915ac730f6_roughness.jpg-209b749918fdbdce78892d5bf77c7eee.s3tc.ctex"]
 
 [params]
 
@@ -41,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1
