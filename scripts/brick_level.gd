@@ -42,6 +42,9 @@ const NO_SHADOW := ["floor", "bed"]
 ## torch's `shadow_caster_mask` -- they cost no torch shadow pass.
 const MOON_ONLY := ["cap", "skirt"]
 const MOON_ONLY_LAYER := 1 << 12
+## The floor slabs are ALSO on this layer, which is all the damp patches' decals
+## touch (scripts/damp.gd): wet stone on the floor, never on a wall, a cart or a boot.
+const WET_LAYER := 1 << 13
 
 const WALL_FACE := 1.9
 const WALL_HEIGHT := 3.5
@@ -549,6 +552,8 @@ static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view
 				else GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 			if piece in MOON_ONLY:
 				mmi.layers = MOON_ONLY_LAYER
+			elif piece == "floor":
+				mmi.layers = 1 | WET_LAYER
 			holder.add_child(mmi)
 			counts[piece] = int(counts.get(piece, 0)) + list.size()
 	holder.set_meta("counts", counts)

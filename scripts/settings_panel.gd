@@ -37,6 +37,8 @@ const SPEC := [
 	{"key": "fog", "label": "Fog", "type": "check"},
 	{"key": "effects", "label": "Impact effects", "type": "check",
 		"hint": "Death bursts and flourishes."},
+	{"key": "damp", "label": "Damp floors and drips", "type": "check",
+		"hint": "Wet patches on the floor that catch the torchlight, and water dripping from the vault."},
 	{"key": "texture_detail", "label": "Texture detail", "type": "option",
 		"choices": [["Untextured", 0], ["No triplanar", 1], ["Full", 2]],
 		"hint": "Triplanar mapping samples each texture three times per pixel."},

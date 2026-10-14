@@ -835,6 +835,7 @@ func _build_module_level() -> void:
 	_place_anchors(holder)
 	_place_hiding_spots(holder)
 	_place_clutter(holder)
+	_place_damp(holder)
 	if not _morgue_room.is_empty():
 		_morgue = load("res://scripts/morgue.gd").build(holder, _module_level, _morgue_room)
 	_build_puzzle_rooms(holder)
@@ -1488,6 +1489,25 @@ func _place_clutter(holder: Node3D) -> void:
 				if absf(off.x) < maxf(half.x, half.y) and absf(off.z) < maxf(half.x, half.y):
 					grid[t.y][t.x] = WALL
 	print("[clutter] %d solid pieces of broken wood" % solid.size())
+
+
+## Wet patches and drips (scripts/damp.gd). No drip in a door's cells (it would
+## fall through a leaf) or a hiding cart's (into the cart).
+func _place_damp(holder: Node3D) -> void:
+	var level_script = load("res://scripts/module_level.gd")
+	if _module_level == null or not level_script.brick:
+		return
+	var blocked := {}
+	for door in _module_level.doors:
+		blocked[door["cell"]] = true
+		blocked[door["other"]] = true
+	for spot in _hiding_spots:
+		var p: Vector3 = (spot as Node3D).global_position
+		blocked[Vector2i(roundi((p.x - _module_level.origin.x) / _module_level.cell_size),
+			roundi((p.z - _module_level.origin.z) / _module_level.cell_size))] = true
+	var damp: Node3D = load("res://scripts/damp.gd").new()
+	holder.add_child(damp)
+	damp.build(_module_level, blocked)
 
 
 ## An enemy something else raised (a sarcophagus's skeleton): parented, set up

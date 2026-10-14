@@ -139,6 +139,8 @@ const TORCH_ENERGY := 10.0
 ## 10-25% between torches, and won 73.1 -> 79.4 fps (CLAUDE.md section 34).
 const TORCH_RANGE := 14.0
 const TORCH_ATTENUATION := 1.0
+## How much the torches light glossy surfaces (brick kit only; see _hang_torch).
+const TORCH_SPECULAR := 0.8
 ## Height up the wall, as a fraction of the module.
 const TORCH_HEIGHT := 0.46
 ## Roughly one torch per this many corridor cells. Omni light count is a
@@ -1977,8 +1979,11 @@ static func _hang_torch(holder: Node3D, scene: PackedScene, at: Vector3,
 	var light := torch.get_node_or_null("Light") as OmniLight3D
 	if light != null:
 		light.omni_attenuation = TORCH_ATTENUATION
-		# No specular: a glossy hotspot on the stone reads as a lamp.
-		light.light_specular = 0.0
+		# Specular only in the brick kit (2026-10-14), where the stone has its
+		# own specular switched off: the damp floor's wet patches catch it as
+		# glints (damp.gd). On the old Tripo modules a glossy hotspot on the
+		# stone read as a lamp, so there it stays off.
+		light.light_specular = TORCH_SPECULAR if brick else 0.0
 		# Torches cast shadows -- only near the camera: `Graphics` sets
 		# `distance_fade_shadow` from its shadow-distance knob for every light
 		# carrying this meta, and switches them off on Potato. The torch's own

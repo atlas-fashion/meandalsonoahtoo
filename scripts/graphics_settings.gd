@@ -31,31 +31,31 @@ const PRESET_NAMES := ["Ultra", "High", "Medium", "Low", "Potato", "Custom"]
 const PRESETS := {
 	Preset.ULTRA: {
 		"render_scale": 1.0, "msaa": 2, "shadows": 2, "shadow_atlas": 4096,
-		"torch_lights": 16.0, "ssao": true, "glow": true, "fog": true, "effects": true,
+		"torch_lights": 16.0, "ssao": true, "glow": true, "fog": true, "effects": true, "damp": true,
 		"light_detail": 1.15, "view_distance": 1.25, "texture_detail": 2,
 		"lod_threshold": 1.0, "anim_quality": 2, "npc_detail": 1.25,
 	},
 	Preset.HIGH: {
 		"render_scale": 1.0, "msaa": 1, "shadows": 2, "shadow_atlas": 4096,
-		"torch_lights": 12.0, "ssao": true, "glow": true, "fog": true, "effects": true,
+		"torch_lights": 12.0, "ssao": true, "glow": true, "fog": true, "effects": true, "damp": true,
 		"light_detail": 1.0, "view_distance": 1.0, "texture_detail": 2,
 		"lod_threshold": 1.0, "anim_quality": 2, "npc_detail": 1.0,
 	},
 	Preset.MEDIUM: {
 		"render_scale": 0.8, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
-		"torch_lights": 10.0, "ssao": false, "glow": true, "fog": true, "effects": true,
+		"torch_lights": 10.0, "ssao": false, "glow": true, "fog": true, "effects": true, "damp": true,
 		"light_detail": 1.0, "view_distance": 1.0, "texture_detail": 2,
 		"lod_threshold": 2.0, "anim_quality": 1, "npc_detail": 0.9,
 	},
 	Preset.LOW: {
 		"render_scale": 0.62, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
-		"torch_lights": 8.0, "ssao": false, "glow": false, "fog": true, "effects": true,
+		"torch_lights": 8.0, "ssao": false, "glow": false, "fog": true, "effects": true, "damp": true,
 		"light_detail": 0.9, "view_distance": 0.9, "texture_detail": 2,
 		"lod_threshold": 4.0, "anim_quality": 1, "npc_detail": 0.75,
 	},
 	Preset.POTATO: {
 		"render_scale": 0.45, "msaa": 0, "shadows": 0, "shadow_atlas": 256,
-		"torch_lights": 6.0, "ssao": false, "glow": false, "fog": false, "effects": false,
+		"torch_lights": 6.0, "ssao": false, "glow": false, "fog": false, "effects": false, "damp": false,
 		"light_detail": 0.7, "view_distance": 0.75, "texture_detail": 0,
 		"lod_threshold": 8.0, "anim_quality": 0, "npc_detail": 0.55,
 	},
@@ -81,6 +81,9 @@ var glow := false
 var fog := true
 ## Death bursts and other non-essential flourishes.
 var effects := true
+## Wet patches on the floor that catch the torchlight, and water dripping
+## from the vault (scripts/damp.gd). Decals and one-particle emitters.
+var damp := true
 ## Scales the reach of the dressing lights (torches, chandeliers).
 var light_detail := 0.9
 ## Scales every authored visibility_range_end in the level.
@@ -167,6 +170,8 @@ func apply_all() -> void:
 	_apply_window()
 	_apply_viewport()
 	_apply_environment()
+	for node in get_tree().get_nodes_in_group("damp"):
+		node.set_enabled(damp)
 	_sweep(get_tree().root)
 	changed.emit()
 
@@ -396,7 +401,7 @@ func _materials_of(g: GeometryInstance3D) -> Array:
 const SAVE_PATH := "user://graphics.cfg"
 const KEYS := [
 	"render_scale", "msaa", "shadows", "shadow_atlas", "torch_lights", "ssao", "glow", "fog",
-	"effects", "light_detail", "view_distance", "texture_detail",
+	"effects", "damp", "light_detail", "view_distance", "texture_detail",
 	"lod_threshold", "anim_quality", "npc_detail", "vsync", "fps_cap",
 ]
 
