@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqmvxwrmcksmc"
-path.s3tc="res://.godot/imported/brick_kit_NormalGL_7b41eb15-e4ce-4f27-8bf5-28915ac730f6.jpg-71b2e55fd651dbd5e80f691dd6ce5415.s3tc.ctex"
+uid="uid://bfonywt5rll26"
+path.s3tc="res://.godot/imported/brick_kit_tripo_base_color_44cc5755-bad4-4df1-9384-dcac6605b508.jpg-4a0eefbe848241a8bc79c01a3498218f.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "1f80da8c7fe63fb3c7dfb4bc1defc265"
+"md5": "b6287952b622545c36e922ef84eb35ca"
 }
 
 [deps]
 
-source_file="res://models/brick/brick_kit_NormalGL_7b41eb15-e4ce-4f27-8bf5-28915ac730f6.jpg"
-dest_files=["res://.godot/imported/brick_kit_NormalGL_7b41eb15-e4ce-4f27-8bf5-28915ac730f6.jpg-71b2e55fd651dbd5e80f691dd6ce5415.s3tc.ctex"]
+source_file="res://models/brick/brick_kit_tripo_base_color_44cc5755-bad4-4df1-9384-dcac6605b508.jpg"
+dest_files=["res://.godot/imported/brick_kit_tripo_base_color_44cc5755-bad4-4df1-9384-dcac6605b508.jpg-4a0eefbe848241a8bc79c01a3498218f.s3tc.ctex"]
 
 [params]
 
@@ -41,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1

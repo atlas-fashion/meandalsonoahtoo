@@ -1,13 +1,11 @@
 extends Node3D
 
-## Damp (2026-10-14): wet patches on the floor and water dripping from the vault.
+## Damp (2026-10-14): water dripping from the vault, and the floor's wet sheen.
 ##
-## WET PATCHES are decals that touch only the floor slabs (`BrickLevel.WET_LAYER`,
-## the decal's `cull_mask`): darker stone, and a much smoother surface that picks
-## up the torches as glints -- smoothest in the middle, where water stands. Some
-## lie along the foot of a wall, where water running down the brick would
-## gather, some out in the corridor, more in the open courts, and one under
-## every drip. Their textures are made here once from noise.
+## The wet look of the floor itself -- its gloss and its puddles -- is in the
+## floor's own Tripo texture (brick_kit_raw/floor_wet.glb, CLAUDE.md section 41);
+## this only switches the floor's specular on so that gloss can show. (The
+## decal puddles this file used to lay were removed at the user's request.)
 ##
 ## DRIPS hang from the underside of the barrel vault, found by casting a ray up
 ## through the vault mesh itself, so a bead always sits ON the brick. Each is a
@@ -21,10 +19,6 @@ extends Node3D
 const BrickLevel := preload("res://scripts/brick_level.gd")
 const DRIP_SHADER := preload("res://shaders/water_drip.gdshader")
 
-## Share of corridor cells with a patch (one in four of those gets two).
-const PATCH_SHARE := 0.34
-## Share of court cells with a patch -- open to the sky, so wetter.
-const COURT_PATCH_SHARE := 0.55
 ## Share of straights with a drip -- far more where a torch hangs, since a drop
 ## is only ever seen by the light it catches -- and of corners.
 const DRIP_SHARE := 0.04
@@ -34,7 +28,6 @@ const CORNER_DRIP_SHARE := 0.07
 ## standing along the walls (clutter, hiding carts).
 const DRIP_ACROSS := 0.75
 const DRIP_ALONG := 2.4
-const PATCH_RANGE := 34.0
 const DRIP_RANGE := 26.0
 const CHECK_EVERY := 0.25
 ## Time between drops from one spot.
@@ -44,10 +37,7 @@ const GRAVITY := 9.8
 const SPLASH := 0.14
 ## The drop's glint (see _drop).
 const DROP_GLINT := Color(0.55, 0.4, 0.26)
-const TEXTURE_SIZE := 128
-const VARIANTS := 4
 
-static var _textures: Array = []
 static var _drop_mesh: Mesh = null
 
 var _drips: Array[GPUParticles3D] = []
@@ -56,7 +46,7 @@ var _clock := 0.0
 var _on := true
 
 
-## Lays the patches and drips over the brick level `built`. `blocked` cells get
+## Hangs the drips in the brick level `built`. `blocked` cells get
 ## no drip (doors, hiding carts).
 func build(built, blocked: Dictionary) -> void:
 	name = "Damp"
@@ -76,45 +66,17 @@ func build(built, blocked: Dictionary) -> void:
 		var vm: Mesh = kit.get(v)
 		if vm != null:
 			vaults[v] = vm.generate_triangle_mesh()
-	var patches := Node3D.new()
-	patches.name = "WetPatches"
-	add_child(patches)
 	var drips := Node3D.new()
 	drips.name = "Drips"
 	add_child(drips)
 	var rng := RandomNumberGenerator.new()
-	var patch_count := 0
 	for key in built.cells:
 		var cell = built.cells[key]
 		rng.seed = hash(key) ^ 0xda3b
 		var centre: Vector3 = built.to_world(cell.pos)
 		var basis := Basis(Vector3.UP, -float(cell.turn) * PI * 0.5)
 		if cell.court:
-			if BrickLevel._in_boss_block(built, cell):
-				continue
-			if rng.randf() < COURT_PATCH_SHARE:
-				for i in rng.randi_range(1, 3):
-					var at := centre + Vector3(rng.randf_range(-2.2, 2.2), 0.0, rng.randf_range(-2.2, 2.2))
-					_patch(patches, rng, at, rng.randf() * TAU,
-						Vector2(rng.randf_range(1.4, 3.4), rng.randf_range(1.2, 2.8)), floor_top)
-					patch_count += 1
 			continue
-		if rng.randf() < PATCH_SHARE:
-			for i in (2 if rng.randf() < 0.25 else 1):
-				if cell.kind == "straight" and rng.randf() < 0.55:
-					# Along the foot of a wall, long way along it.
-					var side := -1.0 if rng.randf() < 0.5 else 1.0
-					var size := Vector2(rng.randf_range(1.6, 3.2), rng.randf_range(0.7, 1.3))
-					var local := Vector3(side * (BrickLevel.WALL_FACE - size.y * 0.32), 0.0,
-						rng.randf_range(-2.0, 2.0))
-					_patch(patches, rng, centre + basis * local,
-						-float(cell.turn) * PI * 0.5 + PI * 0.5 + rng.randf_range(-0.12, 0.12),
-						size, floor_top)
-				else:
-					var local := Vector3(rng.randf_range(-1.1, 1.1), 0.0, rng.randf_range(-1.6, 1.6))
-					_patch(patches, rng, centre + basis * local, rng.randf() * TAU,
-						Vector2(rng.randf_range(0.9, 2.2), rng.randf_range(0.8, 1.8)), floor_top)
-				patch_count += 1
 		# Drips.
 		if blocked.has(key) or built.skylights.has(cell.pos):
 			continue
@@ -148,33 +110,9 @@ func build(built, blocked: Dictionary) -> void:
 				continue
 			var at := centre + basis * Vector3(under.x, under.y - 0.004, under.z)
 			_drip(drips, rng, at, at.y - (centre.y + floor_top) - 0.004)
-			_patch(patches, rng, Vector3(at.x, centre.y, at.z), rng.randf() * TAU,
-				Vector2(rng.randf_range(0.55, 1.0), rng.randf_range(0.5, 0.9)), floor_top, true)
-			patch_count += 1
-	set_meta("patch_count", patch_count)
 	set_meta("drip_count", _drips.size())
-	print("[damp] %d wet patches, %d drips" % [patch_count, _drips.size()])
+	print("[damp] %d drips" % _drips.size())
 	set_enabled(Graphics.damp)
-
-
-func _patch(holder: Node3D, rng: RandomNumberGenerator, at: Vector3, yaw: float,
-		size: Vector2, floor_top: float, pool := false) -> void:
-	var tex: Array = _texture(rng.randi_range(0, VARIANTS - 1))
-	var d := Decal.new()
-	d.size = Vector3(size.x, 0.6, size.y)
-	d.texture_albedo = tex[0]
-	d.texture_orm = tex[1]
-	# Black, mixed in part: darkens the stone without hiding it.
-	d.albedo_mix = 0.72 if pool else 0.6
-	d.upper_fade = 0.1
-	d.lower_fade = 0.1
-	d.cull_mask = BrickLevel.WET_LAYER
-	d.distance_fade_enabled = true
-	d.distance_fade_begin = PATCH_RANGE
-	d.distance_fade_length = 8.0
-	d.position = at + Vector3(0.0, floor_top, 0.0)
-	d.rotation.y = yaw
-	holder.add_child(d)
 
 
 func _drip(holder: Node3D, rng: RandomNumberGenerator, at: Vector3, fall: float) -> void:
@@ -225,44 +163,7 @@ static func _drop() -> Mesh:
 	return s
 
 
-## [albedo, orm] for one patch shape: noise inside a soft round falloff. The
-## albedo is black with the wetness in its alpha (the decal's mask for both
-## textures); the ORM's green is the roughness -- damp at the edges, nearly a
-## mirror where water stands in the middle.
-static func _texture(variant: int) -> Array:
-	if _textures.is_empty():
-		for v in VARIANTS:
-			_textures.append(_make_texture(v))
-	return _textures[variant]
-
-
-static func _make_texture(variant: int) -> Array:
-	var noise := FastNoiseLite.new()
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	noise.seed = 7310 + variant * 97
-	noise.frequency = 0.03
-	noise.fractal_octaves = 4
-	var n := TEXTURE_SIZE
-	var albedo := Image.create(n, n, false, Image.FORMAT_RGBA8)
-	var orm := Image.create(n, n, false, Image.FORMAT_RGBA8)
-	for y in n:
-		for x in n:
-			var u := (float(x) + 0.5) / float(n) * 2.0 - 1.0
-			var v := (float(y) + 0.5) / float(n) * 2.0 - 1.0
-			var r := sqrt(u * u + v * v)
-			var shape := 1.0 - smoothstep(0.25, 1.0, r)
-			var wet := shape * 0.95 + noise.get_noise_2d(float(x), float(y)) * 0.85 - 0.28
-			var edge := 1.0 - smoothstep(0.78, 0.98, r)
-			var mask := smoothstep(0.0, 0.38, wet) * edge
-			var pool := smoothstep(0.3, 0.7, wet)
-			albedo.set_pixel(x, y, Color(0.0, 0.0, 0.0, mask))
-			orm.set_pixel(x, y, Color(1.0, lerpf(0.32, 0.07, pool), 0.0, 1.0))
-	albedo.generate_mipmaps()
-	orm.generate_mipmaps()
-	return [ImageTexture.create_from_image(albedo), ImageTexture.create_from_image(orm)]
-
-
-## Graphics.damp. Off: no patches, no drips, and the floor back to matte.
+## Graphics.damp. Off: no drips, and the floor back to matte.
 func set_enabled(on: bool) -> void:
 	_on = on
 	visible = on

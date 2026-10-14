@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://sh31men27lka"
-path.s3tc="res://.godot/imported/brick_kit_tripo_base_color_358d150a-98f8-41e8-a2e8-3c735ae49a83.jpg-2f7b4cd38ea6af21e9fd3bc6ef45895c.s3tc.ctex"
+uid="uid://bieemc528wrhx"
+path.s3tc="res://.godot/imported/brick_kit_floor_wet_roughness.jpg-250db33d3ca7a79ff92d159f67b77765.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "8611763b77b70deea23af0b1549ef97e"
+"md5": "235ac0d9d57dd73d08694cc4682c0f7d"
 }
 
 [deps]
 
-source_file="res://models/brick/brick_kit_tripo_base_color_358d150a-98f8-41e8-a2e8-3c735ae49a83.jpg"
-dest_files=["res://.godot/imported/brick_kit_tripo_base_color_358d150a-98f8-41e8-a2e8-3c735ae49a83.jpg-2f7b4cd38ea6af21e9fd3bc6ef45895c.s3tc.ctex"]
+source_file="res://models/brick/brick_kit_floor_wet_roughness.jpg"
+dest_files=["res://.godot/imported/brick_kit_floor_wet_roughness.jpg-250db33d3ca7a79ff92d159f67b77765.s3tc.ctex"]
 
 [params]
 

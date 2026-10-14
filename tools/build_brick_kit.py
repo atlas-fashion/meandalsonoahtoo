@@ -334,41 +334,83 @@ def build_arch(name="arch"):
     return ob
 
 
-def relief_normal(ob, source):
-    """Swap ob's normal map for the one in RAW/source.glb.
+## The wet floor's gloss (2026-10-14). Tripo painted the water -- puddles in the
+## hollows, wet cracks, darkened stone -- into the COLOUR of floor_wet.glb, a
+## retexture of the floor task from a wet edit of the user's own reference
+## photo (tools/tripo_image.ps1, tools/tripo_texture.ps1). Its roughness map is
+## matte everywhere (0.90-1.0; three retextures never went below 0.79), so the
+## shine is derived from where Tripo put the water: the wet colour against the
+## dry original (floor.glb), same UVs. Darker than dry = wet. Blurred, because
+## the two textures' fine grain does not line up.
+WET_BASE_ROUGH = 0.62      # the whole floor: kinda wet
+WET_POOL_ROUGH = 0.1       # where Tripo painted standing water
+WET_BLUR = 40              # texels at 4096
 
-    The damp floor (2026-10-14) is Tripo's retexture of the floor task
-    (tools/tripo_texture.ps1): same mesh, same UVs, new colour and roughness --
-    but its normal map is nearly flat (0.475..0.522 against the original's
-    0.32..0.68), and the carved relief lives in the original's. The UVs match,
-    so the original's normal map fits the new texture exactly."""
-    before = set(bpy.data.images)
-    keep = set(bpy.context.scene.objects)
-    bpy.ops.import_scene.gltf(filepath=os.path.join(RAW, source + ".glb"))
-    for o in list(set(bpy.context.scene.objects) - keep):
-        bpy.data.objects.remove(o)
-    normal = None
-    for im in set(bpy.data.images) - before:
-        if "normal" in im.name.lower():
-            normal = im
-    if normal is None:
-        log("    relief_normal: no normal map in %s" % source)
-        return
+
+def _pixels(im):
+    a = np.empty(im.size[0] * im.size[1] * im.channels, np.float32)
+    im.pixels.foreach_get(a)
+    return a.reshape(im.size[1], im.size[0], im.channels)
+
+
+def _box(a, r):
+    """Separable box blur, twice (close to a gaussian)."""
+    for _ in range(2):
+        for axis in (0, 1):
+            c = np.cumsum(np.pad(a, [(r + 1, r) if i == axis else (0, 0) for i in range(2)],
+                                 mode="edge"), axis=axis)
+            hi = np.take(c, range(2 * r + 1, c.shape[axis]), axis=axis)
+            lo = np.take(c, range(0, c.shape[axis] - 2 * r - 1), axis=axis)
+            a = (hi - lo) / (2 * r + 1)
+    return a
+
+
+def wet_gloss(ob, dry_source):
+    lum = np.array([0.2126, 0.7152, 0.0722], np.float32)
+    colour = rough_node = None
     for mat in ob.data.materials:
         for node in mat.node_tree.nodes:
-            if node.type == "NORMAL_MAP":
-                for link in node.inputs["Color"].links:
-                    if link.from_node.type == "TEX_IMAGE":
-                        log("    normal map %s -> %s" % (link.from_node.image.name, normal.name))
-                        link.from_node.image = normal
+            if node.type == "TEX_IMAGE" and node.image is not None:
+                if "color" in node.image.name.lower():
+                    colour = node.image
+                elif "rough" in node.image.name.lower():
+                    rough_node = node
+    before = set(bpy.data.images)
+    keep = set(bpy.context.scene.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(RAW, dry_source + ".glb"))
+    for o in list(set(bpy.context.scene.objects) - keep):
+        bpy.data.objects.remove(o)
+    dry = [im for im in set(bpy.data.images) - before if "color" in im.name.lower()]
+    if colour is None or rough_node is None or not dry or tuple(dry[0].size) != tuple(colour.size):
+        log("    wet_gloss: missing maps, floor left as Tripo made it")
+        return
+    lw = _pixels(colour)[:, :, :3] @ lum
+    ld = _pixels(dry[0])[:, :, :3] @ lum
+    darker = np.clip((1.0 - lw / np.maximum(ld, 0.02)) / 0.5, 0.0, 1.0)
+    wet = _box(darker, WET_BLUR)
+    wet = np.clip((wet - 0.18) / (0.5 - 0.18), 0.0, 1.0)
+    wet = wet * wet * (3.0 - 2.0 * wet)
+    rough = WET_BASE_ROUGH + (WET_POOL_ROUGH - WET_BASE_ROUGH) * wet
+    h, w = rough.shape
+    px = np.zeros((h, w, 4), np.float32)
+    px[:, :, 0] = 1.0
+    px[:, :, 1] = rough
+    px[:, :, 3] = 1.0
+    out = bpy.data.images.new("floor_wet_roughness", w, h, alpha=False)
+    out.colorspace_settings.name = "Non-Color"
+    out.pixels.foreach_set(px.ravel())
+    out.pack()
+    rough_node.image = out
+    log("    wet gloss: roughness %.2f..%.2f, %.0f%% of texels below 0.3"
+        % (rough.min(), rough.max(), 100.0 * (rough < 0.3).mean()))
 
 
 def build_floor():
-    damp = os.path.exists(os.path.join(RAW, "floor_damp.glb"))
-    ob = import_piece("floor_damp" if damp else "floor")
-    if damp:
+    wet = os.path.exists(os.path.join(RAW, "floor_wet.glb"))
+    ob = import_piece("floor_wet" if wet else "floor")
+    if wet:
         ob.name = "floor"
-        relief_normal(ob, "floor")
+        wet_gloss(ob, "floor")
     strip_rubble(ob, 0.1)
     p = points(ob)
     mid = band(p, 2, -0.02, 0.02)

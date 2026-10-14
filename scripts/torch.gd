@@ -26,6 +26,13 @@ extends Node3D
 const HALO_SCALE := 1.6
 const HOT := Color(1.0, 0.72, 0.32)
 const EMBER := Color(1.0, 0.4, 0.13)
+## Time constant of a light low-pass on the flicker (2026-10-14). The noise's
+## fastest octave runs past the frame rate, so the light jumped by 16% of its
+## brightness frame to frame on average and by over 15% on 45% of frames --
+## measured, and it read as jarring. Smoothed, the swells and dips survive.
+const FLICKER_SMOOTH := 0.03
+## A gutter sinks in over this long instead of in one frame.
+const GUTTER_IN := 0.12
 var _light_home := Vector3.ZERO
 ## Wear the brick kit's Tripo torch (its ring bracket, wooden handle and wrapped
 ## head, cut from the torch pillar: "torch_mount") instead of this scene's old
@@ -86,6 +93,9 @@ var _is_managed := false
 var _noise := FastNoiseLite.new()
 var _time := 0.0
 var _gutter := 0.0
+var _gutter_falling := false
+## The flicker after its low-pass (see FLICKER_SMOOTH).
+var _factor := 1.0
 ## The light's own colour, read once, and the chill this torch last showed.
 var _fire_colour := Color.WHITE
 var _chill_shown := 0.0
@@ -269,14 +279,20 @@ func _process(delta: float) -> void:
 
 	_time += delta * flicker_speed
 
-	# Occasional dip, decaying back, on top of the steady wobble.
-	if _gutter > 0.0:
+	# Occasional dip on top of the steady wobble: it sinks in over GUTTER_IN
+	# (it used to drop in a single frame, a visible blink) and recovers.
+	if _gutter_falling:
+		_gutter = move_toward(_gutter, gutter_depth, delta * gutter_depth / GUTTER_IN)
+		_gutter_falling = _gutter < gutter_depth
+	elif _gutter > 0.0:
 		_gutter = maxf(_gutter - delta * 2.5, 0.0)
 	elif randf() < gutter_chance * delta:
-		_gutter = gutter_depth
+		_gutter_falling = true
 
 	var wobble := _noise.get_noise_1d(_time * 12.0)
-	var factor := clampf(1.0 + wobble * flicker_amount - _gutter, 0.08, 2.0)
+	var raw := clampf(1.0 + wobble * flicker_amount - _gutter, 0.08, 2.0)
+	_factor = lerpf(_factor, raw, 1.0 - exp(-delta / FLICKER_SMOOTH))
+	var factor := _factor
 
 	var lit := 1.0
 	if _is_managed:

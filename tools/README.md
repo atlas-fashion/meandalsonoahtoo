@@ -299,20 +299,31 @@ variants share their source's textures) from the eight raw Tripo pieces in
   the door split into `door_frame` / `door_leaf`, and the cage wall's gate
   `cage_door`. The splits are cut AFTER the source piece is decimated, so the
   parts still meet.
-- **The floor is Tripo's damp retexture** (2026-10-14):
-  `models/source/brick_kit_raw/floor_damp.glb`, made by
-  `./tools/tripo_texture.ps1 -Source 7b41eb15-e4ce-4f27-8bf5-28915ac730f6
-  -Model v3.5-20260815 -Prompt "Damp dungeon floor of large worn flagstones..."`
-  (task 358d150a-98f8-41e8-a2e8-3c735ae49a83, 20 credits). Same mesh and UVs
-  as `floor.glb`, new colour and roughness; its own normal map is nearly flat,
-  so `build_floor` grafts `floor.glb`'s normal map onto it (`relief_normal`).
-  Delete `floor_damp.glb` to build the original floor again.
+- **The floor is Tripo's wet retexture** (2026-10-14):
+  `models/source/brick_kit_raw/floor_wet.glb`. First `tools/tripo_image.ps1`
+  (seedream, 5 credits, task 293e33be-...) edited the user's floor photo
+  (`brick_kit_refs/floor.webp`, as PNG) into the same tile wet, with puddles;
+  then `tools/tripo_texture.ps1 -Source 7b41eb15-e4ce-4f27-8bf5-28915ac730f6
+  -Model v3.5-20260815 -Image <that picture>` (task 44cc5755-..., 20 credits)
+  retextured the floor's original generation from it. Same mesh and UVs as
+  `floor.glb`. Tripo paints the water into the COLOUR only -- its roughness
+  map is matte (0.90-1.0) -- so `build_floor` derives the gloss (`wet_gloss`):
+  where the wet colour is darker than the dry `floor.glb` colour, blurred ->
+  roughness 0.1, elsewhere `WET_BASE_ROUGH` 0.62. Delete `floor_wet.glb` to
+  build the original dry floor again.
 
 # Retexturing with Tripo
 
 ```
 ./tools/tripo_texture.ps1 -Source <task id | model.glb> -Prompt "..." -Out models/x.glb
+./tools/tripo_texture.ps1 -Source <task id> -Image picture.png -Out models/x.glb
+./tools/tripo_image.ps1 -Image ref.png -Prompt "the same, but wet" -Out edited.png
 ```
+
+A text prompt alongside the generation's own reference (`-StyleImage`) came
+back looking exactly like the reference and ignored "wet" altogether; editing
+the reference picture first and texturing from it (`-Image`) is what carried
+the change.
 
 The v3 `/models/texture` endpoint. Pass the task id of the Tripo generation
 when there is one: Tripo keeps its UVs. The id of an old generation is in the

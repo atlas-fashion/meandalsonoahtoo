@@ -25,6 +25,10 @@
 param(
     [string]$Source,
     [string]$Prompt,
+    # A picture whose look the texture should follow (JPEG or PNG). Needs -Prompt.
+    [string]$StyleImage,
+    # Texture from this one picture instead of -Prompt (only for Tripo-made models).
+    [string]$Image,
     [string]$TaskId,
     [Parameter(Mandatory = $true)][string]$Out,
     [ValidateSet("standard", "detailed", "extreme")][string]$TextureQuality = "detailed",
@@ -52,6 +56,16 @@ function Get-Balance {
 }
 
 
+function Get-Mime([string]$path) {
+    switch ([IO.Path]::GetExtension($path).ToLower()) {
+        ".png" { return "image/png" }
+        ".jpg" { return "image/jpeg" }
+        ".jpeg" { return "image/jpeg" }
+        default { return "application/octet-stream" }
+    }
+}
+
+
 function Send-File([string]$path) {
     # Multipart by hand (PowerShell 5.1 has no -Form), so the key never goes on
     # a command line.
@@ -62,7 +76,7 @@ function Send-File([string]$path) {
     $payload = (
         "--$boundary",
         "Content-Disposition: form-data; name=`"file`"; filename=`"$name`"",
-        "Content-Type: application/octet-stream",
+        "Content-Type: $(Get-Mime $path)",
         "",
         $data,
         "--$boundary--",
@@ -97,6 +111,16 @@ if ($TaskId) {
     }
     if ($Model) { $body.model = $Model }
     if ($Prompt) { $body.texture_prompt = @{ text = $Prompt } }
+    if ($Image) {
+        if ($Prompt) { throw "-Image and -Prompt cannot be combined (use -StyleImage)" }
+        Write-Host "uploading $Image ..."
+        $body.texture_prompt = @{ image = @{ file_token = (Send-File $Image) } }
+    }
+    if ($StyleImage) {
+        if (-not $Prompt) { throw "-StyleImage needs -Prompt" }
+        Write-Host "uploading $StyleImage ..."
+        $body.texture_prompt.style_image = @{ file_token = (Send-File $StyleImage) }
+    }
     if ($Seed -ge 0) { $body.texture_seed = $Seed }
     $json = $body | ConvertTo-Json -Depth 6
     $r = Invoke-RestMethod -Uri "$base/models/texture" -Headers $headers -Method Post `
