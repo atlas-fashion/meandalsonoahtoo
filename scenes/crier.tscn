@@ -1,23 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=5 format=3]
 
-[ext_resource type="Script" path="res://scripts/bomber.gd" id="1_bomber"]
+[ext_resource type="Script" path="res://scripts/crier.gd" id="1_crier"]
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_1"]
 radius = 0.45
-
-[sub_resource type="SphereMesh" id="SphereMesh_1"]
-radius = 0.45
-height = 0.9
-radial_segments = 24
-rings = 12
-
-[sub_resource type="StandardMaterial3D" id="Mat_bomber"]
-albedo_color = Color(1, 0.443137, 0.109804, 1)
-metallic = 0.2
-roughness = 0.5
-emission_enabled = true
-emission = Color(1, 0.443137, 0.109804, 1)
-emission_energy_multiplier = 1.1
 
 [sub_resource type="SphereMesh" id="SphereMesh_blast"]
 radius = 1.0
@@ -31,15 +17,11 @@ shading_mode = 0
 albedo_color = Color(1, 0.647059, 0.270588, 0)
 cull_mode = 2
 
-[node name="Bomber" type="CharacterBody3D" groups=["bomber"]]
+[node name="Crier" type="CharacterBody3D" groups=["crier"]]
 collision_layer = 5
 collision_mask = 513
 motion_mode = 1
-script = ExtResource("1_bomber")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-mesh = SubResource("SphereMesh_1")
-surface_material_override/0 = SubResource("Mat_bomber")
+script = ExtResource("1_crier")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("SphereShape3D_1")
@@ -51,7 +33,7 @@ mesh = SubResource("SphereMesh_blast")
 surface_material_override/0 = SubResource("Mat_blast")
 
 [node name="Light" type="OmniLight3D" parent="."]
-light_color = Color(1, 0.443137, 0.109804, 1)
+light_color = Color(1, 0.62, 0.16, 1)
 light_energy = 1.1
 omni_range = 7.0
 distance_fade_enabled = true

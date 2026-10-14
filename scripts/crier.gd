@@ -1,99 +1,90 @@
 extends CharacterBody3D
 
-## A fast orange flyer that throws itself at the player's FACE (2026-10-14).
+## A CRIER (2026-10-14; called a bomber before): a warden bot's head, flying
+## loose, that throws itself at the player's face and goes off there.
 ##
-## It chases, and once it has a clear line to the player (the sight layer, which
-## shut doors are on -- so it never goes off behind one) and is within
-## LUNGE_RANGE it flares for WINDUP and lunges. Reaching the face is a BLOW,
-## through the player's guard like any other enemy's:
-##   - PARRIED: it is thrown back and SHATTERS -- no explosion, no harm done.
-##   - blocked: the usual `block_damage_taken` of the blow, and it sticks;
-##   - unguarded: the blow, and it sticks.
-## Stuck on the face it covers the view, blinking ever faster for FACE_FUSE,
-## then explodes -- again a blow through the guard (block 10%, parry nothing) --
-## and shatters into burning pieces with a fireball.
+## The moment it SEES the player -- a clear line on the sight layer (2), which
+## shut doors are on, so never through one -- it flies straight at their face
+## at `rush_speed`, far faster than they can walk. Out of sight it makes for
+## where it last saw them, then gives up. It has no other attack: reaching the
+## face it STICKS (no blow), its lens blinking ever faster for `face_fuse`, and
+## then it explodes -- a blow through the player's guard like any enemy's:
+## parried, nothing; blocked, `block_damage_taken` of it; otherwise all of it.
+## Either way it shatters into burning pieces with a fireball.
 ##
-## It has `max_health` 50 and every weapon hurts it; killed, it shatters
-## harmlessly. A parry is the clean answer. (Before this it ignored weapons and
-## was struck with the sword's haft on E; that prompt is gone, and nothing calls
-## `player.haft_strike` any more.)
+## 50 health and every weapon hurts it; killed, it shatters harmlessly.
 
 signal died
 signal fuse_started
 signal detonated
 
 @export var max_health := 50.0
-## Thrown back by a parry or a kill, its pieces fly the way it was hit and
-## outward from its centre this hard.
+## Its pieces fly the way it was hit and outward from its centre this hard.
 @export var shatter_push := 5.5
 @export var shatter_burst := 3.5
 
 @export_group("Flight")
-@export var move_speed := 13.0
-@export var acceleration := 30.0
-## How far above the player's feet it tries to sit.
+## Straight at the face once it sees the player (they walk at 4.25 m/s).
+@export var rush_speed := 14.0
+## Making for where it last saw them, round the walls.
+@export var move_speed := 11.0
+@export var acceleration := 40.0
+## How far above the player's feet it hovers when it has lost them.
 @export var hover_height := 1.5
 @export var bob_amount := 0.18
 @export var bob_speed := 3.4
+## How far it can see the player from.
 @export var aggro_range := 32.0
+## After losing sight it searches this long before giving up.
+@export var memory := 5.0
 
 @export_group("Performance")
-## Past this distance from the player the bomber stops simulating altogether.
-## Must stay comfortably above aggro_range or it would doze off mid-chase.
+## Past this distance from the player the crier stops simulating altogether.
 @export var dormant_range := 50.0
-## How often a dormant bomber checks whether the player has come closer.
 @export var dormant_poll := 0.4
 
-@export_group("Attack")
-## From this far (centre to eye), with a clear line, it winds up and lunges.
-@export var lunge_range := 3.4
-@export var windup := 0.4
-@export var lunge_speed := 15.0
-## The blow of it reaching the face.
-@export var latch_damage := 8.0
+@export_group("Explosion")
 ## Stuck on the face this long before it goes off.
 @export var face_fuse := 1.8
 @export var explosion_damage := 50.0
 ## Blinks per second at the start of the fuse and at the very end.
 @export var blink_rate_start := 3.0
 @export var blink_rate_end := 16.0
-## Brightness of the flash at the moment of detonation.
 @export var blast_light_energy := 9.0
 @export var blast_radius := 3.5
 
 @export_group("Colours")
-@export var base_color := Color(1.0, 0.443137, 0.109804)
+## The lens: the warden's gold crystal, blinking white-hot on the face.
+@export var base_color := Color(1.0, 0.62, 0.16)
 @export var blink_color := Color(1.0, 0.945098, 0.784314)
-@export var base_glow := 1.1
+@export var base_glow := 1.6
 @export var blink_glow := 4.5
 
 @export_group("Navigation")
 @export var repath_interval := 0.2
 
-## Where on the face it sits: this far in front of the eye, this far below the
-## view's centre, drawn at FACE_SCALE (a 0.9 m ball at arm's length would be
-## the whole screen; this covers the middle of it).
+## Where it sits stuck on the face: this far in front of the eye, this far below
+## the view's centre, drawn at FACE_SCALE, its lens turned to the eyes.
 const FACE_DIST := 0.78
 const FACE_DROP := 0.16
 const FACE_SCALE := 0.62
-## On the face its glow and its light are turned down: at full blink, right at
-## the camera, it burnt to a flat white disc and its light blew out every wall
-## in view (measured in a screenshot).
-const FACE_GLOW := 0.35
-const FACE_LIGHT := 0.25
-## And it blinks hot orange, not white: albedo plus emission at the white blink
-## colour saturated it to a flat disc with no shape.
-const FACE_HOT := 0.4
 ## Reaching within this of the face point counts as contact.
 const FACE_REACH := 0.55
-## A lunge that has not connected after this long gives up and chases again.
-const LUNGE_GIVE_UP := 0.7
-## Seconds between attacks after one is called off.
-const RECOVER := 0.8
+## On the face its glow and its light are turned down: at full blink, right at
+## the camera, it burnt to a flat white disc and lit every wall in view white.
+const FACE_GLOW := 0.35
+const FACE_LIGHT := 0.25
+## And it blinks hot gold, not white.
+const FACE_HOT := 0.4
+## The warden's head (warden.gd `_fill_head`) at this size: a 0.76 m box.
+const HEAD_SCALE := 2.0
+## Seconds between sight checks while it cannot see the player.
+const LOOK_EVERY := 0.1
 
-enum { CHASE, WINDUP, LUNGE, FACE }
+enum { HUNT, FACE }
 
-@onready var mesh: MeshInstance3D = $MeshInstance3D
+const WARDEN := preload("res://scripts/warden.gd")
+
 @onready var shape: CollisionShape3D = $CollisionShape3D
 @onready var light: OmniLight3D = $Light
 ## Pre-authored so its transparent shader is compiled at load rather than
@@ -101,31 +92,35 @@ enum { CHASE, WINDUP, LUNGE, FACE }
 @onready var blast: MeshInstance3D = $Blast
 @onready var agent: NavigationAgent3D = get_node_or_null("NavigationAgent3D")
 
+## The head, built in _ready: `mesh` the plates (and what shatters), `lens` the
+## crystal that blinks.
+var mesh: MeshInstance3D
+var lens: MeshInstance3D
+
 var health := 0.0
-## Lit: stuck on the face, fuse running (kept for anything that asked before).
+## Stuck on the face, fuse running.
 var fusing := false
 ## The health bar hides while it is on the face (enemy_health_bar.gd reads it).
 var scripted := false
 
-var _state := CHASE
-var _state_time := 0.0
-var _recover := 0.0
+var _state := HUNT
 var _material: StandardMaterial3D
+var _plate_material: StandardMaterial3D
 var _blast_material: StandardMaterial3D
 var _dying := false
 var _fuse_left := 0.0
 var _blink_phase := 0.0
 var _bob := 0.0
 var _next_repath := 0.0
-## Cached rather than looked up every frame.
 var _player: Node3D = null
-var _body_radius := 0.45
 var _flash_tween: Tween
-## Asleep: too far from the player to be worth simulating.
 var _dormant := false
 var _next_dormant_check := 0.0
-## Set by the player's `guarded` signal while our blow is being dealt.
-var _parried := false
+## Where and when it last saw the player; -1: never.
+var _seen_at := Vector3.ZERO
+var _seen_time := -100.0
+var _sees := false
+var _next_look := 0.0
 ## Shattered pieces in flight: [node, velocity, rotation, spin axis, spin rate].
 var _shards: Array = []
 var _shard_time := 0.0
@@ -140,9 +135,11 @@ const SHARD_DEPTH := 0.55
 const SHARD_LIFE := 0.9
 const SHARD_SHRINK := 0.3
 const SHARD_GRAVITY := 14.0
-## Pieces cut once per source mesh and shared by every bomber, so the first
+## Pieces cut once per source mesh and shared by every crier, so the first
 ## shatter does not stall on cutting them.
 static var _shard_cache := {}
+static var _head_mesh: ArrayMesh
+static var _lens_mesh: Mesh
 
 
 func _ready() -> void:
@@ -150,13 +147,7 @@ func _ready() -> void:
 	_bob = randf() * TAU
 	# Placed on the face after the player has moved the camera this frame.
 	process_priority = 10
-	var active := mesh.get_active_material(0)
-	if active is StandardMaterial3D:
-		_material = (active as StandardMaterial3D).duplicate()
-		mesh.material_override = _material
-	var collider := shape.shape
-	if collider is SphereShape3D:
-		_body_radius = (collider as SphereShape3D).radius
+	_build_head()
 	_blast_material = blast.get_active_material(0) as StandardMaterial3D
 	if _blast_material != null:
 		_blast_material = _blast_material.duplicate()
@@ -170,112 +161,142 @@ func _ready() -> void:
 	_warm_up.call_deferred()
 
 
+## The warden's head (warden.gd): plate box, neck, brass rim round a gold
+## crystal lens, an aerial -- merged into one mesh, shared by every crier, and
+## centred on the box so it flies and shatters about its middle.
+func _build_head() -> void:
+	var old := get_node_or_null("MeshInstance3D")
+	if old != null:
+		old.free()
+	if _head_mesh == null:
+		var tools := {}
+		var add := func(m: PrimitiveMesh, xf: Transform3D, mat: Material) -> void:
+			if not tools.has(mat):
+				var st := SurfaceTool.new()
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				tools[mat] = st
+			var centre := Transform3D(Basis().scaled(Vector3.ONE * HEAD_SCALE),
+				Vector3(0.0, -0.27 * HEAD_SCALE, 0.0))
+			(tools[mat] as SurfaceTool).append_from(m, 0, centre * xf)
+		var neck := WARDEN._cyl(0.07, 0.09, 0.14, 6)
+		add.call(neck, Transform3D(Basis(), Vector3(0.0, 0.07, 0.0)), WARDEN._mat(&"dark"))
+		add.call(WARDEN._box(Vector3(0.38, 0.28, 0.34)), Transform3D(Basis(Vector3.FORWARD, 0.04),
+			Vector3(0.0, 0.27, 0.0)), WARDEN._mat(&"plate"))
+		add.call(WARDEN._cyl(0.1, 0.1, 0.06, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5),
+			Vector3(0.05, 0.28, -0.18)), WARDEN._mat(&"brass"))
+		add.call(WARDEN._cyl(0.012, 0.012, 0.4, 4), Transform3D(Basis(Vector3.FORWARD, 0.2),
+			Vector3(-0.12, 0.56, 0.06)), WARDEN._mat(&"brass"))
+		_head_mesh = ArrayMesh.new()
+		for mat in tools:
+			var st: SurfaceTool = tools[mat]
+			st.generate_normals()
+			st.commit(_head_mesh)
+			_head_mesh.surface_set_material(_head_mesh.get_surface_count() - 1, mat)
+		var s := SphereMesh.new()
+		s.radius = 0.06 * HEAD_SCALE
+		s.height = 0.05 * HEAD_SCALE
+		s.radial_segments = 4
+		s.rings = 2
+		_lens_mesh = s
+	mesh = MeshInstance3D.new()
+	mesh.name = "Head"
+	mesh.mesh = _head_mesh
+	add_child(mesh)
+	move_child(mesh, 0)
+	# Its plates warm with the lens as it blinks: their own copy of the plate
+	# material, emission off until then.
+	for i in _head_mesh.get_surface_count():
+		if _head_mesh.surface_get_material(i) == WARDEN._mat(&"plate"):
+			_plate_material = WARDEN._mat(&"plate").duplicate() as StandardMaterial3D
+			_plate_material.emission_enabled = true
+			_plate_material.emission = Color.BLACK
+			mesh.set_surface_override_material(i, _plate_material)
+	lens = MeshInstance3D.new()
+	lens.name = "Lens"
+	lens.mesh = _lens_mesh
+	lens.rotation.x = PI * 0.5
+	lens.position = Vector3(0.05, 0.01, -0.21) * HEAD_SCALE
+	_material = StandardMaterial3D.new()
+	_material.albedo_color = base_color
+	_material.emission_enabled = true
+	_material.emission = base_color
+	_material.emission_energy_multiplier = base_glow
+	_material.metallic = 0.2
+	_material.roughness = 0.3
+	lens.material_override = _material
+	mesh.add_child(lens)
+	for mi in [mesh, lens]:
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
 func _physics_process(delta: float) -> void:
 	if _dying:
 		return
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player != null and _player.has_signal("guarded") \
-				and not _player.is_connected("guarded", _on_player_guarded):
-			_player.connect("guarded", _on_player_guarded)
 	var player := _player
 	if player == null:
 		return
-
 	if _state == FACE:
 		_tick_fuse(delta)
 		return
-	# Dormancy: with dozens of these hovering around the map, simulating the
-	# ones nobody can see is the bulk of the physics budget. Never mid-attack.
-	if _state == CHASE and _update_dormancy():
+	if _update_dormancy():
 		return
 
 	_bob += delta * bob_speed
-	_state_time += delta
-	_recover = maxf(_recover - delta, 0.0)
+	var now := Time.get_ticks_msec() / 1000.0
 	var eye := _eye(player)
-	var to_eye := eye - global_position
+	if _sees or now >= _next_look:
+		_next_look = now + LOOK_EVERY
+		_sees = _can_see(player, eye)
+		if _sees:
+			_seen_at = player.global_position
+			_seen_time = now
 
-	match _state:
-		WINDUP:
-			# Hang back and swell, facing the player: the tell.
-			velocity = velocity.move_toward(Vector3.ZERO, acceleration * 2.0 * delta)
-			move_and_slide()
-			var k := clampf(_state_time / windup, 0.0, 1.0)
-			_paint(base_color.lerp(blink_color, k), lerpf(base_glow, blink_glow, k))
-			mesh.scale = Vector3.ONE * (1.0 + 0.18 * sin(k * PI))
-			if _state_time >= windup:
-				if _can_attack(player, eye) and to_eye.length() < lunge_range * 1.6:
-					_set_state(LUNGE)
-				else:
-					_call_off()
+	if _sees:
+		# Straight at the face.
+		var face := _face_point(player)
+		var to_face := face - global_position
+		if to_face.length() <= FACE_REACH:
+			_stick()
 			return
-		LUNGE:
-			var face := _face_point(player)
-			var to_face := face - global_position
-			if to_face.length() <= FACE_REACH:
-				_hit_face(player)
-				return
-			if _state_time > LUNGE_GIVE_UP or not _can_attack(player, eye):
-				_call_off()
-				return
-			velocity = to_face.normalized() * lunge_speed
-			move_and_slide()
-			return
-
-	# CHASE.
-	var flat := Vector3(to_eye.x, 0.0, to_eye.z)
-	if flat.length() > aggro_range:
-		velocity = velocity.move_toward(Vector3.ZERO, acceleration * delta)
+		_turn_to(to_face)
+		velocity = velocity.move_toward(to_face.normalized() * rush_speed, acceleration * 2.0 * delta)
 		move_and_slide()
 		return
-	if _recover <= 0.0 and to_eye.length() <= lunge_range and _can_attack(player, eye):
-		_set_state(WINDUP)
+
+	if now - _seen_time > memory:
+		# Lost them: hang where it is, bobbing.
+		velocity = velocity.move_toward(Vector3(0.0, cos(_bob) * bob_amount, 0.0), acceleration * delta)
+		move_and_slide()
 		return
 
-	# Route around walls when a navmesh is available; the path is flat, so the
-	# height is steered separately.
-	#
-	# The agent's waypoint distances must exceed hover_height, or a flyer never
-	# gets close enough to a floor-level waypoint to advance past it and just
-	# jitters in place on the first one.
-	var heading := flat.normalized()
+	# Round the walls to where it last saw them. The agent's waypoint distances
+	# must exceed hover_height, or a flyer never gets close enough to a
+	# floor-level waypoint to advance past it and jitters on the first one.
+	var to_seen := _seen_at - global_position
+	var heading := Vector3(to_seen.x, 0.0, to_seen.z).normalized()
 	if agent != null:
-		var now := Time.get_ticks_msec() / 1000.0
 		if now >= _next_repath:
 			_next_repath = now + repath_interval
-			agent.target_position = player.global_position
+			agent.target_position = _seen_at
 		if not agent.is_navigation_finished():
 			var step := agent.get_next_path_position() - global_position
 			step.y = 0.0
-			# Ignore a waypoint we are already on top of; its direction is noise.
 			if step.length() > 0.5:
 				heading = step.normalized()
-	# Hold off a little short of the player rather than pressing into them.
-	var speed := move_speed
-	if flat.length() < lunge_range * 0.8:
-		speed = 0.0
-	var wanted_height := player.global_position.y + hover_height + sin(_bob) * bob_amount
-	var climb := clampf(wanted_height - global_position.y, -1.0, 1.0)
-	var desired := heading * speed
-	desired.y = climb * move_speed * 0.8
+	var wanted_height := _seen_at.y + hover_height + sin(_bob) * bob_amount
+	var desired := heading * move_speed
+	desired.y = clampf(wanted_height - global_position.y, -1.0, 1.0) * move_speed * 0.8
 	velocity = velocity.move_toward(desired, acceleration * delta)
-	if flat.length_squared() > 0.001:
-		rotation.y = atan2(-heading.x, -heading.z)
+	if heading.length_squared() > 0.001:
+		_turn_to(heading)
 	move_and_slide()
 
 
-func _set_state(s: int) -> void:
-	_state = s
-	_state_time = 0.0
-
-
-## The attack was not on: back to chasing, and a beat before the next try.
-func _call_off() -> void:
-	_set_state(CHASE)
-	_recover = RECOVER
-	mesh.scale = Vector3.ONE
-	_paint(base_color, base_glow)
+func _turn_to(dir: Vector3) -> void:
+	if Vector2(dir.x, dir.z).length_squared() > 0.0001:
+		rotation.y = atan2(-dir.x, -dir.z)
 
 
 func _eye(player: Node3D) -> Vector3:
@@ -294,12 +315,14 @@ func _face_point(player: Node3D) -> Vector3:
 	return cam.global_position - basis.z * FACE_DIST - basis.y * FACE_DROP
 
 
-## A player it can go for: alive, not hidden or in a scene, and in plain sight
-## -- the line runs on the sight layer, which a shut door blocks.
-func _can_attack(player: Node3D, eye: Vector3) -> bool:
+## In plain sight and in range: alive, not hidden or in a scene, and a clear
+## line on the sight layer -- which a shut door blocks.
+func _can_see(player: Node3D, eye: Vector3) -> bool:
 	if player.get("_dead") == true or player.get("in_cutscene") == true:
 		return false
 	if player.has_method("is_hidden") and player.is_hidden():
+		return false
+	if global_position.distance_squared_to(eye) > aggro_range * aggro_range:
 		return false
 	_sight.from = global_position
 	_sight.to = eye
@@ -307,17 +330,10 @@ func _can_attack(player: Node3D, eye: Vector3) -> bool:
 	return get_world_3d().direct_space_state.intersect_ray(_sight).is_empty()
 
 
-## Contact: a blow through the guard. Parried, it is thrown off and shatters;
-## otherwise it sticks.
-func _hit_face(player: Node3D) -> void:
-	var blow := (_eye(player) - global_position).normalized()
-	_parried = false
-	if player.has_method("take_damage"):
-		player.take_damage(latch_damage, blow, self)
-	if _parried:
-		_burst(-blow)
-		return
-	_set_state(FACE)
+## Reached the face: it sticks there and the fuse starts. No blow -- the only
+## thing that hurts is the explosion.
+func _stick() -> void:
+	_state = FACE
 	fusing = true
 	scripted = true
 	_fuse_left = face_fuse
@@ -327,11 +343,6 @@ func _hit_face(player: Node3D) -> void:
 	mesh.scale = Vector3.ONE * FACE_SCALE
 	set_process(true)
 	fuse_started.emit()
-
-
-func _on_player_guarded(parried: bool, attacker: Node3D) -> void:
-	if attacker == self and parried:
-		_parried = true
 
 
 func _tick_fuse(delta: float) -> void:
@@ -349,6 +360,8 @@ func _tick_fuse(delta: float) -> void:
 	_paint(base_color.lerp(blink_color, FACE_HOT) if lit else base_color.darkened(0.25),
 		(blink_glow if lit else base_glow) * FACE_GLOW)
 	light.light_energy *= FACE_LIGHT / FACE_GLOW
+	if _plate_material != null:
+		_plate_material.emission = base_color * (0.35 * progress if lit else 0.1 * progress)
 	if _fuse_left <= 0.0:
 		_detonate(player)
 
@@ -367,7 +380,7 @@ func _detonate(player: Node3D) -> void:
 	died.emit()
 
 
-## Killed or parried: it shatters, with no explosion and no harm done.
+## Killed, or nothing to go off on: it shatters, with no explosion.
 func _burst(direction: Vector3) -> void:
 	if _dying and _shards.size() > 0:
 		return
@@ -407,11 +420,11 @@ func _shatter(direction: Vector3, burning: bool) -> void:
 			randf_range(6.0, 14.0)])
 	_shard_time = 0.0
 	set_process(true)
-	# White-hot at the break, cooling back to the bomber's orange as they fly.
+	# White-hot at the break, cooling to the lens's gold as they fly.
 	var tween := create_tween().set_parallel(true)
-	tween.tween_property(_shard_material, "albedo_color", base_color, 0.35)
+	tween.tween_property(_shard_material, "albedo_color", base_color.darkened(0.5), 0.35)
 	tween.tween_property(_shard_material, "emission", base_color, 0.35)
-	tween.tween_property(_shard_material, "emission_energy_multiplier", base_glow, 0.5)
+	tween.tween_property(_shard_material, "emission_energy_multiplier", base_glow * 0.5, 0.5)
 	if not burning:
 		# One flash from its own light, dying with the burst.
 		light.light_color = blink_color
@@ -420,10 +433,12 @@ func _shatter(direction: Vector3, burning: bool) -> void:
 
 
 func _make_shard_material() -> StandardMaterial3D:
-	var m := (_material.duplicate() if _material != null else StandardMaterial3D.new()) as StandardMaterial3D
+	var m := StandardMaterial3D.new()
 	# Pieces are closed solids, but cheap enough to draw from both sides, which
 	# saves caring about winding.
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.metallic = 0.35
+	m.roughness = 0.7
 	m.albedo_color = blink_color
 	m.emission_enabled = true
 	m.emission = blink_color
@@ -431,10 +446,10 @@ func _make_shard_material() -> StandardMaterial3D:
 	return m
 
 
-## The first shatter stalled its frame (79 ms measured): a double-sided
-## variant of the bomber material compiling on first draw. So the first bomber
-## to come up cuts the pieces and draws one speck of a piece in that material in
-## front of the camera, once, while the level is still loading.
+## The first shatter stalled its frame (79 ms measured): the double-sided shard
+## material compiling on first draw. So the first crier to come up cuts the
+## pieces and draws one speck of a piece in that material in front of the
+## camera, once, while the level is still loading.
 static var _warmed := false
 
 func _warm_up() -> void:
@@ -461,12 +476,12 @@ func _warm_up() -> void:
 
 func _process(delta: float) -> void:
 	# Stuck on the face: placed every frame after the camera has moved, so it
-	# rides the view without lagging a frame behind it.
+	# rides the view without lagging a frame behind it -- lens to the eyes.
 	if _state == FACE and not _dying and _player != null and is_instance_valid(_player):
 		global_position = _face_point(_player)
 		var cam: Camera3D = _player.get("camera")
 		if cam != null:
-			global_basis = cam.global_basis.orthonormalized()
+			global_basis = cam.global_basis.orthonormalized() * Basis(Vector3.UP, PI)
 		return
 	if _shards.is_empty():
 		if not _dying:
@@ -498,8 +513,7 @@ func _process(delta: float) -> void:
 		queue_free()
 
 
-
-## The sphere cut into SHARD_COUNT chunks: each triangle goes to the nearest of
+## The head cut into SHARD_COUNT chunks: each triangle goes to the nearest of
 ## SHARD_COUNT directions spread over the sphere, and each group is closed into
 ## a solid -- its outer facets, the same pulled in to SHARD_DEPTH, and walls
 ## along its open edges. Returns [mesh centred on itself, its centre, its
@@ -507,16 +521,17 @@ func _process(delta: float) -> void:
 static func _pieces(source: Mesh) -> Array:
 	if _shard_cache.has(source):
 		return _shard_cache[source]
-	var arrays := source.surface_get_arrays(0)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
 	var tris: Array = []
-	if index.is_empty():
-		for i in range(0, verts.size() - 2, 3):
-			tris.append([verts[i], verts[i + 1], verts[i + 2]])
-	else:
-		for i in range(0, index.size() - 2, 3):
-			tris.append([verts[index[i]], verts[index[i + 1]], verts[index[i + 2]]])
+	for surface in source.get_surface_count():
+		var arrays := source.surface_get_arrays(surface)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var index = arrays[Mesh.ARRAY_INDEX]
+		if index == null or (index as PackedInt32Array).is_empty():
+			for i in range(0, verts.size() - 2, 3):
+				tris.append([verts[i], verts[i + 1], verts[i + 2]])
+		else:
+			for i in range(0, index.size() - 2, 3):
+				tris.append([verts[index[i]], verts[index[i + 1]], verts[index[i + 2]]])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
 	var seeds: Array[Vector3] = []
@@ -659,18 +674,16 @@ func apply_knockback(impulse: Vector3, _stun_time := 0.25) -> void:
 		return
 	velocity.x += impulse.x
 	velocity.z += impulse.z
-	if _state != CHASE:
-		_call_off()
 
 
 func _flash() -> void:
-	if _material == null or _state == FACE:
+	if _plate_material == null or _state == FACE:
 		return
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
-	_material.albedo_color = Color(1.0, 0.98, 0.94)
+	_plate_material.emission = Color(0.9, 0.85, 0.75)
 	_flash_tween = create_tween()
-	_flash_tween.tween_property(_material, "albedo_color", base_color, 0.15)
+	_flash_tween.tween_property(_plate_material, "emission", Color.BLACK, 0.15)
 
 
 func _paint(colour: Color, glow: float) -> void:

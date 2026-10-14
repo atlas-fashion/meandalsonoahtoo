@@ -3,7 +3,7 @@ extends RefCounted
 
 ## What everything you can use shows when you are close enough: chests, the
 ## mimic (which has to look exactly like a chest), bone cages, doors and
-## bombers. Nothing is drawn in the world any more -- the HUD's crosshair turns
+## criers. Nothing is drawn in the world any more -- the HUD's crosshair turns
 ## into the interact cursor while any prompt is up (`focus`). The key is the
 ## "interact" action (E).
 

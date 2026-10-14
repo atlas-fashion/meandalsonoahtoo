@@ -551,7 +551,7 @@ func _update_tether() -> void:
 
 ## The blast where the thrown spear strikes: everything damageable within
 ## `BLAST_RADIUS` that stone does not shelter takes `BLAST_DAMAGE` falling off to
-## half at the edge and is thrown outward; a bomber is popped (`swat`); the view
+## half at the edge and is thrown outward; anything with `swat()` is popped (nothing has one since the criers); the view
 ## shakes by how close the player is.
 func _explode(at: Vector3) -> void:
 	var space := player.get_world_3d().direct_space_state

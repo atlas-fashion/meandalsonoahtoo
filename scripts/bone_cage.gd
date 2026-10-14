@@ -497,7 +497,7 @@ func _stab_stand(focus: Vector3) -> Vector3:
 ## has been watching them: it bursts into chunks of bone in a puff of bone dust,
 ## its eyes flaring out, and the pieces tumble down the heap and shrink away.
 
-const BOMBER := preload("res://scripts/bomber.gd")
+const CRIER := preload("res://scripts/crier.gd")
 const DEBRIS := preload("res://scripts/door_debris.gd")
 const BONE_PIECES := 12
 const BONE_LIFE := 0.85
@@ -650,7 +650,7 @@ func _update_bones(delta: float) -> void:
 		_bones.clear()
 
 
-## The skull cut into BONE_PIECES chunks round its own centre (the bomber's
+## The skull cut into BONE_PIECES chunks round its own centre (the crier's
 ## cutter, which expects a mesh centred on the origin). Cut once per mesh.
 ## Returns [mesh, centre relative to the skull's centre, direction] per piece.
 static func _skull_pieces(source: Mesh) -> Array:
@@ -694,7 +694,7 @@ static func _skull_pieces(source: Mesh) -> Array:
 	var pieces: Array = []
 	for i in BONE_PIECES:
 		if not groups[i].is_empty():
-			pieces.append(BOMBER._solid_piece(groups[i], seeds[i]))
+			pieces.append(CRIER._solid_piece(groups[i], seeds[i]))
 	_bone_cache[source] = pieces
 	return pieces
 

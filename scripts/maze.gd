@@ -311,9 +311,9 @@ const DIRECTIONS := {
 
 @export_group("Enemies")
 @export var enemy_scene: PackedScene = preload("res://scenes/enemy.tscn")
-## The flying bombers. Kept a minority of the population so they read as a
+## The flying criers (bombers before 2026-10-14). Kept a minority of the population so they read as a
 ## hazard rather than the main body of it.
-@export var flyer_scene: PackedScene = preload("res://scenes/bomber.tscn")
+@export var flyer_scene: PackedScene = preload("res://scenes/crier.tscn")
 @export_range(0.0, 1.0) var flyer_share := 0.45
 @export var enemy_count := 72
 ## In the module level the count follows the corridor length instead: this
@@ -360,7 +360,7 @@ const PATROL := preload("res://scripts/patrol.gd")
 var _patrol_points: Array[Vector3] = []
 @export var red_pack_min := 1
 @export var red_pack_max := 5
-## Bombers come in ones and twos -- a swarm of them is unfightable.
+## Criers come in ones and twos -- a swarm of them is unfightable.
 @export var flyer_pack_min := 1
 @export var flyer_pack_max := 2
 
@@ -4175,7 +4175,7 @@ func _spawn_enemies() -> void:
 		taken.append(tile)
 
 		# One roll decides the whole group, so a pack is all of a kind: a knot
-		# of reds or a pair of bombers, never a mixed committee.
+		# of reds or a pair of criers, never a mixed committee.
 		var flying: bool = flyer_scene != null and _rng.randf() < flyer_share
 		var pack := _rng.randi_range(
 			flyer_pack_min if flying else red_pack_min,

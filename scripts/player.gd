@@ -3346,7 +3346,8 @@ func _resolve_hits() -> void:
 		var body := hit["collider"] as Node3D
 		if body == null or body in _hit_this_swing:
 			continue
-		# Bombers are dealt with by the haft (E), never the blade.
+		# Anything with swat() is passed over (nothing has one since the criers,
+		# 2026-10-14: the bombers they replaced were struck with the haft).
 		if body.has_method("swat"):
 			continue
 		if require_line_of_sight and _is_blocked(eye, body):
