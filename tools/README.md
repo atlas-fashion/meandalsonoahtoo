@@ -317,6 +317,11 @@ variants share their source's textures) from the eight raw Tripo pieces in
   where the wet colour is darker than the dry `floor.glb` colour, blurred ->
   roughness 0.1, elsewhere `WET_BASE_ROUGH` 0.62. Delete `floor_wet.glb` to
   build the original dry floor again.
+- **The prison hall's frieze and generator** (2026-10-14): text prompts,
+  `brick_kit_raw/prison_frieze.glb` (task 1f3f6ee0-...) and
+  `prison_generator.glb` (task 0eab5b58-...). `build_frieze` takes a 6.7 m slice
+  of the frieze at a uniform scale; `build_generator` fits the machine to 2 m
+  across. See CLAUDE.md section 45.
 
 # Retexturing with Tripo
 

@@ -75,6 +75,7 @@ BUDGET = {
     "floor": 1500, "vault": 7000,
     "door_frame": 99999, "door_leaf": 99999, "cage_door": 99999, "torch_mount": 99999,
     "cart_body": 6000, "cart_wheels": 2400, "cart_lid": 1500,
+    "prison_frieze": 6000, "prison_generator": 8000,
     "wood_support": 3000, "prison_dome": 16000, "jail_gate_l": 99999, "jail_gate_r": 99999, "wood_planks": 2500, "wood_crate": 2500,
 }
 
@@ -571,6 +572,10 @@ def main():
     built.append(build_wood("wood_crate", 0.95, False))
     built.append(build_dome_inside())
     built.extend(build_jail_gate())
+    if os.path.exists(os.path.join(RAW, "prison_frieze.glb")):
+        built.append(build_frieze())
+    if os.path.exists(os.path.join(RAW, "prison_generator.glb")):
+        built.append(build_generator())
     door = build_arch("door")
     # Thinned before it is split, so the leaf's edge and the frame's still meet.
     decimate(door, BUDGET["door"])
@@ -967,6 +972,54 @@ def build_jail_gate():
     apply(right, move(-half, 0, 0))
     log("  jail gate: %d + %d faces" % (len(left.data.polygons), len(right.data.polygons)))
     return left, right
+
+
+
+## --- The prison hall's frieze and generator (Tripo, text prompts, 2026-10-14) ---
+##
+## "prison_frieze": a straight run of dressed stone with a moulded course, a
+## corbel table and a projecting cornice (raw: 1.0 long along x, 0.215 tall,
+## both faces carved alike). Scaled UNIFORMLY to FRIEZE_HEIGHT -- 16 m long at
+## that size -- and a FRIEZE_LEN slice cut from its middle, so the corbels keep
+## their proportions; one slice stands over each arch, overlapping the next.
+## Front (Godot +Z) is the body's face at mid height, at y = 0; the cornice
+## stands ~0.35 m proud of it.
+## "prison_generator": the machine in the middle of the prison (raw 0.72 square,
+## 1.0 tall, an open brass cradle on top for the crystal). Scaled to GEN_WIDTH
+## across, centred, its foot on the floor.
+FRIEZE_HEIGHT = 3.5
+FRIEZE_LEN = 6.7
+GEN_WIDTH = 2.0
+
+
+def build_frieze():
+    ob = import_piece("prison_frieze")
+    strip_rubble(ob, 0.02)
+    p = points(ob)
+    z0, z1 = p[:, 2].min(), p[:, 2].max()
+    mid = band(p, 2, z0 + 0.35 * (z1 - z0), z0 + 0.6 * (z1 - z0))
+    front = float(np.percentile(mid[:, 1], 5))
+    cx = (p[:, 0].max() + p[:, 0].min()) * 0.5
+    s = FRIEZE_HEIGHT / (z1 - z0)
+    apply(ob, scale(s, s, s) @ move(-cx, -front, -z0))
+    clip(ob, (-FRIEZE_LEN * 0.5, 0, 0), (1, 0, 0))
+    clip(ob, (FRIEZE_LEN * 0.5, 0, 0), (-1, 0, 0))
+    q = points(ob)
+    log("  frieze: scale %.2f, %.2f m long, cornice %.2f m proud, back %.2f m"
+        % (s, q[:, 0].max() - q[:, 0].min(), -q[:, 1].min(), q[:, 1].max()))
+    return ob
+
+
+def build_generator():
+    ob = import_piece("prison_generator")
+    strip_rubble(ob, 0.002)
+    p = points(ob)
+    lo, hi = p.min(axis=0), p.max(axis=0)
+    s = GEN_WIDTH / max(hi[0] - lo[0], hi[1] - lo[1])
+    apply(ob, scale(s, s, s) @ move(-(lo[0] + hi[0]) * 0.5, -(lo[1] + hi[1]) * 0.5, -lo[2]))
+    q = points(ob)
+    log("  generator: scale %.2f, %.2f tall" % (s, q[:, 2].max()))
+    return ob
 
 
 NICHE_W = 0.9

@@ -35,6 +35,12 @@ const MIMIC_SCENE := preload("res://scenes/mimic.tscn")
 const SKELETON_MODEL := preload("res://models/ossuary_skeleton_rigged.glb")
 const WARDEN_SCRIPT := preload("res://scripts/warden.gd")
 const EYES := preload("res://scripts/skeleton_eyes.gd")
+const BEAM_SHADER := preload("res://shaders/energy_beam.gdshader")
+## The crystal's centre as a share of the Tripo generator's height: inside the
+## open brass cradle on top (its base at ~0.78, the prongs' tips at 1.0).
+const GEN_CRYSTAL_AT := 0.9
+## The kit frieze's length (build_brick_kit.FRIEZE_LEN).
+const FRIEZE_LEN := 6.7
 
 const TITLES := {
 	&"prison": ["THE PRISON BLOCK", "The wardens turn from the cells."],
@@ -100,6 +106,8 @@ var _lamp_mat: StandardMaterial3D
 var _gen_light: OmniLight3D
 var _pistons: Array[Node3D] = []
 var _flywheel: Node3D
+var _crystal_y := 2.05
+var _beams: Array[MeshInstance3D] = []
 var _power := 1.0
 var _time := 0.0
 
@@ -213,10 +221,11 @@ func _build_domed_prison() -> void:
 		var tmp := cells[i]
 		cells[i] = cells[j]
 		cells[j] = tmp
-	var locker := cells[0] if not cells.is_empty() else -1
+	# No chest in any cell (2026-10-14): the shard comes out of the generator
+	# with its crystal, as in the mine.
 	var held := {}
-	for n in mini(PRISONERS, cells.size() - 1):
-		held[cells[1 + n]] = true
+	for n in mini(PRISONERS, cells.size()):
+		held[cells[n]] = true
 
 	var level = load("res://scripts/module_level.gd")
 	var torch_scene: PackedScene = load(level.TORCH_SCENE)
@@ -230,7 +239,7 @@ func _build_domed_prison() -> void:
 		if bay["entrance"]:
 			continue
 		var cell := {"row": 0.0, "k": i, "centre": xf * Vector3(0.0, 0.0, -BAY_DEEP * 0.5),
-			"locker": i == locker, "alive": false, "prisoner": null,
+			"locker": false, "alive": false, "prisoner": null,
 			"open": -1.6, "open2": 1.6}
 		for side: float in [-1.0, 1.0]:
 			var hinge := Node3D.new()
@@ -254,6 +263,7 @@ func _build_domed_prison() -> void:
 		cell["door_body"] = db
 		var lamp := _sphere(0.07, _lamp_mat)
 		lamp.position = xf * Vector3(0.0, 4.95, BAND_FRONT + 0.1)
+		cell["lock"] = lamp.position
 		add_child(lamp)
 		_dress_bay(cell, xf, held.has(i))
 		_cells.append(cell)
@@ -261,9 +271,7 @@ func _build_domed_prison() -> void:
 	_build_partitions(kit)
 	_build_dome_hall(kit)
 	_build_generator()
-	for c in _cells:
-		var foot: Vector3 = (c["centre"] as Vector3)
-		_pipe(Vector3(0.0, 0.07, 0.0), foot.lerp(Vector3.ZERO, (BAY_DEEP * 0.5 + BAY_GATE_IN) / foot.length()))
+	_build_beams()
 	_drop_sky_lights()
 	if maze != null and maze.has_signal("level_built"):
 		maze.connect("level_built", _arm_doors, CONNECT_ONE_SHOT)
@@ -332,8 +340,9 @@ static func _pair_key(a: Vector2i, b: Vector2i) -> Array:
 	return [mini(a.x, b.x), mini(a.y, b.y), maxi(a.x, b.x), maxi(a.y, b.y)]
 
 
-## Straw, chains on the back wall, a bucket, and a prisoner, bones or (the
-## locker) the room's chest. In the bay's frame: the gate at +BAY_GATE_IN, the
+## Straw, chains on the back wall, a bucket, and a prisoner or bones. (The
+## locker cell with the room's chest is gone, 2026-10-14: the shard comes out
+## of the generator with the crystal.) In the bay's frame: the gate at +BAY_GATE_IN, the
 ## cell running back to -BAY_DEEP.
 func _dress_bay(cell: Dictionary, xf: Transform3D, held: bool) -> void:
 	var straw := _box(self, Vector3(1.4, 0.06, 1.0), Vector3.ZERO, _mat(&"straw"))
@@ -442,11 +451,19 @@ func _build_dome_hall(kit) -> void:
 	# Overlapping a little: end to end, the wall pieces' ragged ends left dark
 	# slots between them.
 	var band_len := float(built.cell_size) + 0.7
+	# Tripo's carved frieze (2026-10-14): a moulded course, a corbel table and
+	# a cornice overhanging the court. The plain brick wall without the kit.
+	var piece := "prison_frieze"
+	var piece_len := FRIEZE_LEN
+	if kit.standalone(piece) == null:
+		piece = "wall"
+		piece_len = 5.2
 	for bay in _prison_bays():
 		var xf: Transform3D = bay["xf"]
 		var mi := MeshInstance3D.new()
-		mi.mesh = kit.standalone("wall")
-		var b := xf.basis * Basis().scaled(Vector3(band_len / 5.2, 1.0, 1.0))
+		mi.name = "Frieze"
+		mi.mesh = kit.standalone(piece)
+		var b := xf.basis * Basis().scaled(Vector3(band_len / piece_len, 1.0, 1.0))
 		mi.transform = Transform3D(b, xf * Vector3(0.0, BAND_BASE, BAND_FRONT))
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(mi)
@@ -686,13 +703,61 @@ func _bars(key: StringName, width: float) -> MeshInstance3D:
 	return mi
 
 
-## The generator in the middle of the aisle: a stone plinth, an iron housing
-## with two pistons and a flywheel, and a brass cradle holding the red crystal
-## over it, which lights the block red.
+## The generator in the middle of the hall, the red crystal floating in the
+## cradle on top of it and lighting the room red.
 func _build_generator() -> void:
 	_gen = Node3D.new()
 	_gen.name = "Generator"
 	add_child(_gen)
+	# The machine is Tripo's (brick kit "prison_generator", 2026-10-14) where
+	# the kit is built; the crystal floats over its open cradle.
+	var mesh: Mesh = null
+	if load("res://scripts/module_level.gd").brick:
+		mesh = load("res://scripts/brick_level.gd").standalone("prison_generator")
+	if mesh != null:
+		var machine := MeshInstance3D.new()
+		machine.name = "Machine"
+		machine.mesh = mesh
+		machine.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		_gen.add_child(machine)
+		var box := mesh.get_aabb()
+		var tall := minf(box.size.y, 2.0)
+		_solid(_gen, Vector3(box.size.x, tall, box.size.z),
+			Vector3(box.get_center().x, box.position.y + tall * 0.5, box.get_center().z))
+		_crystal_y = box.position.y + box.size.y * GEN_CRYSTAL_AT
+		# Iron and brass: the kit flattens every piece to matte stone with no
+		# specular, under which the machine read as a dull dark lump.
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s) as StandardMaterial3D
+			if m != null:
+				m.specular_mode = BaseMaterial3D.SPECULAR_SCHLICK_GGX
+				m.metallic = 0.5
+				m.roughness = 0.5
+	else:
+		_build_generator_parts()
+	_crystal = Node3D.new()
+	_crystal.name = "Crystal"
+	_crystal.position = Vector3(0.0, _crystal_y, 0.0)
+	_gen.add_child(_crystal)
+	_crystal_mat = _glow(RED, 4.0)
+	var gem := _octa(0.34, 0.66, _crystal_mat)
+	_crystal.add_child(gem)
+	_gen_light = OmniLight3D.new()
+	_gen_light.light_color = Color(1.0, 0.22, 0.12)
+	_gen_light.light_energy = 3.0
+	_gen_light.omni_range = 8.5
+	_gen_light.omni_attenuation = 0.9
+	_gen_light.shadow_enabled = false
+	_gen_light.distance_fade_enabled = true
+	_gen_light.distance_fade_begin = 40.0
+	_gen_light.distance_fade_length = 10.0
+	_gen_light.position = Vector3(0.0, _crystal_y + 0.55, 0.0)
+	_gen.add_child(_gen_light)
+
+
+## The old machine from primitives (no brick kit): a stone plinth, an iron
+## housing with two pistons and a flywheel, and a brass cradle for the crystal.
+func _build_generator_parts() -> void:
 	var stone := _mat(&"stone")
 	var iron := _mat(&"iron")
 	var brass := _mat(&"brass")
@@ -731,24 +796,45 @@ func _build_generator() -> void:
 		prong.position = Vector3(cos(a) * 0.28, 1.75, sin(a) * 0.28)
 		prong.rotation = Vector3(sin(a) * 0.22, 0.0, -cos(a) * 0.22)
 		_gen.add_child(prong)
-	_crystal = Node3D.new()
-	_crystal.name = "Crystal"
-	_crystal.position = Vector3(0.0, 2.05, 0.0)
-	_gen.add_child(_crystal)
-	_crystal_mat = _glow(RED, 4.0)
-	var gem := _octa(0.34, 0.66, _crystal_mat)
-	_crystal.add_child(gem)
-	_gen_light = OmniLight3D.new()
-	_gen_light.light_color = Color(1.0, 0.22, 0.12)
-	_gen_light.light_energy = 3.0
-	_gen_light.omni_range = 8.5
-	_gen_light.omni_attenuation = 0.9
-	_gen_light.shadow_enabled = false
-	_gen_light.distance_fade_enabled = true
-	_gen_light.distance_fade_begin = 40.0
-	_gen_light.distance_fade_length = 10.0
-	_gen_light.position = Vector3(0.0, 2.6, 0.0)
-	_gen.add_child(_gen_light)
+	_crystal_y = 2.05
+
+
+## Beams of yellow energy from the crystal over the generator to every cell's
+## lock lamp (2026-10-14; brass pipes along the floor before). One shared unit
+## cylinder, stretched per beam; `_run_generator` drives their `power`.
+func _build_beams() -> void:
+	if _gen == null:
+		return
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.055
+	mesh.bottom_radius = 0.055
+	mesh.height = 1.0
+	mesh.radial_segments = 8
+	mesh.rings = 24
+	mesh.cap_top = false
+	mesh.cap_bottom = false
+	var mat := ShaderMaterial.new()
+	mat.shader = BEAM_SHADER
+	var from := _gen.position + Vector3(0.0, _crystal_y, 0.0)
+	for i in _cells.size():
+		var to: Vector3 = _cells[i]["lock"]
+		var dir := to - from
+		var length := dir.length()
+		# Start a little out of the crystal so the beams meet round it, not in it.
+		var a := from + dir / length * 0.35
+		length -= 0.35
+		var beam := MeshInstance3D.new()
+		beam.name = "Beam%d" % i
+		beam.mesh = mesh
+		beam.material_override = mat
+		beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var up := dir.normalized()
+		beam.transform = Transform3D(Basis(Quaternion(Vector3.UP, up)) * Basis().scaled(Vector3(1.0, length, 1.0)),
+			a + up * length * 0.5)
+		beam.set_instance_shader_parameter(&"beam_length", length)
+		beam.set_instance_shader_parameter(&"seed", float(i) * 1.37)
+		add_child(beam)
+		_beams.append(beam)
 
 
 ## Brass pipes from the generator along the floor to the foot of each row.
@@ -1367,10 +1453,17 @@ func _run_generator(delta: float) -> void:
 	_power = move_toward(_power, 0.0 if powered_off else 1.0, delta * 0.5)
 	for i in _pistons.size():
 		_pistons[i].position.y = 1.5 + sin(_time * 9.0 * _power + float(i) * PI) * 0.12 * _power
-	_flywheel.rotation.x += delta * 7.0 * _power
+	if _flywheel != null:
+		_flywheel.rotation.x += delta * 7.0 * _power
+	# The beams stutter out as the machine winds down.
+	if not _beams.is_empty():
+		var beam_power := 1.0 if not powered_off else _power * _power * _power * randf_range(0.2, 1.0)
+		for b in _beams:
+			b.visible = beam_power > 0.002
+			b.set_instance_shader_parameter(&"power", beam_power)
 	if not powered_off and _crystal != null:
 		_crystal.rotation.y += delta * 0.8
-		_crystal.position.y = 2.05 + sin(_time * 1.7) * 0.04
+		_crystal.position.y = _crystal_y + sin(_time * 1.7) * 0.04
 		var pulse := 0.5 + 0.5 * sin(_time * 3.1)
 		_crystal_mat.emission_energy_multiplier = 3.2 + pulse * 1.8
 		_gen_light.light_energy = 2.5 + pulse * 1.0
@@ -1442,6 +1535,11 @@ func _cut_power() -> void:
 		return
 	if _player.has_method("add_item"):
 		_player.call("add_item", &"red_crystal", 1)
+		# No chest in the cells any more: the room's shard was set in the
+		# generator's cradle under the crystal and comes out with it.
+		if _reward == null:
+			_player.call("add_item", shard, 1)
+			looted = true
 	# The machine gutters out.
 	var light := create_tween()
 	for k in 4:
@@ -1673,6 +1771,12 @@ func restore_state(data: Dictionary) -> void:
 		prisoners_down = bool(data.get("prisoners_down", false))
 		if bool(data.get("powered_off", false)):
 			_power_off_now(data.get("freed_alive", []))
+			# Saved before the cells' chest was removed, with the power cut and
+			# the chest still shut: the shard is owed. Given after the player
+			# is restored (maze restores them after the world).
+			if not looted and _reward == null:
+				looted = true
+				_give_owed_shard.call_deferred()
 	elif kind == &"mine":
 		wardens_down = bool(data.get("wardens_down", false))
 		prisoners_down = bool(data.get("prisoners_down", false))
@@ -1692,6 +1796,12 @@ func restore_state(data: Dictionary) -> void:
 			if lid != null:
 				lid.rotation.x = deg_to_rad(-105.0)
 	on_world_reset()
+
+
+func _give_owed_shard() -> void:
+	var p := get_tree().get_first_node_in_group("player")
+	if p != null and p.has_method("add_item"):
+		p.call("add_item", shard, 1)
 
 
 ## The generator already dead, doors open, the crystal gone, the prisoners out.
