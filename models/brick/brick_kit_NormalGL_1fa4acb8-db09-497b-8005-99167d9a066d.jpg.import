@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dx4v1j3l0a02o"
-path.s3tc="res://.godot/imported/brick_kit_Color_1f3f6ee0-6fa3-43d3-b3b7-838e21e4b6d0.jpg-6d73087cae1583883c1501c234f5f454.s3tc.ctex"
+uid="uid://bbbkag0yf2h7n"
+path.s3tc="res://.godot/imported/brick_kit_NormalGL_1fa4acb8-db09-497b-8005-99167d9a066d.jpg-7b07d4437b5a3ef937aeb44977346150.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "d4cae9d28bb5b1c7cc4054f8327e1b35"
+"md5": "d819c5ba15d7d1f0c43b172b7e8b0bd1"
 }
 
 [deps]
 
-source_file="res://models/brick/brick_kit_Color_1f3f6ee0-6fa3-43d3-b3b7-838e21e4b6d0.jpg"
-dest_files=["res://.godot/imported/brick_kit_Color_1f3f6ee0-6fa3-43d3-b3b7-838e21e4b6d0.jpg-6d73087cae1583883c1501c234f5f454.s3tc.ctex"]
+source_file="res://models/brick/brick_kit_NormalGL_1fa4acb8-db09-497b-8005-99167d9a066d.jpg"
+dest_files=["res://.godot/imported/brick_kit_NormalGL_1fa4acb8-db09-497b-8005-99167d9a066d.jpg-7b07d4437b5a3ef937aeb44977346150.s3tc.ctex"]
 
 [params]
 

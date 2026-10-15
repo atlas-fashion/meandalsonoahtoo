@@ -993,11 +993,26 @@ GEN_WIDTH = 2.0
 
 
 def build_frieze():
-    ob = import_piece("prison_frieze")
+    # Remade by Tripo in the walls' own brick when that exists (2026-10-14): the
+    # wall photo edited to carry the cornice (tools/tripo_image.ps1), then image
+    # to model. A retexture of the carved frieze came back pale brown stone.
+    brick = os.path.exists(os.path.join(RAW, "prison_frieze_brick.glb"))
+    ob = import_piece("prison_frieze_brick" if brick else "prison_frieze")
+    ob.name = "prison_frieze"
     strip_rubble(ob, 0.02)
     p = points(ob)
+    # Its length onto x, whichever way it came.
+    if np.ptp(p[:, 1]) > np.ptp(p[:, 0]):
+        apply(ob, rot_z(-90.0))
+        p = points(ob)
     z0, z1 = p[:, 2].min(), p[:, 2].max()
     mid = band(p, 2, z0 + 0.35 * (z1 - z0), z0 + 0.6 * (z1 - z0))
+    # The front is the side the cornice juts out to: turn it to -y.
+    top = band(p, 2, z0 + 0.88 * (z1 - z0), z1)
+    if (top[:, 1].max() - mid[:, 1].max()) > (mid[:, 1].min() - top[:, 1].min()):
+        apply(ob, rot_z(180.0))
+        p = points(ob)
+        mid = band(p, 2, z0 + 0.35 * (z1 - z0), z0 + 0.6 * (z1 - z0))
     front = float(np.percentile(mid[:, 1], 5))
     cx = (p[:, 0].max() + p[:, 0].min()) * 0.5
     s = FRIEZE_HEIGHT / (z1 - z0)

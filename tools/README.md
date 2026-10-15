@@ -319,7 +319,9 @@ variants share their source's textures) from the eight raw Tripo pieces in
   build the original dry floor again.
 - **The prison hall's frieze and generator** (2026-10-14): text prompts,
   `brick_kit_raw/prison_frieze.glb` (task 1f3f6ee0-...) and
-  `prison_generator.glb` (task 0eab5b58-...). `build_frieze` takes a 6.7 m slice
+  `prison_generator.glb` (task 0eab5b58-...). The frieze in use is
+  `prison_frieze_brick.glb`, remade from the edited wall photo (CLAUDE.md 45).
+  `build_frieze` takes a 6.7 m slice
   of the frieze at a uniform scale; `build_generator` fits the machine to 2 m
   across. See CLAUDE.md section 45.
 

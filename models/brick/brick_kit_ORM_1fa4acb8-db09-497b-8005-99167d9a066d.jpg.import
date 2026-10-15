@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://df8nvr3daygy6"
-path.s3tc="res://.godot/imported/brick_kit_ORM_1f3f6ee0-6fa3-43d3-b3b7-838e21e4b6d0.jpg-8906b4de90a6bba05dcd864b448c80f9.s3tc.ctex"
+uid="uid://be54mpjlkuqot"
+path.s3tc="res://.godot/imported/brick_kit_ORM_1fa4acb8-db09-497b-8005-99167d9a066d.jpg-428c33d5e886cc816ed7378e236b5cad.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "68ed02d6093023fb5d3bcdcb53d38602"
+"md5": "0827fdf5228cbfc7e3a0f15682eb9f8c"
 }
 
 [deps]
 
-source_file="res://models/brick/brick_kit_ORM_1f3f6ee0-6fa3-43d3-b3b7-838e21e4b6d0.jpg"
-dest_files=["res://.godot/imported/brick_kit_ORM_1f3f6ee0-6fa3-43d3-b3b7-838e21e4b6d0.jpg-8906b4de90a6bba05dcd864b448c80f9.s3tc.ctex"]
+source_file="res://models/brick/brick_kit_ORM_1fa4acb8-db09-497b-8005-99167d9a066d.jpg"
+dest_files=["res://.godot/imported/brick_kit_ORM_1fa4acb8-db09-497b-8005-99167d9a066d.jpg-428c33d5e886cc816ed7378e236b5cad.s3tc.ctex"]
 
 [params]
 

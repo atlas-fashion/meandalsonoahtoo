@@ -3468,3 +3468,16 @@ grand stair from ONE doorway up to a throne hall above the corridor roofs.
   4 s later, 10 of 10 gates open; the owed-shard load path gave the shard and
   saved as looted. Bench (RTX 3060, 3440x1440, Ultra, editor closed): 74.7 fps,
   worst p99 26.91 ms, 1102 MB (73.6 / 27.81 / 1090 before).
+- **The cornice is remade in the walls' brick** (2026-10-14, at the user's
+  request): the carved frieze's pale stone did not match the corridor walls. A
+  Tripo retexture of it with the wall photo as a style image (20 credits, task
+  a54d3774-...) came back pale brown stone -- not used. What worked is how the
+  walls themselves were made: `tools/tripo_image.ps1` edited the wall photo
+  (`brick_kit_refs/wall.webp`) into a long, low wall of the same dark charcoal
+  bricks and brown mortar with brick corbels under an overhanging brick cornice
+  (5 credits), then image to model (40 credits) ->
+  `brick_kit_raw/prison_frieze_brick.glb`, which `build_frieze` prefers (it now
+  finds the long axis and the side the cornice juts to itself). 6.7 m slice at
+  3.5 m tall, cornice 0.56 m proud, 6,000 tris. 85 credits left. The old
+  frieze's extracted textures are deleted. Bench: 74.6 fps, worst p99
+  27.31 ms, 1102 MB (74.7 / 26.91 / 1102 before).
