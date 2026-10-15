@@ -786,6 +786,7 @@ func _build_module_level() -> void:
 			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0),
 			"room_gap": module_room_gap,
 			"room_entrances": module_room_entrances,
+			"morgue": morgue_enabled,
 		})
 	_pick_morgue()
 
@@ -864,14 +865,14 @@ func _pick_morgue() -> void:
 	_morgue_room = {}
 	if not morgue_enabled or _module_level == null:
 		return
+	# Chosen by the level builder (module_level `_make_morgue_hall`): its block
+	# is built as an enclosed hall, so the choice has to come before the meshes.
 	var best_d := -1.0
-	for room in _module_level.chest_rooms():
-		var d := (_module_level.room_world(room) as Vector3).distance_to(_module_level.spawn)
-		if d > best_d:
-			best_d = d
+	for room in _module_level.rooms:
+		if room["kind"] == "morgue":
 			_morgue_room = room
+			best_d = (_module_level.room_world(room) as Vector3).distance_to(_module_level.spawn)
 	if not _morgue_room.is_empty():
-		_morgue_room["kind"] = "morgue"
 		print("[morgue] in the room at %s, %.0f m from the start; %d chest rooms left"
 			% [_morgue_room["centre"], best_d, _module_level.chest_rooms().size()])
 

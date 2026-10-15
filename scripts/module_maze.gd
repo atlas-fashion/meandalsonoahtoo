@@ -49,6 +49,11 @@ class Cell extends RefCounted:
 	## Open-sky floor inside a room. It gets no module at all -- no walls, no
 	## roof -- which is what makes the room open to the sky.
 	var court := false
+	## One enclosed hall (the morgue, 2026-10-15): the room's whole block built
+	## as ordinary vaulted cells opening onto each other with NO arches or
+	## junction pillars between them (brick_level.gd) -- only its doorways keep
+	## their arch. morgue.gd stands piers where the vaults meet.
+	var hall := false
 
 
 ## Carves a grid maze and returns {cells: Dictionary of Vector2i -> Cell,

@@ -354,6 +354,10 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 					or (other.x == cell.pos.x and other.y < cell.pos.y))
 				if not (canonical or other_court):
 					continue
+				# Inside the morgue hall the vaults run on into each other: no arch
+				# (morgue.gd stands piers where they meet). Its doorways keep theirs.
+				if cell.hall and out.cells[other].hall:
+					continue
 				var mid := centre + d * half
 				add.call("arch", Transform3D(face_basis, mid))
 				_arch_collision(body, mid, d)
@@ -386,8 +390,9 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 				if cell.kind == "gate":
 					add.call("door", Transform3D(face_basis, at - d * DOOR_PROUD))
 
-		# Pillars in the four corners of a junction.
-		if cell.kind in JUNCTIONS:
+		# Pillars in the four corners of a junction (not in the morgue hall:
+		# its piers and pilasters stand at the corners instead).
+		if cell.kind in JUNCTIONS and not cell.hall:
 			for px: float in [-1.0, 1.0]:
 				for pz: float in [-1.0, 1.0]:
 					var p := centre + Vector3(px, 0.0, pz) * PILLAR_AT

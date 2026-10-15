@@ -353,6 +353,9 @@ const DEFAULTS := {
 	## doorways a chest room keeps (0 = every corridor that ran into it).
 	"room_gap": 1,
 	"room_entrances": 0,
+	## One chest room (the one furthest from the start) becomes the morgue: an
+	## enclosed vaulted hall rather than a cloister (`_make_morgue_hall`).
+	"morgue": false,
 }
 
 
@@ -395,6 +398,8 @@ static func build(parent: Node3D, seed_value: int, size: Vector2i, cell_size: fl
 
 	# Planned before the skylights, which must not open onto its underside.
 	out.boss_hall = plan_boss_hall(out)
+	if bool(opt["morgue"]):
+		_make_morgue_hall(out, brick)
 	if brick:
 		# The kit always has its skylight vault and niche wall.
 		var have := {SKYLIGHT_KIND: true, NICHE_KIND: true}
@@ -414,6 +419,36 @@ static func build(parent: Node3D, seed_value: int, size: Vector2i, cell_size: fl
 	_record_gates(out, chosen)
 	out.spawn = _pick_spawn(out) + Vector3(0.0, 0.2, 0.0)
 	return out
+
+
+## The morgue (2026-10-15): the chest room furthest from where the player
+## starts (the spawn is worked out here early; it depends on nothing that is
+## built) becomes kind "morgue", and its whole block an enclosed hall: every
+## cell an ordinary vaulted cell (court off, `hall` on), classified from its
+## openings -- crosses inside, tees and corners round the ring.
+static func _make_morgue_hall(out: Built, enclose: bool) -> void:
+	var start := _pick_spawn(out)
+	var best: Dictionary = {}
+	var best_d := -1.0
+	for room in out.chest_rooms():
+		var d := (out.room_world(room) as Vector3).distance_to(start)
+		if d > best_d:
+			best_d = d
+			best = room
+	if best.is_empty():
+		return
+	best["kind"] = "morgue"
+	# The old Tripo modules (`-- --modules`) keep the cloister.
+	if not enclose:
+		return
+	var c: Vector2i = best["centre"]
+	var h: int = best["half"]
+	for dx in range(-h, h + 1):
+		for dy in range(-h, h + 1):
+			var cell: ModuleMaze.Cell = out.cells[c + Vector2i(dx, dy)]
+			cell.court = false
+			cell.hall = true
+			ModuleMaze._classify(cell)
 
 
 ## The player starts at the END of the maze, shut in: the dead end furthest
@@ -1753,7 +1788,8 @@ static func place_torches(parent: Node3D, out: Built, density: float = 1.0,
 
 	for key in out.cells:
 		var cell: ModuleMaze.Cell = out.cells[key]
-		if cell.court or door_cells.has(cell.pos):
+		# The morgue hall hangs its own, on its pilasters (morgue.gd).
+		if cell.court or cell.hall or door_cells.has(cell.pos):
 			continue
 		# Deterministic per cell, so torch positions do not shuffle when the
 		# dictionary happens to iterate in a different order.

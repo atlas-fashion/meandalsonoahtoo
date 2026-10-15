@@ -324,6 +324,10 @@ variants share their source's textures) from the eight raw Tripo pieces in
   `build_frieze` takes a 6.7 m slice
   of the frieze at a uniform scale; `build_generator` fits the machine to 2 m
   across. See CLAUDE.md section 45.
+- **The morgue's pieces** (2026-10-15): `brick_kit_raw/wall_loculi.glb` (the
+  wall photo edited into a catacomb burial wall, task 8fe2a084-..., then image
+  to model) and `morgue_slab.glb` (text). `pier_face` is cut from the wall piece.
+  See CLAUDE.md section 47.
 
 # Retexturing with Tripo
 

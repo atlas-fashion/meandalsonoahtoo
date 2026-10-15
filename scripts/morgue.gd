@@ -1,10 +1,15 @@
 extends Node3D
 
-## The morgue (2026-10-08): one of the cloister rooms, dressed as a charnel
-## house -- standing coffins round the court, stone slabs, broken skeletons on
-## the floor and the slabs (most missing limbs; nothing on them glows) -- and,
-## at the back, facing the way in, the royal standing sarcophagus that held the
-## Remnant before it was a ghost, built to its size.
+## The morgue (2026-10-08; rebuilt 2026-10-15): no longer a cloister but one
+## enclosed hall -- the room's whole block built as vaulted brick cells with no
+## arches between them (module_level `_make_morgue_hall`, brick_level `hall`),
+## so the only arches are its doorways and the vaults are its roof. Square
+## brick piers where four vaults meet, pilasters along the walls with a torch
+## on each, catacomb burial walls (Tripo "wall_loculi": the corridor brick, six
+## shrouded bodies to a wall) between the pilasters, Tripo mortuary slabs each
+## with a shrouded body in the bays, old coffins in the corners, broken
+## skeletons on the floor -- and, at the back, facing the way in, the royal
+## standing sarcophagus that held the Remnant before it was a ghost.
 ##
 ## The Remnant guards it. With the crosshair on the sarcophagus, E ("Open")
 ## starts a scene the player does not survive: the player walks up and pulls at
@@ -47,6 +52,27 @@ const COFFIN_HEAD := 0.34
 const COFFIN_DEPTH := 0.62
 const SLAB := Vector3(1.0, 0.86, 2.2)
 
+## The enclosed hall (2026-10-15). Kit pieces measured off the build
+## (build_brick_kit.py): the burial wall, and the pier face.
+const BrickLevel := preload("res://scripts/brick_level.gd")
+const LOCULI_LEN := 3.9
+const LOCULI_HEIGHT := 2.82
+const LOCULI_DEPTH := 0.86
+## Bodies in one burial wall: three rows of two.
+const LOCULI_BODIES := 6
+const PIER_HALF := 1.1
+## Up past the vault crown (5.1 m), under the lid.
+const PIER_TOP := 7.8
+## How far a pilaster stands out in front of the burial walls.
+const PILASTER_PROUD := 0.25
+## Skeletons on the floor.
+const FLOOR_DEAD := 14
+const TORCH_HEIGHT := 2.6
+const TORCH_BOOST := 1.2
+const TORCH_ENERGY := 1.3
+## The level's chunks draw to maze `module_view_range` (70 m).
+const VIEW_RANGE := 75.0
+
 ## Where the player can open the royal sarcophagus from (horizontal, from its
 ## front), and where the scene stands them.
 const REACH := 3.6
@@ -88,8 +114,8 @@ static func build(holder: Node3D, level, room_: Dictionary) -> Node3D:
 
 func _dress() -> void:
 	var centre: Vector3 = built.room_world(room)
-	# The local frame: origin the court's centre, +Z toward the way in, so the
-	# back of the room -- where the royal sarcophagus stands -- is -Z.
+	# The local frame: origin the middle of the block, +Z toward the way in, so
+	# the back of the hall -- where the royal sarcophagus stands -- is -Z.
 	var out := Vector3(0.0, 0.0, 1.0)
 	var doors: Array = built.room_doors(room)
 	if not doors.is_empty():
@@ -97,11 +123,35 @@ func _dress() -> void:
 		out = Vector3(float(step.x), 0.0, float(step.y))
 	global_transform = Transform3D(Basis.looking_at(-out, Vector3.UP), centre)
 	_rng.seed = hash(room["centre"]) ^ 0x6d6f7267
-	var span: float = built.court_half_span(room)
 	var cell: float = built.cell_size
+	var h: int = room["half"]
+	var ring := float(h) * cell
+	# The hall's walls (brick_level.gd: every closed side of a ring cell).
+	var wall := ring + BrickLevel.WALL_FACE
+	var kit_loculi: Mesh = BrickLevel.standalone("wall_loculi")
+	var loc_depth := LOCULI_DEPTH if kit_loculi != null else 0.0
+	# Pilasters stand proud of the burial walls.
+	var pilaster_in := wall - loc_depth - PILASTER_PROUD
 
-	# The royal sarcophagus on its dais at the back, facing the way in.
-	var back := -(span - DAIS.z * 0.5 - 0.2)
+	# Ring cells in the local frame: which are doorways, which are corners.
+	var entrances := {}
+	for way in room["entrances"]:
+		entrances[way["cell"]] = true
+	var ring_cells: Array = []
+	for dz in range(-h, h + 1):
+		for dx in range(-h, h + 1):
+			if maxi(absi(dx), absi(dz)) != h:
+				continue
+			var p: Vector2i = room["centre"] + Vector2i(dx, dz)
+			var local := to_local(built.to_world(p))
+			ring_cells.append({"pos": p, "at": Vector3(local.x, 0.0, local.z),
+				"entrance": entrances.has(p), "corner": absi(dx) == h and absi(dz) == h})
+
+	_build_piers(h, cell, pilaster_in)
+	_hang_torches(h, cell, pilaster_in)
+
+	# The royal sarcophagus on its dais against the back wall, facing the way in.
+	var back := -(wall - loc_depth - 0.15 - DAIS.z * 0.5)
 	_solid_box(Vector3(0.0, DAIS.y * 0.5, back), DAIS, _mat(&"dais"))
 	_royal = _coffin(Vector3(0.0, DAIS.y, back), 0.0, true, "closed")
 	_royal.name = "RoyalSarcophagus"
@@ -111,58 +161,252 @@ func _dress() -> void:
 	# was, crowned. Only seen once the lid is off.
 	_royal_body(Vector3(0.0, DAIS.y + 0.05, back - 0.06))
 
-	# Standing coffins against the piers round the court, facing in; two more
-	# flank the dais. The way in (+Z side) is left clear.
-	var piers: Array[float] = []
-	var n := int(round(2.0 * span / cell))
-	for j in n + 1:
-		piers.append(-span + float(j) * cell)
-	var spots: Array = []
-	for side in [-1.0, 1.0]:
-		for z in piers:
-			var zz := clampf(z, -span + 1.0, span - 1.4)
-			spots.append([Vector3(side * (span - 0.7), 0.0, zz), PI * 0.5 * side])
-	for side in [-1.0, 1.0]:
-		spots.append([Vector3(side * (DAIS.x * 0.5 + 1.3), 0.0, -(span - 0.7)), 0.0])
-	var states := ["closed", "closed", "closed", "ajar", "ajar", "open", "open_body", "fallen", "closed", "open_body"]
-	for i in spots.size():
-		var s: Array = spots[i]
-		_coffin(s[0], s[1], false, states[(i + _rng.randi_range(0, 3)) % states.size()])
+	# Burial niches along every wall but the doorways' and the corners'.
+	var walls_lined := 0
+	for rc in ring_cells:
+		if rc["corner"] or rc["entrance"] or kit_loculi == null:
+			continue
+		var at: Vector3 = rc["at"]
+		_loculi(at + _into_wall(at) * (BrickLevel.WALL_FACE - 0.02), _into_wall(at), kit_loculi)
+		walls_lined += 1
 
-	# Slabs, with the dead laid out on two of them.
-	var slabs := [Vector3(-4.3, 0.0, -1.2), Vector3(4.3, 0.0, -1.2), Vector3(4.3, 0.0, 3.6)]
-	for i in slabs.size():
-		var at: Vector3 = slabs[i]
-		_solid_box(at + Vector3(0.0, SLAB.y * 0.5, 0.0), SLAB, _mat(&"slab"))
-		if i < 2:
-			_corpse(at + Vector3(0.0, SLAB.y, 0.0), _rng.randf_range(-0.15, 0.15), _missing(i == 0))
-		else:
-			for k in 3:
-				_loose_bone(at + Vector3(_rng.randf_range(-0.3, 0.3), SLAB.y, _rng.randf_range(-0.8, 0.8)))
+	# Slabs, each with a shrouded body on it: a pair to each bay inside the
+	# ring, either side of the middle aisle. The ring is the walk along the
+	# burial walls and stays clear: slabs there left gaps under a metre at
+	# their corners, which the navmesh (radius 0.5) closes, and they cut the
+	# corner doorways off from the hall (measured).
+	var slab_mesh: Mesh = BrickLevel.standalone("morgue_slab")
+	var taken: Array[Vector3] = []
+	var slabs := 0
+	for dz in range(-h + 1, h):
+		for dx in range(-h + 1, h):
+			var p: Vector2i = room["centre"] + Vector2i(dx, dz)
+			var local := to_local(built.to_world(p))
+			var at := Vector3(local.x, 0.0, local.z)
+			# The middle column is the aisle from the way in to the sarcophagus.
+			if absf(at.x) < 1.0:
+				continue
+			for s: float in [-1.0, 1.0]:
+				var q := at + Vector3(s * 0.85, 0.0, _rng.randf_range(-0.25, 0.25))
+				_slab(q, _rng.randf_range(-0.06, 0.06) + (PI if _rng.randf() < 0.5 else 0.0), slab_mesh)
+				taken.append(q)
+				slabs += 1
 
-	# The dead on the floor, clear of the aisle to the dais and of the slabs.
+	# Old coffins stood in the corners, against both walls.
+	var coffins := 0
+	for rc in ring_cells:
+		if not rc["corner"] or rc["entrance"]:
+			continue
+		var at: Vector3 = rc["at"]
+		var sx := signf(at.x)
+		var sz := signf(at.z)
+		for k in 2:
+			var along := float(k) * 0.85 - 0.6
+			_coffin(Vector3(sx * (wall - 0.4), 0.0, at.z - sz * along), -sx * PI * 0.5,
+				false, ["closed", "ajar", "open_body", "fallen"][_rng.randi_range(0, 3)])
+			_coffin(Vector3(at.x - sx * along, 0.0, sz * (wall - 0.4)), 0.0 if sz < 0.0 else PI,
+				false, ["closed", "ajar", "open", "closed"][_rng.randi_range(0, 3)])
+			coffins += 2
+
+	# The older dead on the floor: broken skeletons in the open, clear of the
+	# slabs, the piers, the aisle and the dais.
 	var placed: Array[Vector3] = []
 	var tries := 0
-	while placed.size() < 8 and tries < 200:
+	var reach := pilaster_in - 1.2
+	while placed.size() < FLOOR_DEAD and tries < 600:
 		tries += 1
-		var p := Vector3(_rng.randf_range(-span + 1.8, span - 1.8), 0.0, _rng.randf_range(-span + 3.4, span - 1.6))
-		if absf(p.x) < 1.5:
+		var p := Vector3(_rng.randf_range(-reach, reach), 0.0, _rng.randf_range(-reach, reach))
+		if absf(p.x) < 1.6 and p.z > back + 2.0:
 			continue
-		var clear := true
+		if _near_pier(p, h, cell, PIER_HALF + 0.8):
+			continue
+		var clear := p.distance_to(Vector3(0.0, 0.0, back)) > 3.5
 		for q in placed:
-			if q.distance_to(p) < 1.7:
+			if q.distance_to(p) < 1.8:
 				clear = false
-		for s in slabs:
-			if (s as Vector3).distance_to(p) < 1.9:
+		for q in taken:
+			if q.distance_to(p) < 1.9:
 				clear = false
 		if not clear:
 			continue
 		placed.append(p)
 		_corpse(p, _rng.randf_range(-PI, PI), _missing(_rng.randf() < 0.8))
 
-	_gather_cold_lights.call_deferred(centre, span)
-	print("[morgue] %d coffins, %d bodies (%d of them broken), royal sarcophagus %.1f m tall"
-		% [spots.size(), _corpse_count, _missing_count, ROYAL_HEIGHT])
+	_limit_view(wall)
+	_gather_cold_lights.call_deferred(centre, wall)
+	print("[morgue] enclosed hall: %d burial walls (%d bodies), %d slabs, %d coffins, %d bodies laid out (%d broken)"
+		% [walls_lined, walls_lined * LOCULI_BODIES, slabs, coffins, _corpse_count, _missing_count])
+
+
+## Everything here stops drawing past the level's own view range, as its chunks
+## do. Without it the hall's pieces -- burial walls, slabs, piers, 29 skinned
+## bodies, 32 torches -- were drawn from anywhere they were in front of the
+## camera, through the rock: +150-270 draw calls and ~0.5-1 ms at every bench
+## station, the nearest 240 m away (measured). The MultiMeshes span the hall,
+## so theirs carries its half diagonal.
+func _limit_view(wall: float) -> void:
+	for node in find_children("*", "GeometryInstance3D", true, false):
+		var g := node as GeometryInstance3D
+		if g.visibility_range_end > 0.0:
+			continue
+		g.visibility_range_end = VIEW_RANGE + (wall * sqrt(2.0) if g is MultiMeshInstance3D else 0.0)
+		g.visibility_range_end_margin = 4.0
+
+
+## From a ring cell's centre, the way into its outside wall.
+static func _into_wall(at: Vector3) -> Vector3:
+	if absf(at.x) > absf(at.z):
+		return Vector3(signf(at.x), 0.0, 0.0)
+	return Vector3(0.0, 0.0, signf(at.z))
+
+
+## A square brick pier at every vertex inside the hall, where four vaults meet,
+## and a pilaster at every one along the walls: a dark core with the kit's pier
+## face (the corridor brick, cut from the wall piece) on every side that shows.
+## One MultiMesh for all the faces and one for the cores.
+func _build_piers(h: int, cell: float, pilaster_in: float) -> void:
+	var face: Mesh = BrickLevel.standalone("pier_face")
+	var body := StaticBody3D.new()
+	body.name = "Piers"
+	body.collision_layer = BrickLevel.LAYER_WALLS
+	body.collision_mask = 0
+	add_child(body)
+	var faces: Array[Transform3D] = []
+	var cores: Array[Transform3D] = []
+	var verts: Array[float] = []
+	for k in range(-h, h):
+		verts.append((float(k) + 0.5) * cell)
+	var mid := pilaster_in + PIER_HALF
+	var piers: Array = []
+	for vx in verts:
+		for vz in verts:
+			piers.append([Vector3(vx, 0.0, vz), [Vector3.RIGHT, Vector3.LEFT, Vector3.FORWARD, Vector3.BACK]])
+	for v in verts:
+		piers.append([Vector3(v, 0.0, -mid), [Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]])
+		piers.append([Vector3(v, 0.0, mid), [Vector3.FORWARD, Vector3.LEFT, Vector3.RIGHT]])
+		piers.append([Vector3(-mid, 0.0, v), [Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK]])
+		piers.append([Vector3(mid, 0.0, v), [Vector3.LEFT, Vector3.FORWARD, Vector3.BACK]])
+	for pier in piers:
+		var c: Vector3 = pier[0]
+		cores.append(Transform3D(Basis(), c + Vector3(0.0, PIER_TOP * 0.5, 0.0)))
+		for d: Vector3 in pier[1]:
+			# A kit piece's front is +Z: turned so it looks out along d.
+			faces.append(Transform3D(Basis.looking_at(-d, Vector3.UP), c + d * PIER_HALF))
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(PIER_HALF * 2.0, 6.0, PIER_HALF * 2.0)
+		var cs := CollisionShape3D.new()
+		cs.shape = shape
+		cs.position = c + Vector3(0.0, 3.0, 0.0)
+		body.add_child(cs)
+	if face != null:
+		_multi(face, faces, "PierFaces")
+	var core := BoxMesh.new()
+	core.size = Vector3(PIER_HALF * 2.0 - 0.12, PIER_TOP, PIER_HALF * 2.0 - 0.12)
+	core.material = _mat(&"core")
+	_multi(core, cores, "PierCores")
+
+
+func _multi(mesh: Mesh, xfs: Array[Transform3D], name_: String) -> void:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = xfs.size()
+	for i in xfs.size():
+		mm.set_instance_transform(i, xfs[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = name_
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	add_child(mmi)
+
+
+func _near_pier(p: Vector3, h: int, cell: float, margin: float) -> bool:
+	for k in range(-h, h):
+		for j in range(-h, h):
+			var v := Vector3((float(k) + 0.5) * cell, 0.0, (float(j) + 0.5) * cell)
+			if absf(p.x - v.x) < margin and absf(p.z - v.z) < margin:
+				return true
+	return false
+
+
+## A torch on the inner face of every pilaster.
+func _hang_torches(h: int, cell: float, pilaster_in: float) -> void:
+	var level = load("res://scripts/module_level.gd")
+	var scene: PackedScene = load(level.TORCH_SCENE)
+	var energy: float = TORCH_ENERGY
+	var n := get_parent()
+	while n != null and n.get("module_torch_energy") == null:
+		n = n.get_parent()
+	if n != null:
+		energy = float(n.get("module_torch_energy")) * TORCH_BOOST
+	for k in range(-h, h):
+		var v := (float(k) + 0.5) * cell
+		for d: Vector3 in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
+			# `d` points into the wall; the pilaster's face is `pilaster_in` out.
+			var along := Vector3(-d.z, 0.0, d.x) * v
+			var at := d * (pilaster_in - 0.02) + along + Vector3(0.0, TORCH_HEIGHT, 0.0)
+			level._hang_torch(self, scene, at, d, energy, 13.0)
+	# And one on every pier inside, on the face toward the middle aisle, or the
+	# middle of a 28 m hall lit only from its walls is black.
+	for k in range(-h, h):
+		for j in range(-h, h):
+			var c := Vector3((float(k) + 0.5) * cell, TORCH_HEIGHT, (float(j) + 0.5) * cell)
+			var d := Vector3(signf(c.x), 0.0, 0.0)
+			level._hang_torch(self, scene, c - d * (PIER_HALF + 0.02), d, energy, 13.0)
+
+
+## A burial wall (kit "wall_loculi": the corridor brick with three rows of
+## niches, a body in its shroud in each) with its back on the wall face at
+## `at`, `into` pointing into the wall.
+func _loculi(at: Vector3, into: Vector3, mesh: Mesh) -> void:
+	var b := Basis.looking_at(into, Vector3.UP)
+	var mi := MeshInstance3D.new()
+	mi.name = "BurialWall"
+	mi.mesh = mesh
+	# The kit piece's origin is on its front face.
+	mi.transform = Transform3D(b, at - into * LOCULI_DEPTH)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	add_child(mi)
+	var body := StaticBody3D.new()
+	body.collision_layer = 1 | 2
+	body.collision_mask = 0
+	add_child(body)
+	var shape := BoxShape3D.new()
+	# A hair shorter than the mesh, which tucks its ends into the pilasters.
+	shape.size = Vector3(LOCULI_LEN - 0.15, LOCULI_HEIGHT, LOCULI_DEPTH)
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	cs.transform = Transform3D(b, at - into * LOCULI_DEPTH * 0.5 + Vector3(0.0, LOCULI_HEIGHT * 0.5, 0.0))
+	body.add_child(cs)
+
+
+## A mortuary slab with its shrouded body (kit "morgue_slab", Tripo), its
+## length along local Z turned by `yaw`; without the kit, the old bare slab
+## and a skeleton.
+func _slab(at: Vector3, yaw: float, mesh: Mesh) -> void:
+	var b := Basis(Vector3.UP, yaw)
+	if mesh == null:
+		_solid_box(at + Vector3(0.0, SLAB.y * 0.5, 0.0), SLAB, _mat(&"slab"))
+		_corpse(at + Vector3(0.0, SLAB.y, 0.0), yaw, _missing(_rng.randf() < 0.5))
+		return
+	_corpse_count += 1
+	var mi := MeshInstance3D.new()
+	mi.name = "Slab"
+	mi.mesh = mesh
+	mi.transform = Transform3D(b, at)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	add_child(mi)
+	var box := mesh.get_aabb()
+	var body := StaticBody3D.new()
+	body.collision_layer = 1 | 2
+	body.collision_mask = 0
+	add_child(body)
+	var shape := BoxShape3D.new()
+	shape.size = box.size
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	cs.transform = Transform3D(b, at + b * box.get_center())
+	body.add_child(cs)
 
 
 ## A random set of lost parts: one to three limbs (or the head) when `broken`.
@@ -643,6 +887,10 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 			m.uv1_scale = Vector3(0.5, 0.5, 0.5)
 			m.albedo_color = Color(0.17, 0.16, 0.155) if key == &"slab" else Color(0.11, 0.105, 0.1)
 			m.roughness = 0.92
+		&"core":
+			# Inside a pier, behind its brick faces: only ever seen through a crack.
+			m.albedo_color = Color(0.03, 0.028, 0.03)
+			m.roughness = 1.0
 		&"bone":
 			m.albedo_color = Color(0.62, 0.58, 0.5)
 			m.roughness = 0.9

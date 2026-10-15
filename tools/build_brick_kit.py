@@ -75,7 +75,7 @@ BUDGET = {
     "floor": 1500, "vault": 7000,
     "door_frame": 99999, "door_leaf": 99999, "cage_door": 99999, "torch_mount": 99999,
     "cart_body": 6000, "cart_wheels": 2400, "cart_lid": 1500,
-    "prison_frieze": 6000, "prison_generator": 8000,
+    "prison_frieze": 6000, "prison_generator": 8000, "pier_face": 5000, "wall_loculi": 9000, "morgue_slab": 6000,
     "wood_support": 3000, "prison_dome": 16000, "jail_gate_l": 99999, "jail_gate_r": 99999, "wood_planks": 2500, "wood_crate": 2500,
 }
 
@@ -548,6 +548,11 @@ def main():
     clip(top, (0, 0, 3.0), (0, 0, -1))
     apply(top, move(0, 0, -0.6))
     built.append(top)
+    built.append(build_pier_face(wall, top))
+    if os.path.exists(os.path.join(RAW, "wall_loculi.glb")):
+        built.append(build_loculi())
+    if os.path.exists(os.path.join(RAW, "morgue_slab.glb")):
+        built.append(build_morgue_slab())
     niche = duplicate(wall, "wall_niche")
     # Same opening the old module_straight_niche had (NICHE_W x NICHE_H at the sill).
     cut_hole_wall(niche)
@@ -1034,6 +1039,78 @@ def build_generator():
     apply(ob, scale(s, s, s) @ move(-(lo[0] + hi[0]) * 0.5, -(lo[1] + hi[1]) * 0.5, -lo[2]))
     q = points(ob)
     log("  generator: scale %.2f, %.2f tall" % (s, q[:, 2].max()))
+    return ob
+
+
+
+## --- The morgue hall's piers (2026-10-15) ----------------------------------------
+##
+## "pier_face": one face of a square brick pier, PIER_HALF x 2 wide, cut from the
+## wall itself (no stretching) -- the wall up to PIER_LOW, then two bands of the
+## wall's middle stacked on it, up past the vault crown under the lid. Front at
+## y = 0 like the wall; morgue.gd stands four round a dark core.
+PIER_HALF = 1.1
+PIER_LOW = 3.3
+
+
+def build_pier_face(wall, top):
+    low = duplicate(wall, "pier_low")
+    clip(low, (-PIER_HALF, 0, 0), (1, 0, 0))
+    clip(low, (PIER_HALF, 0, 0), (-1, 0, 0))
+    clip(low, (0, 0, PIER_LOW), (0, 0, -1))
+    parts = [low]
+    for k, z in enumerate((PIER_LOW - 0.1, PIER_LOW + 2.2)):
+        band_ = duplicate(top, "pier_band%d" % k)
+        clip(band_, (-PIER_HALF, 0, 0), (1, 0, 0))
+        clip(band_, (PIER_HALF, 0, 0), (-1, 0, 0))
+        apply(band_, move(0, 0, z))
+        parts.append(band_)
+    ob = join(parts, "pier_face")
+    q = points(ob)
+    log("  pier face: %.2f wide, %.2f tall" % (q[:, 0].max() - q[:, 0].min(), q[:, 2].max()))
+    return ob
+
+
+
+## "wall_loculi" (Tripo, 2026-10-15): the corridor wall photo edited into a
+## catacomb burial wall -- three rows of niches, two to a row, a linen-wrapped
+## body in each (tools/tripo_image.ps1) -- then image to model. Raw: 1.0 long
+## along y, 0.22 thick along x, its niches on the +x face (checked by render).
+## Scaled UNIFORMLY to LOCULI_LEN, the stretch of wall between two of the morgue
+## hall's pilasters; front at y = 0, back into +y.
+## "morgue_slab" (Tripo, text): a rough dark stone slab on two blocks with a
+## linen-wrapped body on it. Raw: 1.0 long along x. Scaled to MORGUE_SLAB_LEN,
+## its length turned onto y (Godot z), centred, its feet on the floor.
+LOCULI_LEN = 3.9
+MORGUE_SLAB_LEN = 2.2
+
+
+def build_loculi():
+    ob = import_piece("wall_loculi")
+    strip_rubble(ob, 0.02)
+    # Raw +x (the niches) -> Blender -y, the front.
+    apply(ob, rot_z(-90.0))
+    p = points(ob)
+    s = LOCULI_LEN / (p[:, 0].max() - p[:, 0].min())
+    cx = (p[:, 0].max() + p[:, 0].min()) * 0.5
+    apply(ob, scale(s, s, s) @ move(-cx, -p[:, 1].min(), -p[:, 2].min()))
+    q = points(ob)
+    log("  loculi: %.2f long, %.2f tall, %.2f deep" % (q[:, 0].max() - q[:, 0].min(),
+        q[:, 2].max(), q[:, 1].max()))
+    return ob
+
+
+def build_morgue_slab():
+    ob = import_piece("morgue_slab")
+    strip_rubble(ob, 0.02)
+    apply(ob, rot_z(90.0))
+    p = points(ob)
+    s = MORGUE_SLAB_LEN / (p[:, 1].max() - p[:, 1].min())
+    apply(ob, scale(s, s, s) @ move(-(p[:, 0].max() + p[:, 0].min()) * 0.5,
+        -(p[:, 1].max() + p[:, 1].min()) * 0.5, -p[:, 2].min()))
+    q = points(ob)
+    log("  morgue slab: %.2f x %.2f, %.2f tall" % (q[:, 0].max() - q[:, 0].min(),
+        q[:, 1].max() - q[:, 1].min(), q[:, 2].max()))
     return ob
 
 
