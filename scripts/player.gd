@@ -4236,14 +4236,15 @@ func _reset_inventory(first_time := false) -> void:
 ##
 ## Thrown back along `dir` and off their feet: the view falls to the floor
 ## (flat on the back, looking up, rolled a little) over KNOCK_FALL while the
-## body slides back, then gets up over KNOCK_UP -- the half second the user
-## asked for. No control meanwhile: the slam recovery's lock
-## (`_slam_recover_until`) holds moving, jumping, swinging, blocking and ghost,
+## body slides back, then gets up over KNOCK_UP (0.5 s at first; 0.8 since the
+## user asked for "a bit longer", 2026-10-15). No control meanwhile: the slam
+## recovery's lock (`_slam_recover_until`) holds moving, jumping, swinging,
+## blocking and ghost,
 ## and the slide bleeds off at KNOCK_FRICTION rather than the recovery's stop.
 ## Still hurtable on the floor. Not in a scene, not hidden, not dead.
 @export var knockdown_lift := 2.6
 const KNOCK_FALL := 0.32
-const KNOCK_UP := 0.5
+const KNOCK_UP := 0.8
 const KNOCK_FRICTION := 9.0
 var _knock_at := -1.0
 var _knock_side := 1.0

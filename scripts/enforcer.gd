@@ -50,13 +50,17 @@ const ANIM_SWIPE_CLIP := &"SWIPE_BAKED"
 ## A planted foot slides back at this speed with the walk at rate 1 (measured
 ## in Blender: 1.4 m/s at the authored size).
 const WALK_GROUND_SPEED := 0.82
-## BEAM_BAKED: the cannon is up and aimed from frame 37 to the end (47).
-const BEAM_AIMED := 36.0 / 60.0
+## BEAM_BAKED: the cannon comes up by frame 37, but only SETTLES -- resting on
+## the raised shield arm -- on the clip's last frame (47); held there while it
+## fires. (Held at 37 the shield was still swinging across: "the beam arm is not
+## setting on the shield arm", 2026-10-15.) A hair short of the end, so the
+## clip is still playing, frozen, rather than finished.
+const BEAM_SET_EARLY := 0.04
 ## SWIPE_BAKED: the shield crosses the front fastest at frames 31-37; the blow
 ## lands at frame 32.
 const SWIPE_CONTACT := 31.0 / 60.0
 ## How hard a swipe that lands unguarded throws the player.
-const SWIPE_THROW := 7.5
+const SWIPE_THROW := 11.0
 ## ...and how hard one taken on a held guard shoves them.
 const SWIPE_SHOVE := 4.0
 
@@ -157,9 +161,9 @@ func _init() -> void:
 	attack_damage = 22.0
 	knockback_resistance = 0.85
 	tint_albedo = false
-	base_glow = 4.0
-	windup_glow = 7.0
-	attack_glow = 9.0
+	base_glow = 2.0
+	windup_glow = 3.5
+	attack_glow = 4.5
 	windup_color = Color(0.45, 0.95, 1.0)
 	attack_color = Color(0.8, 1.0, 1.0)
 	hit_punch = 0.06
@@ -256,9 +260,15 @@ func _crystal_material() -> StandardMaterial3D:
 	return m
 
 
-## A glowing lens in each eye socket, on the eye markers the build puts on the
-## head bone, in the crystal's colour (they flare with it, at EYE_GLOW). No
-## halo cards: with the bloom they ran the two eyes together into one ball.
+## A glowing RING in each eye socket (2026-10-15; full discs before), on the eye
+## markers the build puts on the head bone, facing out of the face, in the
+## crystal's colour (they flare with it, at EYE_GLOW). No halo cards: with the
+## bloom they ran the two eyes together into one ball. Sized in world metres:
+## the markers carry the rig's own scale.
+const EYE_RING_OUTER := 0.062
+const EYE_RING_INNER := 0.04
+
+
 func _attach_eyes() -> void:
 	_eye_mat = _material.duplicate() as StandardMaterial3D
 	_eye_mat.emission_energy_multiplier = base_glow * EYE_GLOW
@@ -267,12 +277,16 @@ func _attach_eyes() -> void:
 		if at == null:
 			continue
 		var lens := MeshInstance3D.new()
-		var s := SphereMesh.new()
-		s.radius = 0.075
-		s.height = 0.15
-		s.radial_segments = 12
-		s.rings = 6
-		lens.mesh = s
+		var unit: float = maxf(at.global_basis.get_scale().x, 0.001)
+		var ring := TorusMesh.new()
+		ring.outer_radius = EYE_RING_OUTER / unit
+		ring.inner_radius = EYE_RING_INNER / unit
+		ring.rings = 24
+		ring.ring_segments = 8
+		lens.mesh = ring
+		# A torus lies flat about its Y; stood up to face along the face's +Z
+		# (the markers are not turned: the model faces +Z).
+		lens.rotation.x = PI * 0.5
 		lens.material_override = _eye_mat
 		lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		at.add_child(lens)
@@ -295,7 +309,7 @@ func _setup_clips() -> void:
 func _play_clip(clip: StringName, rate: float, blend := 0.2, restart := false) -> void:
 	if anim == null or not anim.has_animation(clip):
 		return
-	if _clip == clip and not restart:
+	if _clip == clip and not restart and anim.is_playing():
 		anim.speed_scale = rate
 		return
 	_clip = clip
@@ -436,7 +450,32 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 			if now >= _phase_until or (_lost_line_at >= 0.0 and now - _lost_line_at > 0.7):
 				_vent(now)
 			return true
-	# Up close it clubs; the base chase steps in and swings.
+	_update_role(now, player, distance)
+	match _role:
+		Role.MELEE:
+			# The shield: in close and swipe; the beam is someone else's.
+			if gap <= normal_range + 0.4:
+				return false
+			_walk_to(delta, now, player.global_position, move_speed)
+			_face_velocity(flat)
+			return true
+		Role.BEAM:
+			# Never the shield while a fellow swipes: hold the range, and back off
+			# a player who comes too close rather than swing at them.
+			if now >= _beam_ready and _clear and distance <= BEAM_RANGE and not _other_beaming(player):
+				_start_charge(delta, player, flat)
+				return true
+			if distance < BEAM_BACK_OFF:
+				_walk_to(delta, now, global_position - flat.normalized() * 4.0, move_speed * 0.8)
+				_face(flat)
+			elif distance > KEEP_FAR or not _clear:
+				_walk_to(delta, now, player.global_position, move_speed)
+				_face_velocity(flat)
+			else:
+				_hold(delta)
+				_face(flat)
+			return true
+	# Alone, it does both. Up close it swipes; the base chase steps in and swings.
 	if gap <= normal_range + 0.4:
 		return false
 	if now >= _beam_ready and _clear and distance <= BEAM_RANGE:
@@ -456,6 +495,79 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		_hold(delta)
 		_face(flat)
 	return true
+
+
+func _start_charge(delta: float, player: Node3D, flat: Vector3) -> void:
+	_beam = Beam.CHARGE
+	_phase_until = _now() + CHARGE_TIME
+	_aim_dir = _target_dir(player)
+	_hold(delta)
+	_face(flat)
+
+
+# --- Taking turns (2026-10-15) --------------------------------------------------------
+##
+## Two or more enforcers on the same player do not make the same move: the
+## nearest takes the SHIELD (walks in and swipes, never beams), the rest take the
+## BEAM (hold their range and beam, never swipe -- they back away from a player
+## who closes in), and only one beam is charged or fired at a time. Alone, an
+## enforcer does both. Worked out every ROLE_EVERY; the one holding the shield
+## keeps it mid-swipe, and loses it only to one ROLE_MARGIN nearer.
+enum Role { BOTH, MELEE, BEAM }
+const ROLE_EVERY := 0.25
+## How far from the player another enforcer can be and still count as a partner.
+const ROLE_RANGE := 30.0
+const ROLE_MARGIN := 2.0
+## A beam-holder backs off a player closer than this.
+const BEAM_BACK_OFF := 4.0
+var _role := Role.BOTH
+var _role_at := 0.0
+
+
+func _update_role(now: float, player: Node3D, distance: float) -> void:
+	if now < _role_at:
+		return
+	_role_at = now + ROLE_EVERY
+	var partners := 0
+	var nearer := false
+	var melee_held := false
+	for e in get_tree().get_nodes_in_group(&"enforcers"):
+		if e == self or not is_instance_valid(e) or e.get("_dying") == true or e.get("engaged") != true:
+			continue
+		var d := (e as Node3D).global_position.distance_to(player.global_position)
+		if d > ROLE_RANGE:
+			continue
+		partners += 1
+		# Someone already on the shield -- and anyone mid-swipe, however far --
+		# keeps this one on the beam.
+		if e.get("_role") == Role.MELEE and (d < distance + ROLE_MARGIN or e.call("_swiping")):
+			melee_held = true
+		if d < distance - (ROLE_MARGIN if _role == Role.MELEE else 0.0):
+			nearer = true
+	if partners == 0:
+		_role = Role.BOTH
+	elif _role == Role.MELEE and (_swiping() or not nearer):
+		pass
+	elif melee_held or nearer:
+		_role = Role.BEAM
+	else:
+		_role = Role.MELEE
+
+
+func _swiping() -> bool:
+	return state == State.WINDUP or state == State.ATTACK or state == State.RECOVER
+
+
+## Another enforcer charging or firing at this player.
+func _other_beaming(player: Node3D) -> bool:
+	for e in get_tree().get_nodes_in_group(&"enforcers"):
+		if e == self or not is_instance_valid(e) or e.get("_dying") == true:
+			continue
+		var b = e.get("_beam")
+		if (b == Beam.CHARGE or b == Beam.FIRE) \
+				and (e as Node3D).global_position.distance_to(player.global_position) <= ROLE_RANGE:
+			return true
+	return false
 
 
 ## Along the navmesh toward `goal`, at `speed`.
@@ -634,15 +746,15 @@ func _animate(delta: float, now: float) -> void:
 	var entered := _state_fresh()
 	match _beam:
 		Beam.CHARGE:
-			# Up to the aim exactly as the charge ends.
-			_play_clip(ANIM_BEAM_CLIP, BEAM_AIMED / CHARGE_TIME, 0.12, _clip != ANIM_BEAM_CLIP)
+			# The whole clip, settling on the shield arm as the charge ends.
+			_play_clip(ANIM_BEAM_CLIP, _beam_set_at() / CHARGE_TIME, 0.12, _clip != ANIM_BEAM_CLIP)
+			_freeze_at_set()
 		Beam.FIRE:
-			# Held on the aim.
+			# Held on the settled pose.
 			if _clip != ANIM_BEAM_CLIP:
 				_play_clip(ANIM_BEAM_CLIP, 0.0, 0.1, true)
-				anim.seek(BEAM_AIMED, true)
-			if anim != null and anim.current_animation_position >= BEAM_AIMED:
-				anim.speed_scale = 0.0
+				anim.seek(_beam_set_at(), true)
+			_freeze_at_set()
 		_:
 			if state == State.WINDUP or state == State.ATTACK or state == State.RECOVER:
 				# The shield crosses its front as the wind-up ends.
@@ -669,10 +781,10 @@ func _animate(delta: float, now: float) -> void:
 		match _beam:
 			Beam.CHARGE:
 				var t := 1.0 - clampf((_phase_until - now) / CHARGE_TIME, 0.0, 1.0)
-				e = lerpf(base_glow, 12.0, t) * (1.0 + 0.25 * sin(now * 40.0))
+				e = lerpf(base_glow, 6.0, t) * (1.0 + 0.25 * sin(now * 40.0))
 				col = CRYSTAL.lerp(HOT, t)
 			Beam.FIRE:
-				e = 10.0 + 2.0 * sin(now * 53.0)
+				e = 5.0 + 1.0 * sin(now * 53.0)
 				col = HOT
 			Beam.VENT:
 				e = base_glow * 0.5
@@ -689,6 +801,19 @@ func _animate(delta: float, now: float) -> void:
 			_eye_mat.albedo_color = col
 			_eye_mat.emission = col
 			_eye_mat.emission_energy_multiplier = e * EYE_GLOW
+
+
+## Where BEAM_BAKED settles: its end, less BEAM_SET_EARLY.
+func _beam_set_at() -> float:
+	if anim == null or not anim.has_animation(ANIM_BEAM_CLIP):
+		return 0.7
+	return anim.get_animation(ANIM_BEAM_CLIP).length - BEAM_SET_EARLY
+
+
+func _freeze_at_set() -> void:
+	if anim != null and anim.current_animation == ANIM_BEAM_CLIP \
+			and anim.current_animation_position >= _beam_set_at():
+		anim.speed_scale = 0.0
 
 
 var _last_state := -1
@@ -770,7 +895,7 @@ func _die() -> void:
 	if _material != null:
 		var t := create_tween()
 		for k in 5:
-			t.tween_property(_material, "emission_energy_multiplier", 10.0 if k % 2 == 0 else 0.4, 0.07)
+			t.tween_property(_material, "emission_energy_multiplier", 5.0 if k % 2 == 0 else 0.3, 0.07)
 		t.tween_property(_material, "emission_energy_multiplier", 0.0, 0.5)
 	if _eye_mat != null:
 		create_tween().tween_property(_eye_mat, "emission_energy_multiplier", 0.0, 0.6)
