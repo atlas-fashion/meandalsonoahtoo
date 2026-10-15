@@ -45,7 +45,7 @@ signal detonated
 
 @export_group("Explosion")
 ## Stuck on the face this long before it goes off.
-@export var face_fuse := 1.8
+@export var face_fuse := 1.0
 @export var explosion_damage := 50.0
 ## Blinks per second at the start of the fuse and at the very end.
 @export var blink_rate_start := 3.0
@@ -121,6 +121,8 @@ var _seen_at := Vector3.ZERO
 var _seen_time := -100.0
 var _sees := false
 var _next_look := 0.0
+## Set by the player's `guarded` signal while the explosion is being dealt.
+var _parried := false
 ## Shattered pieces in flight: [node, velocity, rotation, spin axis, spin rate].
 var _shards: Array = []
 var _shard_time := 0.0
@@ -234,6 +236,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player") as Node3D
+		if _player != null and _player.has_signal("guarded") and not _player.is_connected("guarded", _on_player_guarded):
+			_player.connect("guarded", _on_player_guarded)
 	var player := _player
 	if player == null:
 		return
@@ -366,18 +370,35 @@ func _tick_fuse(delta: float) -> void:
 		_detonate(player)
 
 
-## Goes off in the player's face: a blow through the guard, then it shatters in
-## a fireball. Parried, the guard takes all of it.
+## Goes off in the player's face: a blow through the guard. Parried, the guard
+## takes all of it and the crier is blown back off the face in pieces -- no
+## fireball, so a parry reads as a parry (with the purple flash dead centre:
+## `guard_flash_centre`). Otherwise it shatters in a fireball.
 func _detonate(player: Node3D) -> void:
 	var blow := (_eye(player) - global_position).normalized()
 	_dying = true
 	fusing = false
+	_parried = false
 	if player.has_method("take_damage"):
 		player.take_damage(explosion_damage, blow, self)
 	detonated.emit()
-	_shatter(-blow, true)
-	_play_blast()
+	if _parried:
+		_shatter(-blow, false)
+	else:
+		_shatter(-blow, true)
+		_play_blast()
 	died.emit()
+
+
+## The player's guard flash goes in the middle of the view while this is on
+## the face (player._on_guarded).
+func guard_flash_centre() -> bool:
+	return _state == FACE
+
+
+func _on_player_guarded(parried: bool, attacker: Node3D) -> void:
+	if attacker == self and parried:
+		_parried = true
 
 
 ## Killed, or nothing to go off on: it shatters, with no explosion.

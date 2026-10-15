@@ -6,8 +6,9 @@ extends Control
 ##   weapons  "weapon_wheel" (C / right stick click): the four weapon-wheel slots
 ##            (inventory 0-3). Released on one, it is taken in hand.
 ##   quick    "quick_wheel" (X): the four quick-item slots (inventory 4-7).
-##            Released on one, it is used (a potion drunk). On a controller the
-##            d-pad uses them directly instead (player.gd, "quick_1".."quick_4").
+##            Released on one, it is used (a potion drunk). On a controller a
+##            d-pad direction holds it up on that slot until it is let go, which
+##            uses it; another direction moves the choice; B cancels.
 ##
 ## Directions are fixed: up 1, right 2, down 3, left 4. The mouse's travel while
 ## the wheel is up is gathered into `_aim` (and swallowed, so the view does not
@@ -36,6 +37,8 @@ var _first := 0
 var _open := false
 var _aim := Vector2.ZERO
 var _choice := -1
+## Held up by a d-pad direction (its "quick_N" action), not the wheel key.
+var _held := &""
 var _font: Font
 
 
@@ -56,6 +59,14 @@ func is_open() -> bool:
 	return _open
 
 
+## Which quick slot a d-pad press is for ("quick_1".."quick_4"), or -1.
+func _dpad_slot(event: InputEvent) -> int:
+	for n in Inventory.QUICK:
+		if event.is_action_pressed(&"quick_%d" % (n + 1)) and not event.is_echo():
+			return n
+	return -1
+
+
 func _can_open() -> bool:
 	return player != null and not player.get("ui_open") and not player.get("in_cutscene") \
 		and player.get("_dead") != true and not player.get("wheel_open") \
@@ -68,6 +79,39 @@ func _input(event: InputEvent) -> void:
 	if not _open:
 		if event.is_action_pressed(_action) and not event.is_echo() and _can_open():
 			_open_wheel()
+			get_viewport().set_input_as_handled()
+			return
+		# The d-pad (2026-10-14): a direction opens the quick wheel on that slot
+		# and holds it up until that button is let go, which uses it.
+		if kind == &"quick":
+			var n := _dpad_slot(event)
+			if n >= 0 and _can_open():
+				_open_wheel()
+				_held = &"quick_%d" % (n + 1)
+				_choice = n
+				queue_redraw()
+				get_viewport().set_input_as_handled()
+		return
+	if _held != &"":
+		# Another direction while one is held moves the choice there.
+		var n := _dpad_slot(event)
+		if n >= 0:
+			_held = &"quick_%d" % (n + 1)
+			_choice = n
+			queue_redraw()
+			get_viewport().set_input_as_handled()
+			return
+		if event.is_action_released(_held):
+			_close(true)
+			get_viewport().set_input_as_handled()
+			return
+		# B before the release: put it down, use nothing.
+		var pad := event as InputEventJoypadButton
+		if pad != null and pad.pressed and pad.button_index == JOY_BUTTON_B:
+			_close(false)
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventJoypadButton or event is InputEventMouseButton:
 			get_viewport().set_input_as_handled()
 		return
 	if event.is_action_released(_action):
@@ -97,6 +141,7 @@ func _close(apply: bool) -> void:
 	if not _open:
 		return
 	_open = false
+	_held = &""
 	visible = false
 	player.set("wheel_open", false)
 	if not apply or _choice < 0:
@@ -119,7 +164,7 @@ func _process(_delta: float) -> void:
 		_close(false)
 		return
 	# The key let go without the release reaching us (focus lost): the same.
-	if not Input.is_action_pressed(_action):
+	if not Input.is_action_pressed(_held if _held != &"" else _action):
 		_close(true)
 		return
 	var stick := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")

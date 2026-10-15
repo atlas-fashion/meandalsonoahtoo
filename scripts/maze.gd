@@ -1525,7 +1525,7 @@ func _spawn_stalker() -> void:
 	if not stalker_enabled or not modules or _module_level == null:
 		return
 	var player := get_tree().get_first_node_in_group("player") as Node3D
-	var tiles_open := _spawn_candidates()
+	var tiles_open := _spawn_candidates(true)
 	if tiles_open.is_empty():
 		return
 	var spots: Array[Vector3] = []
@@ -3991,6 +3991,7 @@ func _populate() -> void:
 	_mimic_committed = false
 	for room in _gates.size():
 		seal_room(room, false)
+	_note_spawn_eye()
 	# Reseed so a reset reproduces the same population rather than drifting.
 	_rng.seed = _active_seed
 	_spawn_boss()
@@ -4291,7 +4292,7 @@ func _spawn_convoys() -> void:
 		tries += 1
 		var cell: Vector2i = loops[_rng.randi_range(0, loops.size() - 1)]
 		var at: Vector3 = _module_level.to_world(cell)
-		if at.distance_to(from) < convoy_start_clear:
+		if at.distance_to(from) < convoy_start_clear or _seen_by_player(at):
 			continue
 		var crowded := false
 		for s in starts:
@@ -4468,7 +4469,8 @@ func _room_of(tile: Vector2i) -> int:
 
 
 ## Open tiles that are neither in the chamber nor near the player's start.
-func _spawn_candidates() -> Array[Vector2i]:
+## `in_sight_too`: skip the sight test (the Remnant starts 100 m off, past it).
+func _spawn_candidates(in_sight_too := false) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	for z in tiles:
 		for x in tiles:
@@ -4500,6 +4502,9 @@ func _spawn_candidates() -> Array[Vector2i]:
 					break
 			if on_chest:
 				continue
+			# Not where the player can see it appear.
+			if not in_sight_too and _seen_by_player(tile_to_world(tile)):
+				continue
 			out.append(tile)
 	return out
 
@@ -4520,3 +4525,46 @@ func _touches_room(tile: Vector2i) -> bool:
 			if is_in_treasure_room(t) or is_in_morgue(t) or is_in_boss_room(t):
 				return true
 	return false
+
+
+## --- Nothing spawns in sight (2026-10-14) ----------------------------------------
+##
+## Every (re)population -- the first build, and a death -- skips spawn spots the
+## player can see from where they stand: a clear line on the sight layer (doors
+## and walls) from their eye to a body's height over the spot, within
+## SPAWN_SIGHT_RANGE. Fog hides anything further. The player is placed before
+## `_populate` runs, so on a respawn this is the anchor they rise at.
+const SPAWN_SIGHT_RANGE := 70.0
+const SPAWN_SIGHT_POINTS := [Vector3(0, 1.0, 0), Vector3(0, 2.4, 0), Vector3(1.3, 1.0, 1.3),
+	Vector3(-1.3, 1.0, 1.3), Vector3(1.3, 2.4, -1.3), Vector3(-1.3, 2.4, -1.3)]
+var _spawn_eye := Vector3.INF
+var _spawn_sight := PhysicsRayQueryParameters3D.new()
+
+
+func _seen_by_player(point: Vector3) -> bool:
+	if _spawn_eye == Vector3.INF:
+		return false
+	if point.distance_squared_to(_spawn_eye) > (SPAWN_SIGHT_RANGE + 2.0) * (SPAWN_SIGHT_RANGE + 2.0):
+		return false
+	# Where a pack's bodies can actually be: anywhere in the 1.3 m it is
+	# scattered over, from a skeleton's chest to a crier's hover (measured: two
+	# criers in sight from a tile whose centre at 1.2 m was hidden by a pier).
+	_spawn_sight.collision_mask = 2
+	for off: Vector3 in SPAWN_SIGHT_POINTS:
+		var at := point + off
+		if at.distance_squared_to(_spawn_eye) > SPAWN_SIGHT_RANGE * SPAWN_SIGHT_RANGE:
+			continue
+		_spawn_sight.from = _spawn_eye
+		_spawn_sight.to = at
+		if get_world_3d().direct_space_state.intersect_ray(_spawn_sight).is_empty():
+			return true
+	return false
+
+
+func _note_spawn_eye() -> void:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	_spawn_eye = Vector3.INF
+	if player == null:
+		return
+	_spawn_eye = player.global_position + Vector3(0.0, 1.6, 0.0)
+	_spawn_sight.exclude = [(player as CollisionObject3D).get_rid()] if player is CollisionObject3D else []

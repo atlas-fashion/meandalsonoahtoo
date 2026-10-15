@@ -118,9 +118,10 @@ func set_open(open: bool) -> void:
 	visible = open
 	_set_hovered(-1)
 	_drop_lift()
-	_left_stick = Vector2.ZERO
-	_stick_dir = Vector2.ZERO
 	player.ui_open = open
+	# The pad: the left stick moves a cursor (pad.gd) whose hover is the
+	# highlight; A still lifts and drops, so the cursor makes no clicks.
+	Pad.want_cursor(self, open, false)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
 	if open:
 		_refresh()
@@ -136,13 +137,13 @@ func _process(_delta: float) -> void:
 	# closes this first, so it is never left open underneath.
 	if get_tree().paused or player == null or player.in_cutscene or player.get("_dead"):
 		visible = false
+		Pad.want_cursor(self, false)
 		_set_hovered(-1)
 		_drop_lift()
 		if player != null:
 			player.ui_open = false
 		return
 	_update_bars()
-	_pad_stick(_delta)
 
 
 func _input(event: InputEvent) -> void:
@@ -193,16 +194,10 @@ func _input(event: InputEvent) -> void:
 				_pad_step(step[pad.button_index])
 				get_viewport().set_input_as_handled()
 				return
-	# The stick is read in _process (it repeats while held); its motion goes to
+	# The left stick drives the pad cursor (pad.gd reads it); its motion goes to
 	# nothing else while the screen is up.
-	var stick := event as InputEventJoypadMotion
-	if stick != null:
-		if stick.axis == JOY_AXIS_LEFT_X:
-			_left_stick.x = stick.axis_value
-		elif stick.axis == JOY_AXIS_LEFT_Y:
-			_left_stick.y = stick.axis_value
-		get_viewport().set_input_as_handled()
-		return
+	# The left stick is the pad cursor's (pad.gd reads its motion events -- so
+	# they are not marked handled here).
 	if event.is_action_pressed("interact"):
 		get_viewport().set_input_as_handled()
 		return
@@ -232,11 +227,6 @@ func _refresh() -> void:
 
 ## The slot whose stack the pad has lifted (A), or -1.
 var _lifted := -1
-var _stick_wait := 0.0
-var _stick_dir := Vector2.ZERO
-var _left_stick := Vector2.ZERO
-const STICK_FIRST := 0.32
-const STICK_REPEAT := 0.13
 
 
 ## Moves the highlight to the nearest slot whose centre lies in `dir` from the
@@ -268,28 +258,6 @@ func _pad_step(dir: Vector2) -> void:
 func _slot_centre(i: int) -> Vector2:
 	var r := _slots[i].get_global_rect()
 	return r.position + r.size * 0.5
-
-
-## The left stick: one step on the push, then repeating while it is held.
-func _pad_stick(delta: float) -> void:
-	# The stick itself (from its motion events), not the move actions: those
-	# carry W/A/S/D too.
-	var v := _left_stick
-	var dir := Vector2.ZERO
-	if v.length() > 0.55:
-		dir = Vector2(signf(v.x), 0.0) if absf(v.x) > absf(v.y) else Vector2(0.0, signf(v.y))
-	if dir == Vector2.ZERO:
-		_stick_dir = Vector2.ZERO
-		return
-	if dir != _stick_dir:
-		_stick_dir = dir
-		_stick_wait = STICK_FIRST
-		_pad_step(dir)
-		return
-	_stick_wait -= delta
-	if _stick_wait <= 0.0:
-		_stick_wait = STICK_REPEAT
-		_pad_step(dir)
 
 
 ## A: lift the highlighted stack, or drop the lifted one on the highlighted slot.
@@ -617,7 +585,8 @@ func _build() -> void:
 		_slots[i] = slot
 		slot.mouse_entered.connect(func() -> void: _set_hovered(i))
 		slot.mouse_exited.connect(func() -> void:
-			if _hovered == i:
+			# The pad cursor between slots keeps the last one lit, for A.
+			if _hovered == i and not Pad.using_pad:
 				_set_hovered(-1))
 
 	panels.add_child(_build_items())

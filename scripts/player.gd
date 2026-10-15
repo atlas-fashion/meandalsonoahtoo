@@ -1546,13 +1546,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_end_block()
 	# Escape is the pause menu's now -- it takes the event before this runs and
 	# frees the mouse itself.
-	else:
-		# The d-pad: each direction uses that quick item at once, without the
-		# wheel (R holds the wheel up for the mouse -- radial_menu.gd).
-		for n in Inventory.QUICK:
-			if event.is_action_pressed("quick_%d" % (n + 1)):
-				use_consumable(Inventory.QUICK_FIRST + n)
-				return
+	# The d-pad holds the quick wheel up (radial_menu.gd) and uses the item
+	# when it is let go.
 
 
 func _physics_process(delta: float) -> void:
@@ -2081,11 +2076,18 @@ func _on_guarded(parry: bool, blow: Vector3, attacker: Node3D, blow_damage := 0.
 	_shake = maxf(_shake, 0.32 if parry else 0.14)
 	var eye := camera.global_position
 	var toward := -blow
-	if attacker != null and is_instance_valid(attacker):
-		toward = (attacker.global_position + Vector3(0.0, 1.3, 0.0)) - eye
-	if toward.length_squared() < 0.0001:
-		toward = -camera.global_basis.z
-	var at := eye + toward.normalized() * 1.15 + Vector3(0.0, -0.12, 0.0)
+	var at := Vector3.ZERO
+	if attacker != null and is_instance_valid(attacker) and attacker.has_method("guard_flash_centre") \
+			and attacker.guard_flash_centre():
+		# Something on the face (a crier): the flash goes dead in the middle of
+		# the view, where the player is looking, not up over its head.
+		at = eye - camera.global_basis.z * 1.15
+	else:
+		if attacker != null and is_instance_valid(attacker):
+			toward = (attacker.global_position + Vector3(0.0, 1.3, 0.0)) - eye
+		if toward.length_squared() < 0.0001:
+			toward = -camera.global_basis.z
+		at = eye + toward.normalized() * 1.15 + Vector3(0.0, -0.12, 0.0)
 	if parry:
 		if attacker != null and is_instance_valid(attacker) and attacker.has_method("apply_knockback"):
 			var away := attacker.global_position - global_position

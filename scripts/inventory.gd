@@ -45,7 +45,7 @@ const ITEMS := {
 		"kind": "Weapon",
 		"desc": "Seven feet of ash with a leaf of iron at the end. Quick to jab, braced for a charge, and thrown, it bursts like a firepot and comes back to the hand that threw it.",
 		"quote": "It always finds its way home."},
-	&"health_potion": {"name": "Health Potion", "stack": 20, "color": Color(0.24, 0.92, 0.32),
+	&"health_potion": {"name": "Health Potion", "stack": 20, "single": true, "color": Color(0.24, 0.92, 0.32),
 		"kind": "Consumable",
 		"desc": "A flask of something green and faintly glowing. Bitter, warm, and it closes wounds.",
 		"quote": "Bitter as the grave, warm as a hearth."},
@@ -225,6 +225,13 @@ static func stack_size(id: StringName) -> int:
 	return int(ITEMS.get(id, {}).get("stack", 1))
 
 
+## Carried in ONE stack only (ITEMS "single"): at most `stack_size` of it in
+## all -- the health potions, 20 (2026-10-14). Everything else stacks as often
+## as it likes.
+static func is_single(id: StringName) -> bool:
+	return bool(ITEMS.get(id, {}).get("single", false))
+
+
 static func item_color(id: StringName) -> Color:
 	return ITEMS.get(id, {}).get("color", Color.WHITE)
 
@@ -261,6 +268,15 @@ func find(id: StringName) -> int:
 ## empty slot's worth.
 func room_for(id: StringName) -> int:
 	var cap := stack_size(id)
+	if is_single(id):
+		# Its one stack's room, or one new stack's if none is carried.
+		var at := find(id)
+		if at >= 0:
+			return maxi(cap - count(id), 0)
+		for i in SIZE:
+			if _free_for(i, id):
+				return cap
+		return 0
 	var room := 0
 	for i in SIZE:
 		if _free_for(i, id):
@@ -286,6 +302,11 @@ func add(id: StringName, amount: int) -> int:
 			var put := mini(room, left)
 			slots[i]["count"] = count_at(i) + put
 			left -= put
+	# One stack only, for a single item: nothing more once it is carried.
+	if is_single(id) and find(id) >= 0:
+		if left != amount:
+			_changed()
+		return amount - left
 	# Its own quick slot first (kept for it while empty), then the rest.
 	var order := _home_order(id)
 	for i in range(HOTBAR - 1, QUICK_FIRST - 1, -1):
@@ -299,6 +320,8 @@ func add(id: StringName, amount: int) -> int:
 			var put := mini(cap, left)
 			slots[i] = {"id": id, "count": put}
 			left -= put
+			if is_single(id):
+				break
 	if left != amount:
 		_changed()
 	return amount - left
@@ -367,6 +390,8 @@ func move(from: int, to: int) -> void:
 ## stack of the same kind. Does nothing if `to` holds something else.
 func split(from: int, to: int) -> void:
 	if from == to or count_at(from) < 2 or to < 0 or to >= SIZE:
+		return
+	if is_single(id_at(from)) and is_empty(to):
 		return
 	if not is_empty(to) and id_at(to) != id_at(from):
 		return

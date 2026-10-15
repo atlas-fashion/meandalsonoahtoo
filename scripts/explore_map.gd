@@ -382,6 +382,9 @@ func _draw_mini_marks() -> void:
 	var c := Vector2(MINIMAP_SIZE, MINIMAP_SIZE) * 0.5
 	var me := _continuous_px(_player.global_position)
 	for pin: Dictionary in _pins:
+		# Pins are for the full map only; marks show here too.
+		if pin.get("quick", false):
+			continue
 		var at := c + ((_pin_px(pin) - me) * k).rotated(-_mini_spin)
 		if Rect2(Vector2.ZERO, Vector2(MINIMAP_SIZE, MINIMAP_SIZE)).grow(-4.0).has_point(at):
 			_draw_mark(_mini_marks, at, pin["color"], int(pin.get("shape", 0)), 0.7)
@@ -454,7 +457,8 @@ func _on_currency_changed(total: int, _gained: int) -> void:
 ##
 ## A cursor over the map rather than a fixed picture: the scroll wheel (or the
 ## right stick up / down on a pad) zooms in and out about the cursor, dragging
-## pans, and a click marks the map -- a pin, a cross or a ring, in a colour the
+## pans; a LEFT click drops a plain pin (full map only, no note; again to lift
+## it), a RIGHT click marks the map -- a pin, a cross or a ring, in a colour the
 ## player picks, with a short note (`_open_editor`). A click on a mark opens it
 ## again to change or delete. Marks are kept in world space (`_pins`), saved
 ## with the game (maze.gd), not forgotten by a death, and drawn on the minimap
@@ -492,6 +496,7 @@ var _drag_from := Vector2.ZERO
 var _dragging := false
 var _pressed := false
 var _hover_pin := -1
+var _press_button := 0
 var _took_ui := false
 
 var _editor: Control = null
@@ -576,7 +581,7 @@ func _build_full_map(root: Control) -> void:
 	var hints := Label.new()
 	hints.name = "Hints"
 	hints.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hints.text = "Mouse / left stick: move the map      Scroll / right stick: zoom      Click / A: mark here (or open the mark)      ` / B: close"
+	hints.text = "Mouse / left stick: move the map      Scroll / right stick: zoom      Left click / A: pin (again to remove)      Right click / X: mark with a note      ` / B: close"
 	hints.add_theme_font_size_override("font_size", 14)
 	hints.add_theme_color_override("font_color", Color(0.82, 0.8, 0.76))
 	hints.add_theme_color_override("font_outline_color", Color(0, 0, 0))
@@ -673,12 +678,17 @@ func _map_input(event: InputEvent) -> void:
 			_zoom_at(ZOOM_STEP if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / ZOOM_STEP,
 				_full_panel.size * 0.5)
 		elif button.pressed and button.button_index == MOUSE_BUTTON_LEFT:
+			_quick_pin(_full_panel.size * 0.5)
+		elif button.pressed and button.button_index == MOUSE_BUTTON_RIGHT:
 			_click_map(_full_panel.size * 0.5)
 		get_viewport().set_input_as_handled()
 		return
 	var pad := event as InputEventJoypadButton
 	if pad != null and pad.pressed:
 		if pad.button_index == JOY_BUTTON_A:
+			_quick_pin(_full_panel.size * 0.5)
+			get_viewport().set_input_as_handled()
+		elif pad.button_index == JOY_BUTTON_X:
 			_click_map(_full_panel.size * 0.5)
 			get_viewport().set_input_as_handled()
 		elif pad.button_index in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT]:
@@ -706,12 +716,15 @@ func _on_map_input(event: InputEvent) -> void:
 				or button.button_index == MOUSE_BUTTON_MIDDLE:
 			if button.pressed:
 				_pressed = true
-				_dragging = button.button_index != MOUSE_BUTTON_LEFT
+				_dragging = button.button_index == MOUSE_BUTTON_MIDDLE
+				_press_button = button.button_index
 				_drag_from = button.position
 			elif _pressed:
 				_pressed = false
-				# A left click that never became a drag marks the map.
-				if button.button_index == MOUSE_BUTTON_LEFT and not _dragging:
+				# A click that never became a drag: left pins, right marks.
+				if not _dragging and _press_button == MOUSE_BUTTON_LEFT:
+					_quick_pin(button.position)
+				elif not _dragging and _press_button == MOUSE_BUTTON_RIGHT:
 					_click_map(button.position)
 				_dragging = false
 			_full_panel.accept_event()
@@ -757,6 +770,32 @@ func _click_map(p: Vector2) -> void:
 	var gy := px.y / float(PPC) - float(MARGIN_CELLS) - 0.5
 	var world := Vector2(_built.origin.x + gx * _built.cell_size, _built.origin.z + gy * _built.cell_size)
 	_open_editor(-1, world)
+
+
+## Left click / A (2026-10-14): a PIN at the spot -- no note asked for, drawn
+## on the full map only, not the minimap. On a pin already, it comes off again.
+const QUICK_PIN_COLOUR := Color(0.96, 0.93, 0.86)
+
+func _quick_pin(p: Vector2) -> void:
+	var hit := _pin_at(p)
+	if hit >= 0:
+		if _pins[hit].get("quick", false):
+			_pins.remove_at(hit)
+			_hover_pin = -1
+			_pin_layer.queue_redraw()
+		return
+	var world := _panel_to_world(p)
+	_pins.append({"x": world.x, "z": world.y, "note": "", "color": QUICK_PIN_COLOUR, "shape": 0, "quick": true})
+	_hover_pin = _pin_at(p)
+	_pin_layer.queue_redraw()
+
+
+## Panel point -> world x, z (the inverse of `_continuous_px`).
+func _panel_to_world(p: Vector2) -> Vector2:
+	var px := _panel_to_px(p)
+	var gx := px.x / float(PPC) - float(MARGIN_CELLS) - 0.5
+	var gy := px.y / float(PPC) - float(MARGIN_CELLS) - 0.5
+	return Vector2(_built.origin.x + gx * _built.cell_size, _built.origin.z + gy * _built.cell_size)
 
 
 ## The player's arrow and every mark, at the current zoom; a hovered mark shows
@@ -982,7 +1021,7 @@ func editor_open() -> bool:
 func pins_state() -> Array:
 	var out: Array = []
 	for pin: Dictionary in _pins:
-		out.append({"x": pin["x"], "z": pin["z"], "note": pin["note"],
+		out.append({"x": pin["x"], "z": pin["z"], "note": pin["note"], "quick": pin.get("quick", false),
 			"color": (pin["color"] as Color).to_html(false), "shape": pin.get("shape", 0)})
 	return out
 
@@ -993,7 +1032,7 @@ func restore_pins(data: Array) -> void:
 		if d is Dictionary:
 			_pins.append({"x": float(d.get("x", 0.0)), "z": float(d.get("z", 0.0)),
 				"note": String(d.get("note", "")), "color": Color.html(String(d.get("color", "ee3a2e"))),
-				"shape": int(d.get("shape", 0))})
+				"shape": int(d.get("shape", 0)), "quick": bool(d.get("quick", false))})
 	if _pin_layer != null:
 		_pin_layer.queue_redraw()
 	if _mini_marks != null:

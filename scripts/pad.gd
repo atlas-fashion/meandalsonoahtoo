@@ -8,7 +8,7 @@ extends Node
 ##
 ## THE CURSOR. Screens that are worked with a mouse (the inventory, the full map)
 ## ask for it with `want_cursor(self, true)`. While one does and a pad is in use,
-## an arrow is drawn and the left stick (or d-pad) moves it; it is a mouse as far
+## an arrow is drawn and the left stick moves it; it is a mouse as far
 ## as the game is concerned -- every move is sent as a real InputEventMouseMotion
 ## and A as the left button (press and release; held, it drags), so hovering,
 ## clicking and drag-and-drop all work without the screens knowing. The OS
@@ -24,6 +24,7 @@ extends Node
 signal device_changed(pad: bool)
 
 const CURSOR_SPEED := 820.0
+const STICK_DEAD := 0.18
 ## Synthetic mouse events carry this device id, so they are not mistaken for
 ## the real mouse (which would switch `using_pad` off).
 const SYNTH_DEVICE := 77
@@ -37,6 +38,9 @@ var _arrow: Control
 var _a_down := false
 var _pad_device := 0
 var _hid_mouse := false
+## The left stick, from its own motion events (Input.get_joy_axis only sees
+## what a joypad driver reports, not parsed events).
+var _stick := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -55,6 +59,12 @@ func _ready() -> void:
 # --- Which device -----------------------------------------------------------------
 
 func _input(event: InputEvent) -> void:
+	var motion := event as InputEventJoypadMotion
+	if motion != null:
+		if motion.axis == JOY_AXIS_LEFT_X:
+			_stick.x = motion.axis_value
+		elif motion.axis == JOY_AXIS_LEFT_Y:
+			_stick.y = motion.axis_value
 	var pad := using_pad
 	if event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed:
 		pad = true
@@ -74,13 +84,15 @@ func _input(event: InputEvent) -> void:
 
 # --- The cursor --------------------------------------------------------------------
 
-## A screen that wants the pad cursor while it is open.
-func want_cursor(owner: Object, on: bool) -> void:
+## A screen that wants the pad cursor while it is open. `click`: whether A is
+## the left mouse button for it (the inventory works A itself, on the slot the
+## cursor highlights, so it asks for no clicks).
+func want_cursor(owner: Object, on: bool, click := true) -> void:
 	if on:
 		if _cursor_owners.is_empty():
 			# Start where the real pointer is, so nothing jumps.
 			cursor_pos = get_viewport().get_mouse_position()
-		_cursor_owners[owner] = true
+		_cursor_owners[owner] = click
 	else:
 		_cursor_owners.erase(owner)
 		if _cursor_owners.is_empty():
@@ -109,13 +121,19 @@ func _process(delta: float) -> void:
 	if Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 		_hid_mouse = true
-	var v := Input.get_vector(&"ui_left", &"ui_right", &"ui_up", &"ui_down")
+	# The LEFT STICK moves it (2026-10-14; it used to be the ui_* actions, which
+	# carry the d-pad -- the inventory steps its highlight on the d-pad).
+	var v := _stick
+	if v.length() < STICK_DEAD:
+		v = Vector2.ZERO
+	else:
+		v = v.limit_length(1.0)
 	if v != Vector2.ZERO:
 		var rect := get_viewport().get_visible_rect()
 		cursor_pos = (cursor_pos + v * v.length() * CURSOR_SPEED * delta).clamp(rect.position, rect.end - Vector2(2, 2))
 		_send_motion(v * v.length() * CURSOR_SPEED * delta)
-	# A is the left mouse button.
-	var a := Input.is_joy_button_pressed(_pad_device, JOY_BUTTON_A)
+	# A is the left mouse button -- for screens that asked for clicks.
+	var a := Input.is_joy_button_pressed(_pad_device, JOY_BUTTON_A) and _cursor_owners.values().has(true)
 	if a != _a_down:
 		_a_down = a
 		_send_button(a)
