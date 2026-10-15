@@ -431,7 +431,7 @@ func _update_blood(delta: float) -> void:
 	material.set_shader_parameter("aspect", size.x / maxf(size.y, 1.0))
 
 
-## --- A warden's beam on the player (warden.gd) -----------------------------------
+## --- An enforcer's beam on the player (enforcer.gd) -----------------------------------
 ##
 ## A gold glow round the edges of the view while a beam holds the player (and
 ## for its short linger), so the slow has a visible cause. Gameplay information:
@@ -446,9 +446,10 @@ func _update_beam_glow(delta: float) -> void:
 		return
 	if _beam_glow == null:
 		var g := Gradient.new()
-		g.set_color(0, Color(1.0, 0.75, 0.25, 0.0))
-		g.set_color(1, Color(1.0, 0.7, 0.2, 0.55))
-		g.add_point(0.55, Color(1.0, 0.75, 0.25, 0.0))
+		# The enforcer's crystal cyan (2026-10-15; gold before), as its beam.
+		g.set_color(0, Color(0.2, 0.85, 1.0, 0.0))
+		g.set_color(1, Color(0.1, 0.8, 1.0, 0.55))
+		g.add_point(0.55, Color(0.2, 0.85, 1.0, 0.0))
 		var tex := GradientTexture2D.new()
 		tex.gradient = g
 		tex.fill = GradientTexture2D.FILL_RADIAL

@@ -1164,7 +1164,7 @@ func _update_head(delta: float) -> void:
 	shake_offset += Vector3(tremble.x, tremble.y, 0.0)
 	shake_roll += tremble.z
 	# Getting up after a death, and a scene's crush into the floor.
-	var wake := _wake_view()
+	var wake := _wake_view() + _knock_view()
 	var crushed := _scene_crush * _scene_crush * (3.0 - 2.0 * _scene_crush)
 	effort.x += wake.z + 38.0 * crushed
 	effort.y += wake.y - 25.0 * crushed
@@ -1648,8 +1648,10 @@ func _physics_process(delta: float) -> void:
 		_release_phasing()
 
 	if down:
-		velocity.x = move_toward(velocity.x, 0.0, acceleration * 2.0 * delta)
-		velocity.z = move_toward(velocity.z, 0.0, acceleration * 2.0 * delta)
+		# Knocked down, the throw carries the body back along the floor.
+		var stop := KNOCK_FRICTION if is_knocked_down() else acceleration * 2.0
+		velocity.x = move_toward(velocity.x, 0.0, stop * delta)
+		velocity.z = move_toward(velocity.z, 0.0, stop * delta)
 	elif _ghosting:
 		# Full steering at ghost speed, a little off the floor.
 		var ghost_input := _move_input()
@@ -3750,7 +3752,7 @@ func drain_health(amount: float, floor_health := 0.0) -> float:
 	return taken
 
 
-## --- A warden bot's beam (warden.gd, 2026-10-09) ------------------------------------
+## --- An enforcer's beam (enforcer.gd; the warden bot's, 2026-10-09) ------------------------------------
 ##
 ## Not a blow: it is held on the player, so it is paid by the frame. `dps` health a
 ## second and slowed to `beam_slow` (lingering `BEAM_LINGER` after it moves off),
@@ -4154,6 +4156,7 @@ func _respawn() -> void:
 	_ghost_meter = 1.0
 	_ghost_locked = false
 	_slam_recover_until = 0.0
+	_knock_at = -1.0
 	_slam_crouch = 0.0
 	_shake = 0.0
 	_slamming = false
@@ -4227,6 +4230,61 @@ func _reset_inventory(first_time := false) -> void:
 	if first_time:
 		inventory.add(&"spear", 1)
 	inventory_changed.emit()
+
+
+## --- Knocked down (an enforcer's shield swipe, 2026-10-15) --------------------------
+##
+## Thrown back along `dir` and off their feet: the view falls to the floor
+## (flat on the back, looking up, rolled a little) over KNOCK_FALL while the
+## body slides back, then gets up over KNOCK_UP -- the half second the user
+## asked for. No control meanwhile: the slam recovery's lock
+## (`_slam_recover_until`) holds moving, jumping, swinging, blocking and ghost,
+## and the slide bleeds off at KNOCK_FRICTION rather than the recovery's stop.
+## Still hurtable on the floor. Not in a scene, not hidden, not dead.
+@export var knockdown_lift := 2.6
+const KNOCK_FALL := 0.32
+const KNOCK_UP := 0.5
+const KNOCK_FRICTION := 9.0
+var _knock_at := -1.0
+var _knock_side := 1.0
+
+
+func knock_down(dir: Vector3, push := 7.5) -> void:
+	if _dead or in_cutscene or is_hidden():
+		return
+	var away := Vector3(dir.x, 0.0, dir.z)
+	if away.length_squared() < 0.0001:
+		away = global_basis.z
+	away = away.normalized()
+	_knock_at = _now()
+	_knock_side = -1.0 if randf() < 0.5 else 1.0
+	_slamming = false
+	if _blocking:
+		_end_block()
+	velocity = away * push + Vector3(0.0, knockdown_lift, 0.0)
+	_slam_recover_until = maxf(_slam_recover_until, _knock_at + KNOCK_FALL + KNOCK_UP)
+	_shake = maxf(_shake, 0.5)
+
+
+func is_knocked_down() -> bool:
+	return _knock_at >= 0.0 and _now() - _knock_at < KNOCK_FALL + KNOCK_UP
+
+
+## The view while knocked down: (drop m, pitch deg, roll deg), as `_wake_view`.
+func _knock_view() -> Vector3:
+	if _knock_at < 0.0:
+		return Vector3.ZERO
+	var t := _now() - _knock_at
+	if t >= KNOCK_FALL + KNOCK_UP:
+		_knock_at = -1.0
+		return Vector3.ZERO
+	# On the back, eye a foot off the floor, looking up past whatever hit them.
+	var floored := Vector3(1.28, 34.0, 16.0 * _knock_side)
+	if t < KNOCK_FALL:
+		var k := t / KNOCK_FALL
+		return floored * (k * k)
+	var k := smoothstep(0.0, 1.0, (t - KNOCK_FALL) / KNOCK_UP)
+	return floored * (1.0 - k)
 
 
 ## Shoved by something in the world. Applied straight to velocity so the hit

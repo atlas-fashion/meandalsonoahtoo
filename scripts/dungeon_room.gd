@@ -7,7 +7,7 @@ extends Node3D
 ##
 ##   prison   THE PRISON BLOCK -- two rows of barred cells facing each other
 ##            across the court, a generator between them running on a red
-##            crystal, and warden bots (warden.gd) posted in front of the
+##            crystal, and enforcers (enforcer.gd) posted in front of the
 ##            cells. Step into the room and they turn on you. Once they are
 ##            all down the crystal can be taken (E): the generator dies, every
 ##            lock lets go, the cell doors swing open and the prisoners come
@@ -17,8 +17,8 @@ extends Node3D
 ##            back of the court, seamed with gold and red crystal, worked by
 ##            shackled prisoners with picks and by three electric drills
 ##            grinding into it, powered down brass cables from a generator that
-##            runs on the room's SHARD. Two warden bots oversee the work. Step
-##            in and the wardens turn on you and drive the miners at you, picks
+##            runs on the room's SHARD. Two enforcers oversee the work. Step
+##            in and the enforcers turn on you and drive the miners at you, picks
 ##            and all. With every one of them down, E takes the shard out of the
 ##            generator: the drills spin down and the shard is the player's.
 ##   vacant   A placeholder until the other rooms are designed: the court with
@@ -26,14 +26,14 @@ extends Node3D
 ##            a low dais.
 ##
 ## Not sealed: maze.gd still reads `sealed` (always false here), and the
-## Remnant asks `is_warding` (never). Deaths: wardens come back unless every
+## Remnant asks `is_warding` (never). Deaths: enforcers come back unless every
 ## one was destroyed; a cut generator stays cut, and prisoners who were let out
 ## and not yet killed are back in their open cells.
 
 const CHEST_SCENE := preload("res://scenes/chest.tscn")
 const MIMIC_SCENE := preload("res://scenes/mimic.tscn")
 const SKELETON_MODEL := preload("res://models/ossuary_skeleton_rigged.glb")
-const WARDEN_SCRIPT := preload("res://scripts/warden.gd")
+const ENFORCER_SCRIPT := preload("res://scripts/enforcer.gd")
 const EYES := preload("res://scripts/skeleton_eyes.gd")
 const BEAM_SHADER := preload("res://shaders/energy_beam.gdshader")
 ## The crystal's centre as a share of the Tripo generator's height: inside the
@@ -43,8 +43,8 @@ const GEN_CRYSTAL_AT := 0.9
 const FRIEZE_LEN := 6.7
 
 const TITLES := {
-	&"prison": ["THE PRISON BLOCK", "The wardens turn from the cells."],
-	&"mine": ["THE CRYSTAL MINE", "The wardens drive the miners at you."],
+	&"prison": ["THE PRISON BLOCK", "The enforcers turn from the cells."],
+	&"mine": ["THE CRYSTAL MINE", "The enforcers drive the miners at you."],
 	&"vacant": ["", ""],
 }
 
@@ -63,9 +63,9 @@ const DOOR_H := 2.35
 const BAR_R := 0.022
 ## How many cells (of the eight) hold a prisoner; one is the locker.
 const PRISONERS := 5
-## The wardens' posts in front of the cells: (x, z, which row they watch).
+## The enforcers' posts in front of the cells: (x, z, which row they watch).
 const POSTS := [Vector3(-3.5, -2.0, -1.0), Vector3(3.5, -2.0, -1.0), Vector3(0.0, 2.3, 1.0)]
-## How far inside the room's block the player is before the wardens notice.
+## How far inside the room's block the player is before the enforcers notice.
 const ALARM_IN := 1.8
 const PRISONER_SCALE := 0.94
 
@@ -80,7 +80,7 @@ var tint := 1.0
 ## maze.gd reads these: never sealed, the shard taken or not.
 var sealed := false
 var looted := false
-var wardens_down := false
+var enforcers_down := false
 var powered_off := false
 var prisoners_down := false
 
@@ -97,7 +97,7 @@ var _reward: Node3D
 ## {row, k, centre (local), door, door_body, prisoner (decor) or null,
 ##  locker: bool, alive: bool (its prisoner, once let out)}
 var _cells: Array[Dictionary] = []
-var _wardens: Array[Node] = []
+var _enforcers: Array[Node] = []
 var _freed: Array[Node] = []
 var _gen: Node3D
 var _crystal: Node3D
@@ -762,7 +762,7 @@ func _build_generator_parts() -> void:
 	var iron := _mat(&"iron")
 	var brass := _mat(&"brass")
 	_box(_gen, Vector3(2.4, 0.35, 2.4), Vector3(0.0, 0.175, 0.0), stone)
-	# Rusted plate, as the wardens are made of: the plain dark iron read as a
+	# Rusted plate, as the enforcers are made of: the plain dark iron read as a
 	# black box under the crystal's red light.
 	_box(_gen, Vector3(1.3, 1.0, 1.0), Vector3(0.0, 0.85, 0.0), _mat(&"rust"))
 	_box(_gen, Vector3(1.38, 0.08, 1.08), Vector3(0.0, 1.32, 0.0), brass)
@@ -872,7 +872,7 @@ const DRILLS_AT := [-0.62, 0.0, 0.62]
 const MINERS_AT := [-0.92, -0.31, 0.31, 0.92]
 ## Two more, breaking rock on the heap by the cart.
 const HEAP_MINERS := 2
-## Wardens overseeing, (x, z) in the court; they face the rock.
+## Enforcers overseeing, (x, z) in the court; they face the rock.
 const MINE_POSTS := [Vector2(-2.8, 0.2), Vector2(3.2, -1.2)]
 const BIT_LENGTH := 1.25
 const MINER_SCALE := 0.94
@@ -981,7 +981,7 @@ func _build_mine() -> void:
 			cable.basis = Basis(Quaternion(Vector3.UP, (b - a).normalized()))
 			add_child(cable)
 	# The workbench (2026-10-11): front right, its front toward the middle of
-	# the court, behind the wardens' patch. Gold crystals buy weapon and armor
+	# the court, behind the enforcers' patch. Gold crystals buy weapon and armor
 	# levels there. Solid, and built before the bake.
 	var bench := Node3D.new()
 	bench.name = "Workbench"
@@ -1286,11 +1286,11 @@ func _release_miner(cell: Dictionary) -> Node3D:
 
 ## --- Who turns on the player, and when (2026-10-10) ------------------------------
 ##
-## Walking into the mine sets nothing off. The wardens stroll about the court
+## Walking into the mine sets nothing off. The enforcers stroll about the court
 ## watching the miners (`_respawn_mine`: wanderers with the court in front of
 ## the face as their patch, leashed to the room) and fight only once they SEE
 ## the player, each on its own eyes. The miners keep working until either:
-##   * both wardens are down -- MINERS_TURN later, every one still at work
+##   * both enforcers are down -- MINERS_TURN later, every one still at work
 ##     drops its work and comes for the player; or
 ##   * the player strikes one at its work (its `MinerHit` body on the damageable
 ##     layer): that one turns, taking the blow, and the rest keep working.
@@ -1326,22 +1326,22 @@ func _release_all_miners() -> void:
 			delay += 0.15
 
 
-## After a death or a load: the wardens back on their posts unless every one
+## After a death or a load: the enforcers back on their posts unless every one
 ## was destroyed; every miner not yet killed back at work.
 func _respawn_mine() -> void:
-	for w in _wardens:
+	for w in _enforcers:
 		if is_instance_valid(w):
 			w.free()
-	_wardens.clear()
+	_enforcers.clear()
 	for e in _freed:
 		if is_instance_valid(e):
 			e.free()
 	_freed.clear()
-	if not wardens_down and maze != null:
+	if not enforcers_down and maze != null:
 		var scene: PackedScene = maze.get("enemy_scene")
 		for post: Vector2 in MINE_POSTS:
 			var w: Node3D = scene.instantiate()
-			w.set_script(WARDEN_SCRIPT)
+			w.set_script(ENFORCER_SCRIPT)
 			var at := to_global(Vector3(post.x, 0.3, post.y))
 			var face := to_global(Vector3(post.x, 0.3, post.y - 1.0)) - at
 			face.y = 0.0
@@ -1356,8 +1356,8 @@ func _respawn_mine() -> void:
 			w.set("aggro_box_origin", global_position)
 			maze.call("adopt_enemy", w)
 			w.set("aggro_range", 22.0)
-			w.connect("died", _on_warden_died)
-			_wardens.append(w)
+			w.connect("died", _on_enforcer_died)
+			_enforcers.append(w)
 	for cell in _cells:
 		cell["alive"] = false
 		if not cell.get("dead", false):
@@ -1370,7 +1370,7 @@ func _respawn_mine() -> void:
 		_mine_off_now()
 
 
-## Where the wardens stroll: a loose grid over the court between the miners
+## Where the enforcers stroll: a loose grid over the court between the miners
 ## and the way in, clear of the generator, the drills and the ore heap.
 func _watch_spots() -> Array[Vector3]:
 	var spots: Array[Vector3] = []
@@ -1427,13 +1427,13 @@ func _process(delta: float) -> void:
 	if kind == &"mine":
 		_run_mine(delta)
 		# Walking in sets nothing off: only the room's name is given. The
-		# wardens fight when they see the player (their own eyes).
+		# enforcers fight when they see the player (their own eyes).
 		if not _alarmed and _player_inside(ALARM_IN):
 			_alarmed = true
 			var hud := _hud()
-			if hud != null and hud.has_method("announce") and not (wardens_down and prisoners_down):
-				hud.announce(String(TITLES[kind][0]), "Wardens oversee the miners.")
-	elif not _alarmed and not wardens_down and _player_inside(ALARM_IN):
+			if hud != null and hud.has_method("announce") and not (enforcers_down and prisoners_down):
+				hud.announce(String(TITLES[kind][0]), "Enforcers oversee the miners.")
+	elif not _alarmed and not enforcers_down and _player_inside(ALARM_IN):
 		_raise_alarm()
 	_update_focus()
 
@@ -1473,15 +1473,15 @@ func _raise_alarm() -> void:
 	_alarmed = true
 	var hud := _hud()
 	if hud != null and hud.has_method("announce"):
-		hud.announce(String(TITLES[kind][0]), "Destroy the wardens. Then cut the power.")
-	for w in _wardens:
+		hud.announce(String(TITLES[kind][0]), "Destroy the enforcers. Then cut the power.")
+	for w in _enforcers:
 		if is_instance_valid(w) and w.has_method("alert"):
 			w.call("alert")
 
 
 func _update_focus() -> void:
 	_focus = false
-	if not wardens_down or powered_off or _crystal == null or (kind == &"mine" and not prisoners_down):
+	if not enforcers_down or powered_off or _crystal == null or (kind == &"mine" and not prisoners_down):
 		_prompt.visible = false
 		return
 	var blocked: bool = _player.get("in_cutscene") == true or _player.get("_dead") == true \
@@ -1641,24 +1641,24 @@ func _on_prisoner_died(cell: Dictionary) -> void:
 	var hud := _hud()
 	if hud != null and hud.has_method("announce"):
 		if kind == &"mine":
-			hud.announce("THE MINERS ARE DOWN", "Take the shard from the generator." if wardens_down
-				else "The wardens still stand.")
+			hud.announce("THE MINERS ARE DOWN", "Take the shard from the generator." if enforcers_down
+				else "The enforcers still stand.")
 		else:
 			hud.announce("THE BLOCK FALLS QUIET", "")
 
 
-func _on_warden_died() -> void:
-	for w in _wardens:
+func _on_enforcer_died() -> void:
+	for w in _enforcers:
 		if is_instance_valid(w) and w.get("_dying") != true:
 			return
-	wardens_down = true
+	enforcers_down = true
 	var hud := _hud()
 	if hud != null and hud.has_method("announce"):
 		if kind == &"mine":
-			hud.announce("THE WARDENS ARE DOWN", "Take the shard from the generator." if prisoners_down
+			hud.announce("THE ENFORCERS ARE DOWN", "Take the shard from the generator." if prisoners_down
 				else "The miners drop their picks...")
 		else:
-			hud.announce("THE WARDENS ARE DOWN", "The generator still holds the cells.")
+			hud.announce("THE ENFORCERS ARE DOWN", "The generator still holds the cells.")
 	if kind == &"mine":
 		# A moment later, with nobody standing over them, the miners turn.
 		get_tree().create_timer(MINERS_TURN).timeout.connect(_release_all_miners)
@@ -1685,22 +1685,22 @@ func on_world_reset() -> void:
 
 
 func _respawn_prison() -> void:
-	for w in _wardens:
+	for w in _enforcers:
 		if is_instance_valid(w):
 			w.free()
-	_wardens.clear()
+	_enforcers.clear()
 	for e in _freed:
 		if is_instance_valid(e):
 			e.free()
 	_freed.clear()
-	if not wardens_down and maze != null:
+	if not enforcers_down and maze != null:
 		var scene: PackedScene = maze.get("enemy_scene")
 		for post: Vector3 in POSTS:
 			var w: Node3D = scene.instantiate()
-			w.set_script(WARDEN_SCRIPT)
+			w.set_script(ENFORCER_SCRIPT)
 			# POSTS are (x, z, the row watched).
 			var at := to_global(Vector3(post.x, 0.3, post.y))
-			# Facing the row it watches: -Z of a warden is its front.
+			# Facing the row it watches: -Z of an enforcer is its front.
 			var watch := to_global(Vector3(post.x, 0.3, post.y + post.z))
 			var face := (watch - at)
 			face.y = 0.0
@@ -1711,8 +1711,8 @@ func _respawn_prison() -> void:
 			w.set("aggro_box_origin", global_position)
 			maze.call("adopt_enemy", w)
 			w.set("aggro_range", 26.0)
-			w.connect("died", _on_warden_died)
-			_wardens.append(w)
+			w.connect("died", _on_enforcer_died)
+			_enforcers.append(w)
 	if powered_off and not prisoners_down:
 		for cell in _cells:
 			if cell["alive"]:
@@ -1756,7 +1756,7 @@ func save_state() -> Dictionary:
 			alive.append(i)
 		if _cells[i].get("dead", false):
 			dead.append(i)
-	return {"kind": kind, "looted": looted, "wardens_down": wardens_down,
+	return {"kind": kind, "looted": looted, "enforcers_down": enforcers_down,
 		"powered_off": powered_off, "prisoners_down": prisoners_down, "freed_alive": alive,
 		"miners_dead": dead}
 
@@ -1767,7 +1767,8 @@ func restore_state(data: Dictionary) -> void:
 		return
 	looted = bool(data.get("looted", false))
 	if kind == &"prison":
-		wardens_down = bool(data.get("wardens_down", false))
+		# Saves from before the rename (2026-10-15) call them wardens.
+		enforcers_down = bool(data.get("enforcers_down", data.get("wardens_down", false)))
 		prisoners_down = bool(data.get("prisoners_down", false))
 		if bool(data.get("powered_off", false)):
 			_power_off_now(data.get("freed_alive", []))
@@ -1778,7 +1779,8 @@ func restore_state(data: Dictionary) -> void:
 				looted = true
 				_give_owed_shard.call_deferred()
 	elif kind == &"mine":
-		wardens_down = bool(data.get("wardens_down", false))
+		# Saves from before the rename (2026-10-15) call them wardens.
+		enforcers_down = bool(data.get("enforcers_down", data.get("wardens_down", false)))
 		prisoners_down = bool(data.get("prisoners_down", false))
 		for i: int in data.get("miners_dead", []):
 			if i < _cells.size():

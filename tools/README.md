@@ -329,6 +329,18 @@ variants share their source's textures) from the eight raw Tripo pieces in
   to model) and `morgue_slab.glb` (text). `pier_face` is cut from the wall piece.
   See CLAUDE.md section 47.
 
+# The enforcer (2026-10-15)
+
+```
+blender -b models/source/enforcer/ENFORCER_BAKED.blend -P tools/build_enforcer.py
+godot --headless --import --path .
+```
+
+Builds `models/enforcer.glb` from the user's rigged mech: only the BAKED clips,
+bone markers (EyeL/EyeR, Muzzle, Shield), the parts joined into one mesh with a
+2K baked atlas (`models/source/enforcer/enforcer_atlas.png`). Set the extracted
+atlas texture to `compress/mode=2` after the first import. See CLAUDE.md 48.
+
 # Retexturing with Tripo
 
 ```

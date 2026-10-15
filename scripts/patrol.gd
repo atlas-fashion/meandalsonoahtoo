@@ -2,9 +2,9 @@ extends Node
 
 ## A skeleton pack on patrol (2026-10-10): every pack in the corridors is always
 ## on the move, in a column -- the leader walking a route through the maze, the
-## rest following in its footsteps, the warden bot bringing up the rear.
+## rest following in its footsteps, the enforcer bringing up the rear.
 ##
-## Nothing here runs by itself. Each member's `_wander` (enemy.gd, warden.gd)
+## Nothing here runs by itself. Each member's `_wander` (enemy.gd, enforcer.gd)
 ## hands over to `step` while it has nothing better to do; the moment one sees
 ## the player it fights as ever, and when it has lost them it falls back in.
 ##
@@ -18,7 +18,7 @@ extends Node
 ##   starts a fresh trail.
 
 const SPACING := 1.5
-## The warden walks this much further back than the last skeleton.
+## The enforcer walks this much further back than the last skeleton.
 const TAIL_GAP := 1.2
 ## Of each member's own `wander_speed`.
 const PACE := 1.25
@@ -29,7 +29,7 @@ const LEG_MAX := 40.0
 const TRAIL_STEP := 0.35
 ## A route passing this near a shut wooden door is refused.
 const DOOR_CLEAR := 1.6
-## 14 m: the longest column (six and a warden) needs ~11.
+## 14 m: the longest column (six and an enforcer) needs ~11.
 const TRAIL_MAX := 40
 
 ## Untyped (see `_leader`): it holds members after they are killed and freed,
@@ -64,7 +64,7 @@ func setup(pack: Array[Node3D], route_points: Array[Vector3], seed_value: int) -
 ## there, or come back from a fight) otherwise meets it head on and both stop
 ## for good (measured: 2 of 49 patrols, an archer and its leader nose to nose).
 ## In a fight they are solid to each other again, so a pack does not stack up
-## on one spot round the player. The warden passes through its pack always
+## on one spot round the player. The enforcer passes through its pack always
 ## (maze.gd), so its pairs are left alone.
 var _marching := {}
 var _next_sync := 0.0
@@ -90,11 +90,11 @@ func _physics_process(_delta: float) -> void:
 		return
 	for i in members.size():
 		var a = members[i]
-		if not _alive(a) or a.has_method("is_warden"):
+		if not _alive(a) or a.has_method("is_enforcer"):
 			continue
 		for j in range(i + 1, members.size()):
 			var b = members[j]
-			if not _alive(b) or b.has_method("is_warden"):
+			if not _alive(b) or b.has_method("is_enforcer"):
 				continue
 			if _marching.get(a, false) and _marching.get(b, false):
 				a.add_collision_exception_with(b)
@@ -135,8 +135,8 @@ func _current_leader() -> Node3D:
 	_leader = null
 	_prune()
 	for m in members:
-		# The warden walks behind; it leads only when every skeleton is down.
-		if _alive(m) and not m.has_method("is_warden"):
+		# The enforcer walks behind; it leads only when every skeleton is down.
+		if _alive(m) and not m.has_method("is_enforcer"):
 			_leader = m
 			break
 	if _leader == null:
@@ -243,7 +243,7 @@ func _follow(e: Node3D, lead: Node3D) -> Vector3:
 		if m == e:
 			break
 	var back := SPACING * float(rank)
-	if e.has_method("is_warden"):
+	if e.has_method("is_enforcer"):
 		back += TAIL_GAP
 	var target := _behind(lead.global_position, back)
 	var to := target - e.global_position

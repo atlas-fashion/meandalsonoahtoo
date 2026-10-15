@@ -61,12 +61,12 @@ const ITEMS := {
 		"kind": "Trophy",
 		"desc": "A whole skull, prised off a fallen skeleton before it could crumble. Few come away intact.",
 		"quote": "It is still listening."},
-	# What the dungeon's machines run on (2026-10-09): warden bots on gold
-	# crystals (warden.gd drops them), the prison hubs' generators on red ones
+	# What the dungeon's machines run on (2026-10-09): enforcers on gold
+	# crystals (enforcer.gd drops them), the prison hubs' generators on red ones
 	# (dungeon_room.gd, taken out to cut the power).
 	&"gold_crystal": {"name": "Gold Crystal", "stack": 20, "color": Color(1.0, 0.74, 0.2),
 		"kind": "Material",
-		"desc": "A cloudy gold crystal prised out of a warden bot's chest. It still ticks faintly, like something counting.",
+		"desc": "A cloudy gold crystal prised out of an enforcer's workings. It still ticks faintly, like something counting.",
 		"quote": "It wanted to keep walking."},
 	&"red_crystal": {"name": "Red Crystal", "stack": 10, "color": Color(1.0, 0.16, 0.1),
 		"kind": "Material",

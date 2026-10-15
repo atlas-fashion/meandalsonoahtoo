@@ -1,42 +1,77 @@
 extends "res://scripts/enemy.gd"
 
-## The warden bot (2026-10-09): a crude iron machine the dungeon's keepers built
-## to herd the dead, walking on the power of a gold crystal caged in its chest.
-## (The boss is THE WARDEN; these are his machines.)
+## The ENFORCER (2026-10-15; the "warden bot" before): a rusted mech the
+## dungeon's keepers built to herd the dead, a cyan crystal burning in its
+## chest. (The boss is THE WARDEN; these are his machines.)
+##
+## The model and its animations are the user's (`models/enforcer.glb`, built by
+## tools/build_enforcer.py from models/source/enforcer/ENFORCER_BAKED.blend):
+## a 16-bone rig with three BAKED clips -- WALK_BAKED, BEAM_BAKED (the cannon
+## arm raised and held on the target) and SWIPE_BAKED (the shield arm swung
+## across). Its eyes and its beam glow the crystal's own colour, read off the
+## crystal's material.
 ##
 ## Made like the archer: the maze puts this script on an enemy.tscn instance
-## before it enters the tree (so its numbers live in `_init`), and on entering
-## the tree it throws the skeleton model away and builds its own body out of
-## primitives -- merged per rigid part, so a bot is ~20 draws, and all bots
-## share the meshes. No rig: the legs, arms and head are driven in code.
+## before it enters the tree (so its numbers live in `_init`); on entering the
+## tree it throws the skeleton model away and puts the enforcer in its place.
+## The clips are named so enemy.gd's own state animations never match them; this
+## script plays them (enemy.gd still advances the player by hand, so far-off
+## enforcers are posed less often).
 ##
-## One walks with every skeleton pack (maze.gd `_spawn_pack`), keeping close to
-## its `escort` while they amble. The prison hubs (dungeon_room.gd) post more
-## of them in front of their cells.
+## One walks with every skeleton pack (maze.gd `_spawn_enforcer`), keeping close
+## to its `escort` while they amble. The prison and the mine (dungeon_room.gd)
+## post more of them.
 ##
 ## Hunting (`_chase`, enemy.gd's hook):
 ##   * the BEAM: with a clear line through stone and the player within
-##     BEAM_RANGE, it plants itself and charges (CHARGE_TIME -- the crystals
-##     flare and a thin aiming line appears, the tell), then holds a beam on the
-##     player for up to BEAM_TIME: `player.beam_hit` -- BEAM_DPS a second and
-##     slowed, a raised guard taking a tenth. The beam swings after the player
-##     at TRACK_RATE, so a fast sidestep (a ghost) can slip it; stone stops it,
-##     its fellows do not. Then it vents for VENT_TIME.
-##   * otherwise it walks in, and close enough it clubs (`attack_damage`).
+##     BEAM_RANGE, it plants itself and raises the cannon (CHARGE_TIME: the
+##     BEAM_BAKED clip up to the aim, the crystal and eyes flaring, a thin aiming
+##     line), then holds a beam on the player for up to BEAM_TIME:
+##     `player.beam_hit` -- BEAM_DPS a second and slowed, a raised guard taking a
+##     tenth. It swings after the player at TRACK_RATE; stone stops it, its
+##     fellows do not. Then it vents for VENT_TIME.
+##   * otherwise it walks in, and close enough it swipes with the shield
+##     (SWIPE_BAKED, timed so the shield crosses its front as the wind-up ends):
+##     `attack_damage`, and a player it catches unguarded is knocked off their
+##     feet (`player.knock_down`: thrown back, on the floor, half a second to
+##     get up). A held guard takes the blow standing, shoved back; a parry throws
+##     the enforcer instead, as with any enemy.
 ## Heavy: 240 health, hard to shove, slow on its feet.
+
+const MODEL := preload("res://models/enforcer.glb")
+## The mesh is authored 4.42 m tall; drawn at 2.6 m.
+const MODEL_SCALE := 0.59
+## The model's feet sit this far under its origin at that scale.
+const MODEL_LIFT := 0.05
+## The clips (tools/build_enforcer.py), all 60 fps.
+const ANIM_WALK_CLIP := &"WALK_BAKED"
+const ANIM_BEAM_CLIP := &"BEAM_BAKED"
+const ANIM_SWIPE_CLIP := &"SWIPE_BAKED"
+## A planted foot slides back at this speed with the walk at rate 1 (measured
+## in Blender: 1.4 m/s at the authored size).
+const WALK_GROUND_SPEED := 0.82
+## BEAM_BAKED: the cannon is up and aimed from frame 37 to the end (47).
+const BEAM_AIMED := 36.0 / 60.0
+## SWIPE_BAKED: the shield crosses the front fastest at frames 31-37; the blow
+## lands at frame 32.
+const SWIPE_CONTACT := 31.0 / 60.0
+## How hard a swipe that lands unguarded throws the player.
+const SWIPE_THROW := 7.5
+## ...and how hard one taken on a held guard shoves them.
+const SWIPE_SHOVE := 4.0
 
 const BEAM_DPS := 5.0
 const BEAM_RANGE := 20.0
 const CHARGE_TIME := 0.65
 const BEAM_TIME := 3.2
 const VENT_TIME := 1.6
-## Seconds after first noticing the player before the first charge.
+## After first seeing the player, how long until it may first charge.
 const FIRST_BEAM := 0.6
-## How fast the beam swings after the player, rad/s.
+## How fast the beam swings after a moving player, radians a second.
 const TRACK_RATE := 0.95
-## Stone: the sight layer and the exact walls.
+## Stone: the sight layer and the player's exact walls.
 const WORLD_MASK := 2 | 256
-## The player as a capsule: feet + LOW to feet + HIGH, this thick.
+## The player as the beam sees them: a capsule from the feet up.
 const BODY_LOW := 0.25
 const BODY_HIGH := 1.6
 const BODY_RADIUS := 0.4
@@ -47,8 +82,10 @@ const KEEP_FAR := 12.0
 ## The drawn beam stops this far short of a player it is on.
 const SHORT_OF_PLAYER := 0.8
 
-const GOLD := Color(1.0, 0.72, 0.22)
-const HOT := Color(1.0, 0.93, 0.7)
+## The crystal's colour, read off its material in `_ready` (cyan in the model).
+var CRYSTAL := Color(0.0, 0.91, 1.0)
+## The beam's hot core: the crystal's colour run toward white.
+var HOT := Color(0.75, 0.97, 1.0)
 
 enum Beam { IDLE, CHARGE, FIRE, VENT }
 
@@ -70,16 +107,20 @@ var _beam_end := Vector3.ZERO
 var _beam_on_player := false
 
 var _built := false
-var _hips: Node3D
-var _torso: Node3D
-var _head: Node3D
-var _legs: Array[Node3D] = []
-var _knees: Array[Node3D] = []
-var _gun_arm: Node3D
+var _model: Node3D
 var _muzzle: Node3D
-var _club_arm: Node3D
-var _crystals: Array[MeshInstance3D] = []
 var _parts: Array[MeshInstance3D] = []
+## Stands in for enemy.gd's `mesh`: it takes a copy of this one's material as
+## the state material, which is then put on the model's crystal and the eyes.
+var _state_proxy: MeshInstance3D
+var _eyes_glow: Array[MeshInstance3D] = []
+## The eyes' own copy of the crystal's colour, at EYE_GLOW of its glow: on the same
+## material, with the bloom, the two eyes (0.11 m apart) ran together into one ball.
+var _eye_mat: StandardMaterial3D
+const EYE_GLOW := 0.35
+var _clip := &""
+## The player's guard as the swipe lands: -1 none, 0 blocked, 1 parried.
+var _guard_seen := -1
 var _beam_root: Node3D
 ## The core's and the glow's holders, stretched to the beam's length each tick.
 var _spans: Array[Node3D] = []
@@ -89,55 +130,53 @@ var _beam_flare: MeshInstance3D
 var _beam_light: OmniLight3D
 var _beam_mat: StandardMaterial3D
 var _glow_mat: StandardMaterial3D
-var _stride := 0.0
-var _club := 0.0
 
-static var _meshes := {}
 static var _mats := {}
 
 
 func _init() -> void:
-	# A club for an arm, not a sword (enemy.gd `armed`).
+	# A shield for an arm, not a sword (enemy.gd `armed`).
 	armed = false
 	max_health = 240.0
-	move_speed = 2.7
-	acceleration = 14.0
+	move_speed = 2.2
+	acceleration = 12.0
 	vision_cone_degrees = 160.0
 	sight_needs_line_of_sight = true
 	sight_memory = 6.0
-	eye_height = 1.95
+	eye_height = 2.15
 	wanders = true
 	wander_speed = 1.3
 	can_slam = false
 	can_normal = true
-	normal_range = 1.9
-	normal_duration = 0.35
+	# The shield's sweep reaches about a metre past its body.
+	normal_range = 1.25
+	normal_duration = 0.3
 	normal_cooldown = 2.2
 	windup_time = 0.6
 	recover_time = 0.75
 	attack_damage = 22.0
 	knockback_resistance = 0.85
 	tint_albedo = false
-	base_glow = 2.4
-	windup_glow = 4.5
-	attack_glow = 6.0
-	windup_color = Color(1.0, 0.55, 0.15)
-	attack_color = Color(1.0, 0.3, 0.1)
-	hit_punch = 0.08
-	display_name = "WARDEN BOT"
+	base_glow = 4.0
+	windup_glow = 7.0
+	attack_glow = 9.0
+	windup_color = Color(0.45, 0.95, 1.0)
+	attack_color = Color(0.8, 1.0, 1.0)
+	hit_punch = 0.06
+	display_name = "ENFORCER"
 	drop_rolls_min = 1
 	drop_rolls_max = 1
 	drop_odds = {&"gold_crystal": 0.6, &"health_potion": 0.15}
 
 
-func is_warden() -> bool:
+func is_enforcer() -> bool:
 	return true
 
 
 # --- The body ---------------------------------------------------------------------
 
 ## Before `_ready` (and enemy.gd's @onready lookups): the skeleton goes, the
-## robot goes in its place, and the capsule grows to fit it.
+## enforcer goes in its place, and the capsule grows to fit it.
 func _enter_tree() -> void:
 	if _built:
 		return
@@ -151,231 +190,119 @@ func _enter_tree() -> void:
 	for child in vis.get_children():
 		vis.remove_child(child)
 		child.free()
-	_build_body(vis)
+	_model = MODEL.instantiate() as Node3D
+	_model.name = "Enforcer"
+	# Authored facing +Z; enemies face -Z.
+	_model.transform = Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * MODEL_SCALE),
+		Vector3(0.0, MODEL_LIFT, 0.0))
+	vis.add_child(_model)
+	for mi in _model.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		_parts.append(m)
+	_muzzle = _model.find_child("Muzzle", true, false) as Node3D
+	# The state material's holder (see `_state_proxy`): never drawn.
+	_state_proxy = MeshInstance3D.new()
+	_state_proxy.name = "StateCrystal"
+	_state_proxy.mesh = SphereMesh.new()
+	_state_proxy.visible = false
+	vis.add_child(_state_proxy)
 	var cs := get_node_or_null("CollisionShape3D") as CollisionShape3D
 	if cs != null:
 		var cap := CapsuleShape3D.new()
-		cap.radius = 0.55
-		cap.height = 2.25
+		cap.radius = 0.6
+		cap.height = 2.5
 		cs.shape = cap
-		cs.position = Vector3(0.0, 1.125, 0.0)
+		cs.position = Vector3(0.0, 1.25, 0.0)
 	var ag := get_node_or_null("NavigationAgent3D") as NavigationAgent3D
 	if ag != null:
-		ag.radius = 0.55
-		ag.height = 2.25
+		ag.radius = 0.6
+		ag.height = 2.5
 
 
 func _ready() -> void:
+	# The crystal's material: its colour is the eyes' and the beam's.
+	var crystal_part: MeshInstance3D = null
+	var crystal_surface := -1
+	for m in _parts:
+		for i in m.mesh.get_surface_count():
+			var mat := m.mesh.surface_get_material(i) as StandardMaterial3D
+			if mat != null and mat.resource_name.contains("Crystal"):
+				crystal_part = m
+				crystal_surface = i
+				CRYSTAL = mat.emission
+				HOT = CRYSTAL.lerp(Color.WHITE, 0.7)
+	var state := _crystal_material()
+	_state_proxy.material_override = state
+	# enemy.gd copies its `mesh`'s material as the state material.
+	mesh = _state_proxy
 	super()
-	name = "Warden"
-	add_to_group(&"wardens")
-	# enemy.gd made its own copy of the first mesh's material -- the chest
-	# crystal's -- and tints it by state; every crystal on the bot shares it.
-	for c in _crystals:
-		c.material_override = _material
+	name = "Enforcer"
+	add_to_group(&"enforcers")
+	if crystal_part != null:
+		crystal_part.set_surface_override_material(crystal_surface, _material)
+	_attach_eyes()
+	_setup_clips()
 	_build_beam()
 
 
-func _build_body(vis: Node3D) -> void:
-	var crystal := _mat(&"crystal")
-
-	# The chest crystal first: enemy.gd takes the first mesh's material as its own.
-	_torso = Node3D.new()
-	_torso.name = "Torso"
-	_torso.position = Vector3(0.0, 1.08, 0.0)
-	vis.add_child(_torso)
-	var core := _crystal_mesh(0.13, 0.26)
-	core.position = Vector3(0.0, 0.5, -0.33)
-	core.material_override = crystal
-	_torso.add_child(core)
-	_crystals.append(core)
-
-	_hips = Node3D.new()
-	_hips.name = "Hips"
-	_hips.position = Vector3(0.0, 1.0, 0.0)
-	vis.add_child(_hips)
-	_hips.add_child(_part(&"hips", _fill_hips))
-
-	# Legs: hip pivot, thigh, knee pivot, shin and a flat foot.
-	for side: float in [-1.0, 1.0]:
-		var hip := Node3D.new()
-		hip.position = Vector3(0.3 * side, 1.0, 0.0)
-		vis.add_child(hip)
-		hip.add_child(_part(&"thigh", _fill_thigh))
-		var knee := Node3D.new()
-		knee.position = Vector3(0.0, -0.5, 0.0)
-		hip.add_child(knee)
-		knee.add_child(_part(&"shin", _fill_shin))
-		_legs.append(hip)
-		_knees.append(knee)
-
-	_torso.add_child(_part(&"torso", _fill_torso))
-
-	# A box of a head on a neck, one gold lens and an aerial.
-	_head = Node3D.new()
-	_head.position = Vector3(0.0, 0.92, 0.0)
-	_torso.add_child(_head)
-	_head.add_child(_part(&"head", _fill_head))
-	var lens := _crystal_mesh(0.06, 0.05)
-	lens.rotation.x = PI * 0.5
-	lens.position = Vector3(0.05, 0.28, -0.21)
-	lens.material_override = crystal
-	_head.add_child(lens)
-	_crystals.append(lens)
-
-	# The beam arm (right): modelled along -Z, a barrel ending in a crystal.
-	_gun_arm = Node3D.new()
-	_gun_arm.position = Vector3(0.6, 0.82, 0.0)
-	_torso.add_child(_gun_arm)
-	_gun_arm.add_child(_part(&"gun_arm", _fill_gun_arm))
-	_muzzle = Node3D.new()
-	_muzzle.position = Vector3(0.0, -0.02, -0.98)
-	_gun_arm.add_child(_muzzle)
-	var tip := _crystal_mesh(0.07, 0.16)
-	tip.rotation.x = PI * 0.5
-	tip.position = Vector3(0.0, -0.02, -0.86)
-	tip.material_override = crystal
-	_gun_arm.add_child(tip)
-	_crystals.append(tip)
-
-	# The club arm (left): a pipe of an arm and an iron block of a fist,
-	# hanging down (-Y).
-	_club_arm = Node3D.new()
-	_club_arm.position = Vector3(-0.6, 0.82, 0.0)
-	_torso.add_child(_club_arm)
-	_club_arm.add_child(_part(&"club_arm", _fill_club_arm))
-
-	for mi in vis.find_children("*", "MeshInstance3D", true, false):
-		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+func _crystal_material() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = CRYSTAL
+	m.emission_enabled = true
+	m.emission = CRYSTAL
+	m.emission_energy_multiplier = base_glow
+	m.roughness = 0.2
+	return m
 
 
-func _fill_hips(add: Callable) -> void:
-	add.call(_box(Vector3(0.78, 0.22, 0.46)), Transform3D(), _mat(&"iron"))
-	add.call(_box(Vector3(0.82, 0.06, 0.5)), Transform3D(Basis(), Vector3(0.0, 0.12, 0.0)), _mat(&"brass"))
-	add.call(_cyl(0.11, 0.11, 0.9, 8), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), _mat(&"dark"))
-
-
-func _fill_thigh(add: Callable) -> void:
-	add.call(_cyl(0.1, 0.12, 0.5, 8), Transform3D(Basis(), Vector3(0.0, -0.25, 0.0)), _mat(&"iron"))
-	add.call(_box(Vector3(0.24, 0.3, 0.22)), Transform3D(Basis(), Vector3(0.0, -0.18, -0.02)), _mat(&"plate"))
-
-
-func _fill_shin(add: Callable) -> void:
-	add.call(_cyl(0.1, 0.1, 0.12, 8), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), _mat(&"brass"))
-	add.call(_cyl(0.09, 0.13, 0.42, 8), Transform3D(Basis(), Vector3(0.0, -0.24, 0.0)), _mat(&"iron"))
-	add.call(_cyl(0.035, 0.035, 0.4, 5), Transform3D(Basis(), Vector3(0.0, -0.22, 0.13)), _mat(&"brass"))
-	add.call(_box(Vector3(0.3, 0.1, 0.46)), Transform3D(Basis(), Vector3(0.0, -0.5, -0.06)), _mat(&"plate"))
-
-
-## The barrel of a body, riveted bands round it, the crystal in a cage at the
-## front, a boiler stack at the back, plates bolted on askew.
-func _fill_torso(add: Callable) -> void:
-	var iron := _mat(&"iron")
-	var plate := _mat(&"plate")
-	var brass := _mat(&"brass")
-	var dark := _mat(&"dark")
-	add.call(_cyl(0.4, 0.44, 0.86, 12), Transform3D(Basis(), Vector3(0.0, 0.47, 0.0)), iron)
-	for y: float in [0.1, 0.5, 0.86]:
-		add.call(_cyl(0.455, 0.455, 0.06, 12), Transform3D(Basis(), Vector3(0.0, y, 0.0)), brass)
-	# The crystal's window: a dark box sunk into the front, bars across it.
-	add.call(_box(Vector3(0.36, 0.44, 0.12)), Transform3D(Basis(), Vector3(0.0, 0.5, -0.36)), dark)
-	for x: float in [-0.12, 0.0, 0.12]:
-		add.call(_cyl(0.014, 0.014, 0.46, 4), Transform3D(Basis(), Vector3(x, 0.5, -0.44)), brass)
-	# Nobody built this carefully.
-	add.call(_box(Vector3(0.34, 0.3, 0.05)), Transform3D(Basis(Vector3.UP, 0.5) * Basis(Vector3.FORWARD, 0.1),
-		Vector3(0.32, 0.28, -0.24)), plate)
-	add.call(_box(Vector3(0.3, 0.36, 0.05)), Transform3D(Basis(Vector3.UP, -0.6) * Basis(Vector3.FORWARD, -0.08),
-		Vector3(-0.3, 0.62, -0.26)), plate)
-	for side: float in [-1.0, 1.0]:
-		add.call(_box(Vector3(0.3, 0.2, 0.36)), Transform3D(Basis(Vector3.FORWARD, -0.25 * side),
-			Vector3(0.48 * side, 0.82, 0.0)), plate)
-	add.call(_cyl(0.07, 0.09, 0.62, 8), Transform3D(Basis(Vector3.RIGHT, -0.2), Vector3(0.12, 1.0, 0.34)), dark)
-	add.call(_cyl(0.1, 0.1, 0.06, 8), Transform3D(Basis(Vector3.RIGHT, -0.2), Vector3(0.12, 1.3, 0.4)), brass)
-	add.call(_cyl(0.03, 0.03, 0.7, 5), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.0, 0.25, 0.42)), brass)
-
-
-func _fill_head(add: Callable) -> void:
-	add.call(_cyl(0.07, 0.09, 0.14, 6), Transform3D(Basis(), Vector3(0.0, 0.07, 0.0)), _mat(&"dark"))
-	add.call(_box(Vector3(0.38, 0.28, 0.34)), Transform3D(Basis(Vector3.FORWARD, 0.04), Vector3(0.0, 0.27, 0.0)),
-		_mat(&"plate"))
-	add.call(_cyl(0.1, 0.1, 0.06, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.05, 0.28, -0.18)),
-		_mat(&"brass"))
-	add.call(_cyl(0.012, 0.012, 0.4, 4), Transform3D(Basis(Vector3.FORWARD, 0.2), Vector3(-0.12, 0.56, 0.06)),
-		_mat(&"brass"))
-
-
-func _fill_gun_arm(add: Callable) -> void:
-	var brass := _mat(&"brass")
-	add.call(_cyl(0.11, 0.11, 0.16, 8), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), brass)
-	add.call(_cyl(0.08, 0.08, 0.32, 8), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, 0.0, -0.18)),
-		_mat(&"iron"))
-	add.call(_cyl(0.13, 0.15, 0.48, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, -0.02, -0.56)),
-		_mat(&"plate"))
-	add.call(_cyl(0.16, 0.16, 0.05, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, -0.02, -0.8)), brass)
-	for k in 4:
-		var a := TAU * float(k) / 4.0 + 0.4
-		add.call(_box(Vector3(0.03, 0.03, 0.16)), Transform3D(Basis(),
-			Vector3(cos(a) * 0.13, -0.02 + sin(a) * 0.13, -0.88)), brass)
-
-
-func _fill_club_arm(add: Callable) -> void:
-	var iron := _mat(&"iron")
-	var brass := _mat(&"brass")
-	add.call(_cyl(0.11, 0.11, 0.16, 8), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), brass)
-	add.call(_cyl(0.07, 0.08, 0.5, 8), Transform3D(Basis(), Vector3(0.0, -0.28, 0.0)), iron)
-	add.call(_cyl(0.09, 0.09, 0.1, 8), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.0, -0.55, 0.0)), brass)
-	add.call(_cyl(0.07, 0.08, 0.36, 8), Transform3D(Basis(), Vector3(0.0, -0.75, 0.0)), iron)
-	add.call(_box(Vector3(0.3, 0.32, 0.3)), Transform3D(Basis(Vector3.UP, 0.3), Vector3(0.0, -1.02, 0.0)),
-		_mat(&"plate"))
-	for k in 4:
-		var a := TAU * float(k) / 4.0
-		add.call(_box(Vector3(0.06, 0.06, 0.06)), Transform3D(Basis(), Vector3(cos(a) * 0.17, -1.02, sin(a) * 0.17)),
-			brass)
-
-
-## One rigid part: every primitive `fill` adds, merged into one mesh with a
-## surface per material, built once and shared by every bot.
-func _part(key: StringName, fill: Callable) -> MeshInstance3D:
-	if not _meshes.has(key):
-		var tools := {}
-		var add := func(mesh: PrimitiveMesh, xf: Transform3D, mat: Material) -> void:
-			if not tools.has(mat):
-				var st := SurfaceTool.new()
-				st.begin(Mesh.PRIMITIVE_TRIANGLES)
-				tools[mat] = st
-			(tools[mat] as SurfaceTool).append_from(mesh, 0, xf)
-		fill.call(add)
-		var am := ArrayMesh.new()
-		for mat in tools:
-			var st: SurfaceTool = tools[mat]
-			st.generate_normals()
-			st.commit(am)
-			am.surface_set_material(am.get_surface_count() - 1, mat)
-		_meshes[key] = am
-	var mi := MeshInstance3D.new()
-	mi.mesh = _meshes[key]
-	_parts.append(mi)
-	return mi
-
-
-func _crystal_mesh(radius: float, height: float) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var key := "crystal_%.2f_%.2f" % [radius, height]
-	if not _meshes.has(key):
+## A glowing lens in each eye socket, on the eye markers the build puts on the
+## head bone, in the crystal's colour (they flare with it, at EYE_GLOW). No
+## halo cards: with the bloom they ran the two eyes together into one ball.
+func _attach_eyes() -> void:
+	_eye_mat = _material.duplicate() as StandardMaterial3D
+	_eye_mat.emission_energy_multiplier = base_glow * EYE_GLOW
+	for name_ in ["EyeL", "EyeR"]:
+		var at := _model.find_child(name_, true, false) as Node3D
+		if at == null:
+			continue
+		var lens := MeshInstance3D.new()
 		var s := SphereMesh.new()
-		s.radius = radius
-		s.height = height
-		s.radial_segments = 4
-		s.rings = 2
-		_meshes[key] = s
-	mi.mesh = _meshes[key]
-	return mi
+		s.radius = 0.075
+		s.height = 0.15
+		s.radial_segments = 12
+		s.rings = 6
+		lens.mesh = s
+		lens.material_override = _eye_mat
+		lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		at.add_child(lens)
+		_eyes_glow.append(lens)
 
 
-static func _box(size: Vector3) -> BoxMesh:
-	var b := BoxMesh.new()
-	b.size = size
-	return b
+func _setup_clips() -> void:
+	if anim == null:
+		return
+	if anim.has_animation(ANIM_WALK_CLIP):
+		anim.get_animation(ANIM_WALK_CLIP).loop_mode = Animation.LOOP_LINEAR
+	for c in [ANIM_BEAM_CLIP, ANIM_SWIPE_CLIP]:
+		if anim.has_animation(c):
+			anim.get_animation(c).loop_mode = Animation.LOOP_NONE
+	_play_clip(ANIM_WALK_CLIP, 0.0, 0.0)
+
+
+## Plays `clip` at `rate`, blending over `blend` -- unless it is already the
+## clip playing, when only the rate changes.
+func _play_clip(clip: StringName, rate: float, blend := 0.2, restart := false) -> void:
+	if anim == null or not anim.has_animation(clip):
+		return
+	if _clip == clip and not restart:
+		anim.speed_scale = rate
+		return
+	_clip = clip
+	anim.play(clip, blend, 1.0)
+	anim.speed_scale = rate
+	if restart:
+		anim.seek(0.0, true)
 
 
 static func _cyl(top: float, bottom: float, height: float, sides: int) -> CylinderMesh:
@@ -400,29 +327,6 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 		return _mats[key]
 	var m := StandardMaterial3D.new()
 	match key:
-		&"iron":
-			# Not fully metallic: in these halls there is nothing for it to reflect
-			# and full metal renders black.
-			m.albedo_color = Color(0.3, 0.25, 0.21)
-			m.metallic = 0.45
-			m.roughness = 0.72
-		&"plate":
-			m.albedo_color = Color(0.36, 0.24, 0.16)
-			m.metallic = 0.35
-			m.roughness = 0.82
-		&"brass":
-			m.albedo_color = Color(0.56, 0.42, 0.18)
-			m.metallic = 0.55
-			m.roughness = 0.5
-		&"dark":
-			m.albedo_color = Color(0.07, 0.06, 0.05)
-			m.roughness = 0.9
-		&"crystal":
-			m.albedo_color = GOLD
-			m.emission_enabled = true
-			m.emission = GOLD
-			m.emission_energy_multiplier = 2.4
-			m.roughness = 0.2
 		&"flash":
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -430,6 +334,31 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 			m.albedo_color = Color(1.0, 0.9, 0.75, 0.55)
 	_mats[key] = m
 	return m
+
+
+# --- The shield swipe ---------------------------------------------------------------
+
+## enemy.gd's blow, then the knock-down: unguarded, the player goes off their
+## feet; a held guard keeps them standing, shoved back; a parry already threw
+## this enforcer and leaves the player alone.
+func _try_connect(player: Node3D, gap: float, reach: float, charge_speed := 0.0) -> void:
+	var had := _attack_connected
+	_guard_seen = -1
+	if player.has_signal("guarded") and not player.is_connected("guarded", _on_player_guarded):
+		player.connect("guarded", _on_player_guarded)
+	super(player, gap, reach, charge_speed)
+	if had or not _attack_connected:
+		return
+	var away := Vector3(_attack_direction.x, 0.0, _attack_direction.z).normalized()
+	if _guard_seen == -1 and player.has_method("knock_down"):
+		player.call("knock_down", away, SWIPE_THROW)
+	elif _guard_seen == 0 and player.has_method("apply_knockback"):
+		player.call("apply_knockback", away * SWIPE_SHOVE)
+
+
+func _on_player_guarded(parried: bool, attacker: Node3D) -> void:
+	if attacker == self:
+		_guard_seen = 1 if parried else 0
 
 
 # --- The beam ---------------------------------------------------------------------
@@ -447,7 +376,7 @@ func _build_beam() -> void:
 	_beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_beam_mat.albedo_color = Color(HOT, 0.9)
 	_glow_mat = _beam_mat.duplicate()
-	_glow_mat.albedo_color = Color(GOLD, 0.22)
+	_glow_mat.albedo_color = Color(CRYSTAL, 0.22)
 	# Unit length along -Z from the muzzle; scaled to the beam's length.
 	# Open tubes narrowing toward the far end: seen down its length by the
 	# player it hits, a capped tube ended in a flat disc under their eyes.
@@ -663,7 +592,7 @@ func _draw_beam(now: float) -> void:
 	if Graphics.effects and not charging:
 		if _beam_light == null:
 			_beam_light = OmniLight3D.new()
-			_beam_light.light_color = GOLD
+			_beam_light.light_color = CRYSTAL
 			_beam_light.light_energy = 2.2
 			_beam_light.omni_range = 4.5
 			_beam_light.shadow_enabled = false
@@ -697,66 +626,53 @@ func _physics_process(delta: float) -> void:
 	_animate(delta, now)
 
 
-## Legs, bob, head and arms. No rig: every joint is a node turned here.
+## Which clip, at what rate. The beam owns the body while it charges and fires,
+## the swipe while enemy.gd winds up, strikes and recovers, and the walk the
+## rest of the time -- played at the rate that keeps its feet on the floor, and
+## eased to a stop where it stands (there is no idle clip).
 func _animate(delta: float, now: float) -> void:
-	var v := get_real_velocity()
-	var speed := Vector2(v.x, v.z).length()
-	var walking := clampf(speed / 1.6, 0.0, 1.0)
-	_stride += delta * (2.0 + speed * 2.4)
-	var swing := sin(_stride) * 0.55 * walking
-	for i in _legs.size():
-		var s := swing if i == 0 else -swing
-		_legs[i].rotation.x = s
-		# The knee bends on the forward swing and straightens to plant.
-		_knees[i].rotation.x = maxf(0.0, sin(_stride + (0.0 if i == 0 else PI) + 0.9)) * 0.7 * walking
-	_hips.position.y = 1.0 - absf(cos(_stride)) * 0.05 * walking
-	_torso.position.y = 1.08 - absf(cos(_stride)) * 0.06 * walking
-	_torso.rotation.z = sin(_stride) * 0.05 * walking
-	# Head: toward the player while hunting, otherwise a slow look about.
-	var player := _resolve_player()
-	var head_yaw := sin(now * 0.7 + float(get_instance_id() % 97)) * 0.5
-	if engaged and player != null:
-		var to := to_local(player.global_position)
-		head_yaw = clampf(atan2(-to.x, -to.z), -1.0, 1.0)
-	_head.rotation.y = lerp_angle(_head.rotation.y, head_yaw, clampf(delta * 5.0, 0.0, 1.0))
+	var entered := _state_fresh()
+	match _beam:
+		Beam.CHARGE:
+			# Up to the aim exactly as the charge ends.
+			_play_clip(ANIM_BEAM_CLIP, BEAM_AIMED / CHARGE_TIME, 0.12, _clip != ANIM_BEAM_CLIP)
+		Beam.FIRE:
+			# Held on the aim.
+			if _clip != ANIM_BEAM_CLIP:
+				_play_clip(ANIM_BEAM_CLIP, 0.0, 0.1, true)
+				anim.seek(BEAM_AIMED, true)
+			if anim != null and anim.current_animation_position >= BEAM_AIMED:
+				anim.speed_scale = 0.0
+		_:
+			if state == State.WINDUP or state == State.ATTACK or state == State.RECOVER:
+				# The shield crosses its front as the wind-up ends.
+				var fresh := _clip != ANIM_SWIPE_CLIP or (state == State.WINDUP and entered)
+				_play_clip(ANIM_SWIPE_CLIP, SWIPE_CONTACT / maxf(windup_time, 0.05), 0.1, fresh)
+			else:
+				var v := get_real_velocity()
+				var speed := Vector2(v.x, v.z).length()
+				if speed > 0.15:
+					_play_clip(ANIM_WALK_CLIP, clampf(speed / WALK_GROUND_SPEED, 0.4, 3.2), 0.25)
+				else:
+					# Standing: the walk eased to a stop.
+					if _clip != ANIM_WALK_CLIP:
+						_play_clip(ANIM_WALK_CLIP, 0.0, 0.3, true)
+					elif anim != null:
+						anim.speed_scale = move_toward(anim.speed_scale, 0.0, delta * 4.0)
 
-	# The gun arm: along the aim while charging or firing, otherwise hanging
-	# forward and down.
-	var aiming := _beam == Beam.CHARGE or _beam == Beam.FIRE
-	if aiming:
-		var up := Vector3.UP if absf(_aim_dir.y) < 0.95 else Vector3.FORWARD
-		var want := Basis.looking_at(_aim_dir, up)
-		var cur := _gun_arm.global_basis.orthonormalized()
-		_gun_arm.global_basis = cur.slerp(want, clampf(delta * 14.0, 0.0, 1.0))
-	else:
-		var rest := Basis(Vector3.RIGHT, -1.05 + sin(_stride) * 0.15 * walking)
-		_gun_arm.basis = _gun_arm.basis.orthonormalized().slerp(rest, clampf(delta * 6.0, 0.0, 1.0))
-
-	# The club: back and up through the wind-up, down hard through the blow.
-	var club_target := -sin(_stride) * 0.3 * walking
-	match state:
-		State.WINDUP:
-			club_target = 2.4
-		State.ATTACK:
-			club_target = -1.1
-		State.RECOVER:
-			club_target = -0.4
-	var rate := 20.0 if state == State.ATTACK else 7.0
-	_club = lerpf(_club, club_target, clampf(delta * rate, 0.0, 1.0))
-	_club_arm.rotation.x = _club
-
-	# The crystals: their rest glow, flaring through a charge and burning hot
-	# while it fires. (enemy.gd's state colours ride on the same material.)
+	# The crystal and the eyes: their rest glow, flaring through a charge and
+	# burning hot while it fires. (enemy.gd's state colours ride on the same
+	# material.)
 	if _material != null:
 		var e := base_glow
-		var col := GOLD
+		var col := CRYSTAL
 		match _beam:
 			Beam.CHARGE:
 				var t := 1.0 - clampf((_phase_until - now) / CHARGE_TIME, 0.0, 1.0)
-				e = lerpf(base_glow, 9.0, t) * (1.0 + 0.25 * sin(now * 40.0))
-				col = GOLD.lerp(HOT, t)
+				e = lerpf(base_glow, 12.0, t) * (1.0 + 0.25 * sin(now * 40.0))
+				col = CRYSTAL.lerp(HOT, t)
 			Beam.FIRE:
-				e = 7.5 + 1.5 * sin(now * 53.0)
+				e = 10.0 + 2.0 * sin(now * 53.0)
 				col = HOT
 			Beam.VENT:
 				e = base_glow * 0.5
@@ -766,8 +682,24 @@ func _animate(delta: float, now: float) -> void:
 		elif state == State.ATTACK:
 			e = attack_glow
 			col = attack_color
+		_material.albedo_color = col
 		_material.emission = col
 		_material.emission_energy_multiplier = e
+		if _eye_mat != null:
+			_eye_mat.albedo_color = col
+			_eye_mat.emission = col
+			_eye_mat.emission_energy_multiplier = e * EYE_GLOW
+
+
+var _last_state := -1
+
+
+## True on the first tick of a state, so a second swipe in a row restarts the
+## clip rather than finding it already played out.
+func _state_fresh() -> bool:
+	var fresh := state != _last_state
+	_last_state = state
+	return fresh
 
 
 ## Ambling with its pack: it keeps close to its escort rather than wandering
@@ -819,8 +751,9 @@ func _unflash() -> void:
 			mi.material_overlay = null
 
 
-## It does not fold up like a skeleton: the crystal gutters, sparks fly, it
-## drops onto its knees, tips forward and lies a moment before it goes.
+## It does not fold up like a skeleton: the crystal and eyes gutter, sparks fly,
+## the rig stops where it stands, it sinks onto its knees, tips forward and lies
+## a moment before it goes.
 func _die() -> void:
 	_cancel_beam()
 	_dying = true
@@ -830,22 +763,21 @@ func _die() -> void:
 	if _punch_tween != null and _punch_tween.is_valid():
 		_punch_tween.kill()
 	visual.scale = _mesh_scale
+	if anim != null:
+		anim.pause()
 	if Graphics.effects:
 		_sparks()
 	if _material != null:
 		var t := create_tween()
 		for k in 5:
-			t.tween_property(_material, "emission_energy_multiplier", 8.0 if k % 2 == 0 else 0.4, 0.07)
+			t.tween_property(_material, "emission_energy_multiplier", 10.0 if k % 2 == 0 else 0.4, 0.07)
 		t.tween_property(_material, "emission_energy_multiplier", 0.0, 0.5)
+	if _eye_mat != null:
+		create_tween().tween_property(_eye_mat, "emission_energy_multiplier", 0.0, 0.6)
 	var fall := create_tween().set_parallel(true)
-	fall.tween_property(visual, "position:y", -0.45, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	fall.tween_property(visual, "rotation:x", -0.95, 0.7).set_delay(0.3) \
+	fall.tween_property(visual, "position:y", -0.7, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	fall.tween_property(visual, "rotation:x", -1.25, 0.8).set_delay(0.3) \
 		.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
-	for i in _legs.size():
-		fall.tween_property(_legs[i], "rotation:x", -1.3, 0.4)
-		fall.tween_property(_knees[i], "rotation:x", 1.9, 0.4)
-	fall.tween_property(_club_arm, "rotation:x", -0.2, 0.5)
-	fall.tween_property(_gun_arm, "rotation", Vector3(-0.3, 0.0, 0.0), 0.5)
 	var gone := create_tween()
 	gone.tween_interval(2.6)
 	gone.tween_property(self, "scale", Vector3(1.0, 0.01, 1.0), 0.4).set_ease(Tween.EASE_IN)
@@ -872,6 +804,6 @@ func _sparks() -> void:
 	m.albedo_color = HOT
 	q.material = m
 	p.mesh = q
-	p.position = Vector3(0.0, 1.55, -0.3)
+	p.position = Vector3(0.0, 1.9, -0.3)
 	add_child(p)
 	p.emitting = true

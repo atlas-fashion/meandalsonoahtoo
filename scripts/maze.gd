@@ -354,7 +354,7 @@ const DIRECTIONS := {
 @export_range(0.0, 1.0) var second_archer_share := 0.45
 const ARCHER_SCRIPT := preload("res://scripts/archer.gd")
 ## Skeleton packs in the corridors are always on the move (patrol.gd): the
-## column walks routes between corridor points, the warden at its back.
+## column walks routes between corridor points, the enforcer at its back.
 @export var patrols := true
 const PATROL := preload("res://scripts/patrol.gd")
 var _patrol_points: Array[Vector3] = []
@@ -4006,7 +4006,7 @@ func _populate() -> void:
 	if modules and _module_level != null:
 		_report_room_intruders()
 	# After the count, which is of the corridors: each chest room puts back its
-	# own -- a prison's wardens and loose prisoners, the mimic -- which this
+	# own -- a prison's enforcers and loose prisoners, the mimic -- which this
 	# repopulate (or the first build) has just cleared.
 	for p in _puzzles:
 		p.call("on_world_reset")
@@ -4234,10 +4234,10 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 		enemy.aggro_range = enemy_aggro_range
 		_give_wander_area(enemy, tile, roams)
 		_spawned.append(enemy)
-	# Every skeleton pack walks with a warden bot (warden.gd), which keeps close
+	# Every skeleton pack walks with a enforcer (enforcer.gd), which keeps close
 	# to the pack's first skeleton while they amble.
-	if not flying and wardens_with_packs and leader != null:
-		var w := _spawn_warden(tile, leader, members)
+	if not flying and enforcers_with_packs and leader != null:
+		var w := _spawn_enforcer(tile, leader, members)
 		# It passes through its own pack: two of them standing side by side in a
 		# corridor otherwise wall in its wider body (measured: one of six stuck
 		# 7.6 m from its escort, wedged between two sentries).
@@ -4245,7 +4245,7 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 			(w as PhysicsBody3D).add_collision_exception_with(m)
 		w.set("pack", members)
 		count += 1
-		# On patrol: the column walks the corridors, the warden at its back.
+		# On patrol: the column walks the corridors, the enforcer at its back.
 		if patrols and not _patrol_points.is_empty():
 			var column: Array[Node3D] = []
 			column.assign(members)
@@ -4261,7 +4261,7 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 ## --- Haul convoys (convoy.gd, 2026-10-09) ---------------------------------------
 ##
 ## Skeletons moving a cart of coins and crystals round the corridors' loops
-## with a warden behind. They start somewhere far from the player and from each
+## with an enforcer behind. They start somewhere far from the player and from each
 ## other, already moving, every time the world is populated.
 
 @export var convoy_count := 4
@@ -4313,16 +4313,16 @@ func _spawn_convoys() -> void:
 		% [_convoys.size(), loops.size(), _corridor_cell_count()])
 
 
-@export var wardens_with_packs := true
-## A warden's beam reaches 20 m (warden.gd BEAM_RANGE), so it notices further
+@export var enforcers_with_packs := true
+## An enforcer's beam reaches 20 m (enforcer.gd BEAM_RANGE), so it notices further
 ## than a skeleton does.
-@export var warden_aggro_range := 22.0
-const WARDEN_SCRIPT := preload("res://scripts/warden.gd")
+@export var enforcer_aggro_range := 22.0
+const ENFORCER_SCRIPT := preload("res://scripts/enforcer.gd")
 
 
-func _spawn_warden(tile: Vector2i, escort: Node3D, members: Array[Node3D] = []) -> Node3D:
+func _spawn_enforcer(tile: Vector2i, escort: Node3D, members: Array[Node3D] = []) -> Node3D:
 	var w: Node3D = enemy_scene.instantiate()
-	w.set_script(WARDEN_SCRIPT)
+	w.set_script(ENFORCER_SCRIPT)
 	# Beside its escort, on whichever side leaves it furthest from the rest of
 	# the pack: it does not collide with them, and asleep it would stand inside
 	# one until woken.
@@ -4344,7 +4344,7 @@ func _spawn_warden(tile: Vector2i, escort: Node3D, members: Array[Node3D] = []) 
 	w.position = best + Vector3(0.0, 0.3, 0.0)
 	w.rotation.y = _open_heading(tile)
 	add_child(w)
-	w.set("aggro_range", warden_aggro_range)
+	w.set("aggro_range", enforcer_aggro_range)
 	_give_wander_area(w, tile, true)
 	w.set("escort", escort)
 	_spawned.append(w)

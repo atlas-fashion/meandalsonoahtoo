@@ -574,7 +574,7 @@ func _physics_process(delta: float) -> void:
 		_enter_summon()
 		return
 
-	# A guard with a patch of its own to stroll (the mine's wardens) keeps
+	# A guard with a patch of its own to stroll (the mine's enforcers) keeps
 	# strolling it while the player is outside its zone, rather than walking
 	# back to its post and standing there.
 	if returning and wanders and not wander_spots.is_empty() and _inside_wander_area(global_position):
@@ -646,7 +646,7 @@ func _physics_process(delta: float) -> void:
 ##
 ## A skeleton with a right arm carries a weapon (skeleton_sword.gd), and the
 ## weapon is what hurts the player: a blow lands only where the swept blade
-## passes through them. `armed` false (archers, wardens, prisoners fighting
+## passes through them. `armed` false (archers, enforcers, prisoners fighting
 ## bare-handed) keeps the old reach test. Set before the enemy enters the tree.
 var armed := true
 var weapon := &"sword"

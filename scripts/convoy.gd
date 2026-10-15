@@ -2,8 +2,8 @@ extends Node3D
 
 ## A haul convoy (2026-10-09): skeletons moving a wheelbarrow cart of gold
 ## coins and red and gold crystals through the corridors -- from a refinery to
-## a consolidator, by the lore, though neither exists yet -- with a warden bot
-## (warden.gd) walking behind. Spawned by maze.gd (`_spawn_convoys`) on every
+## a consolidator, by the lore, though neither exists yet -- with an enforcer
+## (enforcer.gd) walking behind. Spawned by maze.gd (`_spawn_convoys`) on every
 ## repopulate, already on the move.
 ##
 ## THE ROUTE never goes near a dead end: the corridor graph (`network`) is cut
@@ -18,11 +18,11 @@ extends Node3D
 ## THE CREW are real skeletons (enemy.tscn) with `hauled_by` set: no AI of
 ## their own, placed and posed by the convoy each tick (enemy.gd calls
 ## `pose_hauler`). One PUSHES at the handles, one PULLS on a rope in front, one
-## STEADIES the load at the side. The warden escorts a marker 4.6 m behind the
+## STEADIES the load at the side. The enforcer escorts a marker 4.6 m behind the
 ## cart.
 ##
 ## SET UPON -- the player seen in front of the puller or close to any of them,
-## any of them hurt or alerted, the warden engaged -- they let go and fight as
+## any of them hurt or alerted, the enforcer engaged -- they let go and fight as
 ## ordinary enemies; the cart stays where it stopped, and E on it takes the load.
 
 const MM := preload("res://scripts/module_maze.gd")
@@ -33,7 +33,7 @@ const PUSH_AT := -1.9
 const PULL_AT := 2.5
 const STEADY_AT := -0.1
 const STEADY_SIDE := 0.85
-const WARDEN_AT := -4.6
+const ENFORCER_AT := -4.6
 ## Joined on before the route runs out; trimmed this far behind the marker.
 const LOOK_AHEAD := 14.0
 const KEEP_BEHIND := 12.0
@@ -69,7 +69,7 @@ var net: Dictionary = {}
 var broken := false
 var looted := false
 var crew: Array[Dictionary] = []
-var warden: Node3D
+var enforcer: Node3D
 
 var _rng := RandomNumberGenerator.new()
 ## The cells the route runs through, and the smoothed polyline over them.
@@ -177,7 +177,7 @@ func _others_claims() -> Dictionary:
 	return out
 
 
-## From behind its warden to the end of its road (just its own cell once it has
+## From behind its enforcer to the end of its road (just its own cell once it has
 ## been dropped): the whole convoy and everywhere it is going.
 func claimed() -> Dictionary:
 	var out := {}
@@ -186,7 +186,7 @@ func claimed() -> Dictionary:
 	out[_cell_at(_cart.global_position)] = true
 	if broken:
 		return out
-	var from_s := _s + WARDEN_AT - 2.0
+	var from_s := _s + ENFORCER_AT - 2.0
 	for i in _cells.size():
 		if _length_to_cell(i) >= from_s:
 			out[_cells[i]] = true
@@ -282,7 +282,7 @@ func _setup(start: Vector2i, seed_value: int) -> bool:
 	_speed = SPEED
 	_build_cart()
 	_marker = Node3D.new()
-	_marker.name = "WardenMark"
+	_marker.name = "EnforcerMark"
 	add_child(_marker)
 	_place(0.0)
 	_spawn_crew()
@@ -312,13 +312,13 @@ func _spawn_crew() -> void:
 		(e as PhysicsBody3D).add_collision_exception_with(_cart)
 	_place(0.0)
 	var tile: Vector2i = maze.call("world_to_tile", _marker.global_position)
-	warden = maze.call("_spawn_warden", tile, _marker, members)
-	if warden != null:
-		warden.set("wander_speed", 1.5)
-		warden.set("pack", members)
+	enforcer = maze.call("_spawn_enforcer", tile, _marker, members)
+	if enforcer != null:
+		enforcer.set("wander_speed", 1.5)
+		enforcer.set("pack", members)
 		for m in members:
-			(warden as PhysicsBody3D).add_collision_exception_with(m)
-		(warden as PhysicsBody3D).add_collision_exception_with(_cart)
+			(enforcer as PhysicsBody3D).add_collision_exception_with(m)
+		(enforcer as PhysicsBody3D).add_collision_exception_with(_cart)
 
 
 func _build_cart() -> void:
@@ -637,10 +637,10 @@ func _maintain() -> void:
 		# Hemmed in: go on to the end of the road and try again shortly.
 		_next_extend = now + 0.5
 		return
-	# Drop cells far behind the warden's mark.
+	# Drop cells far behind the enforcer's mark.
 	var drop := 0
 	while drop < _cells.size() - 4:
-		var behind_s := _s + WARDEN_AT - KEEP_BEHIND
+		var behind_s := _s + ENFORCER_AT - KEEP_BEHIND
 		if _length_to_cell(drop + 1) >= behind_s:
 			break
 		drop += 1
@@ -729,11 +729,11 @@ func _cart_xf(s: float) -> Transform3D:
 	return Transform3D(Basis.looking_at(dir, Vector3.UP), wheel_pt - dir * WHEEL_AHEAD)
 
 ## Lagging further than this behind its mark, out of the player's sight, the
-## warden is put back on it.
-const WARDEN_LAG := 8.0
+## enforcer is put back on it.
+const ENFORCER_LAG := 8.0
 
 
-## Keeps the warden with the cart.
+## Keeps the enforcer with the cart.
 ##   * Far from the player it sleeps like every enemy (enemy.gd dormancy) while
 ##     the cart goes on: carried along at its mark, it is where it should be
 ##     when it wakes. Without this: 55 m behind in a minute.
@@ -742,21 +742,21 @@ const WARDEN_LAG := 8.0
 ##     body only slides along another). Whatever enemy it bumps it stops
 ##     colliding with. Without this: 14 m behind.
 ##   * Still lagging and out of the player's sight, it is put back on its mark.
-func _tend_warden() -> void:
-	if warden == null or not is_instance_valid(warden) or warden.get("_dying") == true:
+func _tend_enforcer() -> void:
+	if enforcer == null or not is_instance_valid(enforcer) or enforcer.get("_dying") == true:
 		return
-	if warden.get("_dormant") == true:
-		warden.global_transform = _marker.global_transform
+	if enforcer.get("_dormant") == true:
+		enforcer.global_transform = _marker.global_transform
 		return
-	if warden.get("engaged") == true:
+	if enforcer.get("engaged") == true:
 		return
-	var body := warden as CharacterBody3D
+	var body := enforcer as CharacterBody3D
 	for i in body.get_slide_collision_count():
 		var other := body.get_slide_collision(i).get_collider() as Node
 		if other != null and other is CharacterBody3D and other.has_method("alert") and other != _player:
 			body.add_collision_exception_with(other)
-	if warden.global_position.distance_to(_marker.global_position) > WARDEN_LAG and not _player_sees(warden):
-		warden.global_transform = _marker.global_transform
+	if enforcer.global_position.distance_to(_marker.global_position) > ENFORCER_LAG and not _player_sees(enforcer):
+		enforcer.global_transform = _marker.global_transform
 
 
 ## Could the player see `n` -- near enough, with a clear line from their eyes?
@@ -770,7 +770,7 @@ func _player_sees(n: Node3D) -> bool:
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
 
 
-## Another convoy's cart (or the warden walking behind it) on this one's road
+## Another convoy's cart (or the enforcer walking behind it) on this one's road
 ## just ahead. Claims keep their roads apart, so this is a guard -- asked five
 ## times a second, not every tick.
 var _held := false
@@ -814,11 +814,11 @@ func _place(ds: float) -> void:
 	_cart.global_transform = xf
 	_wheel.rotation.x -= ds / WHEEL_R
 	_update_steady_side(ds)
-	var m: Array = _at(_s + WARDEN_AT)
-	# Facing along the road: an escorting warden at rest turns to its escort's
+	var m: Array = _at(_s + ENFORCER_AT)
+	# Facing along the road: an escorting enforcer at rest turns to its escort's
 	# heading.
 	_marker.global_transform = Transform3D(Basis.looking_at(m[1], Vector3.UP), m[0])
-	_tend_warden()
+	_tend_enforcer()
 	for entry in crew:
 		var e: Node3D = entry["node"]
 		if not is_instance_valid(e):
@@ -1029,8 +1029,8 @@ func _set_upon() -> bool:
 		if float(e.get("_seen_until")) > Time.get_ticks_msec() / 1000.0:
 			broke_because = "crew alerted"
 			return true
-	if warden != null and is_instance_valid(warden) and warden.get("engaged") == true:
-		broke_because = "warden engaged"
+	if enforcer != null and is_instance_valid(enforcer) and enforcer.get("engaged") == true:
+		broke_because = "enforcer engaged"
 		return true
 	var p := _player
 	if p == null or p.get("_dead") == true or (p.has_method("is_hidden") and p.call("is_hidden")):
@@ -1084,8 +1084,8 @@ func _let_go() -> void:
 		var none: Array[Vector3] = []
 		e.set("wander_spots", none)
 		e.call("alert")
-	if warden != null and is_instance_valid(warden) and warden.has_method("alert"):
-		warden.call("alert")
+	if enforcer != null and is_instance_valid(enforcer) and enforcer.has_method("alert"):
+		enforcer.call("alert")
 
 
 func is_broken() -> bool:

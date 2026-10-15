@@ -1,6 +1,6 @@
 extends CharacterBody3D
 
-## A CRIER (2026-10-14; called a bomber before): a warden bot's head, flying
+## A CRIER (2026-10-14; called a bomber before): the old warden bot's head, flying
 ## loose, that throws itself at the player's face and goes off there.
 ##
 ## The moment it SEES the player -- a clear line on the sight layer (2), which
@@ -57,7 +57,7 @@ signal detonated
 @export var blast_radius := 3.5
 
 @export_group("Colours")
-## The lens: the warden's gold crystal, blinking white-hot on the face.
+## The lens: the old bot's gold crystal, blinking white-hot on the face.
 @export var base_color := Color(1.0, 0.62, 0.16)
 @export var blink_color := Color(1.0, 0.945098, 0.784314)
 @export var base_glow := 1.6
@@ -79,14 +79,13 @@ const FACE_GLOW := 0.35
 const FACE_LIGHT := 0.25
 ## And it blinks hot gold, not white.
 const FACE_HOT := 0.4
-## The warden's head (warden.gd `_fill_head`) at this size: a 0.76 m box.
+## The old warden bot's head at this size: a 0.76 m box.
 const HEAD_SCALE := 2.0
 ## Seconds between sight checks while it cannot see the player.
 const LOOK_EVERY := 0.1
 
 enum { HUNT, FACE }
 
-const WARDEN := preload("res://scripts/warden.gd")
 
 @onready var shape: CollisionShape3D = $CollisionShape3D
 @onready var light: OmniLight3D = $Light
@@ -166,7 +165,7 @@ func _ready() -> void:
 	_warm_up.call_deferred()
 
 
-## The warden's head (warden.gd): plate box, neck, brass rim round a gold
+## The old warden bot's head: plate box, neck, brass rim round a gold
 ## crystal lens, an aerial -- merged into one mesh, shared by every crier, and
 ## centred on the box so it flies and shatters about its middle.
 func _build_head() -> void:
@@ -183,14 +182,14 @@ func _build_head() -> void:
 			var centre := Transform3D(Basis().scaled(Vector3.ONE * HEAD_SCALE),
 				Vector3(0.0, -0.27 * HEAD_SCALE, 0.0))
 			(tools[mat] as SurfaceTool).append_from(m, 0, centre * xf)
-		var neck := WARDEN._cyl(0.07, 0.09, 0.14, 6)
-		add.call(neck, Transform3D(Basis(), Vector3(0.0, 0.07, 0.0)), WARDEN._mat(&"dark"))
-		add.call(WARDEN._box(Vector3(0.38, 0.28, 0.34)), Transform3D(Basis(Vector3.FORWARD, 0.04),
-			Vector3(0.0, 0.27, 0.0)), WARDEN._mat(&"plate"))
-		add.call(WARDEN._cyl(0.1, 0.1, 0.06, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5),
-			Vector3(0.05, 0.28, -0.18)), WARDEN._mat(&"brass"))
-		add.call(WARDEN._cyl(0.012, 0.012, 0.4, 4), Transform3D(Basis(Vector3.FORWARD, 0.2),
-			Vector3(-0.12, 0.56, 0.06)), WARDEN._mat(&"brass"))
+		var neck := _robot_cyl(0.07, 0.09, 0.14, 6)
+		add.call(neck, Transform3D(Basis(), Vector3(0.0, 0.07, 0.0)), _robot_mat(&"dark"))
+		add.call(_robot_box(Vector3(0.38, 0.28, 0.34)), Transform3D(Basis(Vector3.FORWARD, 0.04),
+			Vector3(0.0, 0.27, 0.0)), _robot_mat(&"plate"))
+		add.call(_robot_cyl(0.1, 0.1, 0.06, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5),
+			Vector3(0.05, 0.28, -0.18)), _robot_mat(&"brass"))
+		add.call(_robot_cyl(0.012, 0.012, 0.4, 4), Transform3D(Basis(Vector3.FORWARD, 0.2),
+			Vector3(-0.12, 0.56, 0.06)), _robot_mat(&"brass"))
 		_head_mesh = ArrayMesh.new()
 		for mat in tools:
 			var st: SurfaceTool = tools[mat]
@@ -211,8 +210,8 @@ func _build_head() -> void:
 	# Its plates warm with the lens as it blinks: their own copy of the plate
 	# material, emission off until then.
 	for i in _head_mesh.get_surface_count():
-		if _head_mesh.surface_get_material(i) == WARDEN._mat(&"plate"):
-			_plate_material = WARDEN._mat(&"plate").duplicate() as StandardMaterial3D
+		if _head_mesh.surface_get_material(i) == _robot_mat(&"plate"):
+			_plate_material = _robot_mat(&"plate").duplicate() as StandardMaterial3D
 			_plate_material.emission_enabled = true
 			_plate_material.emission = Color.BLACK
 			mesh.set_surface_override_material(i, _plate_material)
@@ -718,3 +717,47 @@ func _paint(colour: Color, glow: float) -> void:
 			_material.emission_energy_multiplier = glow
 	light.light_color = colour
 	light.light_energy = glow
+
+
+# --- The old warden bot's head pieces ---------------------------------------------
+## The bots became the ENFORCERS (2026-10-15), a rigged model (enforcer.gd); the
+## crier keeps the old bot's head, so the primitives and plates it was made of
+## live here now.
+
+static var _robot_mats := {}
+
+
+static func _robot_box(size: Vector3) -> BoxMesh:
+	var b := BoxMesh.new()
+	b.size = size
+	return b
+
+
+static func _robot_cyl(top: float, bottom: float, height: float, sides: int) -> CylinderMesh:
+	var c := CylinderMesh.new()
+	c.top_radius = top
+	c.bottom_radius = bottom
+	c.height = height
+	c.radial_segments = maxi(sides, 4)
+	c.rings = 1
+	return c
+
+
+static func _robot_mat(key: StringName) -> StandardMaterial3D:
+	if _robot_mats.has(key):
+		return _robot_mats[key]
+	var m := StandardMaterial3D.new()
+	match key:
+		&"plate":
+			m.albedo_color = Color(0.36, 0.24, 0.16)
+			m.metallic = 0.35
+			m.roughness = 0.82
+		&"brass":
+			m.albedo_color = Color(0.56, 0.42, 0.18)
+			m.metallic = 0.55
+			m.roughness = 0.5
+		&"dark":
+			m.albedo_color = Color(0.07, 0.06, 0.05)
+			m.roughness = 0.9
+	_robot_mats[key] = m
+	return m
