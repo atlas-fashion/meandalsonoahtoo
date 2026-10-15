@@ -34,7 +34,7 @@ const KIT := "res://models/brick/brick_kit.glb"
 
 ## Pieces that do NOT cast shadows: the floor and its bed only ever have light
 ## from above.
-const NO_SHADOW := ["floor", "bed"]
+const NO_SHADOW := ["floor", "floor_notch", "bed"]
 ## The lid and skirts DO cast, for the moon (2026-10-14): the Tripo vault has a
 ## few real holes in it, which the lid covers, and the moon would shine through
 ## them. No torch can see them (they are outside the corridor), so they are on
@@ -111,7 +111,7 @@ static func meshes(tint: float) -> Dictionary:
 			fixed[mat] = true
 			var rough := mat.roughness_texture
 			_fix_material(mat, tint)
-			if String(mi.name) == "floor" and rough != null:
+			if String(mi.name).begins_with("floor") and rough != null:
 				# The wet floor (Tripo's retexture, 2026-10-14) keeps its own
 				# wet-gloss map -- 0.62 over the stone, down to 0.1 where Tripo
 				# painted standing water (build_brick_kit.wet_gloss) -- where every
@@ -299,12 +299,24 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 		# courts included, but not the boss block (its stair has its own).
 		var boss_block: bool = cell.court and _in_boss_block(out, cell)
 		if not boss_block:
+			# A manhole cell (module_level `_pick_manholes`): the two tiles on the
+			# hole's side are the kit's notched tile, each turned so its notch
+			# (its +X edge) faces the hole -- together, a round hole. The bed
+			# under the cell is manhole.gd's, with a hole in it.
+			var manhole: Dictionary = out.manholes.get(cell.pos, {})
 			for fx: float in [-1.0, 1.0]:
 				for fz: float in [-1.0, 1.0]:
 					var b := Basis(Vector3.UP, float(rng.randi_range(0, 3)) * PI * 0.5)
-					add.call("floor", Transform3D(b, centre + Vector3(fx, 0.0, fz) * FLOOR_TILE * 0.5))
+					var at := centre + Vector3(fx, 0.0, fz) * FLOOR_TILE * 0.5
+					if not manhole.is_empty() and kit.has("floor_notch") \
+							and Vector3(fx, 0.0, fz).dot(manhole["along"]) > 0.0:
+						var to: Vector3 = manhole["world"] - at
+						add.call("floor_notch", Transform3D(Basis(Vector3.UP, atan2(-to.z, to.x)), at))
+						continue
+					add.call("floor", Transform3D(b, at))
 			# Its top just under the slabs' joints, never over the slabs.
-			add.call("bed", Transform3D(Basis(), centre + Vector3(0.0, -0.16, 0.0)))
+			if manhole.is_empty():
+				add.call("bed", Transform3D(Basis(), centre + Vector3(0.0, -0.16, 0.0)))
 		if cell.court:
 			continue
 

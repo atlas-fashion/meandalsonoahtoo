@@ -1426,13 +1426,11 @@ func _process(delta: float) -> void:
 	_run_generator(delta)
 	if kind == &"mine":
 		_run_mine(delta)
-		# Walking in sets nothing off: only the room's name is given. The
-		# enforcers fight when they see the player (their own eyes).
+		# Walking in sets nothing off, and nothing is announced (2026-10-15, the
+		# user: no commentary on walking into a room). The enforcers fight when
+		# they see the player (their own eyes).
 		if not _alarmed and _player_inside(ALARM_IN):
 			_alarmed = true
-			var hud := _hud()
-			if hud != null and hud.has_method("announce") and not (enforcers_down and prisoners_down):
-				hud.announce(String(TITLES[kind][0]), "Enforcers oversee the miners.")
 	elif not _alarmed and not enforcers_down and _player_inside(ALARM_IN):
 		_raise_alarm()
 	_update_focus()
@@ -1470,10 +1468,8 @@ func _run_generator(delta: float) -> void:
 
 
 func _raise_alarm() -> void:
+	# No title card on walking in (2026-10-15): the enforcers simply turn.
 	_alarmed = true
-	var hud := _hud()
-	if hud != null and hud.has_method("announce"):
-		hud.announce(String(TITLES[kind][0]), "Destroy the enforcers. Then cut the power.")
 	for w in _enforcers:
 		if is_instance_valid(w) and w.has_method("alert"):
 			w.call("alert")

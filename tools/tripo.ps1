@@ -40,6 +40,8 @@ param(
     [int]$FaceLimit = 8000,
     [string]$ModelVersion = "v3.1-20260211",
     [switch]$NoPbr,
+    # Geometry only, no texture (cheaper: the game textures it itself).
+    [switch]$NoTexture,
     # "detailed" asks for the high-resolution texture pass (costs more credits).
     [ValidateSet("", "standard", "detailed")][string]$TextureQuality = "",
     [ValidateSet("", "standard", "detailed")][string]$GeometryQuality = "",
@@ -131,8 +133,8 @@ if ($TaskId) {
             prompt        = $Prompt
             model_version = $ModelVersion
             face_limit    = $FaceLimit
-            texture       = $true
-            pbr           = (-not $NoPbr)
+            texture       = (-not $NoTexture)
+            pbr           = (-not $NoPbr -and -not $NoTexture)
         }
     } else {
         if (-not $Image) { throw "-Image is required for -Mode image" }
@@ -147,8 +149,8 @@ if ($TaskId) {
             file          = @{ type = $ext; file_token = $token }
             model_version = $ModelVersion
             face_limit    = $FaceLimit
-            texture       = $true
-            pbr           = (-not $NoPbr)
+            texture       = (-not $NoTexture)
+            pbr           = (-not $NoPbr -and -not $NoTexture)
         }
     }
     if ($TextureQuality) { $body.texture_quality = $TextureQuality }

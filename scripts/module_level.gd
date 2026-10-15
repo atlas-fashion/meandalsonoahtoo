@@ -291,6 +291,10 @@ class Built extends RefCounted:
 	var skylights := {}
 	## Straight cells built with a bone-cage niche: pos -> {flip, dir}.
 	var niches := {}
+	## Manholes down to the sewer (2026-10-15): pos -> {along: the corridor's axis
+	## from the cell's centre to the hole (unit), world: the hole's centre}.
+	## `_pick_manholes`, before the meshes: brick_level lays notched tiles there.
+	var manholes := {}
 	## The boss hall's plan (`plan_boss_hall`): the stair up from the boss
 	## room's one doorway and the hall above the corridor roofs. {} without a
 	## boss room.
@@ -356,6 +360,8 @@ const DEFAULTS := {
 	## One chest room (the one furthest from the start) becomes the morgue: an
 	## enclosed vaulted hall rather than a cloister (`_make_morgue_hall`).
 	"morgue": false,
+	## Manholes down to the sewer (sewer.gd, manhole.gd); brick kit only.
+	"manholes": 0,
 }
 
 
@@ -405,6 +411,7 @@ static func build(parent: Node3D, seed_value: int, size: Vector2i, cell_size: fl
 		var have := {SKYLIGHT_KIND: true, NICHE_KIND: true}
 		_pick_skylights(out, have)
 		_pick_niches(out, have)
+		_pick_manholes(out, int(opt["manholes"]), seed_value)
 		BrickLevel.build(parent, out, view_range, tint)
 		_place_courts(parent, out, tint, true)
 	else:
@@ -2056,6 +2063,61 @@ static func _pick_niches(out: Built, meshes: Dictionary) -> void:
 		var flip := rng.randf() < 0.5
 		var dir := _cell_basis(cell) * Vector3.RIGHT
 		out.niches[cell.pos] = {"flip": flip, "dir": -dir if flip else dir}
+
+
+## --- Manholes (2026-10-15) ----------------------------------------------------------
+##
+## `count` corridor straights, spread over the map (farthest-point from a random
+## first), each with a manhole in its floor halfway between its centre and one
+## end: on the corridor's middle line, `MANHOLE_ALONG` along it -- exactly where
+## two of the kit's notched tiles meet (brick_level). Not in rooms, courts, the
+## morgue hall, under the boss hall, in skylight or bone-cage cells, or within
+## MANHOLE_CLEAR_SPAWN cells of the start.
+const MANHOLE_ALONG := 1.5
+const MANHOLE_CLEAR_SPAWN := 4
+
+
+static func _pick_manholes(out: Built, count: int, seed_value: int) -> void:
+	out.manholes.clear()
+	if count <= 0:
+		return
+	var start := _pick_spawn(out)
+	var start_cell := Vector2i(roundi((start.x - out.origin.x) / out.cell_size),
+		roundi((start.z - out.origin.z) / out.cell_size))
+	var candidates: Array[Vector2i] = []
+	for key in out.cells:
+		var cell: ModuleMaze.Cell = out.cells[key]
+		if cell.kind != "straight" or cell.room >= 0 or cell.court or cell.hall:
+			continue
+		if out.skylights.has(cell.pos) or out.niches.has(cell.pos):
+			continue
+		if under_boss_hall(out, out.to_world(cell.pos), out.cell_size):
+			continue
+		if (cell.pos - start_cell).length() < MANHOLE_CLEAR_SPAWN:
+			continue
+		candidates.append(cell.pos)
+	if candidates.is_empty():
+		return
+	candidates.sort()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value ^ 0x6d616e68
+	var chosen: Array[Vector2i] = [candidates[rng.randi_range(0, candidates.size() - 1)]]
+	while chosen.size() < count and chosen.size() < candidates.size():
+		var best := Vector2i(-1, -1)
+		var best_d := -1.0
+		for c in candidates:
+			var d := INF
+			for k in chosen:
+				d = minf(d, Vector2(c - k).length())
+			if d > best_d:
+				best_d = d
+				best = c
+		chosen.append(best)
+	for pos in chosen:
+		var cell: ModuleMaze.Cell = out.cells[pos]
+		var axis := Vector3(0.0, 0.0, 1.0) if (cell.open & ModuleMaze.N) else Vector3(1.0, 0.0, 0.0)
+		var along := axis * (1.0 if rng.randf() < 0.5 else -1.0)
+		out.manholes[pos] = {"along": along, "world": out.to_world(pos) + along * MANHOLE_ALONG}
 
 
 static func place_windows(parent: Node3D, out: Built, density: float = 1.0) -> Node3D:

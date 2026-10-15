@@ -84,19 +84,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _player == null or _player.get("in_cutscene") or _player.get("_dead"):
 		return
 	get_viewport().set_input_as_handled()
-	var again := active
 	_near = false
 	_prompt.visible = false
 	attuned.emit(self)
 	# A burst of its light, from the crystal.
 	if _player.has_method("_guard_flash"):
 		_player._guard_flash(_crystal.global_position, TEAL, true)
-	var hud := get_tree().get_first_node_in_group("hud")
-	if hud != null and hud.has_method("announce"):
-		if again:
-			hud.announce("PROGRESS BOUND", "What you have charted is kept")
-		else:
-			hud.announce("ANCHOR ATTUNED", "You will rise here when you fall")
+	# No announcement (2026-10-15, at the user's request): the burst of light
+	# and the anchor waking are the only sign.
 
 
 func _apply_look() -> void:

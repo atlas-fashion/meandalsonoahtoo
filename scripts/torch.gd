@@ -40,6 +40,11 @@ var _light_home := Vector3.ZERO
 ## torch bottom, never the old one"). Off for a torch whose body is something
 ## else -- the torch pillar's own carved torch, a brazier.
 @export var kit_mount := true
+## A sewer torch (sewer.gd), ranked against the sewer's level only.
+var sewer := false
+## Below this the camera is in the sewer (sewer.gd SPLIT_Y).
+const SEWER_SPLIT_Y := -4.0
+const OTHER_LEVEL := 1000.0
 ## The kit torch hangs with its head's top here (just above the flame's base),
 ## its wall side at z = 0; its head is KIT_HEAD_OUT off the wall, and the
 ## flame, halo, embers and light move out to it.
@@ -162,8 +167,13 @@ func _exit_tree() -> void:
 static func _rank(camera_at: Vector3, limit: int) -> void:
 	var distances := PackedFloat32Array()
 	distances.resize(_managed.size())
+	var below := camera_at.y < SEWER_SPLIT_Y
 	for i in _managed.size():
 		distances[i] = (_managed[i]._fixed_position as Vector3).distance_to(camera_at)
+		# Torches on the other level (sewer / dungeon) light nothing the camera
+		# can see through the rock: rank them last.
+		if _managed[i].sewer != below:
+			distances[i] += OTHER_LEVEL
 	var cut := INF
 	if limit <= 0:
 		cut = -INF

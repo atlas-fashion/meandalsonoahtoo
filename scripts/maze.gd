@@ -787,6 +787,7 @@ func _build_module_level() -> void:
 			"room_gap": module_room_gap,
 			"room_entrances": module_room_entrances,
 			"morgue": morgue_enabled,
+			"manholes": manhole_count,
 		})
 	_pick_morgue()
 
@@ -843,6 +844,7 @@ func _build_module_level() -> void:
 		_morgue = load("res://scripts/morgue.gd").build(holder, _module_level, _morgue_room)
 	_build_puzzle_rooms(holder)
 	_build_shard_door(holder)
+	_build_sewer()
 
 
 ## --- The morgue (2026-10-08) -------------------------------------------------------
@@ -856,6 +858,51 @@ func _build_module_level() -> void:
 ## wander near it; at the user's request it now wanders at random.)
 
 @export var morgue_enabled := true
+
+
+## --- The sewer (2026-10-15) ---------------------------------------------------------
+##
+## `manhole_count` manholes in corridor straights (module_level `_pick_manholes`),
+## each with a cover to lift and a ladder down to the sewer (sewer.gd) -- big
+## brick pipes on the same grid, 12 m under the corridors. Neither is under
+## NavRegion: nothing walks down there. The sewer has its own map level
+## (explore_map.gd `add_level`).
+
+@export var manhole_count := 5
+var _sewer: Node3D
+var _manholes: Array[Node3D] = []
+
+
+func _build_sewer() -> void:
+	if _module_level == null or _module_level.manholes.is_empty():
+		return
+	var sewer_script = load("res://scripts/sewer.gd")
+	_sewer = sewer_script.build(self, _module_level, _active_seed)
+	if _sewer == null:
+		return
+	var manhole_script = load("res://scripts/manhole.gd")
+	var i := 0
+	for shaft in _sewer.get("shafts"):
+		var cell: Vector2i = shaft["cell"]
+		_manholes.append(manhole_script.build(self, shaft, _module_level.to_world(cell), i))
+		i += 1
+	_wall_off_sewer.call_deferred()
+
+
+## No light up here reaches the sewer's visual layer: the floor between is not
+## a shadow caster, so the corridors' torches and the moon would light the pipes
+## through it. Run once the level's lights exist (the moon is the scene's).
+func _wall_off_sewer() -> void:
+	if _sewer == null:
+		return
+	var layer: int = _sewer.get("VISUAL_LAYER")
+	for n in get_tree().root.find_children("*", "Light3D", true, false):
+		var light := n as Light3D
+		if _sewer.is_ancestor_of(light):
+			continue
+		light.light_cull_mask &= ~layer
+		if light is DirectionalLight3D:
+			light.shadow_caster_mask &= ~layer
 
 var _morgue_room: Dictionary = {}
 var _morgue: Node3D = null
@@ -1091,6 +1138,8 @@ func save_state() -> Dictionary:
 		data["map"] = map.snapshot()
 		# The player's own marks; a death does not forget them.
 		data["pins"] = map.pins_state()
+		# The sewer's charting (its own level of the map).
+		data["map_levels"] = map.levels_state()
 	data["map_checkpoint"] = _map_snapshot.duplicate()
 	data["doors"] = _indices(_nodes_with("res://scripts/wood_door.gd"),
 		func(n: Node) -> bool: return n.get("opened") == true)
@@ -1106,6 +1155,11 @@ func save_state() -> Dictionary:
 	data["puzzles"] = puzzles
 	if _shard_door != null:
 		data["door"] = _shard_door.call("save_state")
+	var open_holes: Array = []
+	for i in _manholes.size():
+		if _manholes[i].call("is_open"):
+			open_holes.append(i)
+	data["manholes"] = open_holes
 	return data
 
 
@@ -1126,6 +1180,9 @@ func restore_world(data: Dictionary) -> void:
 	for i in data.get("carts", []):
 		if int(i) < carts.size():
 			carts[int(i)].call("restore_searched")
+	for i in data.get("manholes", []):
+		if int(i) < _manholes.size():
+			_manholes[int(i)].call("set_open_now")
 	var a := int(data.get("anchor", -1))
 	if a >= 0 and a < _anchors.size():
 		for other in _anchors:
@@ -1137,6 +1194,8 @@ func restore_world(data: Dictionary) -> void:
 		map.restore(data["map"])
 	if map != null and data.has("pins"):
 		map.restore_pins(data["pins"])
+	if map != null and data.has("map_levels"):
+		map.restore_levels(data["map_levels"])
 	_map_snapshot = data.get("map_checkpoint", _map_snapshot)
 
 
@@ -1368,7 +1427,7 @@ func _place_hiding_spots(holder: Node3D) -> void:
 	for key: Vector2i in _module_level.cells:
 		var cell = _module_level.cells[key]
 		if cell.kind != "straight" or cell.room >= 0 or cell.court or door_cells.has(key) \
-				or _module_level.niches.has(key):
+				or _module_level.niches.has(key) or _module_level.manholes.has(key):
 			continue
 		if absi(key.x - spawn_cell.x) + absi(key.y - spawn_cell.y) <= 1:
 			continue
@@ -1478,6 +1537,8 @@ func _place_clutter(holder: Node3D) -> void:
 		var p: Vector3 = (spot as Node3D).global_position
 		blocked[Vector2i(roundi((p.x - _module_level.origin.x) / _module_level.cell_size),
 			roundi((p.z - _module_level.origin.z) / _module_level.cell_size))] = true
+	for key in _module_level.manholes:
+		blocked[key] = true
 	var solid: Array = level_script.BrickLevel.place_clutter(holder, _module_level, blocked, module_view_range)
 	for s in solid:
 		var at: Vector3 = s["at"]
@@ -1508,6 +1569,8 @@ func _place_damp(holder: Node3D) -> void:
 		var p: Vector3 = (spot as Node3D).global_position
 		blocked[Vector2i(roundi((p.x - _module_level.origin.x) / _module_level.cell_size),
 			roundi((p.z - _module_level.origin.z) / _module_level.cell_size))] = true
+	for key in _module_level.manholes:
+		blocked[key] = true
 	var damp: Node3D = load("res://scripts/damp.gd").new()
 	holder.add_child(damp)
 	damp.build(_module_level, blocked)
@@ -1658,6 +1721,8 @@ func _attach_explore_map() -> void:
 	map.name = "ExploreMap"
 	add_child(map)
 	map.setup(_module_level, player)
+	if _sewer != null:
+		map.add_level(&"sewer", _sewer.get("map"))
 	# What dying before any anchor is attuned leaves charted.
 	_map_snapshot = map.snapshot()
 

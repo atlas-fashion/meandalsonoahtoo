@@ -174,6 +174,7 @@ func _process(delta: float) -> void:
 	# Something else took the screen (a scene, death): the map shuts.
 	if _full_open and (_player.get("in_cutscene") or _player.get("_dead")):
 		set_full_map_open(false)
+	_check_level()
 	_update_reveal()
 	_update_marker_transforms()
 	_pad_map(delta)
@@ -259,6 +260,8 @@ func revealed_count() -> int:
 ## one when it is attuned, and dying restores it -- everything charted since
 ## the checkpoint is forgotten.
 func snapshot() -> Dictionary:
+	if _level != &"dungeon" and _stored.has(&"dungeon"):
+		return (_stored[&"dungeon"]["revealed"] as Dictionary).duplicate()
 	return _revealed.duplicate()
 
 
@@ -279,6 +282,9 @@ func hiding_place_marked(world: Vector3) -> bool:
 
 
 func restore(snap: Dictionary) -> void:
+	if _level != &"dungeon" and _stored.has(&"dungeon"):
+		_stored[&"dungeon"]["revealed"] = snap.duplicate()
+		return
 	_revealed = snap.duplicate()
 	# Redrawn now, and wherever the player stands is charted again next frame.
 	_rebuild_map_image()
@@ -326,6 +332,7 @@ func _build_minimap(root: Control) -> void:
 	style.corner_radius_top_right = 6
 	style.corner_radius_bottom_left = 6
 	style.corner_radius_bottom_right = 6
+	_frame_styles.append(style)
 	frame.add_theme_stylebox_override("panel", style)
 	box.add_child(frame)
 
@@ -364,6 +371,19 @@ func _build_minimap(root: Control) -> void:
 	_mini_marker.position = Vector2(MINIMAP_SIZE * 0.5, MINIMAP_SIZE * 0.5)
 	box.add_child(_mini_marker)
 
+	# Which map this is, when it is not the dungeon's.
+	_level_label = Label.new()
+	_level_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_level_label.add_theme_font_size_override("font_size", 13)
+	_level_label.add_theme_color_override("font_color", COL_SEWER_WALL)
+	_level_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	_level_label.add_theme_constant_override("outline_size", 4)
+	_level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_level_label.position = Vector2(0.0, MINIMAP_SIZE - 24.0)
+	_level_label.size = Vector2(MINIMAP_SIZE, 20.0)
+	_level_label.visible = false
+	box.add_child(_level_label)
+
 
 var _mini_marks: Control = null
 ## The minimap's crop is this much bigger than its frame, so it can turn.
@@ -383,7 +403,7 @@ func _draw_mini_marks() -> void:
 	var me := _continuous_px(_player.global_position)
 	for pin: Dictionary in _pins:
 		# Pins are for the full map only; marks show here too.
-		if pin.get("quick", false):
+		if pin.get("quick", false) or not _pin_on_level(pin):
 			continue
 		var at := c + ((_pin_px(pin) - me) * k).rotated(-_mini_spin)
 		if Rect2(Vector2.ZERO, Vector2(MINIMAP_SIZE, MINIMAP_SIZE)).grow(-4.0).has_point(at):
@@ -535,6 +555,7 @@ func _build_full_map(root: Control) -> void:
 	pstyle.bg_color = COL_BG
 	pstyle.border_color = COL_WALL
 	pstyle.set_border_width_all(3)
+	_frame_styles.append(pstyle)
 	panel.add_theme_stylebox_override("panel", pstyle)
 	panel.gui_input.connect(_on_map_input)
 	panel.mouse_exited.connect(func() -> void:
@@ -575,6 +596,7 @@ func _build_full_map(root: Control) -> void:
 	rstyle.draw_center = false
 	rstyle.border_color = COL_WALL
 	rstyle.set_border_width_all(3)
+	_frame_styles.append(rstyle)
 	rim.add_theme_stylebox_override("panel", rstyle)
 	panel.add_child(rim)
 
@@ -592,6 +614,19 @@ func _build_full_map(root: Control) -> void:
 	hints.offset_top = 12
 	hints.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	overlay.add_child(hints)
+
+	_full_title = Label.new()
+	_full_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_full_title.text = "DUNGEON"
+	_full_title.add_theme_font_size_override("font_size", 20)
+	_full_title.add_theme_color_override("font_color", Color(0.9, 0.86, 0.78))
+	_full_title.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	_full_title.add_theme_constant_override("outline_size", 5)
+	_full_title.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_full_title.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_full_title.offset_top = 58
+	_full_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	overlay.add_child(_full_title)
 
 	_build_editor(overlay)
 
@@ -748,6 +783,8 @@ func _pin_at(p: Vector2) -> int:
 	var best := -1
 	var best_d := PIN_PICK
 	for i in _pins.size():
+		if not _pin_on_level(_pins[i]):
+			continue
 		var d := _px_to_panel(_pin_px(_pins[i])).distance_to(p)
 		if d < best_d:
 			best_d = d
@@ -785,7 +822,7 @@ func _quick_pin(p: Vector2) -> void:
 			_pin_layer.queue_redraw()
 		return
 	var world := _panel_to_world(p)
-	_pins.append({"x": world.x, "z": world.y, "note": "", "color": QUICK_PIN_COLOUR, "shape": 0, "quick": true})
+	_pins.append({"x": world.x, "z": world.y, "note": "", "color": QUICK_PIN_COLOUR, "shape": 0, "quick": true, "level": _level})
 	_hover_pin = _pin_at(p)
 	_pin_layer.queue_redraw()
 
@@ -806,6 +843,8 @@ func _draw_full_marks() -> void:
 	var font := ThemeDB.fallback_font
 	for i in _pins.size():
 		var pin: Dictionary = _pins[i]
+		if not _pin_on_level(pin):
+			continue
 		var at := _px_to_panel(_pin_px(pin))
 		_draw_mark(_pin_layer, at, pin["color"], int(pin.get("shape", 0)), 1.0 if i != _hover_pin else 1.3)
 		if i == _hover_pin and String(pin["note"]) != "":
@@ -985,7 +1024,7 @@ func _save_pin() -> void:
 	if _editor == null or not _editor.visible:
 		return
 	var pin := {"x": _edit_world.x, "z": _edit_world.y, "note": _editor_note.text.strip_edges().left(NOTE_MAX),
-		"color": PIN_COLOURS[_edit_colour], "shape": _edit_shape}
+		"color": PIN_COLOURS[_edit_colour], "shape": _edit_shape, "level": _level}
 	if _editing >= 0 and _editing < _pins.size():
 		_pins[_editing] = pin
 	else:
@@ -1022,7 +1061,8 @@ func pins_state() -> Array:
 	var out: Array = []
 	for pin: Dictionary in _pins:
 		out.append({"x": pin["x"], "z": pin["z"], "note": pin["note"], "quick": pin.get("quick", false),
-			"color": (pin["color"] as Color).to_html(false), "shape": pin.get("shape", 0)})
+			"color": (pin["color"] as Color).to_html(false), "shape": pin.get("shape", 0),
+			"level": String(pin.get("level", "dungeon"))})
 	return out
 
 
@@ -1032,7 +1072,8 @@ func restore_pins(data: Array) -> void:
 		if d is Dictionary:
 			_pins.append({"x": float(d.get("x", 0.0)), "z": float(d.get("z", 0.0)),
 				"note": String(d.get("note", "")), "color": Color.html(String(d.get("color", "ee3a2e"))),
-				"shape": int(d.get("shape", 0)), "quick": bool(d.get("quick", false))})
+				"shape": int(d.get("shape", 0)), "quick": bool(d.get("quick", false)),
+				"level": StringName(String(d.get("level", "dungeon")))})
 	if _pin_layer != null:
 		_pin_layer.queue_redraw()
 	if _mini_marks != null:
@@ -1267,6 +1308,15 @@ func _rebuild_map_image() -> void:
 			_paint_wall_outline(img, cell)
 	# No icons (2026-10-10): junctions, rooms, gates and hiding places are no
 	# longer drawn -- the player marks the map themselves (`_pins`).
+	# Except the sewer's ladders (2026-10-15): the only ways out of it.
+	var ladders = _built.get("ladders")
+	if ladders != null:
+		for at: Vector3 in ladders:
+			if not _revealed.has(_cell_for_world(at)):
+				continue
+			var px := _continuous_px(at)
+			img.fill_rect(Rect2i(int(px.x) - 3, int(px.y) - 3, 6, 6), Color(0.0, 0.0, 0.0))
+			img.fill_rect(Rect2i(int(px.x) - 2, int(px.y) - 2, 4, 4), Color(0.92, 0.88, 0.7))
 
 	if _map_texture == null:
 		_map_texture = ImageTexture.create_from_image(img)
@@ -1359,10 +1409,115 @@ func _paint_wall_outline(img: Image, cell) -> void:
 	# a solid outline dashed. Two survives that.
 	var t := 2
 	if not (cell.open & ModuleMaze.N):
-		img.fill_rect(Rect2i(ox, oy, PPC, t), COL_WALL)
+		img.fill_rect(Rect2i(ox, oy, PPC, t), _wall_colour())
 	if not (cell.open & ModuleMaze.S):
-		img.fill_rect(Rect2i(ox, oy + PPC - t, PPC, t), COL_WALL)
+		img.fill_rect(Rect2i(ox, oy + PPC - t, PPC, t), _wall_colour())
 	if not (cell.open & ModuleMaze.W):
-		img.fill_rect(Rect2i(ox, oy, t, PPC), COL_WALL)
+		img.fill_rect(Rect2i(ox, oy, t, PPC), _wall_colour())
 	if not (cell.open & ModuleMaze.E):
-		img.fill_rect(Rect2i(ox + PPC - t, oy, t, PPC), COL_WALL)
+		img.fill_rect(Rect2i(ox + PPC - t, oy, t, PPC), _wall_colour())
+
+
+## --- Levels (2026-10-15) ---------------------------------------------------------
+##
+## The sewer (sewer.gd) is a second map on the same grid: `add_level` registers
+## it, and whichever level the player is on is the one charted, drawn and shown,
+## on both the full map and the minimap (`_check_level`, by height: below
+## LEVEL_SPLIT_Y is the sewer). Each level keeps its own charted cells; marks
+## are kept per level. Dying forgets only the DUNGEON's charting since the
+## checkpoint (`snapshot` / `restore` read and write it whichever level is up).
+
+const LEVEL_SPLIT_Y := -4.0
+const COL_SEWER_WALL := Color(0.46, 0.66, 0.52)
+const LEVEL_TITLES := {&"dungeon": "", &"sewer": "SEWERS"}
+
+var _level := &"dungeon"
+## Levels not on screen: name -> {"built": ..., "revealed": {...}}.
+var _stored := {}
+var _level_label: Label = null
+var _full_title: Label = null
+var _frame_styles: Array[StyleBoxFlat] = []
+
+
+func add_level(level: StringName, built) -> void:
+	_stored[level] = {"built": built, "revealed": {}}
+
+
+func current_level() -> StringName:
+	return _level
+
+
+func _level_for_player() -> StringName:
+	if _stored.has(&"sewer") or _level == &"sewer":
+		return &"sewer" if _player.global_position.y < LEVEL_SPLIT_Y else &"dungeon"
+	return &"dungeon"
+
+
+func _check_level() -> void:
+	var want := _level_for_player()
+	if want != _level:
+		_switch_level(want)
+
+
+func _switch_level(level: StringName) -> void:
+	if not _stored.has(level):
+		return
+	_stored[_level] = {"built": _built, "revealed": _revealed}
+	var next: Dictionary = _stored[level]
+	_stored.erase(level)
+	_level = level
+	_built = next["built"]
+	_revealed = next["revealed"]
+	_index_doors()
+	_img_w = (_built.size.x + MARGIN_CELLS * 2) * PPC
+	_img_h = (_built.size.y + MARGIN_CELLS * 2) * PPC
+	_last_cell = Vector2i(-999999, -999999)
+	_rebuild_map_image()
+	_revealed_dirty = false
+	var title: String = LEVEL_TITLES.get(level, "")
+	if _level_label != null:
+		_level_label.text = title
+		_level_label.visible = title != ""
+	if _full_title != null:
+		_full_title.text = title if title != "" else "DUNGEON"
+	var wall := COL_SEWER_WALL if level == &"sewer" else COL_WALL
+	for s in _frame_styles:
+		s.border_color = wall
+	if _pin_layer != null:
+		_pin_layer.queue_redraw()
+	if _mini_marks != null:
+		_mini_marks.queue_redraw()
+
+
+## The colour walls are drawn in on the level on screen.
+func _wall_colour() -> Color:
+	return COL_SEWER_WALL if _level == &"sewer" else COL_WALL
+
+
+func _pin_on_level(pin: Dictionary) -> bool:
+	return StringName(pin.get("level", &"dungeon")) == _level
+
+
+## The charted cells of every level but the dungeon, for a save.
+func levels_state() -> Dictionary:
+	var out := {}
+	if _level != &"dungeon":
+		out[String(_level)] = _revealed.keys()
+	for level in _stored:
+		if level != &"dungeon":
+			out[String(level)] = (_stored[level]["revealed"] as Dictionary).keys()
+	return out
+
+
+func restore_levels(data: Dictionary) -> void:
+	for key in data:
+		var level := StringName(key)
+		var cells := {}
+		for c in data[key]:
+			cells[c] = true
+		if level == _level:
+			_revealed = cells
+			_rebuild_map_image()
+			_last_cell = Vector2i(-999999, -999999)
+		elif _stored.has(level):
+			_stored[level]["revealed"] = cells

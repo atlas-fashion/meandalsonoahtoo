@@ -626,6 +626,43 @@ func leave_hiding(at: Vector3, yaw: float) -> void:
 		hidden_changed.emit(false)
 
 
+## --- Ladders (manhole.gd, 2026-10-15) ---------------------------------------------
+##
+## On a ladder the body is moved by the ladder's scene (`global_position`
+## written each frame), not by physics: collision off, no input, nothing in the
+## hands. It can still be hurt (a scene in the world).
+
+var climbing := false
+
+
+func begin_climb() -> void:
+	begin_cutscene(true)
+	_cancel_drink()
+	climbing = true
+	hands_busy = true
+	velocity = Vector3.ZERO
+	_set_body_solid(false)
+
+
+## Faces the body to `yaw` and the view to `pitch` at once (for a ladder).
+func climb_face(yaw: float, pitch: float) -> void:
+	rotation.y = yaw
+	_look_pitch = pitch
+
+
+func end_climb() -> void:
+	if not climbing:
+		return
+	climbing = false
+	hands_busy = false
+	velocity = Vector3.ZERO
+	_set_body_solid(true)
+	# The teleport down the ladder is not a fall.
+	_was_grounded = true
+	_land_kick = 0.0
+	end_cutscene()
+
+
 func _set_body_solid(solid: bool) -> void:
 	var shape := get_node_or_null(^"CollisionShape3D") as CollisionShape3D
 	if shape != null:
@@ -1553,7 +1590,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if is_hidden():
+	if is_hidden() or climbing:
 		velocity = Vector3.ZERO
 		return
 	_check_block()
@@ -4183,6 +4220,9 @@ func _respawn() -> void:
 		hands_busy = false
 		_set_body_solid(true)
 		hidden_changed.emit(false)
+	if climbing:
+		climbing = false
+		_set_body_solid(true)
 	_end_slowmo()
 	# The teleport is not a fall -- without this the next frame's is_on_floor()
 	# transition would read as a landing and fire the bob for a hit that never

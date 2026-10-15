@@ -79,6 +79,7 @@ A dropped connection costs nothing: the job keeps running server-side, and
 transient 5xx rather than aborting, which it used to do.
 
 **Cost: 20 credits per text-to-3D generation**, measured (600 -> 580).
+`-NoTexture` asks for geometry only (no texture, no PBR): 10 credits.
 
 ## What Tripo actually returns
 
@@ -328,6 +329,23 @@ variants share their source's textures) from the eight raw Tripo pieces in
   wall photo edited into a catacomb burial wall, task 8fe2a084-..., then image
   to model) and `morgue_slab.glb` (text). `pier_face` is cut from the wall piece.
   See CLAUDE.md section 47.
+- **The manhole cover** (2026-10-15): `brick_kit_raw/manhole_cover.glb`, text
+  prompt, `tripo.ps1 -NoTexture` (geometry only: 10 credits, task 990ec001-...).
+  `build_manhole_cover` stands it flat, pattern up, 1.08 m across and
+  `COVER_T` 0.1 thick; the game paints it dark rusted iron (manhole.gd).
+  `floor_notch` is the floor tile with a half circle (`MANHOLE_R` 0.5) cut
+  from the middle of its +X edge -- two of them round a hole. CLAUDE.md 50.
+
+# Sewer brick (2026-10-15)
+
+```
+blender -b --factory-startup -P tools/build_sewer_brick.py
+```
+
+A tileable 1K brick texture in the corridor walls' colours for the sewer
+pipes (Tripo's brick is baked per piece and cannot tile round a pipe).
+Writes `textures/sewer_brick_albedo.png` and `_normal.png`; set both imports
+to `compress/mode=2` with mipmaps.
 
 # The enforcer (2026-10-15)
 

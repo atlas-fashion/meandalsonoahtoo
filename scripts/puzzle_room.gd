@@ -377,9 +377,7 @@ func _check_seal() -> void:
 
 func _seal() -> void:
 	sealed = true
-	var hud := _hud()
-	if hud != null and hud.has_method("announce"):
-		hud.announce(String(TITLES[kind][0]), String(TITLES[kind][1]))
+	# No title card on walking in (2026-10-15).
 	_shake(0.22)
 	var t := create_tween()
 	t.tween_property(_ring_mat, "emission_energy_multiplier", 2.4, 0.3)

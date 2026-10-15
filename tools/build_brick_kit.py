@@ -75,7 +75,7 @@ BUDGET = {
     "floor": 1500, "vault": 7000,
     "door_frame": 99999, "door_leaf": 99999, "cage_door": 99999, "torch_mount": 99999,
     "cart_body": 6000, "cart_wheels": 2400, "cart_lid": 1500,
-    "prison_frieze": 6000, "prison_generator": 8000, "pier_face": 5000, "wall_loculi": 9000, "morgue_slab": 6000,
+    "prison_frieze": 6000, "prison_generator": 8000, "pier_face": 5000, "wall_loculi": 9000, "morgue_slab": 6000, "floor_notch": 2500, "manhole_cover": 3000,
     "wood_support": 3000, "prison_dome": 16000, "jail_gate_l": 99999, "jail_gate_r": 99999, "wood_planks": 2500, "wood_crate": 2500,
 }
 
@@ -588,7 +588,11 @@ def main():
     built.extend(split_door(door))
     if os.path.exists(os.path.join(RAW, "door_arch.glb")):
         built.append(build_door_arch())
-    built.append(build_floor())
+    floor = build_floor()
+    built.append(floor)
+    built.append(build_floor_notch(floor))
+    if os.path.exists(os.path.join(RAW, "manhole_cover.glb")):
+        built.append(build_manhole_cover())
 
     barrel = build_vault()
     straight = duplicate(barrel, "vault_straight")
@@ -1111,6 +1115,71 @@ def build_morgue_slab():
     q = points(ob)
     log("  morgue slab: %.2f x %.2f, %.2f tall" % (q[:, 0].max() - q[:, 0].min(),
         q[:, 1].max() - q[:, 1].min(), q[:, 2].max()))
+    return ob
+
+
+
+## --- Manholes (2026-10-15) --------------------------------------------------------
+##
+## "floor_notch": the floor tile with a half-circle bitten out of the middle of
+## its +X edge (Blender +X = Godot +X), MANHOLE_R round. Two of them side by side,
+## turned to face each other, make the round hole a manhole sits in (brick_level
+## lays them in a manhole cell). Cut with an exact boolean before decimation.
+## "manhole_cover": the Tripo cover (text to model, GEOMETRY ONLY -- the 10
+## credits left bought no texture; the game gives it the dungeon's iron), laid
+## flat with its patterned face up, COVER_D across, centred, its foot at z = 0.
+MANHOLE_R = 0.5
+COVER_D = 1.08
+## Tripo made it 0.23 m thick at that size: a slab, not a lid.
+COVER_T = 0.1
+
+
+def build_floor_notch(floor):
+    ob = duplicate(floor, "floor_notch")
+    bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=MANHOLE_R, depth=3.0,
+                                        location=(FLOOR_TILE * 0.5, 0.0, 0.0))
+    cut = bpy.context.view_layer.objects.active
+    mod = ob.modifiers.new("hole", "BOOLEAN")
+    mod.operation = "DIFFERENCE"
+    mod.object = cut
+    mod.solver = "EXACT"
+    mod.use_hole_tolerant = True
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    bpy.data.objects.remove(cut)
+    p = points(ob)
+    d = np.hypot(p[:, 0] - FLOOR_TILE * 0.5, p[:, 1])
+    log("  floor notch: %d verts, nearest to the hole centre %.3f m (radius %.2f)"
+        % (len(p), d.min(), MANHOLE_R))
+    return ob
+
+
+def build_manhole_cover():
+    ob = import_piece("manhole_cover")
+    strip_rubble(ob, 0.02)
+    p = points(ob)
+    thin = int(np.argmin(np.ptp(p, axis=0)))
+    if thin == 0:
+        apply(ob, Matrix.Rotation(math.radians(-90.0), 4, "Y"))
+    elif thin == 1:
+        apply(ob, Matrix.Rotation(math.radians(90.0), 4, "X"))
+    p = points(ob)
+    mid = (p[:, 2].max() + p[:, 2].min()) * 0.5
+    # The patterned face carries far more vertices than the plain back.
+    if (p[:, 2] > mid).sum() < (p[:, 2] < mid).sum():
+        apply(ob, Matrix.Rotation(math.pi, 4, "X"))
+        p = points(ob)
+    s = COVER_D / max(np.ptp(p[:, 0]), np.ptp(p[:, 1]))
+    apply(ob, scale(s, s, s) @ move(-(p[:, 0].max() + p[:, 0].min()) * 0.5,
+                                  -(p[:, 1].max() + p[:, 1].min()) * 0.5, -p[:, 2].min()))
+    apply(ob, scale(1.0, 1.0, COVER_T / np.ptp(points(ob)[:, 2])))
+    for m in ob.data.materials:
+        if m is not None:
+            m.name = "ManholeIron"
+    q = points(ob)
+    log("  manhole cover: %.2f across, %.3f thick" % (np.ptp(q[:, 0]), q[:, 2].max()))
     return ob
 
 
