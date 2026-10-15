@@ -6,9 +6,9 @@ extends "res://scripts/enemy.gd"
 ##
 ## The model and its animations are the user's (`models/enforcer.glb`, built by
 ## tools/build_enforcer.py from models/source/enforcer/ENFORCER_BAKED.blend):
-## a 16-bone rig with three BAKED clips -- WALK_BAKED, BEAM_BAKED (the cannon
-## arm raised and held on the target) and SWIPE_BAKED (the shield arm swung
-## across). Its eyes and its beam glow the crystal's own colour, read off the
+## a 16-bone rig with four BAKED clips -- WALK_BAKED, BEAM_BAKED (the cannon
+## arm raised onto the shield arm), BEAM_RECOIL_BAKED (the cannon kicking back
+## as it fires) and SWIPE_1_BAKED (the shield drawn back and swept across). Its eyes and its beam glow the crystal's own colour, read off the
 ## crystal's material.
 ##
 ## Made like the archer: the maze puts this script on an enemy.tscn instance
@@ -25,13 +25,14 @@ extends "res://scripts/enemy.gd"
 ## Hunting (`_chase`, enemy.gd's hook):
 ##   * the BEAM: with a clear line through stone and the player within
 ##     BEAM_RANGE, it plants itself and raises the cannon (CHARGE_TIME: the
-##     BEAM_BAKED clip up to the aim, the crystal and eyes flaring, a thin aiming
+##     BEAM_BAKED clip up to the aim; firing plays BEAM_RECOIL_BAKED once and
+##     holds its kicked-back end, the crystal and eyes flaring, a thin aiming
 ##     line), then holds a beam on the player for up to BEAM_TIME:
 ##     `player.beam_hit` -- BEAM_DPS a second and slowed, a raised guard taking a
 ##     tenth. It swings after the player at TRACK_RATE; stone stops it, its
 ##     fellows do not. Then it vents for VENT_TIME.
 ##   * otherwise it walks in, and close enough it swipes with the shield
-##     (SWIPE_BAKED, timed so the shield crosses its front as the wind-up ends):
+##     (SWIPE_1_BAKED, timed so the shield crosses its front as the wind-up ends):
 ##     `attack_damage`, and a player it catches unguarded is knocked off their
 ##     feet (`player.knock_down`: thrown back, on the floor, half a second to
 ##     get up). A held guard takes the blow standing, shoved back; a parry throws
@@ -46,7 +47,11 @@ const MODEL_LIFT := 0.05
 ## The clips (tools/build_enforcer.py), all 60 fps.
 const ANIM_WALK_CLIP := &"WALK_BAKED"
 const ANIM_BEAM_CLIP := &"BEAM_BAKED"
-const ANIM_SWIPE_CLIP := &"SWIPE_BAKED"
+const ANIM_SWIPE_CLIP := &"SWIPE_1_BAKED"
+## Firing: starts on BEAM_BAKED's settled pose (measured: the muzzle 0.000 m
+## apart), kicks the cannon back 0.23 m by its frame 18 and stays there -- it
+## does not return, so it is played once and its end held while the beam runs.
+const ANIM_RECOIL_CLIP := &"BEAM_RECOIL_BAKED"
 ## A planted foot slides back at this speed with the walk at rate 1 (measured
 ## in Blender: 1.4 m/s at the authored size).
 const WALK_GROUND_SPEED := 0.82
@@ -56,9 +61,10 @@ const WALK_GROUND_SPEED := 0.82
 ## setting on the shield arm", 2026-10-15.) A hair short of the end, so the
 ## clip is still playing, frozen, rather than finished.
 const BEAM_SET_EARLY := 0.04
-## SWIPE_BAKED: the shield crosses the front fastest at frames 31-37; the blow
-## lands at frame 32.
-const SWIPE_CONTACT := 31.0 / 60.0
+## SWIPE_1_BAKED (second delivery): the shield is drawn back over frames 11-21
+## and swept across the chest at 22-25 (fastest 23, 47 m/s at the authored
+## size, seen in renders); the blow lands at frame 22.
+const SWIPE_CONTACT := 21.0 / 60.0
 ## How hard a swipe that lands unguarded throws the player.
 const SWIPE_THROW := 11.0
 ## ...and how hard one taken on a held guard shoves them.
@@ -298,7 +304,7 @@ func _setup_clips() -> void:
 		return
 	if anim.has_animation(ANIM_WALK_CLIP):
 		anim.get_animation(ANIM_WALK_CLIP).loop_mode = Animation.LOOP_LINEAR
-	for c in [ANIM_BEAM_CLIP, ANIM_SWIPE_CLIP]:
+	for c in [ANIM_BEAM_CLIP, ANIM_SWIPE_CLIP, ANIM_RECOIL_CLIP]:
 		if anim.has_animation(c):
 			anim.get_animation(c).loop_mode = Animation.LOOP_NONE
 	_play_clip(ANIM_WALK_CLIP, 0.0, 0.0)
@@ -750,11 +756,17 @@ func _animate(delta: float, now: float) -> void:
 			_play_clip(ANIM_BEAM_CLIP, _beam_set_at() / CHARGE_TIME, 0.12, _clip != ANIM_BEAM_CLIP)
 			_freeze_at_set()
 		Beam.FIRE:
-			# Held on the settled pose.
-			if _clip != ANIM_BEAM_CLIP:
-				_play_clip(ANIM_BEAM_CLIP, 0.0, 0.1, true)
-				anim.seek(_beam_set_at(), true)
-			_freeze_at_set()
+			# The kick as it fires, played once from the settled pose, its
+			# end held for the rest of the beam.
+			if anim == null or not anim.has_animation(ANIM_RECOIL_CLIP):
+				if _clip != ANIM_BEAM_CLIP:
+					_play_clip(ANIM_BEAM_CLIP, 0.0, 0.1, true)
+					anim.seek(_beam_set_at(), true)
+				_freeze_at_set()
+			else:
+				if _clip != ANIM_RECOIL_CLIP:
+					_play_clip(ANIM_RECOIL_CLIP, 1.0, 0.05, true)
+				_hold_recoil()
 		_:
 			if state == State.WINDUP or state == State.ATTACK or state == State.RECOVER:
 				# The shield crosses its front as the wind-up ends.
@@ -808,6 +820,13 @@ func _beam_set_at() -> float:
 	if anim == null or not anim.has_animation(ANIM_BEAM_CLIP):
 		return 0.7
 	return anim.get_animation(ANIM_BEAM_CLIP).length - BEAM_SET_EARLY
+
+
+## Held a hair short of the recoil's end, so it is still "playing", frozen.
+func _hold_recoil() -> void:
+	if anim != null and anim.current_animation == ANIM_RECOIL_CLIP \
+			and anim.current_animation_position >= anim.get_animation(ANIM_RECOIL_CLIP).length - BEAM_SET_EARLY:
+		anim.speed_scale = 0.0
 
 
 func _freeze_at_set() -> void:

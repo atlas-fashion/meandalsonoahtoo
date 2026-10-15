@@ -4,11 +4,14 @@
     godot --headless --import --path .
 
 The source (models/source/enforcer/ENFORCER_BAKED.blend, from the user) is a
-rusty Tripo mech on a 16-bone rig with three BAKED actions on NLA tracks --
-WALK_BAKED (120 frames), BEAM_BAKED (47, the gun arm raised and firing) and
-SWIPE_BAKED (75, the shield arm swung) -- at 60 fps. The file also carries an
-unbaked "BEAM" action (IK targets only, on a mesh): not exported; only the
-baked ones are used (user, 2026-10-15).
+rusty Tripo mech on a 16-bone rig with four BAKED actions on NLA tracks --
+WALK_BAKED (120 frames), BEAM_BAKED (47, the gun arm raised onto the shield
+arm), BEAM_RECOIL_BAKED (20, the cannon kicking as it fires) and SWIPE_1_BAKED
+(70, the shield arm swung) -- at 60 fps (second delivery, 2026-10-15). The
+file also carries the unbaked actions they were made from (WALK, BEAM,
+BEAM_RECOIL, SWIPE_1; BEAM_RECOIL on an UNMUTED NLA track): every track and
+action not ending in _BAKED is removed before export -- only the baked ones
+are used (user).
 
 Added here, so the game does not have to guess where things are on the mesh:
   * empties parented to bones, which Godot imports as BoneAttachment3Ds:
@@ -148,6 +151,11 @@ def atlas(arm):
 def main():
     sc = bpy.context.scene
     arm = bpy.data.objects["Armature"]
+    # The file may have been saved in pose or edit mode; the operators below
+    # (join, smart project, bake) need object mode.
+    if bpy.context.mode != "OBJECT":
+        bpy.context.view_layer.objects.active = arm
+        bpy.ops.object.mode_set(mode="OBJECT")
     # Rest pose for every measurement.
     arm.animation_data.action = None
     for t in arm.animation_data.nla_tracks:
@@ -160,8 +168,14 @@ def main():
     for ob in bpy.data.objects:
         if ob.type != "ARMATURE" and ob.animation_data is not None:
             ob.animation_data_clear()
-    if "BEAM" in bpy.data.actions:
-        bpy.data.actions.remove(bpy.data.actions["BEAM"])
+    ad = arm.animation_data
+    for t in list(ad.nla_tracks):
+        if not all(s.action is not None and s.action.name.endswith("_BAKED") for s in t.strips):
+            ad.nla_tracks.remove(t)
+    for a in list(bpy.data.actions):
+        if not a.name.endswith("_BAKED"):
+            bpy.data.actions.remove(a)
+    log("tracks kept:", [t.name for t in ad.nla_tracks])
 
     for m in bpy.data.materials:
         if m.name == "Material.001":
@@ -206,7 +220,8 @@ def main():
     arm.data.pose_position = "POSE"
     for t in arm.animation_data.nla_tracks:
         t.mute = True
-    for name, track_action in (("SWIPE_BAKED", "SWIPE_BAKED"), ("BEAM_BAKED", "BEAM_BAKED")):
+    for name, track_action in (("SWIPE_1_BAKED", "SWIPE_1_BAKED"), ("BEAM_BAKED", "BEAM_BAKED"),
+                              ("BEAM_RECOIL_BAKED", "BEAM_RECOIL_BAKED")):
         act = bpy.data.actions[track_action]
         arm.animation_data.action = act
         e = bpy.data.objects["Shield" if name.startswith("SWIPE") else "Muzzle"]
@@ -225,6 +240,7 @@ def main():
         log("%s: fastest frames %s" % (name, [(f, round(v, 2)) for v, f in top]))
         for f, w in rows[:: max(1, len(rows) // 12)]:
             log("  %s f%3d at (%.2f, %.2f, %.2f)" % (name, f, w.x, w.y, w.z))
+        log("  %s first (%.3f, %.3f, %.3f) last (%.3f, %.3f, %.3f)" % (name, *rows[0][1], *rows[-1][1]))
     arm.animation_data.action = None
     for t in arm.animation_data.nla_tracks:
         t.mute = False

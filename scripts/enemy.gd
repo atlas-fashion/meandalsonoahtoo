@@ -1288,8 +1288,17 @@ func _update_locomotion() -> void:
 ## runs every frame; further out it accumulates the elapsed time and spends it
 ## in one larger step, which is the same motion at a coarser sample rate.
 func _advance_anim(delta: float) -> void:
-	if anim == null or not anim.active:
+	if anim == null:
 		return
+	if not anim.active:
+		# Dozing switches the rig off; but `alert()` and the maze's
+		# `_turn_loose` wake a body by clearing `_dormant` alone, and those
+		# fought frozen in their first frame (found 2026-10-15: every enforcer
+		# woken by a prison alarm beamed and swiped without moving a joint).
+		# Awake means the rig runs.
+		if _dormant:
+			return
+		anim.active = true
 	_anim_debt += delta
 	var stride := 0.0
 	if Graphics.anim_full_distance < 1.0e8:

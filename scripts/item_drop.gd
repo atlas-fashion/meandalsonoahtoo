@@ -7,6 +7,11 @@ extends Node3D
 ## goes into the inventory as it arrives. If there is no room it says so and
 ## stays where it is.
 ##
+## Walked over, a drop of something the player already CARRIES (a stack of it in
+## the pack, or a quick slot kept for it that has run dry) is taken without E
+## (`_auto_take`, 2026-10-15) -- within AUTO_REACH of the feet, room
+## permitting. Anything new still needs E, so nothing unknown is scooped up.
+##
 ## Made with `spawn(parent, at, id, count)` on this script; see enemy.gd
 ## `_grant_drop`.
 
@@ -16,6 +21,8 @@ const SKULL_MODEL := "res://models/skull_worn_ready.glb"
 
 ## Horizontal reach from the player, as a chest's.
 const REACH := 2.4
+## Walking over it: this close to the player's feet takes it, if it is carried.
+const AUTO_REACH := 0.9
 const GRAVITY := 14.0
 ## What a drop lands on: everything static -- floors and stone (2), the props
 ## on layer 1 only (the jail's bed and bucket) and on 9 only (the boss's
@@ -162,9 +169,32 @@ func _process(delta: float) -> void:
 		if _player == null:
 			return
 	var to := _player.global_position - global_position
+	if _resting and _auto_take(to):
+		return
 	_near = _resting and Vector2(to.x, to.z).length() <= REACH \
 		and absf(to.y) < 2.0 and Interact.looked_at(self, 3.2, 0.22)
 	_prompt.visible = _near
+
+
+## Taken by walking over it: resting, at the player's feet, already carried,
+## and room for all of it. Returns whether it went.
+func _auto_take(to: Vector3) -> bool:
+	if Vector2(to.x, to.z).length() > AUTO_REACH or absf(to.y) > 1.2:
+		return false
+	if _player.get("in_cutscene") or _player.get("_dead") or _player.get("climbing") \
+			or (_player.has_method("is_hidden") and _player.is_hidden()):
+		return false
+	var inventory: Inventory = _player.get("inventory")
+	if inventory == null:
+		return false
+	if inventory.count(id) <= 0 and not (inventory.assigned.values() as Array).has(id):
+		return false
+	if inventory.room_for(id) < count:
+		return false
+	_near = false
+	_prompt.visible = false
+	_take_off()
+	return true
 
 
 func _unhandled_input(event: InputEvent) -> void:

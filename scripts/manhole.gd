@@ -8,9 +8,11 @@ extends Node3D
 ## E on the cover: the player crouches, prises it up and drags it aside. E on
 ## the open hole: they climb down -- the screen fades to black on the way into
 ## the shaft, and fades back in on the last stretch of the ladder, in the
-## sewer's chamber. At the bottom, E on the ladder climbs back up the same way
-## (a cover put back over it is pushed off from below). Once open, a cover
-## stays open, saved by maze.gd.
+## sewer's chamber. At the bottom, E on the ladder climbs back up the same way.
+## A cover comes off only from ABOVE (2026-10-15, user): under a covered
+## manhole the ladder leads to a shut lid ("Sealed" -- E says so and does
+## nothing). Once open, a manhole works from both sides and stays open, saved
+## by maze.gd.
 ##
 ## The hole is visual only -- the dungeon's floor collision runs whole under it
 ## -- so an open hole carries a collider (`_blocker`) that keeps everyone from
@@ -212,6 +214,7 @@ func _process(_delta: float) -> void:
 	_near_bottom = ladder != null and absf(at.y - foot.y) < 1.2 \
 		and Vector2(at.x - foot.x, at.z - foot.z).length() <= 2.2 \
 		and Interact.looked_at(ladder, 2.6, 0.2)
+	_ladder_prompt.text = "E   Climb up" if state == State.OPEN else "E   Sealed"
 	_ladder_prompt.visible = _near_bottom
 
 
@@ -226,7 +229,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_climb_down()
 	elif _near_bottom:
 		get_viewport().set_input_as_handled()
-		_climb_up()
+		if state == State.OPEN:
+			_climb_up()
+		else:
+			_toast("The cover is shut from above")
+
+
+func _toast(text: String) -> void:
+	var hud := _hud()
+	if hud != null and hud.has_method("_show_toast"):
+		hud.call("_show_toast", text)
 
 
 func _hud() -> Node:
@@ -428,6 +440,9 @@ func _climb_down() -> void:
 
 
 func _climb_up() -> void:
+	# Only through an open manhole: the cover cannot be shifted from below.
+	if state != State.OPEN:
+		return
 	_busy = true
 	var foot: Vector3 = shaft["foot"]
 	var stand := foot - along * 0.6
@@ -468,19 +483,6 @@ func _climb_up() -> void:
 	if not await _climb(under, push_at, 0.55, 0.7):
 		_abort()
 		return
-	if state == State.COVERED:
-		# Shoved up and off from below.
-		_cover_aside = _aside_for(top - along)
-		var lifted := Transform3D(Basis(along.cross(Vector3.UP).normalized(), -0.5), _cover_home.origin + Vector3(0.0, 0.3, 0.0))
-		var c := create_tween().set_ignore_time_scale(true)
-		c.tween_method(func(k: float): _cover.transform = _cover_home.interpolate_with(lifted, k), 0.0, 1.0, 0.25) \
-			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		c.tween_method(func(k: float): _cover.transform = lifted.interpolate_with(_cover_aside, k), 0.0, 1.0, 0.45) \
-			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		_player.set("_shake", maxf(float(_player.get("_shake")), 0.14))
-		await c.finished
-		state = State.OPEN
-		_blocker.disabled = false
 	var out := Vector3(top.x, top.y - 0.6, top.z)
 	if not await _climb(push_at, out, 0.7, 0.2):
 		_abort()

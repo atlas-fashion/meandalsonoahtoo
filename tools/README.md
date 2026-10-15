@@ -354,10 +354,16 @@ blender -b models/source/enforcer/ENFORCER_BAKED.blend -P tools/build_enforcer.p
 godot --headless --import --path .
 ```
 
-Builds `models/enforcer.glb` from the user's rigged mech: only the BAKED clips,
+Builds `models/enforcer.glb` from the user's rigged mech: only the BAKED clips
+(second delivery: WALK_BAKED, BEAM_BAKED, BEAM_RECOIL_BAKED, SWIPE_1_BAKED; every
+unbaked track and action is removed, one of them was an UNMUTED NLA track),
 bone markers (EyeL/EyeR, Muzzle, Shield), the parts joined into one mesh with a
 2K baked atlas (`models/source/enforcer/enforcer_atlas.png`). Set the extracted
 atlas texture to `compress/mode=2` after the first import. See CLAUDE.md 48.
+Traps: the .blend may be saved in pose/edit mode (the script forces object
+mode first); and Godot will NOT re-extract `models/enforcer_enforcer_atlas.jpg`
+over an existing file -- if the mesh changes, delete it and
+`.godot/imported/enforcer.glb-*` and re-import (CLAUDE.md 51).
 
 # Retexturing with Tripo
 
