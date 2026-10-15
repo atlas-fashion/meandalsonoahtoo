@@ -57,7 +57,7 @@ render_mode use_quarter_res_pass;
 // Night (2026-10-14): near-black, faintly blue at the zenith, a little warmer
 // at the horizon; the red comes from the moon and its glow, not the sky.
 uniform vec4 zenith_color : source_color = vec4(0.012, 0.014, 0.03, 1.0);
-uniform vec4 horizon_color : source_color = vec4(0.06, 0.035, 0.045, 1.0);
+uniform vec4 horizon_color : source_color = vec4(0.045, 0.038, 0.062, 1.0);
 uniform vec4 ground_color : source_color = vec4(0.005, 0.004, 0.006, 1.0);
 
 // Distinctly DARKER than the sky around them -- smoke against a glow, not a
@@ -68,7 +68,7 @@ uniform vec4 ground_color : source_color = vec4(0.005, 0.004, 0.006, 1.0);
 uniform vec4 cloud_color : source_color = vec4(0.05, 0.045, 0.055, 1.0);
 uniform vec4 cloud_shadow_color : source_color = vec4(0.012, 0.011, 0.015, 1.0);
 // Warm rim where the horizon glow catches the underside of the deck.
-uniform vec4 cloud_glow_color : source_color = vec4(0.12, 0.03, 0.03, 1.0);
+uniform vec4 cloud_glow_color : source_color = vec4(0.07, 0.055, 0.1, 1.0);
 
 // --- cloud shape / motion ----------------------------------------------------
 uniform float cloud_cover : hint_range(0.0, 1.0) = 0.42;
@@ -90,17 +90,17 @@ uniform float cloud_speed : hint_range(0.0, 0.3) = 0.020;
 // not by this shader).
 uniform vec3 light_direction = vec3(0.45, 0.7, 0.2);
 
-// --- the red moon (2026-10-14) -----------------------------------------------
+// --- the moon (2026-10-14; red until the same day, now a soft white with a purple hue) ---
 // Drawn where the scene's DirectionalLight3D ("MoonLight", set up by maze.gd
 // `_setup_moon`) comes from: LIGHT0_DIRECTION. Big and stylised -- several
 // times the real moon's 0.25 degrees -- and far brighter than the sky, because
 // the whole sky is drawn at `background_energy_multiplier` 0.3 through ACES.
-uniform vec4 moon_color : source_color = vec4(1.0, 0.06, 0.025, 1.0);
+uniform vec4 moon_color : source_color = vec4(0.82, 0.74, 1.0, 1.0);
 // Angular radius, radians (0.06 ~ 3.4 degrees).
 uniform float moon_size = 0.06;
-uniform float moon_intensity = 7.0;
+uniform float moon_intensity = 3.0;
 // The red haze round it, in the sky and on the clouds' edges.
-uniform float moon_glow = 1.6;
+uniform float moon_glow = 0.9;
 uniform float star_density : hint_range(0.0, 1.0) = 0.35;
 uniform float star_intensity = 2.2;
 

@@ -484,7 +484,7 @@ func _build_dome_hall(kit) -> void:
 	for k in 4:
 		var a := TAU * (float(k) + 0.5) / 4.0
 		var up := OmniLight3D.new()
-		up.light_color = Color(1.0, 0.32, 0.14)
+		up.light_color = Color(1.0, 0.5, 0.3)
 		up.light_energy = 4.0
 		up.omni_range = 13.0
 		up.omni_attenuation = 1.1
@@ -743,7 +743,7 @@ func _build_generator() -> void:
 	var gem := _octa(0.34, 0.66, _crystal_mat)
 	_crystal.add_child(gem)
 	_gen_light = OmniLight3D.new()
-	_gen_light.light_color = Color(1.0, 0.22, 0.12)
+	_gen_light.light_color = Color(1.0, 0.38, 0.26)
 	_gen_light.light_energy = 3.0
 	_gen_light.omni_range = 8.5
 	_gen_light.omni_attenuation = 0.9

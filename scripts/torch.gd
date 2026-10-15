@@ -24,8 +24,8 @@ extends Node3D
 @export var colour_swing := 0.35
 ## The glow round the flame, drawn this much larger than the scene's card.
 const HALO_SCALE := 1.6
-const HOT := Color(1.0, 0.72, 0.32)
-const EMBER := Color(1.0, 0.4, 0.13)
+const HOT := Color(1.0, 0.8, 0.55)
+const EMBER := Color(1.0, 0.52, 0.27)
 ## Time constant of a light low-pass on the flicker (2026-10-14). The noise's
 ## fastest octave runs past the frame rate, so the light jumped by 16% of its
 ## brightness frame to frame on average and by over 15% on 45% of frames --

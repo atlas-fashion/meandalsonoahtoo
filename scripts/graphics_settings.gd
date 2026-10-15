@@ -419,12 +419,26 @@ func set_mouse_sensitivity(value: float) -> void:
 	save_settings()
 
 
+## The camera's vertical field of view, degrees (2026-10-14). Like the
+## sensitivity: in no preset, saved under [controls]. The player's camera takes
+## it as its base every frame; its own kicks (dash, swing, jump...) ride on top.
+var field_of_view := 75.0
+const FOV_MIN := 55.0
+const FOV_MAX := 100.0
+
+
+func set_field_of_view(value: float) -> void:
+	field_of_view = clampf(value, FOV_MIN, FOV_MAX)
+	save_settings()
+
+
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("graphics", "preset", preset)
 	for key in KEYS:
 		cfg.set_value("graphics", key, get(key))
 	cfg.set_value("controls", "mouse_sensitivity", mouse_sensitivity)
+	cfg.set_value("controls", "field_of_view", field_of_view)
 	cfg.save(SAVE_PATH)
 
 
@@ -448,3 +462,4 @@ func load_settings() -> void:
 			set(key, PRESETS[preset][key])
 	mouse_sensitivity = clampf(float(cfg.get_value("controls", "mouse_sensitivity", 1.0)),
 		SENSITIVITY_MIN, SENSITIVITY_MAX)
+	field_of_view = clampf(float(cfg.get_value("controls", "field_of_view", 75.0)), FOV_MIN, FOV_MAX)

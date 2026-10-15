@@ -360,9 +360,9 @@ const PATROL := preload("res://scripts/patrol.gd")
 var _patrol_points: Array[Vector3] = []
 @export var red_pack_min := 1
 @export var red_pack_max := 5
-## Criers come in ones and twos -- a swarm of them is unfightable.
+## Criers fly solo (2026-10-14; they came in ones and twos).
 @export var flyer_pack_min := 1
-@export var flyer_pack_max := 2
+@export var flyer_pack_max := 1
 
 @onready var nav_region: NavigationRegion3D = $NavRegion
 @onready var floor_mesh: MeshInstance3D = $NavRegion/Floor/MeshInstance3D
@@ -505,7 +505,9 @@ var _full_graph = null
 ## 1.3 since 2026-10-10 (many dim torches with wide soft reach; was 2.8);
 ## 1.4 with shadows; 1.3 since 2026-10-12 with the physical falloff ("darker,
 ## realistic and immersive"): about half the old brightness beside a torch.
-@export var module_torch_energy := 1.3
+## 1.1 since 2026-10-14: the light went from orange to amber (less red), which
+## carries ~20% more luminance at the same energy.
+@export var module_torch_energy := 1.1
 ## The base light: where no torch reaches, the player can BARELY see. ACES
 ## crushes low ambient to black -- 0.3 (and 0.12 before it) measured 0.0005
 ## with every torch off, i.e. there was no base light at all. 1.1 reads about
@@ -1837,8 +1839,8 @@ func _apply_module_environment(builder) -> void:
 ## Diagonal in azimuth so neither corridor direction loses its pool.
 const MOON_ELEVATION := 72.0
 const MOON_AZIMUTH := 45.0
-const MOON_COLOUR := Color(1.0, 0.16, 0.09)
-@export var moon_energy := 2.4
+const MOON_COLOUR := Color(0.86, 0.8, 1.0)
+@export var moon_energy := 1.1
 ## Directional shadows only reach this far; past it the moon would light
 ## everything it faces, roofs or no roofs. Chunks are culled at
 ## `module_view_range` (70 m) plus a block's half diagonal, so the shadow must
@@ -4176,7 +4178,7 @@ func _spawn_enemies() -> void:
 		taken.append(tile)
 
 		# One roll decides the whole group, so a pack is all of a kind: a knot
-		# of reds or a pair of criers, never a mixed committee.
+		# of reds or a lone crier, never a mixed committee.
 		var flying: bool = flyer_scene != null and _rng.randf() < flyer_share
 		var pack := _rng.randi_range(
 			flyer_pack_min if flying else red_pack_min,

@@ -59,6 +59,7 @@ const SPEC := [
 ]
 
 var sensitivity_slider: HSlider
+var fov_slider: HSlider
 var _preset_picker: OptionButton
 var _readout: Label
 var _hint: Label
@@ -132,6 +133,32 @@ func _build() -> void:
 		_hint.text = "How far the view turns for the mouse's travel. 100% is the game's own.")
 	srow.mouse_filter = Control.MOUSE_FILTER_PASS
 	box.add_child(srow)
+
+	var frow := HBoxContainer.new()
+	frow.custom_minimum_size.y = ROW_HEIGHT
+	var fl := Label.new()
+	fl.text = "Field of view"
+	fl.custom_minimum_size.x = 210
+	frow.add_child(fl)
+	fov_slider = HSlider.new()
+	fov_slider.min_value = Graphics.FOV_MIN
+	fov_slider.max_value = Graphics.FOV_MAX
+	fov_slider.step = 1.0
+	fov_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fov_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var fv := Label.new()
+	fv.custom_minimum_size.x = 64
+	fv.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	fov_slider.value_changed.connect(func(v: float) -> void:
+		fv.text = "%d°" % roundi(v)
+		if not _syncing:
+			Graphics.set_field_of_view(v))
+	frow.add_child(fov_slider)
+	frow.add_child(fv)
+	frow.mouse_entered.connect(func() -> void:
+		_hint.text = "How much of the world the view takes in, top to bottom. 75° is the game's own.")
+	frow.mouse_filter = Control.MOUSE_FILTER_PASS
+	box.add_child(frow)
 	box.add_child(_rule())
 
 	box.add_child(section_label("GRAPHICS"))
@@ -257,6 +284,7 @@ func sync() -> void:
 	_syncing = true
 	_preset_picker.select(Graphics.preset)
 	sensitivity_slider.value = Graphics.mouse_sensitivity
+	fov_slider.value = Graphics.field_of_view
 	for entry in SPEC:
 		var key: String = entry["key"]
 		var w: Control = _widgets.get(key)

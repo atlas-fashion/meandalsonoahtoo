@@ -1017,6 +1017,8 @@ func _process(delta: float) -> void:
 ## to apply directly now goes through _update_head, which composes it with the
 ## bob and your look so the three cannot overwrite one another.
 func _update_dash_view(delta: float) -> void:
+	# The base is the player's Field of view setting.
+	_base_fov = Graphics.field_of_view
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
 			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"spin" \
 			and _remnant_hunt <= 0.0 and _stab_fov == 0.0:
@@ -3711,7 +3713,10 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 			_on_guarded(true, _from_direction, attacker, amount)
 			amount *= parry_damage_taken
 		1:
-			amount *= block_damage_taken
+			# Some attackers set how much of their blow a block lets through
+			# (a crier's blast: 25%).
+			var share = attacker.get("block_damage_share") if attacker != null and is_instance_valid(attacker) else null
+			amount *= float(share) if share != null else block_damage_taken
 			_on_guarded(false, _from_direction, attacker)
 	_invulnerable_until = now + invulnerable_time
 	# A ghost is mostly not there: it takes only ghost_damage_taken of a hit.

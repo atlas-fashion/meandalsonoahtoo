@@ -132,7 +132,7 @@ const COURT_Y_OFFSET := -0.02
 ## earlier soft falloff (0.4) also carried light 20 m through stone.
 ## Fire orange. The earlier (1.0, 0.76, 0.50) read as a pale lamp. Orange has
 ## ~18% less luminance, which Maze.module_torch_energy makes back up.
-const TORCH_COLOUR := Color(1.0, 0.5, 0.2)
+const TORCH_COLOUR := Color(1.0, 0.64, 0.38)
 const TORCH_ENERGY := 10.0
 ## 20 m / 0.4 from 2026-10-10 (wide soft pools); 14 m / 1.0 since 2026-10-12
 ## (darker, realistic). At 1.0 a torch adds little past ~12 m: 14 vs 20 m lost
@@ -183,7 +183,7 @@ const TORCH_SCENE := "res://scenes/torch.tscn"
 ## A grate set into a corridor wall with red light coming through it from
 ## somewhere outside, lit from BEHIND so the bars read as dark ironwork.
 const WINDOW_EVERY := 11
-const WINDOW_COLOUR := Color(1.0, 0.13, 0.06)
+const WINDOW_COLOUR := Color(1.0, 0.36, 0.22)
 ## Strong, because most of what a light behind stone and a grate emits never
 ## reaches the corridor.
 const WINDOW_ENERGY := 7.0

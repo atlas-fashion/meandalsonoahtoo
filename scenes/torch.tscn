@@ -185,7 +185,7 @@ draw_pass_1 = SubResource("Mesh_ember")
 
 [node name="Light" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, -0.58)
-light_color = Color(1, 0.5, 0.2, 1)
+light_color = Color(1, 0.64, 0.38, 1)
 light_energy = 1.35
 omni_range = 10.0
 distance_fade_enabled = true

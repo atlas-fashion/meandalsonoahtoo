@@ -47,6 +47,9 @@ signal detonated
 ## Stuck on the face this long before it goes off.
 @export var face_fuse := 1.0
 @export var explosion_damage := 50.0
+## A held guard lets this share of the blast through (other enemies: the
+## player's `block_damage_taken`, 10%). A parry takes none of it.
+@export_range(0.0, 1.0) var block_damage_share := 0.25
 ## Blinks per second at the start of the fuse and at the very end.
 @export var blink_rate_start := 3.0
 @export var blink_rate_end := 16.0
