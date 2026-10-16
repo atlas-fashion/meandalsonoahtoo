@@ -2,20 +2,17 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://m4tvp8gjpepg"
-path.s3tc="res://.godot/imported/sewer_kit_ORM_f96a9e2b-e748-47d5-824b-c113224c2c37.jpg-d43e90b50d85be10a34f570b4ada3603.s3tc.ctex"
+uid="uid://bwuoh6fekxhq0"
+path.s3tc="res://.godot/imported/sewer_mold.png-f959d2341911958d9745f9ae3ff30ed8.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "d3e84bfd5bf39dcbdf7bc4498906fc5f"
-}
 
 [deps]
 
-source_file="res://models/sewer/sewer_kit_ORM_f96a9e2b-e748-47d5-824b-c113224c2c37.jpg"
-dest_files=["res://.godot/imported/sewer_kit_ORM_f96a9e2b-e748-47d5-824b-c113224c2c37.jpg-d43e90b50d85be10a34f570b4ada3603.s3tc.ctex"]
+source_file="res://textures/sewer_mold.png"
+dest_files=["res://.godot/imported/sewer_mold.png-f959d2341911958d9745f9ae3ff30ed8.s3tc.ctex"]
 
 [params]
 

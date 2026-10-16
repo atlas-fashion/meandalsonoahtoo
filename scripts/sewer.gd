@@ -1,7 +1,7 @@
 extends Node3D
 
-## The sewer (2026-10-15): big round brick pipes under the dungeon, reached by
-## ladders down the five manholes (manhole.gd).
+## The sewer (2026-10-15): brick pipes under the dungeon, reached by ladders down
+## the five manholes (manhole.gd).
 ##
 ## Layout, on the dungeon's own 6 m grid so the map can draw it the same way
 ## (`SewerMap`, handed to explore_map.gd as a second level): the manhole cells
@@ -9,70 +9,65 @@ extends Node3D
 ## single loop) -- much simpler than the maze above -- each link an L of pipe
 ## along the grid, and a few short dead-end spurs. Chosen from the level seed.
 ##
-## Remade with Higgsfield (2026-10-15): concept art and source images from
-## gpt_image_2_5 seeded with the user's wall and vault photos, turned into
-## models by Tripo H3.1 (tools/build_sewer_kit.py -> models/sewer/sewer_kit.glb).
-## Straight cells are the kit's tunnel -- a sculpted brick vault with a walkway
-## each side of a channel of black water -- one 6 m section per cell. Bends,
-## junctions, dead ends and manholes are round domed brick CHAMBERS, built as
-## one CSG tree baked a frame later (`_bake`: CSG needs a frame before it will
-## bake) and split into CHUNK-sized pieces; their mouths are cut to the tunnel's
-## measured inside, their closed sides are barred culverts behind the kit's
-## rusted gate, and their brick is the Higgsfield texture
-## (tools/build_sewer_texture.py), world triplanar. Bone heaps and pale fungus
-## from the kit lie about. Collision: the chambers' baked shape plus one trimesh
-## of the tunnel section shared by every cell. A shaft rises from each manhole's
-## chamber to the dungeon floor, an iron ladder down it.
+## Second remake (2026-10-15): ONE piece of stone. Pipes, chambers, the
+## watercourse and the culverts are a single CSG tree (`_build_csg`, baked a frame
+## later and split into CHUNK-sized pieces), all in one material,
+## shaders/sewer_stone.gdshader: the domes' Higgsfield brick, darker, mapped in
+## world space, under black mold, a sludge line, sludge and slime (Higgsfield
+## textures too: tools/build_sewer_texture.py). Nothing meets anything at a
+## seam, and the channel runs unbroken through every chamber. The water is one
+## plane per cell under the walkways, world-mapped (shaders/sewer_water.gdshader).
 ##
-## Light: torches along the pipes (module_level `_hang_torch`, flagged `sewer`
-## so torch.gd ranks them only while the camera is down here). Everything
-## here draws on VISUAL_LAYER, which no dungeon light reaches (maze
-## `_wall_off_sewer`), and its torches reach only this layer and layer 1 (the
-## player, items): the floor above is not a shadow caster, so without the split
-## the dungeon's torches and the moon lit the pipes through it. The sewer is
-## hidden while the camera is above ground (`_process`).
+## Straights are a brick pipe: walls PIPE_SPRING high under a round vault, a
+## walkway each side of a channel with a rounded invert. Every other cell -- bend,
+## junction, dead end, manhole -- is a round domed CHAMBER; the pipes run into it
+## and their channels cross in its middle. A closed side is a CULVERT, a smaller
+## pipe into the rock behind an iron grille made to its arch, its channel running
+## out under the bars.
+##
+## No torches. The light is bioluminescent moss (`_build_moss`: Higgsfield moss as
+## emissive decals in the cracks along the wall's foot and in patches up the
+## walls, some with a faint omni of their own), fireflies drifting in the pipes
+## (`_build_fireflies`), and a musty haze (`_set_below` changes the fog while the
+## camera is down here). Everything here draws on VISUAL_LAYER, which no dungeon
+## light reaches (maze `_wall_off_sewer`), and the sewer is hidden while the
+## camera is above ground.
 
 const ModuleMaze := preload("res://scripts/module_maze.gd")
-const ModuleLevel := preload("res://scripts/module_level.gd")
 
 ## The walkway's height. The dungeon's floor is 0; its collision slab ends at -1.2.
 const FLOOR_Y := -12.0
 ## Below this the camera is in the sewer (torch.gd uses the same split).
 const SPLIT_Y := -4.0
-## The kit (tools/build_sewer_kit.py): Higgsfield images turned into Tripo
-## models -- "tunnel" (one 6 m straight section, walkway at y 0, running along
-## Z), "grate", "bones", "fungus".
+## The generated props (tools/build_sewer_kit.py): "bones".
 const KIT := "res://models/sewer/sewer_kit.glb"
-## The tunnel's inside, measured by the kit build with rays (tunnel_profile.json):
-## [height above the walkway, half-width] from the channel's bottom to the crown.
-## The chambers' mouths are cut to it, padded by MOUTH_PAD.
-const TUNNEL_PROFILE := [[-0.87, 0.28], [-0.77, 0.55], [-0.07, 0.53], [0.03, 0.92],
-	[0.13, 1.96], [1.03, 1.90], [2.03, 1.90], [2.23, 1.82], [2.43, 1.77], [2.63, 1.69],
-	[2.83, 1.58], [3.03, 1.43], [3.23, 1.28], [3.43, 0.96], [3.63, 0.58], [3.70, 0.0]]
-const MOUTH_PAD := 0.04
-## The tunnel's channel, across the section (measured: -0.5 .. 0.7 m, 0.88 deep).
-const CHANNEL_X0 := -0.48
-const CHANNEL_X1 := 0.68
-## Where its water stands, below the walkways.
-const WATER_Y := -0.32
-## A tunnel's walls at torch height (half-width 1.91 m at 1.2 m up).
-const TUNNEL_WALL := 1.88
-## The chambers: a round brick room at every bend, junction, dead end and
-## manhole, inner radius CH_R (so the inner wall stands on the cell's edge),
-## walls CH_WALL high under a dome rising DOME_RISE more.
+## The pipe, across (x) and up (y) from the walkway at its middle: walls stand at
+## +-PIPE_HALF and rise PIPE_SPRING before a round vault (crown 3.9 m).
+const PIPE_HALF := 2.0
+const PIPE_SPRING := 1.9
+const SHELL := 0.8
+const ARC_STEPS := 20
+## The channel down the middle: straight sides CHANNEL_SIDE deep, then a round
+## invert of radius CHANNEL_HALF (bottom 1.02 m down). Water stands at WATER_Y.
+const CHANNEL_HALF := 0.62
+const CHANNEL_SIDE := 0.4
+const WATER_Y := -0.42
+## Below everything: the stone's underside.
+const BASE := -1.7
+## The chambers: inner radius CH_R (the wall on the cell's edge), walls CH_WALL
+## high under a dome rising DOME_RISE more.
 const CH_R := 3.0
-const CH_SHELL := 0.7
-const CH_WALL := 3.9
-const DOME_RISE := 1.7
-## Mouths are cut from MOUTH_FROM to MOUTH_TO out from a chamber's centre.
-const MOUTH_FROM := 2.3
-const MOUTH_TO := 4.3
-## A closed side gets a barred culvert: an alcove ALCOVE_W wide behind the
-## kit's rusted gate.
-const ALCOVE_W := 1.6
-const ALCOVE_H := 2.45
-const ALCOVE_DEEP := 0.55
-const GRATE_W := 1.75
+const CH_SHELL := 0.8
+const CH_WALL := 4.4
+const DOME_RISE := 1.8
+## Culverts: a smaller pipe (the same shape at CULVERT_SCALE) into the rock on a
+## chamber's closed side, CULVERT_DEEP beyond the wall (CULVERT_SHORT when another
+## pipe runs past behind it), barred by a grille GRILLE_IN into its mouth.
+const CULVERT_SCALE := 0.5
+const CULVERT_DEEP := 2.2
+const CULVERT_SHORT := 0.6
+const GRILLE_IN := 0.22
+const BAR_EVERY := 0.13
 ## The shaft up to the manhole.
 const SHAFT_R := 0.56
 const SHAFT_OUTER := 0.95
@@ -81,27 +76,28 @@ const SPURS := 3
 ## Render chunks.
 const CHUNK := 24.0
 const VISUAL_LAYER := 1 << 15
-## Draw distance for the kit pieces (the chambers are chunked).
-const PIECE_RANGE := 46.0
-## Torches: one every TORCH_EVERY cells of tunnel, sides alternating.
-const TORCH_EVERY := 2
-## A torch every second section leaves the one between it 3-9 m from any
-## flame: at the dungeon torches' 12 m reach that stretch was black. Wider and a
-## little stronger pools, rather than more lights (each lit torch redraws the
-## kit for its shadows: one per section cost ~1 ms more GPU).
-const TORCH_REACH := 13.0
-const TORCH_BOOST := 1.0
-## Softer falloff than the dungeon's physical 1.0: in a long straight pipe the
-## light has to carry to the next pool, or the stretch between is black.
-const TORCH_FALLOFF := 0.55
-const TORCH_UP := 1.3
-## Props: share of tunnel cells with a fungus clump / a bone heap.
-const FUNGUS_SHARE := 0.32
-const BONES_SHARE := 0.2
-## The ladder's rails stand this far from the shaft's centre, on the far side
-## from the chamber's middle.
+## Draw distance for the props, moss and fireflies.
+const PIECE_RANGE := 40.0
+## Bone heaps: share of pipe cells with one.
+const BONES_SHARE := 0.22
+## The ladder's rails stand this far from the shaft's centre (manhole.gd too).
 const LADDER_OUT := 0.36
 const RUNG_EVERY := 0.3
+## The moss.
+const MOSS_GLOW := Color(0.32, 1.0, 0.62)
+const MOSS_LIGHT := Color(0.3, 1.0, 0.62)
+const MOSS_LIGHT_ENERGY := 1.2
+const MOSS_LIGHT_RANGE := 4.5
+## Share of moss clusters that carry a light.
+const MOSS_LIT_SHARE := 0.6
+## The haze while the camera is below.
+const HAZE_COLOUR := Color(0.06, 0.07, 0.045)
+const HAZE_ENERGY := 1.0
+const HAZE_DENSITY := 0.06
+## And the base light: cold and a little green, a touch more than the dungeon's,
+## which reads as black on stone this dark.
+const DAMP_AMBIENT := Color(0.15, 0.18, 0.15)
+const DAMP_AMBIENT_SCALE := 2.2
 
 var built
 var map: SewerMap
@@ -109,12 +105,15 @@ var map: SewerMap
 ## (world, the ladder's foot on the walkway), chamber (world centre)}.
 var shafts: Array[Dictionary] = []
 var _csg: CSGCombiner3D
-var _chunks: Array[MeshInstance3D] = []
-var _water: StandardMaterial3D
+## Everything hidden while the camera is above ground.
+var _chunks: Array[Node3D] = []
 var _player: Node3D
 var _below := false
-var _torches: Node3D
-
+var _stone: ShaderMaterial
+var _iron: StandardMaterial3D
+var _rng := RandomNumberGenerator.new()
+## The environment's own fog, kept while the haze is on.
+var _fog_saved := {}
 
 ## The sewer's cells, in the shape explore_map.gd reads a level in.
 class SewerMap extends RefCounted:
@@ -140,12 +139,22 @@ static func build(parent: Node3D, level_built, seed_value: int) -> Node3D:
 	s.set("built", level_built)
 	parent.add_child(s)
 	s.call("_lay_out", seed_value)
-	s.call("_build_csg")
-	s.call("_build_kit")
-	s.call("_build_ladders")
-	s.call("_build_water")
-	s.call("_build_torches")
+	s.call("_build_all", seed_value)
 	return s
+
+
+func _build_all(seed_value: int) -> void:
+	_rng.seed = seed_value ^ 0x6d6f7373
+	_stone = _stone_material()
+	_iron = _iron_material()
+	_build_csg()
+	_build_ladders()
+	_build_grilles()
+	_build_plates()
+	_build_props()
+	_build_water()
+	_build_moss()
+	_build_fireflies()
 
 
 # --- Layout ------------------------------------------------------------------------
@@ -299,13 +308,6 @@ func _runs() -> Array:
 
 
 # --- Geometry ----------------------------------------------------------------------
-##
-## Straight cells are the kit's tunnel, one 6 m section per cell. Every other
-## cell -- bend, junction, dead end, and every manhole -- is a CHAMBER: a round
-## brick room with a dome, built here as CSG and baked (`_bake`), its mouths cut
-## to the tunnel's measured profile so a section butts onto it from outside the
-## wall; closed sides get a barred culvert. CSG handles chambers that sit next
-## to each other: one tree, so each one's inside is cut through the other's wall.
 
 ## True for the cells built as a chamber.
 func _is_chamber(key: Vector2i) -> bool:
@@ -315,36 +317,62 @@ func _is_chamber(key: Vector2i) -> bool:
 	return not (c.open == (ModuleMaze.N | ModuleMaze.S) or c.open == (ModuleMaze.E | ModuleMaze.W))
 
 
-## A straight cell's basis: the tunnel's +Z (its length) along the corridor.
-func _tunnel_basis(key: Vector2i) -> Basis:
-	var c: ModuleMaze.Cell = map.cells[key]
-	return Basis.IDENTITY if c.open & ModuleMaze.N else Basis(Vector3.UP, PI * 0.5)
-
-
 func _side_dir(side: int) -> Vector3:
 	var d: Vector2i = ModuleMaze.DIRS[side]
 	return Vector3(float(d.x), 0.0, float(d.y))
 
 
-## The tunnel's inside as a closed outline (x across, y up), padded.
-func _mouth_polygon() -> PackedVector2Array:
-	var right := PackedVector2Array()
-	for i in TUNNEL_PROFILE.size():
-		var row: Array = TUNNEL_PROFILE[i]
-		var y := float(row[0]) - (MOUTH_PAD if i == 0 else 0.0)
-		var x := float(row[1]) + (MOUTH_PAD if i < TUNNEL_PROFILE.size() - 1 else 0.0)
-		right.append(Vector2(x, y))
+## How far a chamber's culvert on `side` runs past its wall: short where another
+## pipe runs behind it, barely a niche where another chamber does.
+func _culvert_deep(key: Vector2i, side: int) -> float:
+	var nb: Vector2i = key + ModuleMaze.DIRS[side]
+	if not map.cells.has(nb):
+		return CULVERT_DEEP
+	return 0.12 if _is_chamber(nb) else CULVERT_SHORT
+
+
+## A pipe's outline across (x) and up (y): walls at +-half up to `spring`, a round
+## vault over, down to `bottom`.
+func _pipe_outline(half: float, spring: float, bottom: float) -> PackedVector2Array:
 	var poly := PackedVector2Array()
-	for p in right:
-		poly.append(p)
-	for i in range(right.size() - 2, -1, -1):
-		poly.append(Vector2(-right[i].x, right[i].y))
+	poly.append(Vector2(-half, bottom))
+	for i in ARC_STEPS + 1:
+		var a := PI - PI * float(i) / float(ARC_STEPS)
+		poly.append(Vector2(cos(a) * half, spring + sin(a) * half))
+	poly.append(Vector2(half, bottom))
 	return poly
 
 
+## The channel: straight sides, then a round invert.
+func _channel_outline() -> PackedVector2Array:
+	var r := CHANNEL_HALF
+	var poly := PackedVector2Array()
+	poly.append(Vector2(-r, 0.4))
+	for i in ARC_STEPS + 1:
+		var a := PI + PI * float(i) / float(ARC_STEPS)
+		poly.append(Vector2(cos(a) * r, -CHANNEL_SIDE + sin(a) * r))
+	poly.append(Vector2(r, 0.4))
+	return poly
+
+
+## The height of a culvert's inside above the walkway, `x` across it.
+func _culvert_top(x: float) -> float:
+	var half := PIPE_HALF * CULVERT_SCALE
+	return PIPE_SPRING * CULVERT_SCALE + sqrt(maxf(half * half - x * x, 0.0))
+
+
+func _extrude(parent: Node, poly: PackedVector2Array, from: Vector3, dir: Vector3, depth: float) -> void:
+	var cut := CSGPolygon3D.new()
+	cut.polygon = poly
+	cut.mode = CSGPolygon3D.MODE_DEPTH
+	cut.depth = depth
+	cut.smooth_faces = true
+	cut.material = _stone
+	cut.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), from)
+	parent.add_child(cut)
+
+
 func _build_csg() -> void:
-	var wall := _brick_material()
-	var floor_mat := _floor_material()
 	_csg = CSGCombiner3D.new()
 	_csg.name = "SewerCSG"
 	add_child(_csg)
@@ -355,7 +383,7 @@ func _build_csg() -> void:
 	_csg.add_child(hollow)
 	var inner := CSGCombiner3D.new()
 	hollow.add_child(inner)
-	# The insides end flat at the walkway.
+	# The insides end flat at the walkway; only the channels go below it.
 	var w: float = float(map.size.x + 4) * map.cell_size
 	var d: float = float(map.size.y + 4) * map.cell_size
 	var above := CSGBox3D.new()
@@ -363,12 +391,28 @@ func _build_csg() -> void:
 	above.position = Vector3(map.origin.x + w * 0.5 - 2.0 * map.cell_size, FLOOR_Y + 30.0,
 		map.origin.z + d * 0.5 - 2.0 * map.cell_size)
 	above.operation = CSGShape3D.OPERATION_INTERSECTION
-	above.material = floor_mat
+	above.material = _stone
 	hollow.add_child(above)
 	var cuts := CSGCombiner3D.new()
 	cuts.operation = CSGShape3D.OPERATION_SUBTRACTION
 	_csg.add_child(cuts)
-	var mouth := _mouth_polygon()
+
+	# The pipes: one extrusion per straight run, chamber centre to chamber
+	# centre, so a run is one unbroken piece of stone, channel and all.
+	var air := _pipe_outline(PIPE_HALF, PIPE_SPRING, -0.6)
+	var shell := _pipe_outline(PIPE_HALF + SHELL, PIPE_SPRING, BASE)
+	var chan := _channel_outline()
+	for run in _runs():
+		var a: Vector3 = map.to_world(run[0])
+		var b: Vector3 = map.to_world(run[1])
+		var dir := (b - a).normalized()
+		var length := a.distance_to(b)
+		_extrude(outer, shell, a, dir, length)
+		_extrude(inner, air, a, dir, length)
+		_extrude(cuts, chan, a, dir, length)
+
+	var c_air := _pipe_outline(PIPE_HALF * CULVERT_SCALE, PIPE_SPRING * CULVERT_SCALE, -0.6)
+	var c_shell := _pipe_outline(PIPE_HALF * CULVERT_SCALE + 0.6, PIPE_SPRING * CULVERT_SCALE, BASE)
 	var count := 0
 	for key in map.cells:
 		if not _is_chamber(key):
@@ -376,45 +420,34 @@ func _build_csg() -> void:
 		count += 1
 		var c: ModuleMaze.Cell = map.cells[key]
 		var at: Vector3 = map.to_world(key)
-		# Walls and dome: outside and inside.
-		for layer in [[outer, CH_R + CH_SHELL, CH_WALL + 1.2, FLOOR_Y - 1.2, DOME_RISE + CH_SHELL],
-				[inner, CH_R, CH_WALL + 1.0, FLOOR_Y - 1.0, DOME_RISE]]:
+		for layer in [[outer, CH_R + CH_SHELL, BASE, DOME_RISE + CH_SHELL],
+				[inner, CH_R, -0.6, DOME_RISE]]:
 			var r: float = layer[1]
 			var cyl := CSGCylinder3D.new()
 			cyl.radius = r
-			cyl.height = layer[2]
-			cyl.sides = 40
-			cyl.material = wall
-			cyl.position = Vector3(at.x, float(layer[3]) + float(layer[2]) * 0.5, at.z)
+			cyl.height = CH_WALL - float(layer[2])
+			cyl.sides = 48
+			cyl.material = _stone
+			cyl.position = Vector3(at.x, at.y + (float(layer[2]) + CH_WALL) * 0.5, at.z)
 			(layer[0] as Node).add_child(cyl)
 			var dome := CSGSphere3D.new()
 			dome.radius = r
-			dome.radial_segments = 40
-			dome.rings = 20
-			dome.material = wall
-			dome.position = Vector3(at.x, FLOOR_Y + CH_WALL, at.z)
-			dome.scale = Vector3(1.0, float(layer[4]) / r, 1.0)
+			dome.radial_segments = 48
+			dome.rings = 24
+			dome.material = _stone
+			dome.position = Vector3(at.x, at.y + CH_WALL, at.z)
+			dome.scale = Vector3(1.0, float(layer[3]) / r, 1.0)
 			(layer[0] as Node).add_child(dome)
+		# Every closed side is a culvert, its channel running on into it.
 		for side in ModuleMaze.ORDER:
-			var dir := _side_dir(side)
 			if c.open & side:
-				# A mouth in the tunnel's own shape.
-				var cut := CSGPolygon3D.new()
-				cut.polygon = mouth
-				cut.mode = CSGPolygon3D.MODE_DEPTH
-				cut.depth = MOUTH_TO - MOUTH_FROM
-				cut.material = wall
-				cut.transform = Transform3D(Basis.looking_at(dir, Vector3.UP),
-					at + dir * MOUTH_FROM)
-				cuts.add_child(cut)
-			else:
-				# A barred culvert: an alcove behind where the gate will hang.
-				var alcove := CSGBox3D.new()
-				alcove.size = Vector3(ALCOVE_W, ALCOVE_H, ALCOVE_DEEP * 2.0)
-				alcove.material = wall
-				alcove.transform = Transform3D(Basis.looking_at(dir, Vector3.UP),
-					at + dir * CH_R + Vector3(0.0, ALCOVE_H * 0.5, 0.0))
-				cuts.add_child(alcove)
+				continue
+			var dir := _side_dir(side)
+			var deep := _culvert_deep(key, side)
+			var start := CH_R - 0.6
+			_extrude(outer, c_shell, at + dir * start, dir, CH_R + deep - start + 0.5)
+			_extrude(inner, c_air, at + dir * start, dir, CH_R + deep - start)
+			_extrude(cuts, chan, at, dir, CH_R + deep)
 	for s in shafts:
 		var hole: Vector3 = s["hole"]
 		var top := -0.15
@@ -423,14 +456,14 @@ func _build_csg() -> void:
 		tube.radius = SHAFT_OUTER
 		tube.height = top - bottom
 		tube.sides = 20
-		tube.material = wall
+		tube.material = _stone
 		tube.position = Vector3(hole.x, (top + bottom) * 0.5, hole.z)
 		outer.add_child(tube)
 		var bore := CSGCylinder3D.new()
 		bore.radius = SHAFT_R
 		bore.height = 2.0 - (bottom - 0.5)
 		bore.sides = 20
-		bore.material = wall
+		bore.material = _stone
 		bore.position = Vector3(hole.x, (2.0 + bottom - 0.5) * 0.5, hole.z)
 		inner.add_child(bore)
 	_csg.visible = false
@@ -456,7 +489,7 @@ func _bake() -> void:
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
 	_collision_body().add_child(cs)
-	# Split by triangle centre into chunks, one surface per material.
+	# Split by triangle centre into chunks.
 	var tools := {}
 	var tris := 0
 	for s in mesh.get_surface_count():
@@ -465,39 +498,33 @@ func _bake() -> void:
 		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 		var tri_count := idx.size() if idx.size() > 0 else verts.size()
-		var mat := mesh.surface_get_material(s)
 		for t in range(0, tri_count, 3):
 			var i0 := idx[t] if idx.size() > 0 else t
 			var i1 := idx[t + 1] if idx.size() > 0 else t + 1
 			var i2 := idx[t + 2] if idx.size() > 0 else t + 2
 			var c := (verts[i0] + verts[i1] + verts[i2]) / 3.0
-			var key := Vector3i(floori(c.x / CHUNK), s, floori(c.z / CHUNK))
+			var key := Vector2i(floori(c.x / CHUNK), floori(c.z / CHUNK))
 			if not tools.has(key):
 				var st := SurfaceTool.new()
 				st.begin(Mesh.PRIMITIVE_TRIANGLES)
-				st.set_material(mat)
+				st.set_material(_stone)
 				tools[key] = st
 			var st: SurfaceTool = tools[key]
 			for i in [i0, i1, i2]:
 				st.set_normal(normals[i])
 				st.add_vertex(verts[i])
 			tris += 1
-	var by_chunk := {}
-	for key: Vector3i in tools:
-		var ck := Vector2i(key.x, key.z)
-		if not by_chunk.has(ck):
-			by_chunk[ck] = ArrayMesh.new()
-		(tools[key] as SurfaceTool).commit(by_chunk[ck])
-	for ck in by_chunk:
+	for ck: Vector2i in tools:
 		var mi := MeshInstance3D.new()
-		mi.name = "Chambers_%d_%d" % [ck.x, ck.y]
-		mi.mesh = by_chunk[ck]
+		mi.name = "Stone_%d_%d" % [ck.x, ck.y]
+		mi.mesh = (tools[ck] as SurfaceTool).commit()
 		mi.layers = VISUAL_LAYER
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		# Nothing down here casts: no light in the sewer has shadows.
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		_chunks.append(mi)
-	_set_below(false, true)
-	print("[sewer] chambers baked: %d triangles in %d chunks" % [tris, by_chunk.size()])
+	_set_below(_below, true)
+	print("[sewer] stone baked: %d triangles in %d chunks" % [tris, tools.size()])
 
 
 var _body: StaticBody3D
@@ -513,167 +540,163 @@ func _collision_body() -> StaticBody3D:
 	return _body
 
 
-## Brightness of each kit piece's own colour map, matched to the dungeon.
-const KIT_TINT := {"tunnel": Color(0.85, 0.82, 0.78), "grate": Color(0.85, 0.8, 0.75),
-	"bones": Color(0.7, 0.68, 0.64), "fungus": Color(0.75, 0.75, 0.72)}
+# --- Materials ----------------------------------------------------------------------
 
-## The kit's meshes by name, their materials made fit for this light: Tripo
-## marks everything metallic through its packed map, which reads black away
-## from a reflection, and stone and bone are not metal.
-static var _kit := {}
+static var _noise_tex: NoiseTexture2D
 
 
-static func kit_mesh(piece: String) -> Mesh:
-	if _kit.is_empty():
-		if not ResourceLoader.exists(KIT):
-			push_error("sewer: the kit is missing -- run tools/build_sewer_kit.py")
-			return null
-		var scene: Node = (load(KIT) as PackedScene).instantiate()
-		for node in scene.find_children("*", "MeshInstance3D", true, false):
-			var mi := node as MeshInstance3D
-			var mesh := mi.mesh.duplicate() as Mesh
-			var metal := String(mi.name) == "grate"
-			for s in mesh.get_surface_count():
-				var m := mesh.surface_get_material(s) as StandardMaterial3D
-				if m == null:
-					continue
-				m = m.duplicate() as StandardMaterial3D
-				m.metallic = 0.55 if metal else 0.0
-				m.metallic_texture = null
-				# The packed map is glossy (the roughness scalar only multiplies it):
-				# wet plastic under a torch. Dull stone, rusty iron.
-				m.roughness_texture = null
-				m.roughness = 0.6 if metal else 0.85
-				m.specular_mode = BaseMaterial3D.SPECULAR_SCHLICK_GGX
-				m.albedo_color = KIT_TINT.get(String(mi.name), Color.WHITE)
-				mesh.surface_set_material(s, m)
-			_kit[String(mi.name)] = mesh
-		scene.free()
-	return _kit.get(piece)
+static func _noise() -> NoiseTexture2D:
+	if _noise_tex == null:
+		var n := FastNoiseLite.new()
+		n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		n.frequency = 0.008
+		n.fractal_octaves = 4
+		n.seed = 731
+		_noise_tex = NoiseTexture2D.new()
+		_noise_tex.width = 512
+		_noise_tex.height = 512
+		_noise_tex.seamless = true
+		_noise_tex.generate_mipmaps = true
+		_noise_tex.noise = n
+	return _noise_tex
 
 
-var _pieces: Node3D
+func _stone_material() -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/sewer_stone.gdshader")
+	m.set_shader_parameter("brick_albedo", load("res://textures/sewer_hf_albedo.png"))
+	m.set_shader_parameter("brick_normal", load("res://textures/sewer_hf_normal.png"))
+	m.set_shader_parameter("mold_tex", load("res://textures/sewer_mold.png"))
+	m.set_shader_parameter("sludge_tex", load("res://textures/sewer_sludge.png"))
+	m.set_shader_parameter("sludge_normal", load("res://textures/sewer_sludge_normal.png"))
+	m.set_shader_parameter("noise_tex", _noise())
+	m.set_shader_parameter("floor_y", FLOOR_Y)
+	return m
 
 
-func _piece(name_: String, xf: Transform3D, shadows := true) -> MeshInstance3D:
-	var mesh := kit_mesh(name_)
-	if mesh == null:
-		return null
-	var mi := MeshInstance3D.new()
-	mi.name = name_.capitalize()
-	mi.mesh = mesh
-	mi.transform = xf
-	mi.layers = VISUAL_LAYER
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows \
-		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.visibility_range_end = PIECE_RANGE
-	mi.visibility_range_end_margin = 4.0
-	_pieces.add_child(mi)
-	_chunks.append(mi)
-	return mi
-
-
-## The tunnels, the gates in the closed sides of chambers, and the bones and
-## fungus, from the kit.
-func _build_kit() -> void:
-	_pieces = Node3D.new()
-	_pieces.name = "Kit"
-	add_child(_pieces)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(map.origin) ^ 0x6b6974
-	var tunnel := kit_mesh("tunnel")
-	var tunnel_shape: Shape3D = tunnel.create_trimesh_shape() if tunnel != null else null
-	var tunnels := 0
-	var gates := 0
-	var props := 0
-	var keys: Array = map.cells.keys()
-	keys.sort()
-	for key: Vector2i in keys:
-		var at: Vector3 = map.to_world(key)
-		var c: ModuleMaze.Cell = map.cells[key]
-		if not _is_chamber(key):
-			var b := _tunnel_basis(key)
-			if _piece("tunnel", Transform3D(b, at)) != null:
-				tunnels += 1
-				var cs := CollisionShape3D.new()
-				cs.shape = tunnel_shape
-				cs.transform = Transform3D(b, at)
-				_collision_body().add_child(cs)
-			# Now and then something grows or lies on a walkway.
-			var side := 1.0 if rng.randf() < 0.5 else -1.0
-			var roll := rng.randf()
-			if roll < FUNGUS_SHARE:
-				var p := b * Vector3(side * 1.45, 0.02, rng.randf_range(-2.0, 2.0))
-				_piece("fungus", Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(0.7, 1.0)), at + p), false)
-				props += 1
-			elif roll < FUNGUS_SHARE + BONES_SHARE:
-				var p := b * Vector3(side * 1.35, 0.02, rng.randf_range(-1.8, 1.8))
-				_piece("bones", Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * 0.72), at + p), false)
-				props += 1
-			continue
-		# A chamber: gates across its closed sides, and its own heap of the dead.
-		for side in ModuleMaze.ORDER:
-			var dir := _side_dir(side)
-			if not (c.open & side):
-				var g := _piece("grate", Transform3D(Basis.looking_at(-dir, Vector3.UP).scaled(Vector3.ONE * GRATE_W),
-					at + dir * (CH_R - 0.06)))
-				if g != null:
-					gates += 1
-		var free_angles: Array[float] = []
-		for k in 8:
-			free_angles.append(k * TAU / 8.0 + PI / 8.0)
-		var shaft := {}
-		for s in shafts:
-			if s["cell"] == key:
-				shaft = s
-		for pick in [["bones", 0.95, 2.0], ["fungus", 0.9, 2.25]]:
-			if rng.randf() > 0.8:
-				continue
-			for tries in 6:
-				var ang: float = free_angles[rng.randi_range(0, free_angles.size() - 1)]
-				var p := Vector3(cos(ang), 0.0, sin(ang)) * float(pick[2])
-				if not shaft.is_empty():
-					var hole: Vector3 = shaft["hole"]
-					if Vector2(at.x + p.x - hole.x, at.z + p.z - hole.z).length() < 1.4:
-						continue
-				free_angles.erase(ang)
-				_piece(pick[0], Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * float(pick[1])), at + p), false)
-				props += 1
-				break
-	print("[sewer] kit: %d tunnel sections, %d gates, %d props" % [tunnels, gates, props])
-
-
-func _brick_material() -> StandardMaterial3D:
-	# The Higgsfield brick (tools/build_sewer_texture.py), world triplanar.
+func _iron_material() -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
-	m.albedo_texture = load("res://textures/sewer_hf_albedo.png")
-	m.albedo_color = Color(0.82, 0.8, 0.78)
-	m.normal_enabled = true
-	m.normal_texture = load("res://textures/sewer_hf_normal.png")
-	m.normal_scale = 1.2
-	m.uv1_triplanar = true
-	m.uv1_world_triplanar = true
-	m.uv1_scale = Vector3.ONE * 0.34
-	m.roughness = 0.62
-	m.specular_mode = BaseMaterial3D.SPECULAR_SCHLICK_GGX
+	m.albedo_color = Color(0.085, 0.06, 0.045)
+	m.metallic = 0.55
+	m.roughness = 0.72
 	return m
 
 
-func _floor_material() -> StandardMaterial3D:
-	# The same brick laid as a floor, wet.
-	var m := _brick_material()
-	m.albedo_color = Color(0.6, 0.58, 0.55)
-	m.roughness = 0.35
-	return m
+# --- Iron: grilles, ladders, the gratings at the ladders' feet ----------------------
+
+## A culvert's grille, made to its arch: bars on BAR_EVERY reaching into the
+## stone above and below (down into the channel in the middle), two flat bands
+## across, one round the arch, and a padlock.
+func _build_grilles() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var half := PIPE_HALF * CULVERT_SCALE
+	var n := 0
+	for key in map.cells:
+		if not _is_chamber(key):
+			continue
+		var c: ModuleMaze.Cell = map.cells[key]
+		var at: Vector3 = map.to_world(key)
+		for side in ModuleMaze.ORDER:
+			if c.open & side:
+				continue
+			n += 1
+			var dir := _side_dir(side)
+			var across := Vector3(-dir.z, 0.0, dir.x)
+			var deep := _culvert_deep(key, side)
+			var origin := at + dir * (CH_R + minf(GRILLE_IN, deep * 0.5))
+			var b := Basis(across, Vector3.UP, -dir)
+			var x := -half + 0.06
+			while x < half - 0.05:
+				var bottom := -0.95 if absf(x) < CHANNEL_HALF - 0.03 else -0.05
+				var top := _culvert_top(x) + 0.06
+				var bar := CylinderMesh.new()
+				bar.top_radius = 0.017
+				bar.bottom_radius = 0.017
+				bar.height = top - bottom
+				bar.radial_segments = 6
+				bar.rings = 1
+				st.append_from(bar, 0, Transform3D(b, origin + b * Vector3(x, (top + bottom) * 0.5, 0.0)))
+				x += BAR_EVERY
+			for y: float in [0.42, 1.18]:
+				var wide := half if y <= PIPE_SPRING * CULVERT_SCALE else sqrt(maxf(half * half - pow(y - PIPE_SPRING * CULVERT_SCALE, 2.0), 0.0))
+				var band := BoxMesh.new()
+				band.size = Vector3(wide * 2.0 + 0.08, 0.055, 0.03)
+				st.append_from(band, 0, Transform3D(b, origin + b * Vector3(0.0, y, 0.022)))
+			var r := half - 0.04
+			for i in 12:
+				var a0 := PI * float(i) / 12.0
+				var a1 := PI * float(i + 1) / 12.0
+				var p0 := Vector3(cos(a0) * r, PIPE_SPRING * CULVERT_SCALE + sin(a0) * r, 0.022)
+				var p1 := Vector3(cos(a1) * r, PIPE_SPRING * CULVERT_SCALE + sin(a1) * r, 0.022)
+				var seg := BoxMesh.new()
+				seg.size = Vector3(p0.distance_to(p1) + 0.01, 0.05, 0.03)
+				var t := (p1 - p0).normalized()
+				var sb := Basis(t, Vector3(0, 0, 1).cross(t), Vector3(0, 0, 1))
+				st.append_from(seg, 0, Transform3D(b * sb, origin + b * ((p0 + p1) * 0.5)))
+			var lock := BoxMesh.new()
+			lock.size = Vector3(0.09, 0.12, 0.05)
+			st.append_from(lock, 0, Transform3D(b, origin + b * Vector3(0.18, 0.95, 0.06)))
+			var shape := BoxShape3D.new()
+			shape.size = Vector3(half * 2.0, _culvert_top(0.0) + 0.2, 0.12)
+			var cs := CollisionShape3D.new()
+			cs.shape = shape
+			cs.transform = Transform3D(b, origin + Vector3(0.0, shape.size.y * 0.5 - 0.1, 0.0))
+			_collision_body().add_child(cs)
+	st.generate_normals()
+	_add_iron(st.commit(), "Grilles")
+	print("[sewer] %d culverts barred" % n)
 
 
-# --- Ladders, water, torches ---------------------------------------------------------
+## Where a ladder comes down, a grating over the channel: the foot of every ladder
+## is on a channel's line (the shaft is on the corridor's axis above, and every
+## chamber has a channel arm on each side).
+func _build_plates() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for s in shafts:
+		var at: Vector3 = s["chamber"]
+		var off: Vector3 = (s["foot"] as Vector3) - at
+		var dir := Vector3(signf(off.x), 0.0, 0.0) if absf(off.x) > absf(off.z) else Vector3(0.0, 0.0, signf(off.z))
+		var reach := off.dot(dir)
+		var from := maxf(0.35, reach - 1.25)
+		var to := minf(CH_R - 0.2, reach + 0.9)
+		var mid := at + dir * ((from + to) * 0.5)
+		var length := to - from
+		var b := Basis(Vector3(-dir.z, 0.0, dir.x), Vector3.UP, -dir)
+		var wide := CHANNEL_HALF * 2.0 + 0.3
+		for side: float in [-1.0, 1.0]:
+			var rail := BoxMesh.new()
+			rail.size = Vector3(0.07, 0.06, length)
+			st.append_from(rail, 0, Transform3D(b, mid + b * Vector3(side * (CHANNEL_HALF + 0.08), -0.03, 0.0)))
+		var z := -length * 0.5 + 0.05
+		while z < length * 0.5 - 0.02:
+			var slat := BoxMesh.new()
+			slat.size = Vector3(wide, 0.045, 0.028)
+			st.append_from(slat, 0, Transform3D(b, mid + b * Vector3(0.0, -0.025, z)))
+			z += 0.085
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(wide, 0.06, length)
+		var cs := CollisionShape3D.new()
+		cs.shape = shape
+		cs.transform = Transform3D(b, mid + Vector3(0.0, -0.03, 0.0))
+		_collision_body().add_child(cs)
+	st.generate_normals()
+	_add_iron(st.commit(), "Gratings")
+
+
+func _add_iron(mesh: Mesh, name_: String) -> void:
+	var mi := MeshInstance3D.new()
+	mi.name = name_
+	mi.mesh = mesh
+	mi.material_override = _iron
+	mi.layers = VISUAL_LAYER
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	_chunks.append(mi)
+
 
 func _build_ladders() -> void:
-	var iron := StandardMaterial3D.new()
-	iron.albedo_color = Color(0.2, 0.15, 0.12)
-	iron.metallic = 0.45
-	iron.roughness = 0.6
 	for s in shafts:
 		var hole: Vector3 = s["hole"]
 		var along: Vector3 = s["along"]
@@ -706,117 +729,396 @@ func _build_ladders() -> void:
 		add_child(holder)
 		var mi := MeshInstance3D.new()
 		mi.mesh = st.commit()
-		mi.material_override = iron
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		mi.material_override = _iron
 		holder.add_child(mi)
 		s["ladder"] = holder
 
 
-## Black water standing in every tunnel's channel (WATER_Y under the
-## walkways), and in the mouths' channel notches; one merged mesh. The sewer is
-## in the group "water" (player.gd `water_depth`): step into a channel and you
-## wade.
+# --- The dead -----------------------------------------------------------------------
+
+static var _bones_mesh: Mesh
+
+
+static func _bones() -> Mesh:
+	if _bones_mesh == null:
+		if not ResourceLoader.exists(KIT):
+			push_error("sewer: the kit is missing -- run tools/build_sewer_kit.py")
+			return null
+		var scene: Node = (load(KIT) as PackedScene).instantiate()
+		for node in scene.find_children("*", "MeshInstance3D", true, false):
+			var mi := node as MeshInstance3D
+			var mesh := mi.mesh.duplicate() as Mesh
+			for s in mesh.get_surface_count():
+				var m := mesh.surface_get_material(s) as StandardMaterial3D
+				if m == null:
+					continue
+				m = m.duplicate() as StandardMaterial3D
+				# Tripo marks everything metal through its packed map; bone is not.
+				m.metallic = 0.0
+				m.metallic_texture = null
+				m.roughness_texture = null
+				m.roughness = 0.8
+				m.albedo_color = Color(0.36, 0.34, 0.3)
+				mesh.surface_set_material(s, m)
+			_bones_mesh = mesh
+		scene.free()
+	return _bones_mesh
+
+
+## Heaps of the dead on the walkways, and in the chambers' corners (the diagonals:
+## the channels run on the axes).
+func _build_props() -> void:
+	var holder := Node3D.new()
+	holder.name = "Bones"
+	add_child(holder)
+	_chunks.append(holder)
+	var mesh := _bones()
+	if mesh == null:
+		return
+	var keys: Array = map.cells.keys()
+	keys.sort()
+	var n := 0
+	for key: Vector2i in keys:
+		var at: Vector3 = map.to_world(key)
+		var p := Vector3.INF
+		if _is_chamber(key):
+			if _rng.randf() < 0.5:
+				for tries in 4:
+					var ang := PI * 0.25 + PI * 0.5 * float(_rng.randi_range(0, 3))
+					var q := at + Vector3(cos(ang), 0.0, sin(ang)) * 2.0
+					var clear := true
+					for s in shafts:
+						var hole: Vector3 = s["hole"]
+						if Vector2(q.x - hole.x, q.z - hole.z).length() < 1.4:
+							clear = false
+					if clear:
+						p = q
+						break
+		elif _rng.randf() < BONES_SHARE:
+			var c: ModuleMaze.Cell = map.cells[key]
+			var along := Vector3(0, 0, 1) if c.open & ModuleMaze.N else Vector3(1, 0, 0)
+			var across := Vector3(along.z, 0.0, along.x)
+			p = at + across * (1.32 if _rng.randf() < 0.5 else -1.32) + along * _rng.randf_range(-2.2, 2.2)
+		if p == Vector3.INF:
+			continue
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.transform = Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * _rng.randf_range(0.55, 0.75)), p)
+		mi.layers = VISUAL_LAYER
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end = PIECE_RANGE
+		holder.add_child(mi)
+		n += 1
+	print("[sewer] %d bone heaps" % n)
+
+
+# --- Water --------------------------------------------------------------------------
+
+## One plane per cell at the water's level, under the walkways: the stone hides it
+## everywhere but the channels, and the shader maps it in world space, so the
+## watercourse is one surface from end to end. Deep culverts reach past their
+## cell and get a strip of their own.
 func _build_water() -> void:
 	add_to_group(&"water")
-	_water = StandardMaterial3D.new()
-	_water.albedo_color = Color(0.02, 0.026, 0.02)
-	_water.roughness = 0.04
-	_water.metallic_specular = 0.8
-	_water.normal_enabled = true
-	_water.normal_texture = load("res://textures/stone_plain_normal.png")
-	_water.normal_scale = 0.2
-	_water.uv1_triplanar = true
-	_water.uv1_world_triplanar = true
-	_water.uv1_scale = Vector3.ONE * 0.5
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/sewer_water.gdshader")
+	m.set_shader_parameter("sludge_tex", load("res://textures/sewer_sludge.png"))
+	m.set_shader_parameter("sludge_normal", load("res://textures/sewer_sludge_normal.png"))
+	m.set_shader_parameter("noise_tex", _noise())
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var width := CHANNEL_X1 - CHANNEL_X0 - 0.04
-	var mid := (CHANNEL_X0 + CHANNEL_X1) * 0.5
+	var half: float = map.cell_size * 0.5
 	for key in map.cells:
-		var at: Vector3 = map.to_world(key)
+		var at: Vector3 = map.to_world(key) + Vector3(0.0, WATER_Y, 0.0)
+		_quad(st, at, Vector3(half, 0, 0), Vector3(0, 0, half))
 		if not _is_chamber(key):
-			var box := BoxMesh.new()
-			box.size = Vector3(width, 0.02, map.cell_size)
-			st.append_from(box, 0, Transform3D(_tunnel_basis(key), at + _tunnel_basis(key) * Vector3(mid, WATER_Y, 0.0)))
 			continue
 		var c: ModuleMaze.Cell = map.cells[key]
 		for side in ModuleMaze.ORDER:
-			if not (c.open & side):
+			if c.open & side or map.cells.has(key + ModuleMaze.DIRS[side]):
 				continue
 			var dir := _side_dir(side)
-			var b := Basis.looking_at(dir, Vector3.UP)
-			var length := map.cell_size * 0.5 - MOUTH_FROM
-			var box := BoxMesh.new()
-			box.size = Vector3(1.0, 0.02, length)
-			st.append_from(box, 0, Transform3D(b, at + dir * (MOUTH_FROM + length * 0.5) + Vector3(0.0, WATER_Y, 0.0)))
+			var across := Vector3(-dir.z, 0.0, dir.x)
+			var reach := CH_R + _culvert_deep(key, side) - half
+			_quad(st, at + dir * (half + reach * 0.5), across * (CHANNEL_HALF + 0.05), dir * (reach * 0.5))
+	st.generate_normals()
 	var mi := MeshInstance3D.new()
 	mi.name = "Water"
 	mi.mesh = st.commit()
-	mi.material_override = _water
+	mi.material_override = m
 	mi.layers = VISUAL_LAYER
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+	_chunks.append(mi)
 
 
-## player.gd `water_depth` asks every "water" node: the surface over `point`,
-## or -INF where there is none -- inside a tunnel's channel, the water's level.
+## An upward-facing quad, centre `c`, half-extents `u` and `v`.
+func _quad(st: SurfaceTool, c: Vector3, u: Vector3, v: Vector3) -> void:
+	var a := c - u - v
+	var b := c + u - v
+	var d := c + u + v
+	var e := c - u + v
+	var up := (u.cross(v)).normalized()
+	# Wind it so it faces up.
+	if up.y < 0.0:
+		st.add_vertex(a); st.add_vertex(b); st.add_vertex(d)
+		st.add_vertex(a); st.add_vertex(d); st.add_vertex(e)
+	else:
+		st.add_vertex(a); st.add_vertex(d); st.add_vertex(b)
+		st.add_vertex(a); st.add_vertex(e); st.add_vertex(d)
+
+
+## player.gd `water_depth` asks every "water" node: the surface over `point`, or
+## -INF where there is none. Water is wherever a channel is: along every pipe,
+## across every chamber, and into its culverts (which reach into the next cell,
+## so the neighbours are asked too).
 func water_surface_at(point: Vector3) -> float:
 	if point.y > SPLIT_Y or map == null:
 		return -INF
 	var rel := point - map.origin
 	var key := Vector2i(roundi(rel.x / map.cell_size), roundi(rel.z / map.cell_size))
-	if not map.cells.has(key) or _is_chamber(key):
-		return -INF
-	var local := _tunnel_basis(key).inverse() * (point - map.to_world(key))
-	if local.x < CHANNEL_X0 or local.x > CHANNEL_X1:
-		return -INF
-	return FLOOR_Y + WATER_Y
-
-
-func _build_torches() -> void:
-	var scene: PackedScene = load(ModuleLevel.TORCH_SCENE)
-	_torches = Node3D.new()
-	_torches.name = "Torches"
-	add_child(_torches)
-	var maze := get_parent()
-	var energy := 1.1
-	if maze != null and maze.get("module_torch_energy") != null:
-		energy = float(maze.get("module_torch_energy"))
-	var spots: Array = []
-	var n := 0
-	for key in map.cells:
-		var at: Vector3 = map.to_world(key)
-		if not _is_chamber(key):
-			if (key.x + key.y) % TORCH_EVERY != 0:
-				continue
-			n += 1
-			var b := _tunnel_basis(key)
-			var out := b * Vector3(1.0 if n % 2 == 0 else -1.0, 0.0, 0.0)
-			spots.append([at + out * (TUNNEL_WALL - 0.05) + Vector3(0.0, TORCH_UP, 0.0), out])
+	for k: Vector2i in [key, key + Vector2i(1, 0), key - Vector2i(1, 0), key + Vector2i(0, 1), key - Vector2i(0, 1)]:
+		if not map.cells.has(k):
 			continue
-		# One on the chamber wall, between two mouths, away from the ladder.
+		var c: ModuleMaze.Cell = map.cells[k]
+		var off := point - map.to_world(k)
+		var chamber := _is_chamber(k)
+		for side in ModuleMaze.ORDER:
+			var reach: float
+			if c.open & side:
+				reach = map.cell_size * 0.5 + 0.01
+			elif chamber:
+				reach = CH_R + _culvert_deep(k, side)
+			else:
+				continue
+			var d := _side_dir(side)
+			var along := off.x * d.x + off.z * d.z
+			var across := absf(off.x * d.z - off.z * d.x)
+			if along >= -CHANNEL_HALF and along <= reach and across <= CHANNEL_HALF:
+				return FLOOR_Y + WATER_Y
+	return -INF
+
+
+# --- Light: moss and fireflies ------------------------------------------------------
+
+## Bioluminescent moss: clusters of the Higgsfield moss as emissive decals in the
+## crack where a wall meets the walkway (each decal cast at 45 deg into the
+## corner, so it paints both), and patches up the walls. Square decals turned at
+## random about their own axis, overlapping, so no cluster repeats another. A
+## share of the clusters carry a faint omni, the only light down here.
+func _build_moss() -> void:
+	var holder := Node3D.new()
+	holder.name = "Moss"
+	add_child(holder)
+	_chunks.append(holder)
+	var tex: Texture2D = load("res://textures/sewer_moss.png")
+	var keys: Array = map.cells.keys()
+	keys.sort()
+	var decals := 0
+	var lights := 0
+	for key: Vector2i in keys:
+		var at: Vector3 = map.to_world(key)
 		var c: ModuleMaze.Cell = map.cells[key]
-		var best := Vector3.ZERO
-		var best_score := -INF
-		for k in 4:
-			var ang := PI * 0.25 + k * PI * 0.5
-			var dir := Vector3(cos(ang), 0.0, sin(ang))
-			var score := 0.0
-			for s in shafts:
-				if s["cell"] == key:
-					score += (dir * CH_R).distance_to(s["hole"] as Vector3 - at)
-			if score > best_score:
-				best_score = score
-				best = dir
-		spots.append([at + best * (CH_R - 0.05) + Vector3(0.0, 2.1, 0.0), best])
-	for spot in spots:
-		var torch := ModuleLevel._hang_torch(_torches, scene, spot[0], spot[1], energy * TORCH_BOOST, TORCH_REACH)
-		torch.set("sewer", true)
-		var light := torch.get_node_or_null("Light") as Light3D
-		if light != null:
-			light.light_cull_mask = VISUAL_LAYER | 1
-			(light as OmniLight3D).omni_attenuation = TORCH_FALLOFF
-	print("[sewer] %d torches" % spots.size())
+		if _is_chamber(key):
+			for i in _rng.randi_range(2, 3):
+				var ang := _rng.randf() * TAU
+				var out := Vector3(cos(ang), 0.0, sin(ang))
+				# Not across a pipe's mouth or a culvert's.
+				var gap := false
+				for side in ModuleMaze.ORDER:
+					if out.dot(_side_dir(side)) > 0.88:
+						gap = true
+				if gap:
+					continue
+				var r := _moss_crack(holder, tex, at + out * CH_R, out, Vector3(-out.z, 0.0, out.x))
+				decals += r[0]
+				lights += r[1]
+			# Moss deep in every culvert, glowing behind its grille: the bars read
+			# as black iron against it (the way the dungeon's windows are lit).
+			for side in ModuleMaze.ORDER:
+				if c.open & side:
+					continue
+				var deep := _culvert_deep(key, side)
+				if deep < 0.3:
+					continue
+				var dir := _side_dir(side)
+				var inside := at + dir * (CH_R + deep * 0.75)
+				var across := Vector3(-dir.z, 0.0, dir.x)
+				for s: float in [-1.0, 1.0]:
+					_moss_decal(holder, tex, inside + across * s * PIPE_HALF * CULVERT_SCALE,
+						(across * s - Vector3.UP).normalized(), dir, _rng.randf_range(0.35, 0.55), 0.7)
+					decals += 1
+				var l := _moss_light(inside + Vector3(0.0, 0.5, 0.0), 1.0)
+				l.omni_range = 2.6
+				holder.add_child(l)
+				lights += 1
+			if _rng.randf() < 0.6:
+				var ang := _rng.randf() * TAU
+				var out := Vector3(cos(ang), 0.0, sin(ang))
+				decals += _moss_patch(holder, tex, at + out * CH_R + Vector3(0, _rng.randf_range(0.8, 3.0), 0), out)
+			continue
+		var along := Vector3(0, 0, 1) if c.open & ModuleMaze.N else Vector3(1, 0, 0)
+		var across := Vector3(along.z, 0.0, along.x)
+		for side: float in [-1.0, 1.0]:
+			if _rng.randf() < 0.55:
+				var r := _moss_crack(holder, tex, at + across * side * PIPE_HALF + along * _rng.randf_range(-2.4, 2.4),
+					across * side, along)
+				decals += r[0]
+				lights += r[1]
+			if _rng.randf() < 0.22:
+				decals += _moss_patch(holder, tex, at + across * side * PIPE_HALF + along * _rng.randf_range(-2.6, 2.6)
+					+ Vector3(0, _rng.randf_range(0.5, 1.7), 0), across * side)
+	print("[sewer] moss: %d decals, %d lights" % [decals, lights])
+
+
+## A run of moss in the crack at `corner` (on the walkway, at the wall's foot),
+## the wall's outward normal `out` and the crack's direction `along`. Returns
+## [decals, lights].
+func _moss_crack(holder: Node3D, tex: Texture2D, corner: Vector3, out: Vector3, along: Vector3) -> Array:
+	var length := _rng.randf_range(0.7, 2.2)
+	var n := maxi(2, int(length / 0.55))
+	var proj := (out - Vector3.UP).normalized()
+	for i in n:
+		var t := (float(i) / float(maxi(n - 1, 1)) - 0.5) * length + _rng.randf_range(-0.12, 0.12)
+		var size := _rng.randf_range(0.4, 0.75)
+		_moss_decal(holder, tex, corner + along * t, proj, along, size, 0.8)
+	var lit := 0
+	if _rng.randf() < MOSS_LIT_SHARE:
+		lit = 1
+		holder.add_child(_moss_light(corner - out * 0.35 + Vector3(0.0, 0.22, 0.0), _rng.randf_range(0.7, 1.2)))
+	return [n, lit]
+
+
+## A faint omni the colour of the moss: no shadows, on this layer only.
+func _moss_light(at: Vector3, strength: float) -> OmniLight3D:
+	var l := OmniLight3D.new()
+	l.light_color = MOSS_LIGHT
+	l.light_energy = MOSS_LIGHT_ENERGY * strength
+	l.omni_range = MOSS_LIGHT_RANGE
+	l.omni_attenuation = 1.2
+	l.light_specular = 0.6
+	l.shadow_enabled = false
+	l.light_cull_mask = VISUAL_LAYER | 1
+	l.distance_fade_enabled = true
+	l.distance_fade_begin = 30.0
+	l.distance_fade_length = 8.0
+	l.position = at
+	return l
+
+
+## A patch of moss on a wall at `at`, its outward normal `out`.
+func _moss_patch(holder: Node3D, tex: Texture2D, at: Vector3, out: Vector3) -> int:
+	var along := Vector3(-out.z, 0.0, out.x)
+	var k := _rng.randi_range(1, 3)
+	for i in k:
+		var p := at + along * _rng.randf_range(-0.35, 0.35) + Vector3(0, _rng.randf_range(-0.3, 0.3), 0)
+		_moss_decal(holder, tex, p, out, along, _rng.randf_range(0.3, 0.6), 0.6)
+	return k
+
+
+func _moss_decal(holder: Node3D, tex: Texture2D, at: Vector3, proj: Vector3, along: Vector3,
+		size: float, depth: float) -> void:
+	var y := -proj
+	var x := along - y * along.dot(y)
+	x = x.normalized().rotated(y, _rng.randf() * TAU)
+	var z := x.cross(y)
+	var d := Decal.new()
+	d.size = Vector3(size, depth, size)
+	d.transform = Transform3D(Basis(x, y, z), at)
+	d.texture_albedo = tex
+	d.texture_emission = tex
+	d.emission_energy = _rng.randf_range(0.5, 1.1)
+	d.albedo_mix = 0.7
+	d.modulate = Color(1.0, 1.0, 1.0, _rng.randf_range(0.75, 1.0))
+	d.upper_fade = 0.25
+	d.lower_fade = 0.35
+	d.normal_fade = 0.0
+	d.cull_mask = VISUAL_LAYER
+	d.distance_fade_enabled = true
+	d.distance_fade_begin = PIECE_RANGE - 6.0
+	d.distance_fade_length = 6.0
+	holder.add_child(d)
+
+
+## Fireflies: a few tiny glowing bugs drifting in most cells, blinking out of
+## step (shaders/sewer_firefly.gdshader). GPU particles wandering on turbulence;
+## fewer without `Graphics.effects`.
+func _build_fireflies() -> void:
+	var holder := Node3D.new()
+	holder.name = "Fireflies"
+	add_child(holder)
+	_chunks.append(holder)
+	var gfx := get_node_or_null("/root/Graphics")
+	var effects: bool = gfx == null or bool(gfx.get("effects"))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 180.0
+	pm.initial_velocity_min = 0.05
+	pm.initial_velocity_max = 0.22
+	pm.gravity = Vector3.ZERO
+	pm.damping_min = 0.02
+	pm.damping_max = 0.06
+	pm.turbulence_enabled = true
+	pm.turbulence_noise_strength = 1.6
+	pm.turbulence_noise_scale = 2.6
+	pm.turbulence_noise_speed_random = 0.4
+	pm.turbulence_influence_min = 0.04
+	pm.turbulence_influence_max = 0.12
+	pm.scale_min = 0.6
+	pm.scale_max = 1.25
+	var hue := Gradient.new()
+	hue.set_color(0, Color(0.78, 1.0, 0.32))
+	hue.set_color(1, Color(0.42, 1.0, 0.6))
+	var hue_tex := GradientTexture1D.new()
+	hue_tex.gradient = hue
+	pm.color_initial_ramp = hue_tex
+	# The blink, over each bug's life: out of step because their lives are.
+	var blink := Gradient.new()
+	blink.offsets = PackedFloat32Array([0.0, 0.07, 0.15, 0.27, 0.36, 0.5, 0.58, 0.72, 0.8, 0.9, 1.0])
+	blink.colors = PackedColorArray([Color(1, 1, 1, 0.0), Color(1, 1, 1, 1.0), Color(1, 1, 1, 0.12),
+		Color(1, 1, 1, 0.9), Color(1, 1, 1, 0.05), Color(1, 1, 1, 1.0), Color(1, 1, 1, 0.2),
+		Color(1, 1, 1, 0.85), Color(1, 1, 1, 0.1), Color(1, 1, 1, 0.7), Color(1, 1, 1, 0.0)])
+	var blink_tex := GradientTexture1D.new()
+	blink_tex.gradient = blink
+	pm.color_ramp = blink_tex
+	var pm_room := pm.duplicate() as ParticleProcessMaterial
+	pm_room.emission_box_extents = Vector3(1.8, 1.0, 1.8)
+	# The pipes' box lies along the pipe (the node is turned to it), over the walkways.
+	pm.emission_box_extents = Vector3(1.3, 0.9, 2.8)
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.03, 0.03)
+	var fm := ShaderMaterial.new()
+	fm.shader = load("res://shaders/sewer_firefly.gdshader")
+	quad.material = fm
+	var keys: Array = map.cells.keys()
+	keys.sort()
+	var n := 0
+	for key: Vector2i in keys:
+		if _rng.randf() > 0.7:
+			continue
+		var at: Vector3 = map.to_world(key)
+		var c: ModuleMaze.Cell = map.cells[key]
+		var p := GPUParticles3D.new()
+		p.amount = 5 if effects else 2
+		p.lifetime = 9.0
+		p.randomness = 0.5
+		p.preprocess = 9.0
+		p.process_material = pm
+		p.draw_pass_1 = quad
+		p.local_coords = false
+		p.layers = VISUAL_LAYER
+		p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		p.visibility_aabb = AABB(Vector3(-4, -2, -4), Vector3(8, 6, 8))
+		p.visibility_range_end = PIECE_RANGE
+		p.position = at + Vector3(0.0, 1.7, 0.0)
+		if _is_chamber(key):
+			p.process_material = pm_room
+		elif not (c.open & ModuleMaze.N):
+			p.rotation.y = PI * 0.5
+		holder.add_child(p)
+		n += 1
+	print("[sewer] fireflies in %d cells" % n)
 
 
 # --- Running ------------------------------------------------------------------------
@@ -831,23 +1133,48 @@ func _process(_delta: float) -> void:
 	_set_below(y < SPLIT_Y)
 
 
-## The sewer draws only while the camera is down here. (The dungeon stays drawn
-## below: the shafts look up into it, and its torches are ranked out.)
+## The sewer draws only while the camera is down here, and the air goes thick and
+## musty. (The dungeon stays drawn below: the shafts look up into it.)
 func _set_below(below: bool, force := false) -> void:
 	if below == _below and not force:
 		return
 	_below = below
 	for c in _chunks:
-		c.visible = below
-	for child in get_children():
-		if child is MeshInstance3D and String(child.name).begins_with("Water"):
-			(child as MeshInstance3D).visible = below
-	if _torches != null:
-		_torches.visible = below
+		if is_instance_valid(c):
+			c.visible = below
+	_haze(below)
 	# Lights spawned up there since the level was built (the boss, a chest's
 	# room light) are kept off this layer too.
 	if below and get_parent() != null and get_parent().has_method("_wall_off_sewer"):
 		get_parent().call("_wall_off_sewer")
+
+
+func _haze(on: bool) -> void:
+	var world := get_viewport().find_world_3d() if is_inside_tree() else null
+	var env: Environment = world.environment if world != null else null
+	if env == null:
+		return
+	if on:
+		if _fog_saved.is_empty():
+			_fog_saved = {"colour": env.fog_light_color, "energy": env.fog_light_energy,
+				"density": env.fog_density, "ambient": env.ambient_light_color,
+				"ambient_energy": env.ambient_light_energy}
+		env.fog_light_color = HAZE_COLOUR
+		env.fog_light_energy = HAZE_ENERGY
+		env.fog_density = HAZE_DENSITY
+		env.ambient_light_color = DAMP_AMBIENT
+		env.ambient_light_energy = float(_fog_saved["ambient_energy"]) * DAMP_AMBIENT_SCALE
+	elif not _fog_saved.is_empty():
+		env.fog_light_color = _fog_saved["colour"]
+		env.fog_light_energy = _fog_saved["energy"]
+		env.fog_density = _fog_saved["density"]
+		env.ambient_light_color = _fog_saved["ambient"]
+		env.ambient_light_energy = _fog_saved["ambient_energy"]
+		_fog_saved = {}
+
+
+func _exit_tree() -> void:
+	_haze(false)
 
 
 func is_below() -> bool:

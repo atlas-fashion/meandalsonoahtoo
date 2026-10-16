@@ -38,6 +38,9 @@ def main():
     # Back to h rows (nearest is fine at this scale: < 30% stretch).
     idx = np.clip((np.arange(h) * (crop.shape[0] / h)).astype(int), 0, crop.shape[0] - 1)
     a2 = crop[idx]
+    # The row match leaves a low-frequency step top to bottom (1.36x a
+    # neighbouring row): taken out by `heal`, defined below.
+    a2 = heal(a2)
     lr = np.abs(a2[:, 0] - a2[:, -1]).mean()
     tb = np.abs(a2[0] - a2[-1]).mean()
     inner_c = np.mean([np.abs(a2[:, i] - a2[:, i + 1]).mean() for i in range(100, w - 100, 37)])
@@ -50,7 +53,7 @@ def main():
         lum = sum(np.roll(lum, i - 2, axis=axis) * k[i] for i in range(5))
     gy, gx = np.gradient(lum)
     s = 9.0
-    nx, ny = -gx * s, gy * s
+    nx, ny = -gx * s, -gy * s
     nz = np.ones_like(nx)
     ln = np.sqrt(nx * nx + ny * ny + nz * nz)
     nrm = np.stack([nx / ln, ny / ln, nz / ln], -1) * 0.5 + 0.5
@@ -67,4 +70,117 @@ def main():
         print("[sewer tex] wrote", img.filepath_raw)
 
 
+
+
+# --- Mold, sludge and moss (2026-10-15, second pass) ---------------------------------
+#
+# Three more Higgsfield images (gpt_image_2_5, high), asked to tile:
+#   tex_mold.png   -- black mold colonies on a pale grey ground
+#   tex_sludge.png -- black-brown wet sewer muck
+#   tex_moss.png   -- glowing cyan-green moss on black
+# Measured, mold and sludge did not quite wrap (edge difference 1.3-1.5x the
+# difference between neighbouring columns/rows); `heal` takes the step out: the
+# mismatch across each wrap, low-passed along the edge so the fix carries no
+# streaks of its own, spread back over a band either side.
+
+BAND = 96
+
+
+def heal(a):
+    a = a.copy()
+    h, w = a.shape[:2]
+    k = np.exp(-0.5 * (np.arange(-18, 19) / 6.0) ** 2)
+    k /= k.sum()
+    for axis in (1, 0):
+        b = np.moveaxis(a, axis, 0)  # the wrap runs between b[0] and b[-1]
+        d = b[0] - b[-1]
+        d = sum(np.roll(d, i - 18, axis=0) * k[i] for i in range(len(k)))
+        n = b.shape[0]
+        for i in range(BAND):
+            f = 0.5 * (1.0 - i / BAND)
+            b[i] -= d * f
+            b[n - 1 - i] += d * f
+        a = np.moveaxis(b, 0, axis)
+    return a
+
+
+def edges(a):
+    lr = np.abs(a[:, 0] - a[:, -1]).mean() / np.abs(a[:, 1:] - a[:, :-1]).mean()
+    tb = np.abs(a[0] - a[-1]).mean() / np.abs(a[1:] - a[:-1]).mean()
+    return lr, tb
+
+
+def load(name):
+    im = bpy.data.images.load(os.path.join(os.path.dirname(SRC), "tex_%s.png" % name))
+    w, h = im.size
+    return np.array(im.pixels[:]).reshape(h, w, 4)[:, :, :3].copy()
+
+
+def normal_from(lum, strength):
+    k = np.array([1, 4, 6, 4, 1], float) / 16
+    for axis in (0, 1):
+        lum = sum(np.roll(lum, i - 2, axis=axis) * k[i] for i in range(5))
+    # Wrapped differences, so the normal map tiles too. Pixel rows run UP
+    # (Blender), so +y is up the image: green up, OpenGL convention.
+    gx = (np.roll(lum, -1, 1) - np.roll(lum, 1, 1)) * 0.5
+    gy = (np.roll(lum, -1, 0) - np.roll(lum, 1, 0)) * 0.5
+    nx, ny = -gx * strength, -gy * strength
+    nz = np.ones_like(nx)
+    ln = np.sqrt(nx * nx + ny * ny + nz * nz)
+    return np.stack([nx / ln, ny / ln, nz / ln], -1) * 0.5 + 0.5
+
+
+def save(name, rgb, alpha=None, data=False):
+    h, w = rgb.shape[:2]
+    img = bpy.data.images.new(name, w, h, alpha=alpha is not None)
+    if data:
+        img.colorspace_settings.name = "Non-Color"
+    px = np.ones((h, w, 4))
+    px[..., :3] = np.clip(rgb, 0, 1)
+    if alpha is not None:
+        px[..., 3] = np.clip(alpha, 0, 1)
+    img.pixels = px.ravel()
+    img.filepath_raw = os.path.join(OUT, name + ".png")
+    img.file_format = "PNG"
+    img.save()
+    print("[sewer tex] wrote", img.filepath_raw)
+
+
+LUM = np.array([0.2126, 0.7152, 0.0722])
+
+
+def extras():
+    # Mold: the mask is how far a pixel is below the grey ground; its colour is
+    # the colony's own, kept in RGB under the mask (the shader lays it over the
+    # brick by the mask, scaled by a world-space coverage noise).
+    m = load("mold")
+    print("[sewer tex] mold edges before (L-R, T-B as x neighbours): %.2f %.2f" % edges(m))
+    m = heal(m)
+    print("[sewer tex] mold edges after: %.2f %.2f" % edges(m))
+    lum = m @ LUM
+    ground = np.percentile(lum, 85)
+    mask = np.clip((ground - 0.04 - lum) / 0.42, 0, 1) ** 0.8
+    save("sewer_mold", m, mask)
+    # Sludge: albedo and a normal from its luminance (the wet clumps proud).
+    s = load("sludge")
+    print("[sewer tex] sludge edges before: %.2f %.2f" % edges(s))
+    s = heal(s)
+    print("[sewer tex] sludge edges after: %.2f %.2f" % edges(s))
+    save("sewer_sludge", s)
+    save("sewer_sludge_normal", normal_from(s @ LUM, 7.0), data=True)
+    # Moss: the glow is its own luminance; alpha lets the decal show only the moss.
+    g = load("moss")
+    print("[sewer tex] moss edges: %.2f %.2f" % edges(g))
+    lum = g @ LUM
+    alpha = np.clip((lum - 0.02) / 0.18, 0, 1)
+    # Each decal is the whole image, so it must fade out round its edge or a
+    # square shows on the stone: colour and alpha both, the glow being the colour.
+    h, w = lum.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    r = np.hypot((xx + 0.5) / w - 0.5, (yy + 0.5) / h - 0.5) * 2.0
+    fall = np.clip((1.0 - r) / 0.45, 0, 1) ** 1.5
+    save("sewer_moss", g * fall[..., None], alpha * fall)
+
+
 main()
+extras()

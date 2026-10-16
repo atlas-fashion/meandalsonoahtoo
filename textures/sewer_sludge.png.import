@@ -2,20 +2,17 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cgoa6pu7y4l2y"
-path.s3tc="res://.godot/imported/sewer_kit_NormalGL_f96a9e2b-e748-47d5-824b-c113224c2c37.jpg-f1dc888abed84fdaf5c2c89aaef1e513.s3tc.ctex"
+uid="uid://dk2hwgup537cu"
+path.s3tc="res://.godot/imported/sewer_sludge.png-e60300701863ab0916d59fc89572eb46.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "ac7040b4358d18e0b0a46df2f53cf644"
-}
 
 [deps]
 
-source_file="res://models/sewer/sewer_kit_NormalGL_f96a9e2b-e748-47d5-824b-c113224c2c37.jpg"
-dest_files=["res://.godot/imported/sewer_kit_NormalGL_f96a9e2b-e748-47d5-824b-c113224c2c37.jpg-f1dc888abed84fdaf5c2c89aaef1e513.s3tc.ctex"]
+source_file="res://textures/sewer_sludge.png"
+dest_files=["res://.godot/imported/sewer_sludge.png-e60300701863ab0916d59fc89572eb46.s3tc.ctex"]
 
 [params]
 

@@ -2,20 +2,17 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bgcvrsbjvolg2"
-path.s3tc="res://.godot/imported/sewer_kit_ORM_460bdb4c-ddc6-4ba1-a440-5e661ec9128d.jpg-80e10a550d42b39fef8df5afc87b1c45.s3tc.ctex"
+uid="uid://cgm7ofomh007"
+path.s3tc="res://.godot/imported/sewer_moss.png-e0377ccd209a2b6ba29339b98e3bcf5c.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "de36d39de3aafd12c16c89826c0eefe1"
-}
 
 [deps]
 
-source_file="res://models/sewer/sewer_kit_ORM_460bdb4c-ddc6-4ba1-a440-5e661ec9128d.jpg"
-dest_files=["res://.godot/imported/sewer_kit_ORM_460bdb4c-ddc6-4ba1-a440-5e661ec9128d.jpg-80e10a550d42b39fef8df5afc87b1c45.s3tc.ctex"]
+source_file="res://textures/sewer_moss.png"
+dest_files=["res://.godot/imported/sewer_moss.png-e0377ccd209a2b6ba29339b98e3bcf5c.s3tc.ctex"]
 
 [params]
 

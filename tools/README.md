@@ -336,7 +336,7 @@ variants share their source's textures) from the eight raw Tripo pieces in
   `floor_notch` is the floor tile with a half circle (`MANHOLE_R` 0.5) cut
   from the middle of its +X edge -- two of them round a hole. CLAUDE.md 50.
 
-# The sewer kit (2026-10-15, Higgsfield)
+# The sewer's textures and props (2026-10-15, Higgsfield)
 
 ```
 blender -b --factory-startup -P tools/build_sewer_texture.py
@@ -344,28 +344,28 @@ blender -b --factory-startup -P tools/build_sewer_kit.py
 godot --headless --import --path .
 ```
 
-Sources are in `models/source/sewer_hf/` (a `.gdignore` folder): concept
-and asset images made with Higgsfield's `gpt_image_2_5` (high, the user's
-wall and vault photos as references), and models from those images made by
-Tripo H3.1 through Higgsfield (`raw_*.glb`). `build_sewer_texture.py` crops
-the generated brick between two matching rows so it tiles, and derives a
-normal map: `textures/sewer_hf_albedo.png` / `_normal.png`. `build_sewer_kit.py`
-writes `models/sewer/sewer_kit.glb` ("tunnel", "grate", "bones", "fungus") and
-`models/sewer/tunnel_profile.json`.
+Sources are in `models/source/sewer_hf/` (a `.gdignore` folder), all made with
+Higgsfield's `gpt_image_2_5` (high): `tex_brick.png` (from the user's wall
+photo), `tex_mold.png`, `tex_sludge.png`, `tex_moss.png`, the concept images,
+and `raw_bones.glb` (Tripo H3.1 through Higgsfield). The sewer's geometry is not
+generated: it is one CSG in `scripts/sewer.gd` (CLAUDE.md section 55).
 
-- The tunnel came back TAPERED, drifting sideways and with a sloping crown
-  (the image's perspective). The build measures centre, half-width and crown
-  at nine stations, fits lines and straightens every cross-section to the
-  middle's, so sections meet end to end (half-width 1.89-1.98 after).
-- **Never `normals_make_consistent` a shell you stand inside**: it points the
-  normals away from the shell's middle, so from inside every face was a back
-  face and the tunnels rendered black beside a lit torch. `face_inside` casts
-  from the tunnel's axis to every face and turns the ones it sees toward it
-  (rays from the axis: 226 of 396 hit back faces before, 0 after).
-- After an export, the extracted `sewer_kit_*.jpg` imports come in at
-  `compress/mode=0`: set them to 2 with mipmaps and re-import.
-- `raw_chamber.glb` is not used: it came back tilted ~15 deg with its near
-  wall cut away. Chambers are CSG in `sewer.gd`.
+`build_sewer_texture.py` writes `textures/sewer_hf_albedo/_normal` (the brick,
+cropped between two matching rows), `sewer_mold` (colour + a mask in alpha),
+`sewer_sludge` + `_normal`, and `sewer_moss` (glow + alpha, faded round its
+edge: every moss decal is the whole image). Generated "tileable" images do not
+quite wrap (edge steps 1.3-1.5x a neighbouring column); `heal` takes the step
+out -- the mismatch across each wrap, low-passed along the edge, spread over a
+band either side -- and the build prints the ratio before and after (all now
+0.95-1.07). Normal maps are green-up (OpenGL); the brick's was inverted before.
+
+`build_sewer_kit.py` writes `models/sewer/sewer_kit.glb` with "bones" only.
+
+- After an export, the extracted `sewer_kit_*.jpg` imports, and new texture
+  PNGs, come in at `compress/mode=0`: set them to 2 with mipmaps and re-import.
+- **Never `normals_make_consistent` a shell you stand inside** (learnt on the
+  first pass's generated tunnel): it points the normals away from the shell's
+  middle, so from inside every face was a back face and rendered black.
 
 # The enforcer (2026-10-15)
 
