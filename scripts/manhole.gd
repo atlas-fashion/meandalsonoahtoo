@@ -15,8 +15,8 @@ extends Node3D
 ## by maze.gd.
 ##
 ## The hole is visual only -- the dungeon's floor collision runs whole under it
-## -- so an open hole carries a collider (`_blocker`) that keeps everyone from
-## walking across thin air. On a ladder the player's body is driven by the
+## -- and an open hole can be walked over (2026-10-16; it used to carry a
+## collider, `_blocker`, now never switched on). On a ladder the player's body is driven by the
 ## scene (player.gd `begin_climb`).
 
 const SEWER := preload("res://scripts/sewer.gd")
@@ -142,7 +142,9 @@ func _dress(cell_centre: Vector3) -> void:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.position = Vector3((r[0] + r[1]) * 0.5, -0.16, (r[2] + r[3]) * 0.5)
 		add_child(mi)
-	# Keeps everyone off thin air once the cover is off.
+	# Kept, but never switched on (2026-10-16, at the user's request): an open
+	# manhole can be walked over -- the floor's collision runs whole under the
+	# hole. It used to stop everyone 0.95 m from its centre.
 	var body := StaticBody3D.new()
 	body.name = "Blocker"
 	body.collision_layer = 1
@@ -187,7 +189,7 @@ func set_open_now() -> void:
 	state = State.OPEN
 	_cover_aside = _aside_for(global_position - along)
 	_cover.transform = _cover_aside
-	_blocker.disabled = false
+	# Open, it stays walkable (2026-10-16): the floor runs whole under it.
 
 
 # --- Running ----------------------------------------------------------------------
@@ -311,7 +313,7 @@ func _lift() -> void:
 	await d.finished
 	_player.set("_shake", maxf(float(_player.get("_shake")), 0.1))
 	state = State.OPEN
-	_blocker.disabled = false
+	# Open, it stays walkable (2026-10-16): the floor runs whole under it.
 	# A look down the hole, then back to the player.
 	_player.scene_look_at(global_position + Vector3(0.0, -2.0, 0.0), 3.0)
 	await _wait(0.5)

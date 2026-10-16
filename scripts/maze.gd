@@ -4068,8 +4068,8 @@ func _populate() -> void:
 	_spawn_enemies()
 	_spawn_convoys()
 	_spawn_stalker()
-	_decrepit_due = -1.0
-	_spawn_decrepit()
+	_spawn_decrepits()
+	_spawn_sewer_lizards()
 	_spawn_chests()
 	if modules and _module_level != null:
 		_report_room_intruders()
@@ -4100,6 +4100,9 @@ func _report_room_intruders() -> void:
 			continue
 		# A convoy's controller sits at the origin; its crew are counted.
 		if node.has_method("is_broken"):
+			continue
+		# The sewer's, under the map: a room above them is not theirs.
+		if (node as Node3D).global_position.y < -4.0:
 			continue
 		total += 1
 		var tile := world_to_tile((node as Node3D).global_position)
@@ -4641,27 +4644,51 @@ func _note_spawn_eye() -> void:
 	_spawn_sight.exclude = [(player as CollisionObject3D).get_rid()] if player is CollisionObject3D else []
 
 
-## --- The decrepit enforcer (2026-10-15) ---------------------------------------------
+## --- The decrepit enforcer (2026-10-15) and the sewer lizards (2026-10-16) ----------
 ##
-## A feral, rotted enforcer (decrepit.gd) hunts the sewer -- only ever one, and
-## only down there. It is placed with the population (so a death resets it) in a
-## sewer cell at least `decrepit_spawn_clear` from the player and out of their
-## sight; killed, the next one comes `decrepit_respawn` seconds later, placed the
-## same way.
+## Feral, rotted enforcers (decrepit.gd) hunt the sewer -- only down there, at
+## most `decrepit_max` at once, and always placed one at a time: each in a sewer
+## cell at least `decrepit_spawn_clear` from the player, out of their sight, and
+## `decrepit_apart` from every other one. Placed with the population (so a death
+## resets them); one killed, another comes `decrepit_respawn` seconds later.
+## The sewer lizards (sewer_lizard.gd), its common vermin, come with the
+## population too: `sewer_lizards_per_cell` of the sewer's cells, out of sight.
 
 const DECREPIT_SCRIPT := preload("res://scripts/decrepit.gd")
+const LIZARD_SCRIPT := preload("res://scripts/sewer_lizard.gd")
 @export var decrepit_enabled := true
+@export var decrepit_max := 3
 @export var decrepit_respawn := 45.0
 @export var decrepit_spawn_clear := 30.0
-var _decrepit: Node3D = null
-var _decrepit_due := -1.0
+@export var decrepit_apart := 40.0
+@export var sewer_lizards_per_cell := 0.15
+@export var sewer_lizard_clear := 16.0
+var _decrepits: Array = []
+var _decrepit_due: Array[float] = []
+
+
+func _spawn_decrepits() -> void:
+	_decrepits.clear()
+	_decrepit_due.clear()
+	for i in decrepit_max:
+		_spawn_decrepit()
+
+
+func _alive_decrepits() -> Array:
+	var out := []
+	for d in _decrepits:
+		if is_instance_valid(d) and not d.get("_dying"):
+			out.append(d)
+	return out
 
 
 func _spawn_decrepit() -> void:
-	_decrepit = null
 	if not decrepit_enabled or _sewer == null or enemy_scene == null:
 		return
-	var spot = _decrepit_spot()
+	var alive := _alive_decrepits()
+	if alive.size() >= decrepit_max:
+		return
+	var spot = _sewer_spot(decrepit_spawn_clear, alive, decrepit_apart)
 	if spot == null:
 		return
 	var d: CharacterBody3D = enemy_scene.instantiate()
@@ -4672,14 +4699,36 @@ func _spawn_decrepit() -> void:
 	d.rotation.y = randf() * TAU
 	_spawned.append(d)
 	d.connect("died", _on_decrepit_died)
-	_decrepit = d
+	_decrepits.append(d)
 	var player := get_tree().get_first_node_in_group("player") as Node3D
-	print("[decrepit] spawned %.0f m from the player" % (spot as Vector3).distance_to(
-		player.global_position if player != null else Vector3.ZERO))
+	print("[decrepit] spawned %.0f m from the player (%d alive)" % [(spot as Vector3).distance_to(
+		player.global_position if player != null else Vector3.ZERO), alive.size() + 1])
 
 
-## A sewer cell far from the player and out of their sight; the furthest if none.
-func _decrepit_spot():
+func _spawn_sewer_lizards() -> void:
+	if _sewer == null or enemy_scene == null or sewer_lizards_per_cell <= 0.0:
+		return
+	var map = _sewer.get("map")
+	var count := int(round(float(map.cells.size()) * sewer_lizards_per_cell))
+	var placed: Array = []
+	for i in count:
+		var spot = _sewer_spot(sewer_lizard_clear, placed, 6.0)
+		if spot == null:
+			break
+		var l: CharacterBody3D = enemy_scene.instantiate()
+		l.set_script(LIZARD_SCRIPT)
+		l.set("sewer", _sewer)
+		add_child(l)
+		l.global_position = (spot as Vector3) + Vector3(randf_range(-1.0, 1.0), 0.25, randf_range(-1.0, 1.0))
+		l.rotation.y = randf() * TAU
+		_spawned.append(l)
+		placed.append(l)
+	print("[sewer] %d lizards" % placed.size())
+
+
+## A sewer cell at least `clear` from the player and out of their sight, and
+## `apart` from each of `others`; the furthest from the player if none qualify.
+func _sewer_spot(clear: float, others: Array, apart: float):
 	var map = _sewer.get("map")
 	if map == null or map.cells.is_empty():
 		return null
@@ -4693,12 +4742,16 @@ func _decrepit_spot():
 	for key in map.cells:
 		var p: Vector3 = map.to_world(key)
 		var d := Vector2(p.x - from.x, p.z - from.z).length()
-		if d > best_d:
+		var crowded := false
+		for o in others:
+			if is_instance_valid(o) and Vector2(p.x - o.global_position.x, p.z - o.global_position.z).length() < apart:
+				crowded = true
+		if d > best_d and not crowded:
 			best_d = d
 			best = p
-		if d < decrepit_spawn_clear:
+		if d < clear or crowded:
 			continue
-		var q := PhysicsRayQueryParameters3D.create(eye, p + Vector3(0.0, 1.2, 0.0), 2 | 256)
+		var q := PhysicsRayQueryParameters3D.create(eye, p + Vector3(0.0, 1.0, 0.0), 2 | 256)
 		if space.intersect_ray(q).is_empty():
 			continue
 		ok.append(p)
@@ -4710,13 +4763,14 @@ func _decrepit_spot():
 
 
 func _on_decrepit_died() -> void:
-	_decrepit_due = Time.get_ticks_msec() / 1000.0 + decrepit_respawn
+	_decrepit_due.append(Time.get_ticks_msec() / 1000.0 + decrepit_respawn)
 
 
 func _tick_decrepit() -> void:
-	if _decrepit_due < 0.0 or Time.get_ticks_msec() / 1000.0 < _decrepit_due:
+	if _decrepit_due.is_empty():
 		return
-	_decrepit_due = -1.0
-	if _decrepit != null and is_instance_valid(_decrepit) and not _decrepit.get("_dying"):
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _decrepit_due[0]:
 		return
+	_decrepit_due.remove_at(0)
 	_spawn_decrepit()

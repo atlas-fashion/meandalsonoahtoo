@@ -1,8 +1,8 @@
 extends "res://scripts/enemy.gd"
 
 ## The DECREPIT ENFORCER (2026-10-15): a rotted, hunched, one-armed enforcer
-## gone feral in the sewer, its arm a great pointed shield. Only ever one at a
-## time, and only in the sewer (maze.gd `_spawn_decrepit`).
+## gone feral in the sewer, its arm a great pointed shield. Only in the sewer, at
+## most three at once, each placed alone (maze.gd `_spawn_decrepit`); 250 health.
 ##
 ## The model and its animations are the user's (`models/decrepit.glb`, built by
 ## tools/build_decrepit.py from models/source/enforcer/PUTRID_ENFORCER_BAKED.blend):
@@ -173,7 +173,7 @@ var combos := 0
 
 func _init() -> void:
 	armed = false
-	max_health = 150.0
+	max_health = 250.0
 	move_speed = CHASE_SPEED
 	acceleration = 30.0
 	vision_cone_degrees = 150.0
@@ -401,6 +401,10 @@ var core_level := 1.0
 
 
 func _process(_delta: float) -> void:
+	# Not drawn while the camera is above ground (12 m of stone between).
+	var cam := get_viewport().get_camera_3d()
+	if cam != null and visual != null:
+		visual.visible = cam.global_position.y < SPLIT_Y
 	if _dying or _eye_mat == null:
 		return
 	var now := _now()

@@ -656,7 +656,12 @@ func _build_grilles() -> void:
 ## grille, as one piece of grating (`_grating_piece`, a metre long) instanced
 ## along it -- one MultiMesh, one draw -- with a box of collision per arm under
 ## it for everyone: the player, and the decrepit enforcer (decrepit.gd), walk it.
-const GRATING_WIDE := CHANNEL_HALF * 2.0 + 0.3
+## The grating stands GRATING_LIFT proud of the walkway, its rails lapping onto
+## the channel's lips: laid flush with the floor (rails topped at the walkway's
+## height, slats just under it) the iron and the stone were coplanar and fought,
+## the grating flickering in and out of the floor.
+const GRATING_WIDE := CHANNEL_HALF * 2.0 + 0.16
+const GRATING_LIFT := 0.012
 
 
 func _build_gratings() -> void:
@@ -719,7 +724,7 @@ func _grating_box(at: Vector3, dir: Vector3, length: float) -> void:
 	shape.size = Vector3(GRATING_WIDE, 0.06, length)
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
-	cs.transform = Transform3D(Basis(Vector3(-dir.z, 0.0, dir.x), Vector3.UP, -dir), at + Vector3(0.0, -0.03, 0.0))
+	cs.transform = Transform3D(Basis(Vector3(-dir.z, 0.0, dir.x), Vector3.UP, -dir), at + Vector3(0.0, GRATING_LIFT - 0.03, 0.0))
 	_collision_body().add_child(cs)
 
 
@@ -730,13 +735,14 @@ func _grating_piece() -> Mesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for side: float in [-1.0, 1.0]:
 		var rail := BoxMesh.new()
-		rail.size = Vector3(0.07, 0.06, 1.0)
-		st.append_from(rail, 0, Transform3D(Basis.IDENTITY, Vector3(side * (CHANNEL_HALF + 0.08), -0.03, 0.0)))
+		# On the lip: its foot sunk into the stone, its top above the walkway.
+		rail.size = Vector3(0.08, 0.07, 1.0)
+		st.append_from(rail, 0, Transform3D(Basis.IDENTITY, Vector3(side * (CHANNEL_HALF + 0.03), GRATING_LIFT + 0.01 - 0.035, 0.0)))
 	var z := -0.5 + 0.0425
 	while z < 0.5:
 		var slat := BoxMesh.new()
-		slat.size = Vector3(GRATING_WIDE, 0.045, 0.028)
-		st.append_from(slat, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, -0.025, z)))
+		slat.size = Vector3(GRATING_WIDE, 0.035, 0.028)
+		st.append_from(slat, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, GRATING_LIFT - 0.0175, z)))
 		z += 0.085
 	st.generate_normals()
 	return st.commit()
