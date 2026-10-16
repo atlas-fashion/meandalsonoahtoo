@@ -148,6 +148,191 @@ def atlas(arm):
     log("joined into one mesh: %d faces, 2 materials, atlas %d px" % (len(ob.data.polygons), ATLAS_PX))
 
 
+## --- The eyes' glow (2026-10-15) ----------------------------------------------------
+##
+## Each eye is a grey domed LENS in a raised bronze bezel. The glow is a ring laid
+## ON the lens, over its outer part (LENS_BAND of the lens's own radius, out to
+## just inside the bezel), following its actual outline and surface and lifted
+## GLOW_LIFT off it, so it neither floats off the eye nor cuts into the bezel.
+##
+## Found from the model itself: the head is rendered front-on in ortho with its
+## texture under flat light, each lens picked out as the grey disc in its half of
+## the image, its outline traced by marching out from the centre on
+## LENS_BEARINGS bearings; then rays from those image points back along the view
+## hit the real surface. The old eye markers (centroids of the two "front-most
+## bulges") sat on each lens's inner edge, ~5 cm off its centre at the authored
+## size -- they are moved to the lens centres here.
+
+LENS_PX = 1200
+LENS_VIEW = 0.6
+LENS_BEARINGS = 96
+LENS_BAND = (0.70, 0.80, 0.88, 0.95)
+GLOW_LIFT = 0.004
+LENS_HARMONICS = 3
+
+
+def measure_lenses(head):
+    from mathutils.bvhtree import BVHTree
+    sc = bpy.context.scene
+    hidden = []
+    for ob in bpy.data.objects:
+        if ob.type == "MESH" and ob != head and not ob.hide_render:
+            ob.hide_render = True
+            hidden.append(ob)
+    engine = sc.render.engine
+    sc.render.engine = "BLENDER_WORKBENCH"
+    sh = sc.display.shading
+    sh.light = "FLAT"
+    sh.color_type = "TEXTURE"
+    view = sc.view_settings.view_transform
+    sc.view_settings.view_transform = "Standard"
+    rx, ry = sc.render.resolution_x, sc.render.resolution_y
+    sc.render.resolution_x = LENS_PX
+    sc.render.resolution_y = LENS_PX
+    cam = bpy.data.cameras.new("LensCam")
+    cam.type = "ORTHO"
+    cam.ortho_scale = LENS_VIEW
+    co = bpy.data.objects.new("LensCam", cam)
+    sc.collection.objects.link(co)
+    pts = np.array([tuple(head.matrix_world @ v.co) for v in head.data.vertices])
+    front = pts[pts[:, 1] < pts[:, 1].min() + 0.25]
+    mid = Vector((float(pts[:, 0].mean()), -3.0, float(np.median(front[:, 2]))))
+    co.location = mid
+    co.rotation_euler = Vector((0, 1, 0)).to_track_quat("-Z", "Z").to_euler()
+    old_cam = sc.camera
+    sc.camera = co
+    path = os.path.join(bpy.app.tempdir, "enforcer_lens.png")
+    sc.render.filepath = path
+    bpy.ops.render.render(write_still=True)
+    im = bpy.data.images.load(path)
+    a = np.array(im.pixels[:]).reshape(LENS_PX, LENS_PX, 4)[::-1, :, :3]
+    bpy.data.images.remove(im)
+    sc.camera = old_cam
+    bpy.data.objects.remove(co)
+    bpy.data.cameras.remove(cam)
+    sc.render.engine = engine
+    sc.view_settings.view_transform = view
+    sc.render.resolution_x, sc.render.resolution_y = rx, ry
+    for ob in hidden:
+        ob.hide_render = False
+
+    mx = a.max(2)
+    mn = a.min(2)
+    sat = np.where(mx > 1e-4, (mx - mn) / np.maximum(mx, 1e-4), 1.0)
+    lens = (sat < 0.22) & (mx > 0.33)
+    px = LENS_VIEW / LENS_PX
+
+    def to_world(x, y):
+        return Vector((mid.x + (x - LENS_PX / 2) * px, -3.0, mid.z - (y - LENS_PX / 2) * px))
+
+    dg = bpy.context.evaluated_depsgraph_get()
+    bvh = BVHTree.FromObject(head, dg)
+    inv = head.matrix_world.inverted()
+    n3 = head.matrix_world.to_3x3()
+    down = (inv.to_3x3() @ Vector((0, 1, 0))).normalized()
+
+    def hit(x, y):
+        h = bvh.ray_cast(inv @ to_world(x, y), down)
+        if h[0] is None:
+            return None
+        return head.matrix_world @ h[0], (n3 @ h[1]).normalized()
+
+    out = []
+    rows0 = int(LENS_PX * 0.3)
+    rows1 = int(LENS_PX * 0.8)
+    angles = np.arange(LENS_BEARINGS) * 2 * np.pi / LENS_BEARINGS
+    for side, x0, x1 in ((-1.0, 0, LENS_PX // 2), (1.0, LENS_PX // 2, LENS_PX)):
+        ys, xs = np.nonzero(lens[rows0:rows1, x0:x1])
+        cx = float(np.median(xs)) + x0
+        cy = float(np.median(ys)) + rows0
+        radii = np.zeros(LENS_BEARINGS)
+        for it in range(3):
+            for k, th in enumerate(angles):
+                r = 4.0
+                miss = 0
+                last_in = 4.0
+                while r < LENS_PX * 0.2:
+                    x = int(round(cx + np.cos(th) * r))
+                    y = int(round(cy - np.sin(th) * r))
+                    if lens[y, x]:
+                        last_in = r
+                        miss = 0
+                    else:
+                        miss += 1
+                        if miss >= 5:
+                            break
+                    r += 1.0
+                radii[k] = last_in
+            # Re-centre on the outline found.
+            cx = float((cx + np.cos(angles) * radii).mean())
+            cy = float((cy - np.sin(angles) * radii).mean())
+        # Smooth the outline: speckle in the rusty texture nicks it (a 5-point
+        # average still left the ring visibly wobbling). The lens is a round
+        # dome, so only the outline's first LENS_HARMONICS harmonics are kept --
+        # its size, any offset, a slight oval -- and the pixel noise is dropped.
+        med = float(np.median(radii))
+        radii = np.clip(radii, med * 0.85, med * 1.15)
+        spec = np.fft.rfft(radii)
+        spec[LENS_HARMONICS + 1:] = 0.0
+        radii = np.fft.irfft(spec, n=LENS_BEARINGS)
+        centre = hit(cx, cy)
+        rows = []
+        for f in LENS_BAND:
+            row = []
+            for k, th in enumerate(angles):
+                h = hit(cx + np.cos(th) * radii[k] * f, cy - np.sin(th) * radii[k] * f)
+                if h is None:
+                    row = None
+                    break
+                row.append(h[0] + h[1] * GLOW_LIFT)
+            if row is None:
+                break
+            rows.append(row)
+        log("lens %+.0f: centre (%.3f, %.3f, %.3f), radius %.3f (%.3f..%.3f), %d rings" % (
+            side, centre[0].x, centre[0].y, centre[0].z, med * px, radii.min() * px, radii.max() * px, len(rows)))
+        out.append((side, centre, rows))
+    return out
+
+
+def build_eye_glow(arm, lenses):
+    mat = bpy.data.materials.new("EnforcerEyeGlow")
+    n = LENS_BEARINGS
+    for side, centre, rows in lenses:
+        if len(rows) < 2:
+            continue
+        verts = []
+        faces = []
+        for row in rows:
+            verts.extend(tuple(v) for v in row)
+        for j in range(len(rows) - 1):
+            for k in range(n):
+                faces.append((j * n + k, j * n + (k + 1) % n, (j + 1) * n + (k + 1) % n, (j + 1) * n + k))
+        me = bpy.data.meshes.new("EyeGlow")
+        me.from_pydata(verts, [], faces)
+        me.update()
+        # Facing out of the lens.
+        if sum(1 for p in me.polygons if p.normal.dot(centre[1]) < 0.0) > len(me.polygons) // 2:
+            for p in me.polygons:
+                p.flip()
+            me.update()
+        me.materials.append(mat)
+        name = "EyeGlowL" if side > 0 else "EyeGlowR"
+        ob = bpy.data.objects.new(name, me)
+        bpy.context.scene.collection.objects.link(ob)
+        ob.parent = arm
+        ob.parent_type = "BONE"
+        ob.parent_bone = "HEAD"
+        bpy.context.view_layer.update()
+        ob.matrix_world = Matrix.Identity(4)
+        # The eye marker, onto the lens's centre.
+        mk = bpy.data.objects.get("EyeL" if side > 0 else "EyeR")
+        if mk is not None:
+            m = mk.matrix_world.copy()
+            m.translation = centre[0]
+            mk.matrix_world = m
+        log("%s: %d verts, %d quads" % (name, len(verts), len(faces)))
+
+
 def main():
     sc = bpy.context.scene
     arm = bpy.data.objects["Armature"]
@@ -247,7 +432,9 @@ def main():
     sc.frame_set(1)
     arm.data.pose_position = "REST"
     bpy.context.view_layer.update()
+    lenses = measure_lenses(bpy.data.objects["rusty spherical robot 3d model"])
     atlas(arm)
+    build_eye_glow(arm, lenses)
     arm.data.pose_position = "POSE"
 
     bpy.ops.object.select_all(action="DESELECT")

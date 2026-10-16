@@ -212,6 +212,8 @@ func _enter_tree() -> void:
 	vis.add_child(_model)
 	for mi in _model.find_children("*", "MeshInstance3D", true, false):
 		var m := mi as MeshInstance3D
+		if String(m.name).begins_with("EyeGlow"):
+			continue
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		_parts.append(m)
 	_muzzle = _model.find_child("Muzzle", true, false) as Node3D
@@ -272,11 +274,14 @@ func _crystal_material() -> StandardMaterial3D:
 	return m
 
 
-## A glowing RING in each eye socket (2026-10-15; full discs before), on the eye
-## markers the build puts on the head bone, facing out of the face, in the
-## crystal's colour (they flare with it, at EYE_GLOW). No halo cards: with the
-## bloom they ran the two eyes together into one ball. Sized in world metres:
-## the markers carry the rig's own scale.
+## A glowing RING in each eye (2026-10-15; full discs before), in the crystal's
+## colour (they flare with it, at EYE_GLOW). The rings are the model's own
+## ("EyeGlowL" / "EyeGlowR", built by tools/build_enforcer.py): laid on the
+## outer part of each grey lens, traced from its real outline and following its
+## surface a few millimetres off it -- the first rings were fixed-size tori on
+## markers that sat on each lens's inner edge, off-centre and cutting into the
+## bezel. The tori below are only a fallback for a model without them. No halo
+## cards: with the bloom they ran the two eyes together into one ball.
 const EYE_RING_OUTER := 0.062
 const EYE_RING_INNER := 0.04
 
@@ -284,6 +289,17 @@ const EYE_RING_INNER := 0.04
 func _attach_eyes() -> void:
 	_eye_mat = _material.duplicate() as StandardMaterial3D
 	_eye_mat.emission_energy_multiplier = base_glow * EYE_GLOW
+	var traced := false
+	for name_ in ["EyeGlowL", "EyeGlowR"]:
+		var ring := _model.find_child(name_, true, false) as MeshInstance3D
+		if ring == null:
+			continue
+		traced = true
+		ring.material_override = _eye_mat
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_eyes_glow.append(ring)
+	if traced:
+		return
 	for name_ in ["EyeL", "EyeR"]:
 		var at := _model.find_child(name_, true, false) as Node3D
 		if at == null:

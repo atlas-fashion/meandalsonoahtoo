@@ -360,6 +360,10 @@ unbaked track and action is removed, one of them was an UNMUTED NLA track),
 bone markers (EyeL/EyeR, Muzzle, Shield), the parts joined into one mesh with a
 2K baked atlas (`models/source/enforcer/enforcer_atlas.png`). Set the extracted
 atlas texture to `compress/mode=2` after the first import. See CLAUDE.md 48.
+The eye glow rings ("EyeGlowL" / "EyeGlowR", bone-parented to HEAD) are traced
+from the lenses by the build: a flat-lit ortho render of the head, the grey
+lens discs found and their outlines kept to LENS_HARMONICS harmonics, rays
+back onto the mesh, a band over 0.70-0.95 of each lens lifted GLOW_LIFT off it.
 Traps: the .blend may be saved in pose/edit mode (the script forces object
 mode first); and Godot will NOT re-extract `models/enforcer_enforcer_atlas.jpg`
 over an existing file -- if the mesh changes, delete it and
