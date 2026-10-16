@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cf40c3uo2hsk6"
-path="res://.godot/imported/decrepit_decrepit_atlas.jpg-db408a7048813c0932aeee7563d9d88c.ctex"
+path.s3tc="res://.godot/imported/decrepit_decrepit_atlas.jpg-db408a7048813c0932aeee7563d9d88c.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0f54a3cd5e31eb2310a44eb1f64e1dd9"
@@ -14,7 +15,7 @@ generator_parameters={
 [deps]
 
 source_file="res://models/decrepit_decrepit_atlas.jpg"
-dest_files=["res://.godot/imported/decrepit_decrepit_atlas.jpg-db408a7048813c0932aeee7563d9d88c.ctex"]
+dest_files=["res://.godot/imported/decrepit_decrepit_atlas.jpg-db408a7048813c0932aeee7563d9d88c.s3tc.ctex"]
 
 [params]
 
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
