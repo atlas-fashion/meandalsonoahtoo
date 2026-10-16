@@ -2,17 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://4ounms7duatt"
-path.s3tc="res://.godot/imported/sewer_brick_albedo.png-c85a1040570ef075c16f89f792a62dfb.s3tc.ctex"
+uid="uid://dx4oyc74tgwmj"
+path.s3tc="res://.godot/imported/sewer_kit_NormalGL_b95136fb-b013-4d9c-891b-ff04fe9cdfe5.jpg-6a75b2a8986b556083b6433379777969.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
+generator_parameters={
+"md5": "c6b18bd8c1b14e83e39f7ded0b40621f"
+}
 
 [deps]
 
-source_file="res://textures/sewer_brick_albedo.png"
-dest_files=["res://.godot/imported/sewer_brick_albedo.png-c85a1040570ef075c16f89f792a62dfb.s3tc.ctex"]
+source_file="res://models/sewer/sewer_kit_NormalGL_b95136fb-b013-4d9c-891b-ff04fe9cdfe5.jpg"
+dest_files=["res://.godot/imported/sewer_kit_NormalGL_b95136fb-b013-4d9c-891b-ff04fe9cdfe5.jpg-6a75b2a8986b556083b6433379777969.s3tc.ctex"]
 
 [params]
 

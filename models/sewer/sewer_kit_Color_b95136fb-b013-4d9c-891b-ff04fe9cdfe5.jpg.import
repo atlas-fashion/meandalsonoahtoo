@@ -2,17 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cvxsrbyjhwtsk"
-path.s3tc="res://.godot/imported/sewer_brick_normal.png-fb774f6c762e095dc078a77c3adef2e3.s3tc.ctex"
+uid="uid://cpv8xw3er3slo"
+path.s3tc="res://.godot/imported/sewer_kit_Color_b95136fb-b013-4d9c-891b-ff04fe9cdfe5.jpg-d37c605d05fa390b58a618244d8a0858.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
+generator_parameters={
+"md5": "567bfbe1d5c8f72cde14e0a2153755ee"
+}
 
 [deps]
 
-source_file="res://textures/sewer_brick_normal.png"
-dest_files=["res://.godot/imported/sewer_brick_normal.png-fb774f6c762e095dc078a77c3adef2e3.s3tc.ctex"]
+source_file="res://models/sewer/sewer_kit_Color_b95136fb-b013-4d9c-891b-ff04fe9cdfe5.jpg"
+dest_files=["res://.godot/imported/sewer_kit_Color_b95136fb-b013-4d9c-891b-ff04fe9cdfe5.jpg-d37c605d05fa390b58a618244d8a0858.s3tc.ctex"]
 
 [params]
 

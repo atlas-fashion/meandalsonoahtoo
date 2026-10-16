@@ -336,16 +336,36 @@ variants share their source's textures) from the eight raw Tripo pieces in
   `floor_notch` is the floor tile with a half circle (`MANHOLE_R` 0.5) cut
   from the middle of its +X edge -- two of them round a hole. CLAUDE.md 50.
 
-# Sewer brick (2026-10-15)
+# The sewer kit (2026-10-15, Higgsfield)
 
 ```
-blender -b --factory-startup -P tools/build_sewer_brick.py
+blender -b --factory-startup -P tools/build_sewer_texture.py
+blender -b --factory-startup -P tools/build_sewer_kit.py
+godot --headless --import --path .
 ```
 
-A tileable 1K brick texture in the corridor walls' colours for the sewer
-pipes (Tripo's brick is baked per piece and cannot tile round a pipe).
-Writes `textures/sewer_brick_albedo.png` and `_normal.png`; set both imports
-to `compress/mode=2` with mipmaps.
+Sources are in `models/source/sewer_hf/` (a `.gdignore` folder): concept
+and asset images made with Higgsfield's `gpt_image_2_5` (high, the user's
+wall and vault photos as references), and models from those images made by
+Tripo H3.1 through Higgsfield (`raw_*.glb`). `build_sewer_texture.py` crops
+the generated brick between two matching rows so it tiles, and derives a
+normal map: `textures/sewer_hf_albedo.png` / `_normal.png`. `build_sewer_kit.py`
+writes `models/sewer/sewer_kit.glb` ("tunnel", "grate", "bones", "fungus") and
+`models/sewer/tunnel_profile.json`.
+
+- The tunnel came back TAPERED, drifting sideways and with a sloping crown
+  (the image's perspective). The build measures centre, half-width and crown
+  at nine stations, fits lines and straightens every cross-section to the
+  middle's, so sections meet end to end (half-width 1.89-1.98 after).
+- **Never `normals_make_consistent` a shell you stand inside**: it points the
+  normals away from the shell's middle, so from inside every face was a back
+  face and the tunnels rendered black beside a lit torch. `face_inside` casts
+  from the tunnel's axis to every face and turns the ones it sees toward it
+  (rays from the axis: 226 of 396 hit back faces before, 0 after).
+- After an export, the extracted `sewer_kit_*.jpg` imports come in at
+  `compress/mode=0`: set them to 2 with mipmaps and re-import.
+- `raw_chamber.glb` is not used: it came back tilted ~15 deg with its near
+  wall cut away. Chambers are CSG in `sewer.gd`.
 
 # The enforcer (2026-10-15)
 
