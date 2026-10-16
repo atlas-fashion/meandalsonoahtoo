@@ -25,8 +25,8 @@ extends "res://scripts/enemy.gd"
 ## Hunting (`_chase`, enemy.gd's hook):
 ##   * the BEAM: with a clear line through stone and the player within
 ##     BEAM_RANGE, it plants itself and raises the cannon (CHARGE_TIME: the
-##     BEAM_BAKED clip up to the aim; firing plays BEAM_RECOIL_BAKED once and
-##     holds its kicked-back end, the crystal and eyes flaring, a thin aiming
+##     BEAM_BAKED clip up to the aim; firing ping-pongs BEAM_RECOIL_BAKED so the
+##     cannon keeps jolting, the crystal and eyes flaring, a thin aiming
 ##     line), then holds a beam on the player for up to BEAM_TIME:
 ##     `player.beam_hit` -- BEAM_DPS a second and slowed, a raised guard taking a
 ##     tenth. It swings after the player at TRACK_RATE; stone stops it, its
@@ -49,9 +49,13 @@ const ANIM_WALK_CLIP := &"WALK_BAKED"
 const ANIM_BEAM_CLIP := &"BEAM_BAKED"
 const ANIM_SWIPE_CLIP := &"SWIPE_1_BAKED"
 ## Firing: starts on BEAM_BAKED's settled pose (measured: the muzzle 0.000 m
-## apart), kicks the cannon back 0.23 m by its frame 18 and stays there -- it
-## does not return, so it is played once and its end held while the beam runs.
+## apart) and kicks the cannon back 0.23 m by its frame 18 without returning.
+## Played once and held it was a single small kick at the start of a 3.2 s beam
+## -- "I couldn't tell if it was" -- so it PING-PONGS for as long as the beam
+## runs (RECOIL_RATE): the cannon jolts back and recovers, over and over, and
+## every pass starts and ends on the aimed pose, so it joins the charge smoothly.
 const ANIM_RECOIL_CLIP := &"BEAM_RECOIL_BAKED"
+const RECOIL_RATE := 1.6
 ## A planted foot slides back at this speed with the walk at rate 1 (measured
 ## in Blender: 1.4 m/s at the authored size).
 const WALK_GROUND_SPEED := 0.82
@@ -255,6 +259,7 @@ func _ready() -> void:
 	_setup_clips()
 	_build_beam()
 	_warm_hit_sparks.call_deferred()
+	_attach_react()
 
 
 func _crystal_material() -> StandardMaterial3D:
@@ -305,25 +310,32 @@ func _setup_clips() -> void:
 		return
 	if anim.has_animation(ANIM_WALK_CLIP):
 		anim.get_animation(ANIM_WALK_CLIP).loop_mode = Animation.LOOP_LINEAR
-	for c in [ANIM_BEAM_CLIP, ANIM_SWIPE_CLIP, ANIM_RECOIL_CLIP]:
+	for c in [ANIM_BEAM_CLIP, ANIM_SWIPE_CLIP]:
 		if anim.has_animation(c):
 			anim.get_animation(c).loop_mode = Animation.LOOP_NONE
+	if anim.has_animation(ANIM_RECOIL_CLIP):
+		anim.get_animation(ANIM_RECOIL_CLIP).loop_mode = Animation.LOOP_PINGPONG
 	_play_clip(ANIM_WALK_CLIP, 0.0, 0.0)
 
 
-## Plays `clip` at `rate`, blending over `blend` -- unless it is already the
-## clip playing, when only the rate changes.
+## Plays `clip` at `rate`, cross-fading over `blend` -- unless it is already the
+## clip playing, when only the rate changes. The fade is the reaction layer's
+## (enforcer_react.gd `crossfade`), not the AnimationPlayer's: that one stalled
+## fading into a clip held at speed 0 and lurched at the start of every other
+## fade. So the clip is switched outright, from its first frame, and the layer
+## eases the rig from the last pose shown into it.
 func _play_clip(clip: StringName, rate: float, blend := 0.2, restart := false) -> void:
 	if anim == null or not anim.has_animation(clip):
 		return
 	if _clip == clip and not restart and anim.is_playing():
 		anim.speed_scale = rate
 		return
+	if _react != null:
+		_react.call("crossfade", blend)
 	_clip = clip
-	anim.play(clip, blend, 1.0)
+	anim.play(clip, 0.0, 1.0)
 	anim.speed_scale = rate
-	if restart:
-		anim.seek(0.0, true)
+	anim.seek(0.0, true)
 
 
 static func _cyl(top: float, bottom: float, height: float, sides: int) -> CylinderMesh:
@@ -380,6 +392,8 @@ func _try_connect(player: Node3D, gap: float, reach: float, charge_speed := 0.0)
 func _on_player_guarded(parried: bool, attacker: Node3D) -> void:
 	if attacker == self:
 		_guard_seen = 1 if parried else 0
+		if parried:
+			_parry_stagger()
 
 
 # --- The beam ---------------------------------------------------------------------
@@ -757,8 +771,7 @@ func _animate(delta: float, now: float) -> void:
 			_play_clip(ANIM_BEAM_CLIP, _beam_set_at() / CHARGE_TIME, 0.12, _clip != ANIM_BEAM_CLIP)
 			_freeze_at_set()
 		Beam.FIRE:
-			# The kick as it fires, played once from the settled pose, its
-			# end held for the rest of the beam.
+			# The cannon jolting as it fires, back and forth for the whole beam.
 			if anim == null or not anim.has_animation(ANIM_RECOIL_CLIP):
 				if _clip != ANIM_BEAM_CLIP:
 					_play_clip(ANIM_BEAM_CLIP, 0.0, 0.1, true)
@@ -766,13 +779,20 @@ func _animate(delta: float, now: float) -> void:
 				_freeze_at_set()
 			else:
 				if _clip != ANIM_RECOIL_CLIP:
-					_play_clip(ANIM_RECOIL_CLIP, 1.0, 0.05, true)
-				_hold_recoil()
+					_play_clip(ANIM_RECOIL_CLIP, RECOIL_RATE, 0.05, true)
 		_:
-			if state == State.WINDUP or state == State.ATTACK or state == State.RECOVER:
+			if is_stunned():
+				# Reeling (a parry, a stagger): it stands while the reaction
+				# layer (enforcer_react.gd) throws it about, rather than
+				# walking on the spot as the shove slides it.
+				if _clip != ANIM_WALK_CLIP:
+					_play_clip(ANIM_WALK_CLIP, 0.0, 0.3, true)
+				elif anim != null:
+					anim.speed_scale = move_toward(anim.speed_scale, 0.0, delta * 6.0)
+			elif state == State.WINDUP or state == State.ATTACK or state == State.RECOVER:
 				# The shield crosses its front as the wind-up ends.
 				var fresh := _clip != ANIM_SWIPE_CLIP or (state == State.WINDUP and entered)
-				_play_clip(ANIM_SWIPE_CLIP, SWIPE_CONTACT / maxf(windup_time, 0.05), 0.1, fresh)
+				_play_clip(ANIM_SWIPE_CLIP, SWIPE_CONTACT / maxf(windup_time, 0.05), 0.18, fresh)
 			else:
 				var v := get_real_velocity()
 				var speed := Vector2(v.x, v.z).length()
@@ -821,13 +841,6 @@ func _beam_set_at() -> float:
 	if anim == null or not anim.has_animation(ANIM_BEAM_CLIP):
 		return 0.7
 	return anim.get_animation(ANIM_BEAM_CLIP).length - BEAM_SET_EARLY
-
-
-## Held a hair short of the recoil's end, so it is still "playing", frozen.
-func _hold_recoil() -> void:
-	if anim != null and anim.current_animation == ANIM_RECOIL_CLIP \
-			and anim.current_animation_position >= anim.get_animation(ANIM_RECOIL_CLIP).length - BEAM_SET_EARLY:
-		anim.speed_scale = 0.0
 
 
 func _freeze_at_set() -> void:
@@ -882,8 +895,17 @@ func _wander(delta: float, now: float) -> Vector3:
 
 # --- Taking blows and dying ---------------------------------------------------------
 
+## The flash of a blow, WITHOUT enemy.gd's squash: that scaled the whole model
+## in one frame and sprang it back -- a cartoon pop that, under the hit
+## reactions (enforcer_react.gd), read as the rig snapping (measured: the head
+## jumping 6-10 cm a frame on the blow). The reactions are the movement now.
 func _flash() -> void:
-	super()
+	if _material != null:
+		if _flash_tween != null and _flash_tween.is_valid():
+			_flash_tween.kill()
+		_material.albedo_color = Color(1.0, 0.95, 0.9)
+		_flash_tween = create_tween()
+		_flash_tween.tween_property(_material, "albedo_color", _state_color, 0.18)
 	var flash := _mat(&"flash")
 	for mi in _parts:
 		mi.material_overlay = flash
@@ -983,6 +1005,9 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void
 	super(amount, _from_direction)
 	if not was_dying and amount > 0.0:
 		_hit_sparks()
+		var player := _resolve_player()
+		if _react != null and player != null and not _dying:
+			_react.call("hit", player.global_position, 0.55 + 0.45 * clampf(amount / HIT_FULL, 0.0, 1.0))
 
 
 ## Where the blow met the plating: on the body's axis at the height the player's
@@ -1105,3 +1130,49 @@ func _warm_hit_sparks() -> void:
 	p.position = Vector3(0.0, 0.0, -0.6)
 	p.restart()
 	get_tree().create_timer(0.8).timeout.connect(p.queue_free)
+
+
+## --- Hit reactions and the parry stagger (2026-10-15) --------------------------------
+##
+## scripts/enforcer_react.gd, a SkeletonModifier3D on the rig: three hit
+## reactions picked at random on every blow that lands, and a long stagger when
+## a swipe is parried -- all layered OVER the clip playing, turned away from the
+## attacker, the feet held planted by IK. They replace enemy.gd's `_flinch`,
+## which tipped the whole model over rigidly, feet and all.
+##
+## A parry stuns it for PARRY_STAGGER (the stagger's own length; any enemy's is
+## the player's `parry_stun` 0.9 s): it stands -- the walk eased to a stop --
+## while it reels.
+
+const REACT := preload("res://scripts/enforcer_react.gd")
+const PARRY_STAGGER := 2.1
+## Damage that plays a hit at full size; lighter blows play it smaller.
+const HIT_FULL := 20.0
+
+var _react: SkeletonModifier3D
+
+
+func _attach_react() -> void:
+	var sk := _model.find_children("*", "Skeleton3D", true, false)
+	if sk.is_empty():
+		return
+	_react = REACT.new()
+	_react.name = "HitReact"
+	(sk[0] as Skeleton3D).add_child(_react)
+
+
+func _flinch(_impulse: Vector3, _time: float) -> void:
+	pass
+
+
+func _parry_stagger() -> void:
+	if _dying:
+		return
+	_stun_until = maxf(_stun_until, _now() + PARRY_STAGGER)
+	var player := _resolve_player()
+	if _react != null and player != null:
+		_react.call("stagger", player.global_position)
+
+
+func is_reeling() -> bool:
+	return _react != null and _react.call("staggering")
