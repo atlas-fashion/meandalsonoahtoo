@@ -254,6 +254,7 @@ func _ready() -> void:
 	_attach_eyes()
 	_setup_clips()
 	_build_beam()
+	_warm_hit_sparks.call_deferred()
 
 
 func _crystal_material() -> StandardMaterial3D:
@@ -951,3 +952,156 @@ func _sparks() -> void:
 	p.position = Vector3(0.0, 1.9, -0.3)
 	add_child(p)
 	p.emitting = true
+
+
+## --- Struck metal (2026-10-15) ------------------------------------------------------
+##
+## Every blow that lands throws a spray of hot sparks off its plating, like a
+## blade on armour: a random HIT_SPARKS_MIN..MAX streaks (fewer, and no flash of
+## light, with `Graphics.effects` off) from the point on its body facing the
+## player, flying back toward them and up, falling and cooling white -> orange
+## -> red. Streaks, not dots: each is two crossed quads aligned to its velocity
+## (`particle_flag_align_y`), so it reads as a line from any side. Mesh and
+## material are shared, and drawn once at load so the first hit does not stall.
+
+const HIT_SPARKS_MIN := 8
+const HIT_SPARKS_MAX := 26
+const HIT_SPARKS_PLAIN := Vector2i(3, 6)
+const HIT_SPARK_SPEED := Vector2(3.0, 9.0)
+const HIT_SPARK_LIFE := 0.5
+## Radius of the body the sparks come off, and the band of it a blade can reach.
+const HIT_SURFACE := 0.62
+const HIT_LOW := 0.8
+const HIT_HIGH := 2.2
+
+static var _spark_mesh: ArrayMesh
+static var _spark_warmed := false
+
+
+func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void:
+	var was_dying := _dying
+	super(amount, _from_direction)
+	if not was_dying and amount > 0.0:
+		_hit_sparks()
+
+
+## Where the blow met the plating: on the body's axis at the height the player's
+## eye is aimed (within the band a weapon reaches), out to its surface toward
+## them.
+func _hit_point() -> Array:
+	var base := global_position
+	var cam := get_viewport().get_camera_3d()
+	var eye: Vector3 = cam.global_position if cam != null else base + Vector3(0.0, 1.6, 2.0)
+	var y := clampf(eye.y - 0.35, base.y + HIT_LOW, base.y + HIT_HIGH)
+	var axis := Vector3(base.x, y, base.z)
+	var out := Vector3(eye.x - base.x, 0.0, eye.z - base.z)
+	out = out.normalized() if out.length_squared() > 0.0001 else -global_basis.z
+	return [axis + out * HIT_SURFACE, out]
+
+
+func _hit_sparks() -> void:
+	var parent := get_parent()
+	if parent == null or not is_inside_tree():
+		return
+	var effects: bool = Graphics.effects
+	var hit := _hit_point()
+	var at: Vector3 = hit[0]
+	var out: Vector3 = hit[1]
+	var n := randi_range(HIT_SPARKS_MIN, HIT_SPARKS_MAX) if effects \
+		else randi_range(HIT_SPARKS_PLAIN.x, HIT_SPARKS_PLAIN.y)
+	var p := _spark_burst(n)
+	parent.add_child(p)
+	p.global_position = at
+	# Back off the plating toward the player and up, fanned wide.
+	p.direction = (out + Vector3(0.0, 0.55, 0.0)).normalized()
+	p.restart()
+	get_tree().create_timer(HIT_SPARK_LIFE * 1.6 + 0.2).timeout.connect(p.queue_free)
+	if effects:
+		var light := OmniLight3D.new()
+		light.light_color = Color(1.0, 0.72, 0.38)
+		light.light_energy = 2.4
+		light.omni_range = 2.6
+		light.shadow_enabled = false
+		light.light_specular = 0.4
+		parent.add_child(light)
+		light.global_position = at + out * 0.15
+		var t := light.create_tween()
+		t.tween_property(light, "light_energy", 0.0, 0.14).set_ease(Tween.EASE_IN)
+		t.tween_callback(light.queue_free)
+
+
+static func _spark_burst(n: int) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.emitting = false
+	p.amount = maxi(n, 1)
+	p.lifetime = HIT_SPARK_LIFE
+	p.lifetime_randomness = 0.55
+	p.explosiveness = 1.0
+	p.local_coords = false
+	p.spread = 62.0
+	p.initial_velocity_min = HIT_SPARK_SPEED.x
+	p.initial_velocity_max = HIT_SPARK_SPEED.y
+	p.gravity = Vector3(0.0, -11.0, 0.0)
+	p.damping_min = 1.0
+	p.damping_max = 3.0
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.1
+	p.particle_flag_align_y = true
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 0.25, 0.7, 1.0])
+	ramp.colors = PackedColorArray([Color(1.0, 0.86, 0.55, 1.0), Color(1.0, 0.6, 0.2, 0.95),
+		Color(0.95, 0.32, 0.07, 0.7), Color(0.6, 0.12, 0.03, 0.0)])
+	p.color_ramp = ramp
+	p.mesh = _streak_mesh()
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
+
+
+## Two crossed quads along +Y, shared by every burst.
+static func _streak_mesh() -> ArrayMesh:
+	if _spark_mesh != null:
+		return _spark_mesh
+	var w := 0.0035
+	var h := 0.13
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for across: Vector3 in [Vector3(w, 0.0, 0.0), Vector3(0.0, 0.0, w)]:
+		var a := -across + Vector3(0.0, -h * 0.5, 0.0)
+		var b := across + Vector3(0.0, -h * 0.5, 0.0)
+		var c := across + Vector3(0.0, h * 0.5, 0.0)
+		var d := -across + Vector3(0.0, h * 0.5, 0.0)
+		for v in [a, b, c, a, c, d]:
+			st.add_vertex(v)
+	_spark_mesh = st.commit()
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.vertex_color_use_as_albedo = true
+	m.albedo_color = Color(1.0, 1.0, 1.0)
+	m.disable_fog = true
+	_spark_mesh.surface_set_material(0, m)
+	return _spark_mesh
+
+
+## The spark material compiles on first draw: one burst of a single speck in
+## front of the camera at load, once for every enforcer.
+func _warm_hit_sparks() -> void:
+	if _spark_warmed or not is_inside_tree():
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	_spark_warmed = true
+	var p := _spark_burst(1)
+	p.scale_amount_min = 0.01
+	p.scale_amount_max = 0.01
+	p.initial_velocity_min = 0.0
+	p.initial_velocity_max = 0.0
+	p.gravity = Vector3.ZERO
+	cam.add_child(p)
+	p.position = Vector3(0.0, 0.0, -0.6)
+	p.restart()
+	get_tree().create_timer(0.8).timeout.connect(p.queue_free)

@@ -3774,3 +3774,15 @@ grand stair from ONE doorway up to a throne hall above the corridor roofs.
   clip while firing and held; swipe and knock-down.
 - Bench (RTX 3060, 3440x1440, editor closed): 66.9 fps, worst p99 35.70 ms,
   1157 MB (68.6 / 34.22 and 65.4 / 30.26 on the same layout before) -- noise.
+- **Struck enforcers throw sparks** (enforcer.gd `take_damage` -> `_hit_sparks`,
+  2026-10-15): every blow that lands sprays a random 8-26 hot streaks (3-6 and
+  no light with `Graphics.effects` off) from the point on its body facing the
+  player (`_hit_point`: the body axis at the eye's height, clamped to
+  `HIT_LOW`..`HIT_HIGH`, out `HIT_SURFACE` 0.62), back toward them and up,
+  falling and cooling white -> orange -> red over ~0.5 s, plus a 0.14 s warm
+  flash of light. Streaks are two crossed quads aligned to velocity
+  (`particle_flag_align_y`), shared mesh and material, warmed at load. First
+  pass at 7 mm wide with the colour driven to 2.2 read as fat white sausages
+  under the glow; 3.5 mm at 1.0 reads as sparks. Measured: 11 of 12 real cuts
+  landed and 11 bursts, every one 0.62 m out on the side facing the player;
+  amounts seen 8-26; a miss none; effects off 3-6 and no light; all freed.
