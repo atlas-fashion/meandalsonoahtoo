@@ -155,6 +155,7 @@ func _build_all(seed_value: int) -> void:
 	_build_water()
 	_build_moss()
 	_build_fireflies()
+	_build_feral_floor()
 
 
 # --- Layout ------------------------------------------------------------------------
@@ -524,6 +525,7 @@ func _bake() -> void:
 		add_child(mi)
 		_chunks.append(mi)
 	_set_below(_below, true)
+	_build_nav()
 	print("[sewer] stone baked: %d triangles in %d chunks" % [tris, tools.size()])
 
 
@@ -1191,3 +1193,71 @@ func nearest_shaft(at: Vector3) -> Dictionary:
 			best_d = d
 			best = s
 	return best
+
+
+# --- For the decrepit enforcer (decrepit.gd) ----------------------------------------
+##
+## A floor of its own over every channel, at the walkways' height, on a layer
+## nothing else collides with: it bounds over the water, straddling it, where
+## the player has to wade. And the sewer's navmesh, baked from that floor and
+## the stone (the channels' sides would otherwise cut every pipe and chamber in
+## two), as its own region on the world's map.
+
+const FERAL_FLOOR := 1 << 13
+const NAV_GROUP := &"sewer_nav"
+
+
+func _build_feral_floor() -> void:
+	var body := StaticBody3D.new()
+	body.name = "FeralFloor"
+	body.collision_layer = FERAL_FLOOR
+	body.collision_mask = 0
+	body.add_to_group(NAV_GROUP)
+	add_child(body)
+	var n := 0
+	for key in map.cells:
+		var c: ModuleMaze.Cell = map.cells[key]
+		var at: Vector3 = map.to_world(key)
+		var chamber := _is_chamber(key)
+		for side in ModuleMaze.ORDER:
+			var reach: float
+			if c.open & side:
+				reach = map.cell_size * 0.5
+			elif chamber:
+				# Up to the culvert's grille.
+				reach = CH_R + minf(GRILLE_IN, _culvert_deep(key, side) * 0.5) - 0.12
+			else:
+				continue
+			var dir := _side_dir(side)
+			var length := reach + CHANNEL_HALF
+			var box := BoxShape3D.new()
+			box.size = Vector3(CHANNEL_HALF * 2.0 + 0.2, 0.4, length)
+			var cs := CollisionShape3D.new()
+			cs.shape = box
+			cs.transform = Transform3D(Basis.looking_at(dir, Vector3.UP),
+				at + dir * ((reach - CHANNEL_HALF) * 0.5) + Vector3(0.0, -0.2, 0.0))
+			body.add_child(cs)
+			n += 1
+	print("[sewer] feral floor: %d spans" % n)
+
+
+func _build_nav() -> void:
+	if _body != null:
+		_body.add_to_group(NAV_GROUP)
+	var nm := NavigationMesh.new()
+	nm.cell_size = 0.25
+	nm.cell_height = 0.25
+	nm.agent_radius = 0.5
+	nm.agent_height = 2.0
+	nm.agent_max_climb = 0.25
+	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	nm.geometry_collision_mask = 256 | FERAL_FLOOR
+	nm.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_GROUPS_WITH_CHILDREN
+	nm.geometry_source_group_name = NAV_GROUP
+	var region := NavigationRegion3D.new()
+	region.name = "SewerNav"
+	region.navigation_mesh = nm
+	add_child(region)
+	region.bake_finished.connect(func() -> void:
+		print("[sewer] navmesh baked: %d polygons" % nm.get_polygon_count()))
+	region.bake_navigation_mesh(true)

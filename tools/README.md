@@ -411,3 +411,29 @@ usage log (`GET /v3/account/usage`), and a kit texture's file name ends in it
 (the generator's v3.1-20260211 is refused, free); `$Input` is a PowerShell
 automatic variable, so the parameter is `-Source`. Every new texture the kit
 export brings imports as `compress/mode=0`: patch to 2 and re-import.
+
+# The decrepit enforcer (2026-10-15)
+
+```
+blender -b models/source/enforcer/PUTRID_ENFORCER_BAKED.blend -P tools/build_decrepit.py
+godot --headless --import --path .
+```
+
+Builds `models/decrepit.glb` from the user's file: only the BAKED clips
+(CRAWL_BAKED, STABS_BAKED, JUMP_BAKED; the unbaked sources, an unmuted JUMP
+track and a never-baked SWIPE are removed), with:
+
+- the root motion taken out of STABS and JUMP (printed as `root ...` tables,
+  copied into scripts/decrepit.gd's ROOT_SLAM / ROOT_JUMP -- re-copy them if the
+  clips change);
+- the IK constraints dropped and the knee flips eased (`smooth_knees`; the
+  crawl as a cycle, so its loop no longer pops);
+- the parts joined into one mesh on a baked colour atlas
+  (`models/source/enforcer/decrepit_atlas.png`) -- with metallic zeroed first, or
+  the bake is black;
+- bone markers "ShieldTip" (ARM_L) and "EyeL" / "EyeR" (HEAD);
+- printed for the script: the crawl's ground speed, the slam's thrust frames and
+  the jump's strike frame.
+
+After an import, set `models/decrepit_decrepit_atlas.jpg.import` to
+`compress/mode=2` with mipmaps and re-import.

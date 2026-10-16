@@ -3308,6 +3308,7 @@ func seal_room(room: int, shut: bool) -> void:
 
 
 func _process(_delta: float) -> void:
+	_tick_decrepit()
 	# Index 0 is the boss chamber, and treasure room r is at r + 1.
 	#
 	# Committed, not simply mirrored from `engaged`: sealing straight off the
@@ -4067,6 +4068,8 @@ func _populate() -> void:
 	_spawn_enemies()
 	_spawn_convoys()
 	_spawn_stalker()
+	_decrepit_due = -1.0
+	_spawn_decrepit()
 	_spawn_chests()
 	if modules and _module_level != null:
 		_report_room_intruders()
@@ -4636,3 +4639,84 @@ func _note_spawn_eye() -> void:
 		return
 	_spawn_eye = player.global_position + Vector3(0.0, 1.6, 0.0)
 	_spawn_sight.exclude = [(player as CollisionObject3D).get_rid()] if player is CollisionObject3D else []
+
+
+## --- The decrepit enforcer (2026-10-15) ---------------------------------------------
+##
+## A feral, rotted enforcer (decrepit.gd) hunts the sewer -- only ever one, and
+## only down there. It is placed with the population (so a death resets it) in a
+## sewer cell at least `decrepit_spawn_clear` from the player and out of their
+## sight; killed, the next one comes `decrepit_respawn` seconds later, placed the
+## same way.
+
+const DECREPIT_SCRIPT := preload("res://scripts/decrepit.gd")
+@export var decrepit_enabled := true
+@export var decrepit_respawn := 45.0
+@export var decrepit_spawn_clear := 30.0
+var _decrepit: Node3D = null
+var _decrepit_due := -1.0
+
+
+func _spawn_decrepit() -> void:
+	_decrepit = null
+	if not decrepit_enabled or _sewer == null or enemy_scene == null:
+		return
+	var spot = _decrepit_spot()
+	if spot == null:
+		return
+	var d: CharacterBody3D = enemy_scene.instantiate()
+	d.set_script(DECREPIT_SCRIPT)
+	d.set("sewer", _sewer)
+	add_child(d)
+	d.global_position = (spot as Vector3) + Vector3(0.0, 0.3, 0.0)
+	d.rotation.y = randf() * TAU
+	_spawned.append(d)
+	d.connect("died", _on_decrepit_died)
+	_decrepit = d
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	print("[decrepit] spawned %.0f m from the player" % (spot as Vector3).distance_to(
+		player.global_position if player != null else Vector3.ZERO))
+
+
+## A sewer cell far from the player and out of their sight; the furthest if none.
+func _decrepit_spot():
+	var map = _sewer.get("map")
+	if map == null or map.cells.is_empty():
+		return null
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	var from: Vector3 = player.global_position if player != null else Vector3.ZERO
+	var eye := from + Vector3(0.0, 1.6, 0.0)
+	var space := get_world_3d().direct_space_state
+	var ok: Array[Vector3] = []
+	var best = null
+	var best_d := -1.0
+	for key in map.cells:
+		var p: Vector3 = map.to_world(key)
+		var d := Vector2(p.x - from.x, p.z - from.z).length()
+		if d > best_d:
+			best_d = d
+			best = p
+		if d < decrepit_spawn_clear:
+			continue
+		var q := PhysicsRayQueryParameters3D.create(eye, p + Vector3(0.0, 1.2, 0.0), 2 | 256)
+		if space.intersect_ray(q).is_empty():
+			continue
+		ok.append(p)
+	if ok.is_empty():
+		return best
+	var roll := RandomNumberGenerator.new()
+	roll.randomize()
+	return ok[roll.randi_range(0, ok.size() - 1)]
+
+
+func _on_decrepit_died() -> void:
+	_decrepit_due = Time.get_ticks_msec() / 1000.0 + decrepit_respawn
+
+
+func _tick_decrepit() -> void:
+	if _decrepit_due < 0.0 or Time.get_ticks_msec() / 1000.0 < _decrepit_due:
+		return
+	_decrepit_due = -1.0
+	if _decrepit != null and is_instance_valid(_decrepit) and not _decrepit.get("_dying"):
+		return
+	_spawn_decrepit()

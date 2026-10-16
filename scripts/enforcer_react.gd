@@ -97,6 +97,12 @@ const STAGGER := {
 const CHANNELS := ["torso", "head", "sh_l", "sh_r", "arm_l", "arm_r"]
 const MAX_ACTIVE := 3
 
+## The reactions this rig plays: the enforcer's by default; another rig on the
+## same bones (decrepit_react.gd) sets its own in `_init`.
+var hits: Array = HITS
+## The long reaction to a parry (`stagger`).
+var stagger_clip: Dictionary = STAGGER
+
 var _bone := {}
 var _ready_bones := false
 ## Leg length in skeleton units (hip offsets are given in these).
@@ -120,22 +126,22 @@ func _init() -> void:
 func hit(from_world: Vector3, strength := 1.0) -> void:
 	if staggering():
 		return
-	var pick := randi_range(0, HITS.size() - 1)
+	var pick := randi_range(0, hits.size() - 1)
 	if pick == _last_hit:
-		pick = (pick + randi_range(1, HITS.size() - 1)) % HITS.size()
+		pick = (pick + randi_range(1, hits.size() - 1)) % hits.size()
 	_last_hit = pick
-	_start(HITS[pick], from_world, 1.0 if randf() < 0.5 else -1.0, clampf(strength, 0.4, 1.3))
+	_start(hits[pick], from_world, 1.0 if randf() < 0.5 else -1.0, clampf(strength, 0.4, 1.3))
 
 
 ## Parried: the long stagger, away from `from_world`. Clears the hits under it.
 func stagger(from_world: Vector3) -> void:
 	_active.clear()
-	_start(STAGGER, from_world, 1.0 if randf() < 0.5 else -1.0, 1.0)
+	_start(stagger_clip, from_world, 1.0 if randf() < 0.5 else -1.0, 1.0)
 
 
 func staggering() -> bool:
 	for a in _active:
-		if a[0] == STAGGER:
+		if a[0] == stagger_clip:
 			return true
 	return false
 
