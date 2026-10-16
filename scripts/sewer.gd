@@ -150,12 +150,11 @@ func _build_all(seed_value: int) -> void:
 	_build_csg()
 	_build_ladders()
 	_build_grilles()
-	_build_plates()
+	_build_gratings()
 	_build_props()
 	_build_water()
 	_build_moss()
 	_build_fireflies()
-	_build_feral_floor()
 
 
 # --- Layout ------------------------------------------------------------------------
@@ -650,41 +649,97 @@ func _build_grilles() -> void:
 	print("[sewer] %d culverts barred" % n)
 
 
-## Where a ladder comes down, a grating over the channel: the foot of every ladder
-## is on a channel's line (the shaft is on the corridor's axis above, and every
-## chamber has a channel arm on each side).
-func _build_plates() -> void:
+## The whole watercourse is covered by an iron grating at the walkways' height
+## (2026-10-16; it used to be one plate at each ladder's foot): rails along both
+## lips of the channel, slats across, the black water showing through. It runs
+## along every pipe, across every chamber's crossing and up to each culvert's
+## grille, as one piece of grating (`_grating_piece`, a metre long) instanced
+## along it -- one MultiMesh, one draw -- with a box of collision per arm under
+## it for everyone: the player, and the decrepit enforcer (decrepit.gd), walk it.
+const GRATING_WIDE := CHANNEL_HALF * 2.0 + 0.3
+
+
+func _build_gratings() -> void:
+	var xforms: Array[Transform3D] = []
+	var half := GRATING_WIDE * 0.5
+	for key in map.cells:
+		var c: ModuleMaze.Cell = map.cells[key]
+		var at: Vector3 = map.to_world(key)
+		var chamber := _is_chamber(key)
+		# The square where the arms meet (in a pipe, the middle of its run).
+		var axis := Vector3(0, 0, 1) if (c.open & ModuleMaze.N or c.open & ModuleMaze.S) else Vector3(1, 0, 0)
+		xforms.append(_grating_xf(at, axis, GRATING_WIDE))
+		_grating_box(at, axis, GRATING_WIDE)
+		for side in ModuleMaze.ORDER:
+			var reach: float
+			if c.open & side:
+				reach = map.cell_size * 0.5
+			elif chamber:
+				# Up to the culvert's grille.
+				reach = CH_R + minf(GRILLE_IN, _culvert_deep(key, side) * 0.5) - 0.05
+			else:
+				continue
+			var dir := _side_dir(side)
+			var length := reach - half
+			if length <= 0.01:
+				continue
+			var n := maxi(1, roundi(length))
+			var piece := length / float(n)
+			for i in n:
+				xforms.append(_grating_xf(at + dir * (half + (float(i) + 0.5) * piece), dir, piece))
+			# A hair past the cell's edge, into the next cell's: boxes that only met
+			# there let a ray straight down the seam slip between them.
+			var lap := 0.03 if c.open & side else 0.0
+			_grating_box(at + dir * (half + (length + lap) * 0.5), dir, length + lap)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _grating_piece()
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+	var mi := MultiMeshInstance3D.new()
+	mi.name = "Gratings"
+	mi.multimesh = mm
+	mi.material_override = _iron
+	mi.layers = VISUAL_LAYER
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	_chunks.append(mi)
+	print("[sewer] channel grating: %d pieces" % xforms.size())
+
+
+## A piece centred at `at`, running along `dir`, `length` long.
+func _grating_xf(at: Vector3, dir: Vector3, length: float) -> Transform3D:
+	var b := Basis(Vector3(-dir.z, 0.0, dir.x), Vector3.UP, -dir)
+	return Transform3D(b * Basis.from_scale(Vector3(1.0, 1.0, length)), at)
+
+
+func _grating_box(at: Vector3, dir: Vector3, length: float) -> void:
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(GRATING_WIDE, 0.06, length)
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	cs.transform = Transform3D(Basis(Vector3(-dir.z, 0.0, dir.x), Vector3.UP, -dir), at + Vector3(0.0, -0.03, 0.0))
+	_collision_body().add_child(cs)
+
+
+## One metre of grating along local Z, its top at y = 0: two rails resting on
+## the channel's lips, slats across them.
+func _grating_piece() -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for s in shafts:
-		var at: Vector3 = s["chamber"]
-		var off: Vector3 = (s["foot"] as Vector3) - at
-		var dir := Vector3(signf(off.x), 0.0, 0.0) if absf(off.x) > absf(off.z) else Vector3(0.0, 0.0, signf(off.z))
-		var reach := off.dot(dir)
-		var from := maxf(0.35, reach - 1.25)
-		var to := minf(CH_R - 0.2, reach + 0.9)
-		var mid := at + dir * ((from + to) * 0.5)
-		var length := to - from
-		var b := Basis(Vector3(-dir.z, 0.0, dir.x), Vector3.UP, -dir)
-		var wide := CHANNEL_HALF * 2.0 + 0.3
-		for side: float in [-1.0, 1.0]:
-			var rail := BoxMesh.new()
-			rail.size = Vector3(0.07, 0.06, length)
-			st.append_from(rail, 0, Transform3D(b, mid + b * Vector3(side * (CHANNEL_HALF + 0.08), -0.03, 0.0)))
-		var z := -length * 0.5 + 0.05
-		while z < length * 0.5 - 0.02:
-			var slat := BoxMesh.new()
-			slat.size = Vector3(wide, 0.045, 0.028)
-			st.append_from(slat, 0, Transform3D(b, mid + b * Vector3(0.0, -0.025, z)))
-			z += 0.085
-		var shape := BoxShape3D.new()
-		shape.size = Vector3(wide, 0.06, length)
-		var cs := CollisionShape3D.new()
-		cs.shape = shape
-		cs.transform = Transform3D(b, mid + Vector3(0.0, -0.03, 0.0))
-		_collision_body().add_child(cs)
+	for side: float in [-1.0, 1.0]:
+		var rail := BoxMesh.new()
+		rail.size = Vector3(0.07, 0.06, 1.0)
+		st.append_from(rail, 0, Transform3D(Basis.IDENTITY, Vector3(side * (CHANNEL_HALF + 0.08), -0.03, 0.0)))
+	var z := -0.5 + 0.0425
+	while z < 0.5:
+		var slat := BoxMesh.new()
+		slat.size = Vector3(GRATING_WIDE, 0.045, 0.028)
+		st.append_from(slat, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, -0.025, z)))
+		z += 0.085
 	st.generate_normals()
-	_add_iron(st.commit(), "Gratings")
+	return st.commit()
 
 
 func _add_iron(mesh: Mesh, name_: String) -> void:
@@ -1197,48 +1252,11 @@ func nearest_shaft(at: Vector3) -> Dictionary:
 
 # --- For the decrepit enforcer (decrepit.gd) ----------------------------------------
 ##
-## A floor of its own over every channel, at the walkways' height, on a layer
-## nothing else collides with: it bounds over the water, straddling it, where
-## the player has to wade. And the sewer's navmesh, baked from that floor and
-## the stone (the channels' sides would otherwise cut every pipe and chamber in
-## two), as its own region on the world's map.
+## The sewer's navmesh, baked from the stone and the channel grating (without
+## the grating the channels would cut every pipe and chamber in two), as its own
+## region on the world's map.
 
-const FERAL_FLOOR := 1 << 13
 const NAV_GROUP := &"sewer_nav"
-
-
-func _build_feral_floor() -> void:
-	var body := StaticBody3D.new()
-	body.name = "FeralFloor"
-	body.collision_layer = FERAL_FLOOR
-	body.collision_mask = 0
-	body.add_to_group(NAV_GROUP)
-	add_child(body)
-	var n := 0
-	for key in map.cells:
-		var c: ModuleMaze.Cell = map.cells[key]
-		var at: Vector3 = map.to_world(key)
-		var chamber := _is_chamber(key)
-		for side in ModuleMaze.ORDER:
-			var reach: float
-			if c.open & side:
-				reach = map.cell_size * 0.5
-			elif chamber:
-				# Up to the culvert's grille.
-				reach = CH_R + minf(GRILLE_IN, _culvert_deep(key, side) * 0.5) - 0.12
-			else:
-				continue
-			var dir := _side_dir(side)
-			var length := reach + CHANNEL_HALF
-			var box := BoxShape3D.new()
-			box.size = Vector3(CHANNEL_HALF * 2.0 + 0.2, 0.4, length)
-			var cs := CollisionShape3D.new()
-			cs.shape = box
-			cs.transform = Transform3D(Basis.looking_at(dir, Vector3.UP),
-				at + dir * ((reach - CHANNEL_HALF) * 0.5) + Vector3(0.0, -0.2, 0.0))
-			body.add_child(cs)
-			n += 1
-	print("[sewer] feral floor: %d spans" % n)
 
 
 func _build_nav() -> void:
@@ -1251,7 +1269,7 @@ func _build_nav() -> void:
 	nm.agent_height = 2.0
 	nm.agent_max_climb = 0.25
 	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
-	nm.geometry_collision_mask = 256 | FERAL_FLOOR
+	nm.geometry_collision_mask = 256
 	nm.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_GROUPS_WITH_CHILDREN
 	nm.geometry_source_group_name = NAV_GROUP
 	var region := NavigationRegion3D.new()

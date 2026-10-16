@@ -37,6 +37,7 @@ import os
 import bpy
 import numpy as np
 from mathutils import Vector, Matrix
+from mathutils.bvhtree import BVHTree
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(HERE, "models", "decrepit.glb")
@@ -566,6 +567,34 @@ def main():
     tip = sh[proj > proj.max() - 0.08].mean(axis=0)
     log("shield: %d verts on ARM_L, point %.3f along the arm at (%.3f, %.3f, %.3f)" % (len(own), proj.max(), *tip))
     bone_empty("ShieldTip", arm, "ARM_L", tip, size=0.15)
+    # The chest, for the crystal (decrepit.gd): where a ray from in front meets
+    # the TORSO's own plating -- only faces skinned to it, so the shield arm in
+    # front cannot catch the ray -- just above the torso bone's root: in the rest
+    # pose the mask covers it from z 3.28 up, the chest is the plating under that.
+    tg = body.vertex_groups.get("TORSO")
+    tv = set()
+    for v in body.data.vertices:
+        for g in v.groups:
+            if tg is not None and g.group == tg.index and g.weight > 0.5:
+                tv.add(v.index)
+    mw = body.matrix_world
+    verts = [mw @ v.co for v in body.data.vertices]
+    polys = [list(p.vertices) for p in body.data.polygons if all(i in tv for i in p.vertices)]
+    bvh = BVHTree.FromPolygons(verts, polys)
+    tb = arm.data.bones["TORSO"]
+    t_head = arm.matrix_world @ tb.head_local
+    t_tail = arm.matrix_world @ tb.tail_local
+    aim = t_head.lerp(t_tail, 0.05)
+    hit = bvh.ray_cast(aim + Vector((0.0, -6.0, 0.0)), Vector((0.0, 1.0, 0.0)))
+    if hit[0] is not None:
+        at, normal = hit[0], hit[1]
+        if normal.y > 0.0:
+            normal = -normal
+        log("chest at (%.3f, %.3f, %.3f), facing (%.2f, %.2f, %.2f), %d torso faces" % (*at, *normal, len(polys)))
+        bone_empty("Chest", arm, "TORSO", at, size=0.1)
+        bone_empty("ChestOut", arm, "TORSO", at + normal * 0.3, size=0.05)
+    else:
+        log("chest: the ray missed the torso")
     arm.data.pose_position = "POSE"
 
     # Contacts: the slam's shield furthest forward, the jump's point lowest.

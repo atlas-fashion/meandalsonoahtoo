@@ -34,9 +34,8 @@ extends "res://scripts/enemy.gd"
 ## Every blow that lands throws sparks off its plating (the enforcer's) and plays
 ## one of three hit reactions at random.
 ##
-## It walks on its own floor over the sewer's channels (sewer.gd FERAL_FLOOR,
-## layer 14, which nothing else collides with), straddling the water, and paths
-## on the sewer's navmesh, baked from that floor and the stone.
+## It walks the sewer's channel grating like anyone else, and paths on the
+## sewer's navmesh, baked from the grating and the stone.
 
 const ENF := preload("res://scripts/enforcer.gd")
 const REACT := preload("res://scripts/decrepit_react.gd")
@@ -47,8 +46,6 @@ const MODEL_LIFT := -0.03
 const CLIP_CRAWL := &"CRAWL_BAKED"
 const CLIP_SLAM := &"STABS_BAKED"
 const CLIP_JUMP := &"JUMP_BAKED"
-## Layer of the sewer's channel-spanning floor, which only this collides with.
-const FERAL_FLOOR := 1 << 13
 ## Below this the player is in the sewer (sewer.gd SPLIT_Y).
 const SPLIT_Y := -4.0
 ## The crawl's planted feet slide back at 4.886 m/s at the authored size.
@@ -93,13 +90,22 @@ const KNOCK_LIE := 1.0
 const KNOCK_RISE := 0.55
 const KNOCK_PITCH := 1.32
 const KNOCK_PIVOT := Vector3(0.0, 0.0, 0.55)
-const EYE_RADIUS := 0.03
-const EYE_COLOUR := Color(1.0, 0.56, 0.14)
-## Its eyes cast a faint glow ahead of its face: without it, in this dark, the
-## body was not there at all -- two points of light and nothing to read an attack
-## by.
-const GLOW_ENERGY := 0.9
-const GLOW_RANGE := 4.2
+## Its glow is the moss's own green (sewer.gd MOSS_GLOW), so from any distance
+## it reads as one more patch of moss in the dark -- until it is close enough to
+## make out a face: two X-shaped eyes and the enforcers' crystal in its chest.
+const GLOW := Color(0.32, 1.0, 0.62)
+## Each eye is an X of two bars, EYE_BAR long and EYE_THICK thick (metres).
+const EYE_BAR := 0.085
+const EYE_THICK := 0.014
+const EYE_BRIGHT := 1.8
+## The chest crystal: an elongated octahedron (the enforcer's is one), half
+## proud of the plating, CRYSTAL_SIZE across / tall / deep.
+const CRYSTAL_SIZE := Vector3(0.11, 0.2, 0.08)
+const CRYSTAL_PROUD := 0.035
+const CRYSTAL_ENERGY := 3.2
+## And a faint glow ahead of its face, so close up an attack can be read.
+const GLOW_ENERGY := 0.75
+const GLOW_RANGE := 4.0
 const GLOW_AHEAD := Vector3(0.0, 1.85, -0.75)
 
 ## The clips' travel (build_decrepit.py), every 2 frames: [seconds, forward, left].
@@ -237,7 +243,6 @@ func _enter_tree() -> void:
 		cap.height = 2.4
 		cs.shape = cap
 		cs.position = Vector3(0.0, 1.2, 0.0)
-	collision_mask |= FERAL_FLOOR
 	var ag := get_node_or_null("NavigationAgent3D") as NavigationAgent3D
 	if ag != null:
 		ag.radius = 0.6
@@ -255,6 +260,7 @@ func _ready() -> void:
 	_visual_rest = visual.transform
 	_setup_clips()
 	_attach_eyes()
+	_attach_crystal()
 	_attach_react()
 	_warm_sparks.call_deferred()
 	_twitch_at = _now() + randf_range(0.6, 1.8)
@@ -288,38 +294,163 @@ func _play_clip(clip: StringName, rate: float, blend := 0.2, restart := false) -
 	anim.seek(0.0, true)
 
 
-## Two small amber points in the mask's pale eyes: it hunts in the dark, and
-## they are how it is first seen.
+## The eyes: an X of light in each of the mask's lenses. The face, the chest
+## crystal and the glow ahead of it are all the moss's green.
 func _attach_eyes() -> void:
 	_eye_mat = StandardMaterial3D.new()
 	_eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_eye_mat.albedo_color = EYE_COLOUR * 1.5
-	var glow := OmniLight3D.new()
-	glow.name = "EyeGlow"
-	glow.light_color = EYE_COLOUR
-	glow.light_energy = GLOW_ENERGY
-	glow.omni_range = GLOW_RANGE
-	glow.omni_attenuation = 1.3
-	glow.shadow_enabled = false
-	glow.light_specular = 0.5
-	glow.light_cull_mask = (1 << 15) | 1
-	glow.position = GLOW_AHEAD
-	add_child(glow)
+	_eye_mat.albedo_color = GLOW * EYE_BRIGHT
+	_eye_mat.disable_receive_shadows = true
+	_glow = OmniLight3D.new()
+	_glow.name = "FaceGlow"
+	_glow.light_color = GLOW
+	_glow.light_energy = GLOW_ENERGY
+	_glow.omni_range = GLOW_RANGE
+	_glow.omni_attenuation = 1.3
+	_glow.shadow_enabled = false
+	_glow.light_specular = 0.5
+	_glow.light_cull_mask = (1 << 15) | 1
+	_glow.position = GLOW_AHEAD
+	add_child(_glow)
 	for n in ["EyeL", "EyeR"]:
 		var marker := _model.find_child(n, true, false) as Node3D
 		if marker == null:
 			continue
-		var s := SphereMesh.new()
-		var scale_world := marker.global_basis.get_scale().x if marker.is_inside_tree() else MODEL_SCALE * 1.746
-		s.radius = EYE_RADIUS / maxf(scale_world, 0.001)
-		s.height = s.radius * 2.0
-		s.radial_segments = 10
-		s.rings = 5
-		var mi := MeshInstance3D.new()
-		mi.mesh = s
-		mi.material_override = _eye_mat
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		marker.add_child(mi)
+		# The markers carry the rig's scale (armature x model); bars are sized in
+		# metres against it. Their local axes are the model's at rest: X across
+		# the face, Y up, Z out of it.
+		var s := _marker_scale(marker)
+		var bar := BoxMesh.new()
+		bar.size = Vector3(EYE_BAR, EYE_THICK, EYE_THICK) / s
+		var x := Node3D.new()
+		x.name = "X"
+		x.position = Vector3(0.0, 0.0, 0.012 / s)
+		marker.add_child(x)
+		for a: float in [PI * 0.25, -PI * 0.25]:
+			var mi := MeshInstance3D.new()
+			mi.mesh = bar
+			mi.material_override = _eye_mat
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.rotation = Vector3(0.0, 0.0, a)
+			x.add_child(mi)
+
+
+## The crystal in its chest, on the "Chest" marker (build_decrepit.py: the
+## torso's plating just under the mask), half proud of it.
+func _attach_crystal() -> void:
+	var marker := _model.find_child("Chest", true, false) as Node3D
+	if marker == null:
+		return
+	var s := _marker_scale(marker)
+	var h := CRYSTAL_SIZE / s * 0.5
+	var pts := [Vector3(0, h.y, 0), Vector3(0, -h.y, 0), Vector3(h.x, 0, 0), Vector3(0, 0, h.z),
+		Vector3(-h.x, 0, 0), Vector3(0, 0, -h.z)]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for apex in [0, 1]:
+		for i in 4:
+			var a: Vector3 = pts[2 + i]
+			var b: Vector3 = pts[2 + (i + 1) % 4]
+			var tip: Vector3 = pts[apex]
+			# Wound outward (Godot's front faces are clockwise seen from outside).
+			if apex == 0:
+				st.add_vertex(tip); st.add_vertex(b); st.add_vertex(a)
+			else:
+				st.add_vertex(tip); st.add_vertex(a); st.add_vertex(b)
+	st.generate_normals()
+	_crystal_mat = StandardMaterial3D.new()
+	_crystal_mat.albedo_color = GLOW.darkened(0.6)
+	_crystal_mat.roughness = 0.15
+	_crystal_mat.metallic_specular = 0.8
+	_crystal_mat.emission_enabled = true
+	_crystal_mat.emission = GLOW
+	_crystal_mat.emission_energy_multiplier = CRYSTAL_ENERGY
+	_crystal_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mi := MeshInstance3D.new()
+	mi.name = "Crystal"
+	mi.mesh = st.commit()
+	mi.material_override = _crystal_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = Vector3(0.0, 0.0, CRYSTAL_PROUD / s)
+	mi.rotation = Vector3(0.0, 0.0, 0.18)
+	marker.add_child(mi)
+
+
+static func _marker_scale(marker: Node3D) -> float:
+	if marker.is_inside_tree():
+		return maxf(marker.global_basis.get_scale().x, 0.001)
+	return MODEL_SCALE * 1.746
+
+
+## --- The flicker: insane, tripped energy ---------------------------------------------
+##
+## Every glow on it -- the X eyes, the chest crystal, the face glow -- stutters on
+## its own fits: under a restless shimmer (fast noise), at random intervals it
+## cuts OUT for a few frames, STUTTERS on and off at 14-30 Hz, SURGES too bright,
+## or sags DIM. The eyes and the crystal have a fit each, out of step; now and
+## then one fit runs through both at once, a surge through the whole machine.
+
+var _glow: OmniLight3D
+var _crystal_mat: StandardMaterial3D
+var _flicker_noise := FastNoiseLite.new()
+var _fit_eyes := {"mode": &"", "until": 0.0, "next": 0.0, "rate": 20.0, "seed": 0.0}
+var _fit_core := {"mode": &"", "until": 0.0, "next": 0.0, "rate": 20.0, "seed": 37.0}
+## Last levels applied (for the tests).
+var eye_level := 1.0
+var core_level := 1.0
+
+
+func _process(_delta: float) -> void:
+	if _dying or _eye_mat == null:
+		return
+	var now := _now()
+	var e := _fit(_fit_eyes, _fit_core, now)
+	var c := _fit(_fit_core, _fit_eyes, now)
+	eye_level = e
+	core_level = c
+	_eye_mat.albedo_color = GLOW * (EYE_BRIGHT * e)
+	if _crystal_mat != null:
+		_crystal_mat.emission_energy_multiplier = CRYSTAL_ENERGY * c
+	if _glow != null:
+		_glow.light_energy = GLOW_ENERGY * (0.55 * e + 0.45 * c)
+
+
+func _fit(st: Dictionary, other: Dictionary, now: float) -> float:
+	if now >= float(st["next"]):
+		var roll := randf()
+		var mode := &"dim"
+		var dur := randf_range(0.18, 0.55)
+		if roll < 0.32:
+			mode = &"out"
+			dur = randf_range(0.035, 0.17)
+		elif roll < 0.62:
+			mode = &"stutter"
+			dur = randf_range(0.12, 0.42)
+			st["rate"] = randf_range(14.0, 30.0)
+		elif roll < 0.84:
+			mode = &"surge"
+			dur = randf_range(0.04, 0.11)
+		st["mode"] = mode
+		st["until"] = now + dur
+		st["next"] = now + dur + randf_range(0.06, 0.85)
+		# A tripped surge through the whole machine.
+		if randf() < 0.22:
+			other["mode"] = mode
+			other["until"] = st["until"]
+			other["rate"] = st["rate"]
+			other["next"] = maxf(float(other["next"]), float(st["until"]) + 0.05)
+	var shimmer := 0.78 + 0.22 * _flicker_noise.get_noise_1d(now * 11.0 * 60.0 + float(st["seed"]) * 100.0)
+	if now < float(st["until"]):
+		match st["mode"]:
+			&"out":
+				return 0.03
+			&"stutter":
+				return shimmer if fmod(now * float(st["rate"]), 1.0) < 0.5 else 0.06
+			&"surge":
+				return 1.9
+			&"dim":
+				return shimmer * 0.32
+	return shimmer
 
 
 func _attach_react() -> void:
@@ -864,7 +995,11 @@ func _die() -> void:
 		_hit_sparks()
 		_impact_sparks()
 	if _eye_mat != null:
-		create_tween().tween_property(_eye_mat, "albedo_color", Color(0.05, 0.02, 0.0), 0.5)
+		create_tween().tween_property(_eye_mat, "albedo_color", Color(0.01, 0.03, 0.02), 0.5)
+	if _crystal_mat != null:
+		create_tween().tween_property(_crystal_mat, "emission_energy_multiplier", 0.0, 0.7)
+	if _glow != null:
+		create_tween().tween_property(_glow, "light_energy", 0.0, 0.6)
 	var fall := create_tween().set_parallel(true)
 	fall.tween_property(visual, "position:y", visual.position.y - 0.4, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	fall.tween_property(visual, "rotation:z", 1.35, 0.7).set_delay(0.15) \

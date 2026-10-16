@@ -431,7 +431,8 @@ track and a never-baked SWIPE are removed), with:
 - the parts joined into one mesh on a baked colour atlas
   (`models/source/enforcer/decrepit_atlas.png`) -- with metallic zeroed first, or
   the bake is black;
-- bone markers "ShieldTip" (ARM_L) and "EyeL" / "EyeR" (HEAD);
+- bone markers "ShieldTip" (ARM_L), "EyeL" / "EyeR" (HEAD) and "Chest" (TORSO, the
+  plating under the mask, for the crystal);
 - printed for the script: the crawl's ground speed, the slam's thrust frames and
   the jump's strike frame.
 
