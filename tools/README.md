@@ -443,11 +443,11 @@ asserts all five are present. With:
 - printed for the script: the crawl's ground speed, and per attack clip a
   "contacts" line (shield point furthest forward / lowest, foot furthest
   forward, with frame and clip time) plus a per-frame track -- decrepit.gd's
-  *_CONTACT / *_TIP / *_ROOT_AT_HIT come from these.
+  *_HITS / *_TIP come from these.
 
 To change the clips: bake in Blender (only names ending `_BAKED` go out), copy
 the file to `models/source/enforcer/`, run the build, re-copy the root tables
-and contact values into decrepit.gd, import, and check every switch (see
+and hit times (*_HITS) into decrepit.gd, import, and check every switch (see
 CLAUDE.md docs/notes/59).
 
 After an import, set `models/decrepit_decrepit_atlas.jpg.import` to

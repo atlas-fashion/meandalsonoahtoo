@@ -693,7 +693,7 @@ def main():
 
     # Contacts, in place (the root is out): per frame the shield's point and
     # the lower foot, forward (-y) and up (z) from the body's start, in authored
-    # units. decrepit.gd's *_CONTACT / *_TIP / *_ROOT_AT_HIT come from these.
+    # units. decrepit.gd's *_HITS / *_TIP come from these.
     e = bpy.data.objects["ShieldTip"]
     for name, _ in CLIPS[1:]:
         act = bpy.data.actions[name]

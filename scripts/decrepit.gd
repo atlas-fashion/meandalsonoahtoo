@@ -80,11 +80,12 @@ const WANDER_SPEED := 2.4
 ## name says so (x MODEL_SCALE in the game).
 ##
 ## SWIPE: the shield's point is furthest out at clip 0.533 s (f33), SWIPE_TIP
-## ahead of the body in place, the clip having travelled SWIPE_ROOT_AT_HIT.
+## ahead of the body in place. (How far the clip has travelled by the first hit
+## is read off its root table at the time, so moving the hit keeps it aimed.)
 const SWIPE_DAMAGE := 25.0
-const SWIPE_CONTACT := 0.533
+## Every blow the swipe lands, clip seconds (the first is the one its lunge aims).
+const SWIPE_HITS := [0.533]
 const SWIPE_TIP := 2.74 * MODEL_SCALE
-const SWIPE_ROOT_AT_HIT := 2.36
 const SWIPE_END := 0.733
 const SWIPE_COOLDOWN := 1.3
 ## The lunge before the blow is stretched (on what is left of it, every frame)
@@ -96,16 +97,14 @@ const SWIPE_THROW := 12.0
 const BLOCK_SHOVE := 5.0
 ## JUMP SLASH: the point is in the floor at clip 0.50 s (f31), JUMP_TIP ahead.
 const JUMP_DAMAGE := 50.0
-const JUMP_CONTACT := 0.5
+const JUMP_HITS := [0.5]
 const JUMP_TIP := 2.57 * MODEL_SCALE
-const JUMP_ROOT_AT_HIT := 1.045
 const JUMP_END := 1.15
 ## DROPKICK: the feet are out in front at clip 1.0 s (f61), DROPKICK_TIP ahead
 ## and ~1.6 m up. Its early sidestep is left out (it dives straight at them).
 const DROPKICK_DAMAGE := 35.0
-const DROPKICK_CONTACT := 1.0
+const DROPKICK_HITS := [1.0]
 const DROPKICK_TIP := 2.53 * MODEL_SCALE
-const DROPKICK_ROOT_AT_HIT := 1.651
 const DROPKICK_END := 1.65
 const DROPKICK_THROW := 10.0
 ## Leaps (jump or dropkick): their flight stretched up to LEAP_STRETCH (and
@@ -123,15 +122,18 @@ const AFTER_CONTACT := 0.3
 ## along the floor for exactly DASH_SLIDE_TIME -- however far (at most
 ## DASH_TRAVEL), faster from further off -- fast at once and easing off
 ## (`_ease_slide`), re-aimed every frame on what is left, scraping sparks;
-## meanwhile the clip plays on from DASH_LUNGE to DASH_CONTACT, slowed to fill
-## the slide (the held lunge). It arrives, the blow lands, at clip DASH_CONTACT,
-## and the rest of the clip plays out to DASH_END. A FIXED slide (the user's
+## meanwhile the clip plays on from DASH_LUNGE to its first hit (DASH_HITS),
+## slowed to fill the slide (the held lunge). It arrives, the first blow lands,
+## there, and the rest of the clip plays out at 1x to DASH_END (any later hits
+## on the way). A FIXED slide (the user's
 ## choice, 2026-10-17) puts the blow at a fixed moment of the clip, so the dash
-## has ordinary markers like the other moves -- its parry cue (DASH_CUE) is a
-## point in its clip.
+## has ordinary markers like the other moves -- its parry cues (DASH_CUES) are
+## points in its clip.
 const DASH_DAMAGE := 15.0
 const DASH_LUNGE := 0.233
-const DASH_CONTACT := 0.3
+## The dash's blows, clip seconds: the FIRST is its arrival (the slide fills the
+## clip from DASH_LUNGE to it); any after play out at 1x.
+const DASH_HITS := [0.3]
 const DASH_END := 0.35
 const DASH_SLIDE_TIME := 0.4
 const DASH_TIP := 2.985 * MODEL_SCALE
@@ -152,18 +154,23 @@ const TURN_SWIPE := 12.0
 const TURN_JUMP := 7.0
 const TURN_DASH := 14.0
 
-## PARRY CUES (player.gd `parry_cue`): each move's own marker -- `*_CUE`, a
-## moment in its clip, set on its own (not worked out from the hit; dragged in
-## tools/timing_preview) -- from which the player is listened to for `*_LISTEN`
-## seconds; a block press inside that parries the blow when it lands. As set,
-## each window closes as its blow lands; moving the cue or the hit changes that.
-## The dash's cue is a point in its clip too: during the slide the clip runs at
-## (DASH_CONTACT - DASH_LUNGE) / DASH_SLIDE_TIME, so 0.2667 is 0.2 s of slide
-## before the blow.
-const SWIPE_CUE := 0.283
-const JUMP_CUE := 0.2
-const DROPKICK_CUE := 0.75
-const DASH_CUE := 0.2667
+## PARRY CUES (player.gd `parry_cue`): each move's own markers -- `*_CUES`,
+## moments in its clip, set on their own (not worked out from the hits; placed,
+## dragged, added and deleted in tools/timing_preview) -- from each of which the
+## player is listened to for `*_LISTEN` seconds; a block press inside that
+## parries the next blow to land (the latest cue before a blow is the one it
+## uses). A move may have several hits and several cues (cue -> hit -> cue ->
+## hit), or no cue at all (then the plain guard-timing rule, player.gd). As set,
+## each window closes as its blow lands; moving a cue or a hit changes that.
+## The dash's cues are points in its clip too: during the slide the clip runs at
+## (first hit - DASH_LUNGE) / DASH_SLIDE_TIME, so 0.2667 is 0.2 s of slide
+## before the arrival. Every time is put on the move's own clock at its start
+## (`_events`), never read off the clip's position -- far off, the animation
+## LOD advances that in strides (a cue opened 0.15 s late from 12 m).
+const SWIPE_CUES := [0.283]
+const JUMP_CUES := [0.2]
+const DROPKICK_CUES := [0.75]
+const DASH_CUES := [0.2667]
 const SWIPE_LISTEN := 0.25
 const JUMP_LISTEN := 0.3
 const DROPKICK_LISTEN := 0.25
@@ -268,8 +275,10 @@ var _slide_t := 0.0
 var _slide_u := 0.0
 var _slide_left := 0.0
 var _scrape_t := 0.0
-## -1 once the dash's parry cue is opened (`_dash_cue_check`).
-var _dash_clip_prev := 0.0
+## The move under way's blows and cues, on its own clock (seconds since it
+## began), sorted; computed at its start (`_events`).
+var _hit_times: Array = []
+var _cue_times: Array = []
 ## The swipe knocked them down: the jump follows as it ends.
 var _combo_pending := false
 ## Body speed carried into a move, and the last speed a move moved it at.
@@ -838,25 +847,23 @@ func _animate(delta: float) -> void:
 static func _spec(kind: int) -> Dictionary:
 	match kind:
 		Move.SWIPE:
-			return {"clip": CLIP_SWIPE, "table": ROOT_SWIPE, "contact": SWIPE_CONTACT, "tip": SWIPE_TIP,
-				"cue": SWIPE_CUE, "listen": SWIPE_LISTEN,
-				"root_at_hit": SWIPE_ROOT_AT_HIT, "stretch": SWIPE_STRETCH, "end": SWIPE_END,
+			return {"clip": CLIP_SWIPE, "table": ROOT_SWIPE, "hits": SWIPE_HITS, "tip": SWIPE_TIP,
+				"cues": SWIPE_CUES, "listen": SWIPE_LISTEN, "stretch": SWIPE_STRETCH, "end": SWIPE_END,
 				"turn": TURN_SWIPE, "straight": false}
 		Move.JUMP:
-			return {"clip": CLIP_JUMP, "table": ROOT_JUMP, "contact": JUMP_CONTACT, "tip": JUMP_TIP,
-				"cue": JUMP_CUE, "listen": JUMP_LISTEN,
-				"root_at_hit": JUMP_ROOT_AT_HIT, "stretch": LEAP_STRETCH, "end": JUMP_END,
+			return {"clip": CLIP_JUMP, "table": ROOT_JUMP, "hits": JUMP_HITS, "tip": JUMP_TIP,
+				"cues": JUMP_CUES, "listen": JUMP_LISTEN, "stretch": LEAP_STRETCH, "end": JUMP_END,
 				"turn": TURN_JUMP, "straight": false}
 		Move.DROPKICK:
-			return {"clip": CLIP_DROPKICK, "table": ROOT_DROPKICK, "contact": DROPKICK_CONTACT,
-				"cue": DROPKICK_CUE, "listen": DROPKICK_LISTEN,
-				"tip": DROPKICK_TIP, "root_at_hit": DROPKICK_ROOT_AT_HIT, "stretch": LEAP_STRETCH,
+			return {"clip": CLIP_DROPKICK, "table": ROOT_DROPKICK, "hits": DROPKICK_HITS,
+				"cues": DROPKICK_CUES, "listen": DROPKICK_LISTEN,
+				"tip": DROPKICK_TIP, "stretch": LEAP_STRETCH,
 				"end": DROPKICK_END, "turn": TURN_JUMP, "straight": true}
 		_:
 			# Its blow and its end come when the slide arrives (`_dash_step`).
-			return {"clip": CLIP_DASH, "table": [], "contact": INF, "tip": DASH_TIP,
-				"cue": INF, "listen": DASH_LISTEN,
-				"root_at_hit": 0.0, "stretch": Vector2.ONE, "end": INF, "turn": TURN_DASH,
+			return {"clip": CLIP_DASH, "table": [], "hits": DASH_HITS, "tip": DASH_TIP,
+				"cues": DASH_CUES, "listen": DASH_LISTEN,
+				"stretch": Vector2.ONE, "end": DASH_END, "turn": TURN_DASH,
 				"straight": true}
 
 
@@ -871,7 +878,7 @@ func _start_move(kind: int, player: Node3D) -> void:
 	_combo_pending = false
 	_target = player
 	var s := _spec(kind)
-	_end_at = s["end"]
+	_events(kind, s)
 	var now := _now()
 	_last_move = kind
 	match kind:
@@ -880,7 +887,6 @@ func _start_move(kind: int, player: Node3D) -> void:
 		Move.DASH:
 			_dash_ready = now + DASH_COOLDOWN
 			_dash_phase = 0
-			_dash_clip_prev = 0.0
 			_scrape_t = 0.0
 		Move.JUMP:
 			_jump_ready = now + JUMP_COOLDOWN
@@ -909,6 +915,41 @@ func _end_move() -> void:
 	_play_clip(CLIP_CRAWL, clampf(_move_vel.length() / CRAWL_GROUND, 0.0, 2.6), BLEND_OUT_OF_MOVE, true)
 
 
+## The move's blows, cues and end, from clip seconds to its own clock: the same
+## for every move but the dash, whose clip runs slowed through the slide
+## (`_dash_clock`). Sorted.
+func _events(kind: int, s: Dictionary) -> void:
+	_hit_times.clear()
+	_cue_times.clear()
+	var hits: Array = (s["hits"] as Array).duplicate()
+	hits.sort()
+	var cues: Array = (s["cues"] as Array).duplicate()
+	cues.sort()
+	var arrive: float = hits[0] if not hits.is_empty() else DASH_LUNGE
+	for h in hits:
+		_hit_times.append(_dash_clock(float(h), arrive) if kind == Move.DASH else float(h))
+	for c in cues:
+		_cue_times.append(_dash_clock(float(c), arrive) if kind == Move.DASH else float(c))
+	var end: float = s["end"]
+	_end_at = _dash_clock(end, arrive) if kind == Move.DASH else end
+
+
+## A moment of the dash's clip on the move's clock: at 1x up to the lunge, the
+## lunge to `arrive` (its first blow) slowed to fill DASH_SLIDE_TIME, at 1x after.
+static func _dash_clock(clip_t: float, arrive: float) -> float:
+	if clip_t <= DASH_LUNGE:
+		return clip_t
+	var span := maxf(arrive - DASH_LUNGE, 0.0001)
+	if clip_t <= arrive:
+		return DASH_LUNGE + (clip_t - DASH_LUNGE) / span * DASH_SLIDE_TIME
+	return DASH_LUNGE + DASH_SLIDE_TIME + (clip_t - arrive)
+
+
+## The first blow's time (the one a lunge or a leap aims), INF if none.
+func _first_hit() -> float:
+	return float(_hit_times[0]) if not _hit_times.is_empty() else INF
+
+
 ## How much further the carried speed will still take it, forward.
 func _carry_ahead() -> float:
 	var c := _carry.length()
@@ -923,7 +964,8 @@ func _run_move(delta: float, _now_t: float) -> void:
 		_end_move()
 		return
 	var s := _spec(_move)
-	var contact: float = s["contact"]
+	# The first blow: the lunge or the leap is stretched to land it on them.
+	var contact := _first_hit()
 	var prev := _move_t
 	_move_t += delta
 	var to := player.global_position - global_position
@@ -941,7 +983,7 @@ func _run_move(delta: float, _now_t: float) -> void:
 		if _move_t < contact:
 			# Stretched so the blow arrives on them: the travel left before it
 			# lands, against how far they are past where it would.
-			var left_root: float = (float(s["root_at_hit"]) - r.x) * MODEL_SCALE
+			var left_root: float = (_root_at(s["table"], contact).x - r.x) * MODEL_SCALE
 			var need: float = flat.length() - float(s["tip"]) - _carry_ahead()
 			var stretch: Vector2 = s["stretch"]
 			if left_root + fwd > 0.01:
@@ -967,12 +1009,16 @@ func _run_move(delta: float, _now_t: float) -> void:
 	_move_vel = Vector3(rv.x, 0.0, rv.z)
 	velocity.x = 0.0
 	velocity.z = 0.0
-	# The parry cue: from here the player is listened to for a block press.
-	var cue: float = s["cue"]
-	if prev < cue and _move_t >= cue and player.has_method("parry_cue"):
-		player.call("parry_cue", self, float(s["listen"]))
-	if prev < contact and _move_t >= contact:
-		_contact(player)
+	# Its cues and blows as the move's clock passes them, cues first: from a cue
+	# the player is listened to for a block press; each blow uses the latest.
+	for cue in _cue_times:
+		if prev < cue and _move_t >= cue and player.has_method("parry_cue"):
+			player.call("parry_cue", self, float(s["listen"]))
+	for hit in _hit_times:
+		if _move == Move.NONE:
+			break
+		if prev < hit and _move_t >= hit:
+			_contact(player)
 	if _move != Move.NONE and _move_t >= _end_at:
 		_end_move()
 
@@ -982,14 +1028,14 @@ func _run_move(delta: float, _now_t: float) -> void:
 ## arrival the blow and the clip again, rising. Returns the forward step.
 func _dash_step(delta: float, flat: Vector3) -> float:
 	var gap := maxf(flat.length() - DASH_TIP - _carry_ahead(), 0.0)
-	_dash_cue_check()
 	match _dash_phase:
 		0:
 			if _move_t >= DASH_LUNGE:
 				# Lunged: the slide, its time fixed, the clip slowed to fill it.
 				_dash_phase = 1
 				if anim != null:
-					anim.speed_scale = (DASH_CONTACT - DASH_LUNGE) / DASH_SLIDE_TIME
+					var arrive: float = DASH_HITS.min() if not DASH_HITS.is_empty() else DASH_LUNGE
+					anim.speed_scale = maxf(arrive - DASH_LUNGE, 0.0) / DASH_SLIDE_TIME
 				_slide_t = 0.0
 				_slide_u = 0.0
 				_slide_left = minf(gap, DASH_TRAVEL)
@@ -1006,37 +1052,13 @@ func _dash_step(delta: float, flat: Vector3) -> float:
 			_slide_left = maxf(_slide_left - fwd, 0.0)
 			_scrape(delta)
 			if u >= 1.0:
-				# Arrived, on time: the blow, and the rest of the clip.
+				# Arrived, on time (its first blow is due now: `_run_move`);
+				# the rest of the clip at 1x.
 				_dash_phase = 2
-				# Any cue not yet passed (a frame lost to the clip's LOD) opens now.
-				_dash_cue_check(true)
-				if _target != null and is_instance_valid(_target):
-					_contact(_target)
-				if _move == Move.DASH:
-					if anim != null:
-						anim.speed_scale = 1.0
-					_end_at = _move_t + maxf(DASH_END - DASH_CONTACT, 0.0)
+				if anim != null:
+					anim.speed_scale = 1.0
 			return fwd
 	return 0.0
-
-
-## The dash's parry cue, opened as the move reaches DASH_CUE's moment. The cue
-## is a point in the CLIP; the clip runs at 1 up to the lunge and slowed through
-## the slide, so that point is turned into the move's own time here -- the clip's
-## position itself is no good to watch: far off, the animation LOD advances it
-## in strides and the cue opened late (0.05 s before the blow from 12 m).
-## `force`: on arrival, if it was never reached.
-func _dash_cue_check(force := false) -> void:
-	if _dash_clip_prev < 0.0:
-		return
-	var at := DASH_CUE
-	if DASH_CUE > DASH_LUNGE:
-		var rate := (DASH_CONTACT - DASH_LUNGE) / DASH_SLIDE_TIME
-		at = DASH_LUNGE + (DASH_CUE - DASH_LUNGE) / maxf(rate, 0.0001)
-	if force or _move_t >= at:
-		_dash_clip_prev = -1.0
-		if _target != null and is_instance_valid(_target) and _target.has_method("parry_cue"):
-			_target.call("parry_cue", self, DASH_LISTEN)
 
 
 ## The slide's share done at `u` (0..1 of its time): fast at once, easing off
