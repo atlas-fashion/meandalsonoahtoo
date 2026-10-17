@@ -53,3 +53,15 @@ notes 59 / 61 (decrepit `_contact`, enforcer via enemy.gd `_try_connect`).
   window lands on its FIRST tick, so a dodge must come before it opens; and a
   swipe re-aims until 0.08 s before its window, so standing aside at the start
   is no dodge.
+- **Follow-up, the same day**: in the user's already-open editor every marker
+  vanished after this change. The preview rebuilt when decrepit.gd changed; its
+  fresh compile of the script failed (decrepit.gd now preloads the brand-new
+  shield_hitbox.gd, which that editor had not scanned yet), and `_rebuild` had
+  ALREADY swapped in bare copies of the clips -- so no markers, and no retry.
+  Now the script is checked first (`_readable`: compiles and has the constants
+  the markers need); if it cannot be read the timeline is left as it was, a
+  warning is printed, and it is retried every RETRY_EVERY 2 s until it can.
+  Measured: a normal build 16 markers; the script broken (a missing preload):
+  markers kept, warning, retrying; repaired: rebuilt, 16, retry off. (A fresh
+  editor built every marker all along: Project > Reload Current Project
+  clears it.)

@@ -74,6 +74,11 @@ var _poll := 0.0
 var _bound := {}
 ## Per clip: &"hit" / &"parry" -> the binding a new marker of that name appends to.
 var _lists := {}
+## The last rebuild could not read the enemy's script (a file it uses not yet
+## scanned by the editor, an edit half saved...): it is tried again, RETRY_EVERY.
+var _failed := false
+var _retry_in := 0.0
+const RETRY_EVERY := 2.0
 
 
 func _ready() -> void:
@@ -88,6 +93,11 @@ func _process(delta: float) -> void:
 	if _poll > 0.0:
 		return
 	_poll = 0.25
+	if _failed:
+		_retry_in -= 0.25
+		if _retry_in <= 0.0:
+			_rebuild()
+		return
 	for path in _watched:
 		if FileAccess.get_modified_time(path) != _watched[path]:
 			_rebuild()
@@ -135,6 +145,21 @@ func _rebuild() -> void:
 	if src == null:
 		push_warning("timing preview: no AnimationPlayer in the model")
 		return
+	# The script read first: if it cannot be, the timeline is left as it was
+	# and it is tried again (it used to swap in bare copies and stop there --
+	# found 2026-10-17: a new file the script preloads, not yet scanned by an
+	# editor that was already open, failed the compile, and every marker went).
+	var path := DECREPIT if enemy == "decrepit" else ENFORCER
+	_watch([path])
+	if not _readable(path):
+		if not _failed:
+			push_warning("timing preview: cannot read %s yet (a file it uses may not be scanned, or it has an error) -- retrying every %d s" % [path, int(RETRY_EVERY)])
+		_failed = true
+		_retry_in = RETRY_EVERY
+		return
+	if _failed:
+		print("[timing preview] %s read: markers rebuilt" % path)
+	_failed = false
 	for lib in tl.get_animation_library_list():
 		tl.remove_animation_library(lib)
 	var copy := AnimationLibrary.new()
@@ -337,6 +362,16 @@ static func write_const(path: String, name: String, value_text: String) -> bool:
 	f.close()
 	if Engine.is_editor_hint():
 		EditorInterface.get_resource_filesystem().update_file(path)
+	return true
+
+
+## Whether the script compiles and has what the markers are built from.
+static func _readable(path: String) -> bool:
+	var c := _consts(path)
+	var need := ["SWIPE_HITS", "SWIPE_CUES", "JUMP_HITS", "DASH_HITS", "DASH_LUNGE"] if path == DECREPIT 		else ["SWIPE_HITS", "SWIPE_CONTACT", "BEAM_SET_EARLY"]
+	for k in need:
+		if not c.has(k):
+			return false
 	return true
 
 
