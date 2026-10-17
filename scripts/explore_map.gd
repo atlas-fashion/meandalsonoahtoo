@@ -1,8 +1,9 @@
 extends CanvasLayer
 
 ## A dungeon map that fills in as the player walks the maze: a small north-up
-## minimap in the top-right corner, and a full map toggled with "toggle_map"
-## (the ` key, or Select). Built from `module_level.gd`'s `Built` data -- see
+## minimap in the top-right corner, and a full map that is a PAGE of the
+## inventory (inventory_screen.gd; "toggle_map", M or Select, opens it there --
+## since 2026-10-17, when the ` key went to the sandbox menu). Built from `module_level.gd`'s `Built` data -- see
 ## `setup()`. The full map is worked with a cursor -- zoomed, panned and marked
 ## by the player; see "The full map" below.
 ##
@@ -109,7 +110,10 @@ var _map_texture: ImageTexture = null
 var _atlas: AtlasTexture = null
 
 var _full_open := false
-var _has_toggle_action := false
+## Shown as the inventory's Map page: the inventory owns the screen (ui_open,
+## the keys that open and close it); the map keeps its own panning, zoom, pins.
+var _embedded := false
+var _hints: Label = null
 ## Tracks `get_tree().paused` frame to frame so the full map can be forced
 ## shut the instant the game pauses, whatever paused it (the pause menu's
 ## Esc handling lives in `pause_menu.gd`, which this file must not touch --
@@ -136,7 +140,7 @@ func _ready() -> void:
 	# process mode), so nothing here could ever notice the pause and close
 	# the full map -- it would stay open, frozen, underneath the pause menu.
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_has_toggle_action = InputMap.has_action("toggle_map")
+	add_to_group(&"explore_map")
 	_build_ui()
 
 
@@ -189,22 +193,15 @@ func _input(event: InputEvent) -> void:
 			_close_editor()
 			get_viewport().set_input_as_handled()
 		return
+	# Escape closes the note editor; otherwise, embedded, it is the inventory's
+	# (it closes the whole screen). Opening and closing is the inventory's too.
 	if _full_open and event.is_action_pressed("ui_cancel"):
 		if editor_open():
 			_close_editor()
-		else:
+		elif not _embedded:
 			set_full_map_open(false)
-		get_viewport().set_input_as_handled()
-		return
-	var pressed := false
-	if _has_toggle_action:
-		pressed = event.is_action_pressed("toggle_map")
-	elif event is InputEventKey and event.pressed and not event.echo:
-		pressed = (event as InputEventKey).physical_keycode == KEY_QUOTELEFT
-	if pressed:
-		if editor_open():
-			_close_editor()
-		set_full_map_open(not _full_open)
+		else:
+			return
 		get_viewport().set_input_as_handled()
 		return
 	if _full_open and not editor_open():
@@ -212,11 +209,19 @@ func _input(event: InputEvent) -> void:
 
 
 ## Public so a harness (or another system) can drive it without faking input.
-func set_full_map_open(open: bool) -> void:
-	if open and _player != null and is_instance_valid(_player) and _player.get("ui_open") and not _took_ui:
+## `embedded`: as the inventory's Map page (inventory_screen.gd), which owns
+## the player's ui_open and leaves room for its header and footer.
+func set_full_map_open(open: bool, embedded := false) -> void:
+	if open and not embedded and _player != null and is_instance_valid(_player) 			and _player.get("ui_open") and not _took_ui:
 		# Another screen (the inventory) is up.
 		return
 	_full_open = open
+	_embedded = open and embedded
+	if _hints != null:
+		# Embedded, the inventory's footer carries the map's keys.
+		_hints.visible = not _embedded
+	if _full_title != null:
+		_full_title.offset_top = 66 if _embedded else 58
 	if _full_root != null:
 		_full_root.visible = open
 	# The two views fight for attention otherwise -- the reference has one
@@ -226,13 +231,15 @@ func set_full_map_open(open: bool) -> void:
 	# The player stops taking input while it is open (not a pause). The mouse
 	# stays captured: it moves the MAP under a cursor fixed in the middle
 	# (2026-10-11); only the mark editor frees it.
-	if _player != null and is_instance_valid(_player):
+	if _player != null and is_instance_valid(_player) and not embedded:
 		if open and not _took_ui:
 			_player.set("ui_open", true)
 			_took_ui = true
 		elif not open and _took_ui:
 			_player.set("ui_open", false)
 			_took_ui = false
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	elif embedded and open:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if not open:
 		_close_editor()
@@ -244,6 +251,11 @@ func set_full_map_open(open: bool) -> void:
 		if _built != null and is_instance_valid(_player):
 			_centre_px = _continuous_px(_player.global_position)
 			_zoom = clampf(maxf(_zoom, 2.0), ZOOM_MIN, ZOOM_MAX)
+			# Off the map altogether (the sandbox's test plane): the whole
+			# dungeon, centred, instead of an empty panel.
+			if _centre_px.x < 0.0 or _centre_px.y < 0.0 or _centre_px.x > float(_img_w) or _centre_px.y > float(_img_h):
+				_centre_px = Vector2(_img_w, _img_h) * 0.5
+				_zoom = clampf(1.0, ZOOM_MIN, ZOOM_MAX)
 		_layout_full_texture()
 		_update_marker_transforms()
 
@@ -601,9 +613,10 @@ func _build_full_map(root: Control) -> void:
 	panel.add_child(rim)
 
 	var hints := Label.new()
+	_hints = hints
 	hints.name = "Hints"
 	hints.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hints.text = "Mouse / left stick: move the map      Scroll / right stick: zoom      Left click / A: pin (again to remove)      Right click / X: mark with a note      ` / B: close"
+	hints.text = "Mouse / left stick: move the map      Scroll / right stick: zoom      Left click / A: pin (again to remove)      Right click / X: mark with a note      Esc / B: close"
 	hints.add_theme_font_size_override("font_size", 14)
 	hints.add_theme_color_override("font_color", Color(0.82, 0.8, 0.76))
 	hints.add_theme_color_override("font_outline_color", Color(0, 0, 0))
@@ -638,9 +651,14 @@ func _position_full_panel() -> void:
 	var view: Vector2 = vp.get_visible_rect().size
 	_full_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	# Equal margins, so the panel's middle -- the map's cursor -- is the
-	# screen's middle, where the crosshair is.
-	_full_panel.position = Vector2(48.0, 48.0)
-	_full_panel.size = view - Vector2(96.0, 96.0)
+	# screen's middle, where the crosshair is. Embedded, below the inventory's
+	# header and the level's title, above its footer.
+	if _embedded:
+		_full_panel.position = Vector2(48.0, 100.0)
+		_full_panel.size = view - Vector2(96.0, 100.0 + 64.0)
+	else:
+		_full_panel.position = Vector2(48.0, 48.0)
+		_full_panel.size = view - Vector2(96.0, 96.0)
 	_full_side = minf(_full_panel.size.x, _full_panel.size.y)
 	_layout_full_texture()
 
@@ -1441,6 +1459,20 @@ var _frame_styles: Array[StyleBoxFlat] = []
 
 func add_level(level: StringName, built) -> void:
 	_stored[level] = {"built": built, "revealed": {}}
+
+
+## Every cell of every level charted (the sandbox, sandbox.gd).
+func reveal_all() -> void:
+	if _built != null:
+		for c in _built.cells:
+			_revealed[c] = true
+		_rebuild_map_image()
+		_revealed_dirty = false
+	for level in _stored:
+		var cells := {}
+		for c in _stored[level]["built"].cells:
+			cells[c] = true
+		_stored[level]["revealed"] = cells
 
 
 func current_level() -> StringName:

@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 59), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 60), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -258,7 +258,8 @@ rebuild and re-run `tools/verify_modules.py`.
 `scripts/maze.gd`), Player (`player.gd`), HUD (`hud.gd`), Benchmark
 (`tools/benchmark.gd`, idle without `--bench`), PauseMenu. `--bench` or
 `--skip-title` skips the title. Autoloads: `Graphics`
-(`graphics_settings.gd`), `Saves` (`save_system.gd`), `Pad` (`pad.gd`).
+(`graphics_settings.gd`), `Saves` (`save_system.gd`), `Pad` (`pad.gd`), `Sandbox`
+(`sandbox.gd`).
 
 **`maze.gd` `_ready()` builds the whole level:** seed (`maze_seed`, or the
 save's) -> level builder -> `_build_gates`, `_place_player`,
@@ -315,15 +316,18 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 - UI: `hud.gd`, `attack_icons.gd`, `inventory.gd` (data),
   `inventory_screen.gd`, `item_slot.gd`, `item_icon.gd`,
   `consumable_type.gd`, `radial_menu.gd` (item wheels), `explore_map.gd`
-  (map, incl. sewer level), `pause_menu.gd` (owns settings `SPEC`),
+  (minimap; the full map is the inventory's MAP page, M -- note 60), `pause_menu.gd` (owns settings `SPEC`),
   `settings_panel.gd`, `title_screen.gd`, `pad.gd` +
   `pad_keyboard_input.gd` (controller, on-screen keyboard).
+- Sandbox (test mode, never saves): `sandbox.gd` (autoload `Sandbox`),
+  `sandbox_world.gd` (test plane, spawning, teleports), `sandbox_menu.gd` (` key).
 - Saving: `save_system.gd` (4 slots, `request()` / `save_now()`, autosave);
   maze.gd supplies `save_state()`, `restore_world()`, `restore_player()`.
 
 **Running.** On the `tflfr` Windows machine the Godot binary is
 `C:\Users\tflfr\Desktop\Godot_v4.7.2-stable_win64.exe` (examples here say
-`godot`). Game args go after `--` (`OS.get_cmdline_user_args()`):
+`godot`). Game args go after `--` (`OS.get_cmdline_user_args()`): `title_screen.gd` reads `--sandbox` (straight into
+the sandbox, note 60);
 `tools/benchmark.gd` reads `--bench --ablate --shot --swing --no-trail
 --preset=<name> --size=WxH --nocull --flat`; `maze.gd` reads `--no-enemies`
 and `--modules`; `brick_level.gd` reads `--brick-skip=a,b`. Harnesses are
@@ -410,6 +414,7 @@ then `godot --headless --import --path .`) are documented in
 | 57 | 2026-10-16 | The decrepit's X eyes, chest crystal and fits; the channel grated over | [docs/notes/57-the-decrepit-s-x-eyes-chest-crystal-and.md](docs/notes/57-the-decrepit-s-x-eyes-chest-crystal-and.md) |
 | 58 | 2026-10-16 | Three decrepits, the sewer lizard, a proud grating, walkable manholes | [docs/notes/58-three-decrepits-the-sewer-lizard-a-proud-grating.md](docs/notes/58-three-decrepits-the-sewer-lizard-a-proud-grating.md) |
 | 59 | 2026-10-17 | The decrepit's new moves; every clip change seamless | [docs/notes/59-the-decrepit-s-new-moves-and-seamless-blending.md](docs/notes/59-the-decrepit-s-new-moves-and-seamless-blending.md) |
+| 60 | 2026-10-17 | Sandbox mode; the map becomes an inventory page | [docs/notes/60-sandbox-mode-the-map-becomes-an-inventory.md](docs/notes/60-sandbox-mode-the-map-becomes-an-inventory.md) |
 
 ## Notes by source file
 
@@ -432,17 +437,17 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/brick_level.gd`: 27
 - `scripts/chest.gd`: 18
 - `scripts/convoy.gd`: 23, 28
-- `scripts/crier.gd`: 43, 48
+- `scripts/crier.gd`: 43, 48, 60
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59
+- `scripts/decrepit.gd`: 56, 57, 59, 60
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24
-- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56
+- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59
 - `scripts/enforcer_react.gd`: 52, 56, 59
-- `scripts/explore_map.gd`: 6.18, 50
+- `scripts/explore_map.gd`: 6.18, 50, 60
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58
 - `scripts/hand_torch.gd`: 24, 29
@@ -451,15 +456,15 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hud.gd`: 6.19, 24
 - `scripts/interact.gd`: 6.18
 - `scripts/inventory.gd`: 6.19, 25
-- `scripts/inventory_screen.gd`: 6.19, 30
+- `scripts/inventory_screen.gd`: 6.19, 30, 60
 - `scripts/item_drop.gd`: 6.19, 16, 51
 - `scripts/item_icon.gd`: 6.19
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60
 - `scripts/maze_graph.gd`: 6.16
-- `scripts/mimic.gd`: 8
+- `scripts/mimic.gd`: 8, 60
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17
@@ -467,22 +472,25 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60
 - `scripts/portcullis.gd`: 6.18
 - `scripts/puzzle_room.gd`: 18, 22
 - `scripts/radial_menu.gd`: 25, 30, 44
 - `scripts/respawn_anchor.gd`: 8b, 32
-- `scripts/save_system.gd`: 19
+- `scripts/save_system.gd`: 19, 60
+- `scripts/sandbox.gd`: 60
+- `scripts/sandbox_menu.gd`: 60
+- `scripts/sandbox_world.gd`: 60
 - `scripts/settings_panel.gd`: 19, 46
 - `scripts/sewer.gd`: 50, 55, 56, 57
-- `scripts/sewer_lizard.gd`: 58
+- `scripts/sewer_lizard.gd`: 58, 60
 - `scripts/shard_door.gd`: 18
 - `scripts/skeleton_eyes.gd`: 13
 - `scripts/skeleton_sword.gd`: 24
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14
-- `scripts/stalker.gd`: 11, 16, 22
-- `scripts/title_screen.gd`: 19
+- `scripts/stalker.gd`: 11, 16, 22, 60
+- `scripts/title_screen.gd`: 19, 60
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50
 - `scripts/wood_door.gd`: 6.18
 - `scripts/workbench.gd`: 32

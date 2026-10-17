@@ -511,7 +511,8 @@ func _process(_delta: float) -> void:
 	# Not drawn while the camera is above ground (12 m of stone between).
 	var cam := get_viewport().get_camera_3d()
 	if cam != null and visual != null:
-		visual.visible = cam.global_position.y < SPLIT_Y
+		# On a different level from the camera (12 m of stone between): hidden.
+		visual.visible = (cam.global_position.y < SPLIT_Y) == (global_position.y < SPLIT_Y)
 	if _dying or _eye_mat == null:
 		return
 	var now := _now()
@@ -601,13 +602,13 @@ func _physics_process(delta: float) -> void:
 
 ## Not above ground: it lives down here.
 func _can_see(player: Node3D, distance: float) -> bool:
-	if player.global_position.y > SPLIT_Y:
+	if _other_level(player):
 		return false
 	return super(player, distance)
 
 
 func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: float, _gap: float) -> bool:
-	if player.global_position.y > SPLIT_Y:
+	if _other_level(player):
 		_hold(delta)
 		return true
 	if now >= _twitch_at:
@@ -1196,3 +1197,10 @@ func _die() -> void:
 	gone.tween_interval(3.0)
 	gone.tween_property(self, "scale", Vector3(1.0, 0.01, 1.0), 0.4).set_ease(Tween.EASE_IN)
 	gone.tween_callback(queue_free)
+
+
+## The player is on the other side of the sewer roof from it. Sewer dwellers
+## neither see nor chase anyone above ground; one placed above ground (the
+## sandbox's test plane, sandbox_world.gd) hunts there as it would below.
+func _other_level(player: Node3D) -> bool:
+	return (player.global_position.y > SPLIT_Y) != (global_position.y > SPLIT_Y)

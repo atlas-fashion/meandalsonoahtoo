@@ -36,6 +36,10 @@ var _title: Label
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
+	# `-- --sandbox`: straight into the sandbox (sandbox.gd).
+	if args.has("--sandbox"):
+		Sandbox.start.call_deferred()
+		return
 	if args.has("--bench") or args.has("--skip-title"):
 		Saves.slot = -1
 		Saves.pending = {}
@@ -181,6 +185,7 @@ func _build() -> void:
 	col.add_child(rule)
 	col.add_child(SettingsPanel.spacer(30))
 	for entry in [["Play", func() -> void: _show(&"slots")],
+			["Sandbox", func() -> void: _play_sandbox()],
 			["Settings", func() -> void: _show(&"settings")],
 			["Quit", func() -> void: get_tree().quit()]]:
 		col.add_child(_big_button(entry[0], entry[1]))
@@ -339,13 +344,25 @@ func _ask_name(i: int) -> void:
 
 
 func _play(i: int, new_name := "") -> void:
+	await _descend()
+	Saves.start(i, new_name)
+
+
+## The SANDBOX (sandbox.gd): the same descent, into an empty level and a flat
+## test plane, with nothing ever saved.
+func _play_sandbox() -> void:
+	await _descend()
+	Sandbox.start()
+
+
+## "DESCENDING...", then the whole screen fades to black; the game picks up in
+## that black (hud.gd) and the player gets up out of it.
+func _descend() -> void:
 	_main.visible = false
 	_slots.visible = false
 	_settings.visible = false
 	_naming.visible = false
 	_loading.visible = true
-	# "DESCENDING...", then the whole screen fades to black; the game picks up
-	# in that black (hud.gd) and the player gets up out of it.
 	var black := ColorRect.new()
 	black.color = Color.BLACK
 	black.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -358,4 +375,3 @@ func _play(i: int, new_name := "") -> void:
 	# One frame drawn fully black before the level's build stalls the window.
 	await get_tree().process_frame
 	await get_tree().process_frame
-	Saves.start(i, new_name)

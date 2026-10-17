@@ -164,6 +164,12 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity += get_gravity() * delta
 
+	# Sandbox with passive enemies: it holds still.
+	if Sandbox.enemies_passive:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
+		return
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player") as Node3D
 	var player := _player

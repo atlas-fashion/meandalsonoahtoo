@@ -29,6 +29,14 @@ extends CanvasLayer
 ## category, B puts a lifted stack back or closes, Y closes. The mouse keeps
 ## its own pointer and hover.
 ##
+## Two PAGES (2026-10-17), tabs in the header: ITEMS (all of the above) and
+## MAP -- the explore map (explore_map.gd), shown embedded between the header
+## and the footer, worked as before (mouse / sticks pan and zoom, pins, notes).
+## "toggle_map" (M, or Select) opens the screen on the Map page, switches pages
+## while it is up, and on the Map page closes it (as the old map key did);
+## "inventory" (Tab / Y) and Escape / B close from either page. While a map note
+## is being typed every key is the note's.
+##
 ## The screen is laid out in the 1280 x 720 canvas the project stretches, so
 ## it fits at any resolution. Created by hud.gd once the player exists.
 
@@ -85,6 +93,15 @@ var _card_quote: Label
 var _coins_value: Label
 var _potions_value: Label
 var _bars: Array = []
+## The page up: &"items" or &"map".
+var _page := &"items"
+var _dim: ColorRect
+var _middle: Control
+var _footer_items: Control
+var _footer_map: Control
+var _tab_items: Button
+var _tab_map: Button
+var _map_node: CanvasLayer = null
 
 
 func _ready() -> void:
@@ -109,12 +126,14 @@ func is_open() -> bool:
 	return visible
 
 
-func set_open(open: bool) -> void:
+func set_open(open: bool, page := &"items") -> void:
 	if open == visible or player == null:
 		return
-	# Another screen (the full map) has the player already.
+	# Another screen has the player already.
 	if open and player.ui_open:
 		return
+	if not open:
+		_show_page(&"items", false)
 	visible = open
 	_set_hovered(-1)
 	_drop_lift()
@@ -128,6 +147,48 @@ func set_open(open: bool) -> void:
 		# Opened from the pad: something is highlighted to start from.
 		if Pad.using_pad:
 			_set_hovered(int(player.selected_slot))
+		_show_page(page)
+
+
+## The explore map (a child of the maze), if the level has one.
+func _map() -> CanvasLayer:
+	if _map_node == null or not is_instance_valid(_map_node):
+		_map_node = get_tree().get_first_node_in_group(&"explore_map") as CanvasLayer
+	return _map_node
+
+
+func page() -> StringName:
+	return _page
+
+
+## Shows `which` page. `live`: the screen is up (the mouse and the map follow);
+## false only tidies the page back for the next opening.
+func _show_page(which: StringName, live := true) -> void:
+	if which == &"map" and _map() == null:
+		which = &"items"
+	_page = which
+	var on_map := which == &"map"
+	_dim.visible = not on_map
+	_middle.visible = not on_map
+	_footer_items.visible = not on_map
+	_footer_map.visible = on_map
+	_tab_items.add_theme_color_override("font_color", DIM if on_map else GOLD)
+	_tab_map.add_theme_color_override("font_color", GOLD if on_map else DIM)
+	var m := _map()
+	if m != null and m.has_method("set_full_map_open"):
+		var map_up: bool = m.get("_full_open")
+		if on_map and live and not map_up:
+			m.call("set_full_map_open", true, true)
+		elif (not on_map or not live) and map_up and m.get("_embedded"):
+			m.call("set_full_map_open", false, true)
+	if not live:
+		return
+	_set_hovered(-1)
+	_drop_lift()
+	# The map moves under a cursor fixed mid-panel (mouse captured); the items
+	# take a free mouse and the pad cursor.
+	Pad.want_cursor(self, not on_map, false)
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if on_map else Input.MOUSE_MODE_VISIBLE
 
 
 func _process(_delta: float) -> void:
@@ -136,6 +197,7 @@ func _process(_delta: float) -> void:
 	# Anything that takes the screen away -- the pause menu, a cutscene, death --
 	# closes this first, so it is never left open underneath.
 	if get_tree().paused or player == null or player.in_cutscene or player.get("_dead"):
+		_show_page(&"items", false)
 		visible = false
 		Pad.want_cursor(self, false)
 		_set_hovered(-1)
@@ -149,12 +211,34 @@ func _process(_delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if player == null or get_tree().paused:
 		return
+	# A map note being typed: every key is the note's (explore_map.gd).
+	var m := _map()
+	if visible and m != null and m.call("editor_open"):
+		return
+	if event.is_action_pressed("toggle_map"):
+		if not player.in_cutscene and not player.get("_dead"):
+			if not visible:
+				set_open(true, &"map")
+			elif _page == &"map":
+				set_open(false)
+			else:
+				_show_page(&"map")
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("inventory"):
 		if not player.in_cutscene and not player.get("_dead"):
 			set_open(not visible)
 		get_viewport().set_input_as_handled()
 		return
 	if not visible:
+		return
+	if _page == &"map":
+		# Escape / B close; everything else is the map's (it reads the rest).
+		if event.is_action_pressed("ui_cancel"):
+			set_open(false)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("interact"):
+			get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel"):
 		if _lifted >= 0:
@@ -554,6 +638,7 @@ func _build() -> void:
 
 	# The game stays faintly visible behind: it is not a pause.
 	var dim := ColorRect.new()
+	_dim = dim
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	# Nearly opaque: at 0.86 the HUD's bars and readouts showed through.
 	dim.color = Color(0.02, 0.018, 0.016, 0.95)
@@ -569,13 +654,25 @@ func _build() -> void:
 
 	page.add_child(_build_header())
 	var middle := CenterContainer.new()
+	_middle = middle
 	middle.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	middle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(middle)
 	var panels := HBoxContainer.new()
 	panels.add_theme_constant_override("separation", 14)
 	middle.add_child(panels)
-	page.add_child(_build_footer())
+	# The Map page keeps the middle's room (the map draws there, beneath).
+	var room := Control.new()
+	room.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	room.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	room.visible = false
+	middle.visibility_changed.connect(func() -> void: room.visible = not middle.visible)
+	page.add_child(room)
+	_footer_items = _build_footer()
+	page.add_child(_footer_items)
+	_footer_map = _build_map_footer()
+	_footer_map.visible = false
+	page.add_child(_footer_map)
 
 	# The weapon wheel is 0-3, the quick-item wheel 4-7 and the bag 8-37.
 	_slots.resize(Inventory.SIZE)
@@ -617,6 +714,61 @@ func _build_header() -> Control:
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(title)
+	# The pages, on the right.
+	box.content_margin_right = 28
+	var fill := Control.new()
+	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(fill)
+	_tab_items = _page_tab("ITEMS", &"items")
+	row.add_child(_tab_items)
+	_tab_map = _page_tab("MAP", &"map")
+	row.add_child(_tab_map)
+	var cap := _keycap("M / Select")
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(cap)
+	return bar
+
+
+func _page_tab(label: String, which: StringName) -> Button:
+	var b := Button.new()
+	b.text = label
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.add_theme_font_override("font", _spaced)
+	b.add_theme_font_size_override("font_size", 18)
+	b.add_theme_color_override("font_color", GOLD if which == &"items" else DIM)
+	b.add_theme_color_override("font_hover_color", Color(0.95, 0.86, 0.66))
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.pressed.connect(func() -> void: _show_page(which))
+	return b
+
+
+## The Map page's keys (the map's own hints, moved down here).
+func _build_map_footer() -> Control:
+	var bar := PanelContainer.new()
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.03, 0.028, 0.026, 0.92)
+	box.border_color = EDGE
+	box.border_width_top = 1
+	box.content_margin_left = 28
+	box.content_margin_right = 28
+	box.content_margin_top = 8
+	box.content_margin_bottom = 8
+	bar.add_theme_stylebox_override("panel", box)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 26)
+	bar.add_child(row)
+	for hint in [["Mouse / L stick", "Move"], ["Scroll / R stick", "Zoom"], ["LMB / A", "Pin"],
+			["RMB / X", "Note"], ["M / Select", "Items"]]:
+		row.add_child(_hint(hint[0], hint[1]))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(spacer)
+	row.add_child(_hint("Tab / Esc / B", "Back"))
 	return bar
 
 

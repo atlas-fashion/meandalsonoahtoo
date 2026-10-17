@@ -591,6 +591,9 @@ func _ready() -> void:
 		_build_leaning_bars()
 		_build_jail_cells()
 
+	# The sandbox (sandbox.gd): its test plane, before the player is placed on it.
+	if Sandbox.active:
+		_build_sandbox()
 	_build_gates()
 	_place_player()
 	_connect_player()
@@ -617,6 +620,8 @@ func _ready() -> void:
 		restore_player(save)
 	is_built = true
 	level_built.emit()
+	if Sandbox.active:
+		_open_sandbox_menu()
 	if Saves.slot >= 0 and not save.has("seed"):
 		# A new game: the player wakes on the cell floor and gets up, as after a
 		# death. Only from the title (a slot) -- the benchmark and harnesses
@@ -1706,7 +1711,8 @@ func _module_rooms() -> void:
 			doors, chest_perches.size()])
 
 
-## The exploration map: a minimap top-right, the full map on `toggle_map` (Tab).
+## The exploration map: a minimap top-right; the full map is the inventory's Map
+## page (`toggle_map`, M -- inventory_screen.gd).
 ##
 ## It fills in as the player walks -- cells they have stood in or can see down
 ## an open corridor, never through a wall -- and persists across respawns,
@@ -1723,6 +1729,9 @@ func _attach_explore_map() -> void:
 	map.setup(_module_level, player)
 	if _sewer != null:
 		map.add_level(&"sewer", _sewer.get("map"))
+	# The sandbox has the whole map charted (and a death keeps it so).
+	if Sandbox.active:
+		map.reveal_all()
 	# What dying before any anchor is attuned leaves charted.
 	_map_snapshot = map.snapshot()
 
@@ -4002,6 +4011,15 @@ func _place_player() -> void:
 	var player := get_tree().get_first_node_in_group("player") as Node3D
 	if player == null:
 		return
+	# The sandbox starts -- and, after a death, rises -- on its test plane.
+	if _sandbox_world != null:
+		var at: Vector3 = _sandbox_world.call("spawn_point")
+		player.global_position = at
+		player.velocity = Vector3.ZERO
+		player.rotation.y = 0.0
+		player.set("_look_pitch", 0.0)
+		player.set_spawn_point(at)
+		return
 	var spawn := tile_to_world(_start_tile) + Vector3(0, 0.3, 0)
 	var anchor := active_anchor()
 	if anchor != null:
@@ -4034,6 +4052,50 @@ func _connect_player() -> void:
 		player.respawned.connect(_on_player_respawned)
 
 
+## --- The sandbox (sandbox.gd, 2026-10-17) -------------------------------------------
+##
+## Built only in a sandbox session: the level as normal but EMPTY (no
+## population unless the sandbox menu turns `sandbox_population` on), the whole
+## map charted, and a flat test plane far off the level (sandbox_world.gd) where
+## the player starts and rises after a death. Its menu (sandbox_menu.gd, the `
+## key) is a CanvasLayer added last under the root -- so it reads its keys
+## before anything else, as the workbench screen does -- and freed with the
+## level.
+
+var _sandbox_world: Node3D = null
+var _sandbox_menu: CanvasLayer = null
+## The level's own enemies, in the sandbox (its menu's switch).
+var sandbox_population := false
+
+
+func _build_sandbox() -> void:
+	_sandbox_world = load("res://scripts/sandbox_world.gd").new()
+	add_child(_sandbox_world)
+	_sandbox_world.call("build", self)
+
+
+func _open_sandbox_menu() -> void:
+	if _sandbox_world == null or _sandbox_menu != null:
+		return
+	_sandbox_menu = CanvasLayer.new()
+	_sandbox_menu.set_script(load("res://scripts/sandbox_menu.gd"))
+	_sandbox_menu.name = "SandboxMenu"
+	_sandbox_menu.call("setup", _sandbox_world, self)
+	get_tree().root.add_child.call_deferred(_sandbox_menu)
+	tree_exiting.connect(func() -> void:
+		if is_instance_valid(_sandbox_menu):
+			_sandbox_menu.queue_free())
+
+
+## The sandbox menu's "Level's own enemies": the normal population, or none.
+func set_sandbox_population(on: bool) -> void:
+	sandbox_population = on
+	if not on:
+		# No decrepit queued to come back.
+		_decrepit_due.clear()
+	_populate()
+
+
 ## Dying resets the run: the same layout, but every enemy and the boss restored
 ## and the player back at their attuned anchor (or the entrance). The map
 ## forgets everything charted since that anchor was attuned.
@@ -4060,6 +4122,9 @@ func _populate() -> void:
 	_mimic_committed = false
 	for room in _gates.size():
 		seal_room(room, false)
+	# The sandbox's level is empty unless its menu asks for the population.
+	if Sandbox.active and not sandbox_population:
+		return
 	_note_spawn_eye()
 	# Reseed so a reset reproduces the same population rather than drifting.
 	_rng.seed = _active_seed

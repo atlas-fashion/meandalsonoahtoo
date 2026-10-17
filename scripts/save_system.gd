@@ -91,6 +91,8 @@ func erase(i: int) -> void:
 ## Starts the game in slot `i`: carries on from its save, or -- if it is empty
 ## -- starts a new game there called `new_name`.
 func start(i: int, new_name := "") -> void:
+	# A real game: no sandbox switches carried in.
+	Sandbox.reset()
 	slot = i
 	pending = read(i)
 	var meta: Dictionary = pending.get("meta", {})
@@ -112,6 +114,7 @@ static func clean_name(typed: String, i: int) -> String:
 
 ## Back to the title. Does not save: the pause menu asks first.
 func exit_to_title() -> void:
+	Sandbox.reset()
 	slot = -1
 	pending = {}
 	get_tree().paused = false

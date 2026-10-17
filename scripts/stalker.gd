@@ -564,6 +564,8 @@ func head_point() -> Vector3:
 ## with it would be a death nobody could avoid. (The puzzle rooms sealed; the
 ## chest rooms that replaced them, dungeon_room.gd, never do, but keep the hook.)
 func _warded(player: Node3D) -> bool:
+	if Sandbox.enemies_passive:
+		return true
 	# Down in the sewer (sewer.gd) the player is off its navmesh entirely.
 	if player.global_position.y < -4.0:
 		return true

@@ -328,6 +328,8 @@ func _can_see(player: Node3D, eye: Vector3) -> bool:
 		return false
 	if player.has_method("is_hidden") and player.is_hidden():
 		return false
+	if Sandbox.enemies_passive:
+		return false
 	if global_position.distance_squared_to(eye) > aggro_range * aggro_range:
 		return false
 	_sight.from = global_position

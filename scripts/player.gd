@@ -3763,6 +3763,9 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 		amount *= ghost_damage_taken
 	# The armor (workbench upgrades).
 	amount *= 1.0 - damage_negation()
+	# Sandbox: nothing hurts (the guard above still registered, for the enemy).
+	if Sandbox.player_god:
+		amount = 0.0
 	if amount <= 0.0:
 		return
 	_mark_damage(amount, _from_direction)
@@ -3779,7 +3782,7 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 ## window, no knockback, no damage marker, and it never takes the player below
 ## `floor_health`. Returns what was taken.
 func drain_health(amount: float, floor_health := 0.0) -> float:
-	if _dead or in_cutscene or amount <= 0.0 or is_hidden():
+	if _dead or in_cutscene or amount <= 0.0 or is_hidden() or Sandbox.player_god:
 		return 0.0
 	var taken := minf(amount, health - floor_health)
 	if taken <= 0.0:
@@ -3816,6 +3819,8 @@ func beam_hit(dps: float, delta: float, blow: Vector3) -> void:
 	_beam_until = now + BEAM_LINGER
 	_beam_guarded = guarded
 	var amount := dps * delta * (1.0 - damage_negation())
+	if Sandbox.player_god:
+		amount = 0.0
 	if guarded:
 		amount *= block_damage_taken
 	if _ghosting:
@@ -4048,7 +4053,7 @@ func _die() -> void:
 ## A scene kills the player outright (the Remnant in the morgue): no guard, no
 ## invulnerability, no damage marker.
 func kill_in_scene() -> void:
-	if _dead:
+	if _dead or Sandbox.player_god:
 		return
 	health = 0.0
 	health_changed.emit(health, max_health)

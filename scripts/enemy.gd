@@ -506,7 +506,8 @@ func _physics_process(delta: float) -> void:
 		returning = player_from_home > leash_radius
 	# Shut in a hiding place: it gives them up. A guard goes home; anything else
 	# that was after them walks away (`_begin_retreat`).
-	var player_hidden: bool = player.has_method("is_hidden") and player.is_hidden()
+	# Sandbox with passive enemies: as good as hidden -- they lose interest.
+	var player_hidden: bool = (player.has_method("is_hidden") and player.is_hidden()) 		or Sandbox.enemies_passive
 	if player_hidden and guarding:
 		returning = true
 	if returning and state != State.CHASE:
