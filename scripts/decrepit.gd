@@ -35,12 +35,12 @@ extends "res://scripts/enemy.gd"
 ##     them where they fell: the jump slash, re-aimed through its flight, its
 ##     point coming down after their invulnerability and before they are up.
 ##     A held guard takes it standing (a tenth through), shoved back.
-##   * close in (CLOSE_RANGE): ANY of its four moves -- picked at random among
-##     those off cooldown (CLOSE_WEIGHTS, the last one used less likely), with a
-##     short breath between (CLOSE_PAUSE) -- the swipe, the jump, the dropkick
-##     (their travel shrunk to land on them where they stand) or the dash.
+##   * close in (CLOSE_RANGE): the swipe, the jump or the dropkick -- picked at
+##     random among those off cooldown (CLOSE_WEIGHTS, the last one used less
+##     likely), with a short breath between (CLOSE_PAUSE), their travel shrunk
+##     to land on them where they stand. Never the dash (a long-distance move).
 ##   * further off it closes the gap: at DASH_MIN..DASH_MAX the DASH, always
-##     first, the moment it is off cooldown -- the -- a crouch, the lunge, and then it SLIDES at them along the floor,
+##     first, the moment it is off cooldown -- a crouch, the lunge, and then it SLIDES at them along the floor,
 ##     the lunge held and the shield out, scraping sparks, re-aimed as they move,
 ##     slowing to arrive with its point on them (DASH_DAMAGE); at
 ##     LEAP_MIN..LEAP_MAX with a clear floor between, now and then a leap -- the
@@ -115,7 +115,7 @@ const DROPKICK_DAMAGE := 35.0
 ## (2.2 m ahead, sweeping down from 3.0 to 1.2 m -- head and chest height), at
 ## the floor by f53, planted from f55. (The window first set, f55-f61, came from
 ## "whichever foot is furthest out" and opened after the left one had landed.)
-const DROPKICK_HITS := [[0.4667, 0.5333], [0.8167, 0.8833], [1.1667, 1.3]]
+const DROPKICK_HITS := [[0.4667, 0.5333], [0.85, 0.9333], [1.1667, 1.3]]
 ## How far ahead of the body the left foot kicks (metres, in game): what the
 ## leap is stretched to land on the player.
 const DROPKICK_TIP := 2.1
@@ -130,11 +130,13 @@ const DROPKICK_COOLDOWN := 3.5
 const LEAP_STRETCH := Vector2(0.0, 9.0)
 ## After the blow lands the travel left in the clip is cut to this share.
 const AFTER_CONTACT := 0.3
-## Close in, every move is in play: within CLOSE_RANGE it picks among those off
-## cooldown by these weights (the move it used last at CLOSE_REPEAT of its
+## Close in, every move but the dash is in play (the dash is a long-distance
+## move -- up close its slide reads as a slow-motion attack, the user,
+## 2026-10-17): within CLOSE_RANGE it picks among those off cooldown by these
+## weights (the move it used last at CLOSE_REPEAT of its
 ## weight), after a breath of CLOSE_PAUSE seconds from its last move's end.
 const CLOSE_RANGE := 3.8
-const CLOSE_WEIGHTS := {Move.SWIPE: 0.4, Move.JUMP: 0.2, Move.DROPKICK: 0.2, Move.DASH: 0.2}
+const CLOSE_WEIGHTS := {Move.SWIPE: 0.5, Move.JUMP: 0.25, Move.DROPKICK: 0.25}
 const CLOSE_REPEAT := 0.3
 const CLOSE_PAUSE := Vector2(0.25, 0.7)
 ## DASH, the gap closer (2026-10-17, the user: "he should slide to you"): the
@@ -151,11 +153,11 @@ const CLOSE_PAUSE := Vector2(0.25, 0.7)
 ## has ordinary markers like the other moves -- its parry cues (DASH_CUES) are
 ## points in its clip.
 const DASH_DAMAGE := 15.0
-const DASH_LUNGE := 0.233
+const DASH_LUNGE := 0.1667
 ## The dash's blows, [start, end] clip seconds: the FIRST start is its arrival
 ## (the slide fills the clip from DASH_LUNGE to it); after it the clip plays at
 ## 1x (the shield held out, f18-f21).
-const DASH_HITS := [[0.2667, 0.3333]]
+const DASH_HITS := [[0.2333, 0.3333]]
 const DASH_END := 0.35
 const DASH_SLIDE_TIME := 0.4
 const DASH_TIP := 2.985 * MODEL_SCALE
@@ -191,8 +193,8 @@ const TURN_DASH := 14.0
 ## LOD advances that in strides (a cue opened 0.15 s late from 12 m).
 const SWIPE_CUES := [0.4333]
 const JUMP_CUES := [0.4333]
-const DROPKICK_CUES := [0.45, 0.8, 1.1333]
-const DASH_CUES := [0.25]
+const DROPKICK_CUES := [0.4333, 0.8333, 1.1333]
+const DASH_CUES := [0.2]
 const SWIPE_LISTEN := 0.25
 const JUMP_LISTEN := 0.3
 const DROPKICK_LISTEN := 0.25
@@ -324,7 +326,7 @@ var combos := 0
 
 func _init() -> void:
 	armed = false
-	max_health = 250.0
+	max_health = 350.0
 	move_speed = CHASE_SPEED
 	acceleration = 30.0
 	vision_cone_degrees = 150.0
@@ -756,7 +758,7 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 ## less likely. NONE if none is ready.
 func _pick_close(now: float) -> int:
 	var ready := {Move.SWIPE: now >= _swipe_ready, Move.JUMP: now >= _jump_ready,
-		Move.DROPKICK: now >= _dropkick_ready, Move.DASH: now >= _dash_ready}
+		Move.DROPKICK: now >= _dropkick_ready}
 	var total := 0.0
 	var weights := {}
 	for m in CLOSE_WEIGHTS:
