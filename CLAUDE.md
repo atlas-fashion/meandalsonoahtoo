@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 58), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 59), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -304,10 +304,12 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 - Enemies: `enemy.gd` (skeleton; base class; also the boss via
   `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` + `arrow.gd`, `crier.gd`
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
-  "warden bots"), `decrepit.gd` + `decrepit_react.gd`, `sewer_lizard.gd` +
+  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: note 59), `sewer_lizard.gd` +
   `goo.gd`, `stalker.gd` ("the Remnant" / "the Shade"), `mimic.gd`,
   `convoy.gd`; helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
-  `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`.
+  `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`. Clip changes on the
+  enforcer and decrepit rigs are inertialized by `enforcer_react.gd`
+  `crossfade` (note 59) -- use it for any new clip switch.
 - World: `chest.gd`, `gate.gd`, `portcullis.gd`, `workbench.gd`,
   `screen_fade.gd`, `sky_setup.gd` (sky, moon).
 - UI: `hud.gd`, `attack_icons.gd`, `inventory.gd` (data),
@@ -407,6 +409,7 @@ then `godot --headless --import --path .`) are documented in
 | 56 | 2026-10-15 | The decrepit enforcer, in the sewer | [docs/notes/56-the-decrepit-enforcer-in-the-sewer.md](docs/notes/56-the-decrepit-enforcer-in-the-sewer.md) |
 | 57 | 2026-10-16 | The decrepit's X eyes, chest crystal and fits; the channel grated over | [docs/notes/57-the-decrepit-s-x-eyes-chest-crystal-and.md](docs/notes/57-the-decrepit-s-x-eyes-chest-crystal-and.md) |
 | 58 | 2026-10-16 | Three decrepits, the sewer lizard, a proud grating, walkable manholes | [docs/notes/58-three-decrepits-the-sewer-lizard-a-proud-grating.md](docs/notes/58-three-decrepits-the-sewer-lizard-a-proud-grating.md) |
+| 59 | 2026-10-17 | The decrepit's new moves; every clip change seamless | [docs/notes/59-the-decrepit-s-new-moves-and-seamless-blending.md](docs/notes/59-the-decrepit-s-new-moves-and-seamless-blending.md) |
 
 ## Notes by source file
 
@@ -431,14 +434,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/convoy.gd`: 23, 28
 - `scripts/crier.gd`: 43, 48
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57
-- `scripts/decrepit_react.gd`: 56
+- `scripts/decrepit.gd`: 56, 57, 59
+- `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56
 - `scripts/enemy_health_bar.gd`: 6.19
-- `scripts/enforcer.gd`: 48, 51, 53
-- `scripts/enforcer_react.gd`: 52, 56
+- `scripts/enforcer.gd`: 48, 51, 53, 59
+- `scripts/enforcer_react.gd`: 52, 56, 59
 - `scripts/explore_map.gd`: 6.18, 50
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58
@@ -498,7 +501,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39
 - `tools/benchmark.gd`: 6.11, 33
 - `tools/build_brick_kit.py`: 27, 28
-- `tools/build_decrepit.py`: 56, 57
+- `tools/build_decrepit.py`: 56, 57, 59
 - `tools/build_enforcer.py`: 48, 51, 53
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18

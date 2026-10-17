@@ -84,6 +84,7 @@ func _init() -> void:
 	super()
 	hits = [HIT_SNAP, HIT_WRENCH, HIT_BUCKLE]
 	stagger_clip = KNOCKED
+	keep_tracking = true
 
 
 func twitch(from_world: Vector3) -> void:

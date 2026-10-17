@@ -3,22 +3,28 @@
     blender -b models/source/enforcer/PUTRID_ENFORCER_BAKED.blend -P tools/build_decrepit.py
     godot --headless --import --path .
 
-The source (from the user, 2026-10-15) is a hunched, one-armed Tripo mech on a
-13-bone rig -- TORSO (root), HEAD, SHOULDER_L > ARM_L (the arm IS a great pointed
-shield), THIGH/CALF L and R, and IK roots FOOT_L.001 / FOOT_R.001 and ARM_L.001
--- with three BAKED actions on NLA tracks at 60 fps:
+The source (from the user; second delivery 2026-10-17) is a hunched, one-armed
+Tripo mech on a 13-bone rig -- TORSO (root), HEAD, SHOULDER_L > ARM_L (the arm IS
+a great pointed shield), THIGH/CALF L and R, and IK roots FOOT_L.001 / FOOT_R.001
+and ARM_L.001 -- with five BAKED actions on NLA tracks at 60 fps:
   CRAWL_BAKED (49 frames, a loping in-place crawl, the shield swinging) -- the
       wander and the chase;
-  STABS_BAKED (105, the shield driven forward in heavy thrusts) -- the shield
-      slam;
-  JUMP_BAKED (105, a leap that brings the shield's point down into the floor
-      2.2 m on) -- the jump slash.
-The file also carries the unbaked actions they were made from (CRAWL, STABS,
-JUMP -- JUMP on an UNMUTED track -- and SWIPE, stashed and never baked): every
-track and action not ending in _BAKED is removed. Only the baked ones go out.
+  SWIPE_BAKED (45, the shield drawn back and swung across the front as it
+      lunges ~3 m) -- the close attack;
+  JUMP_BAKED (75, a leap that brings the shield's point down into the floor
+      2.2 m on) -- the jump slash;
+  DROPKICK_BAKED (103, a dive, a flip and a kick with both feet ~3 m on) -- the
+      long-range leap;
+  DASH_BAKED (21, from a crouch into a wide lunge, the shield thrust out; in
+      place) -- the dash stab.
+CRAWL_BAKED and DASH_BAKED arrive as "CRAWL_BAKED.001" / "DASH_BAKED.001"
+(Blender's duplicate suffix); the suffix is dropped here. The file also carries
+the unbaked actions they were made from (some on UNMUTED tracks) and an empty
+STABS: every track and action not ending in _BAKED is removed. Only the baked
+ones go out. (The first delivery's STABS_BAKED shield slam is gone.)
 
-ROOT MOTION is taken out of the clips here: STABS and JUMP carry the body
-forward (TORSO and the foot roots together), which in the game would leave the
+ROOT MOTION is taken out of the clips here: SWIPE, JUMP and DROPKICK carry the
+body forward (TORSO and the foot roots together), which in the game would leave the
 model metres ahead of its collision body and snap it back on the next clip. Per
 frame the TORSO's horizontal offset from frame 1 is subtracted from the three
 parentless bones (TORSO, FOOT_L.001, FOOT_R.001; everything else hangs off
@@ -26,8 +32,10 @@ them), so every clip plays in place, and the offsets are printed as a table
 ("root ...") that decrepit.gd moves the body along.
 
 Also measured and printed for decrepit.gd: the crawl's ground speed (its planted
-feet), the slam's contact frame (the shield's furthest reach forward) and the
-jump's (the shield's point at its lowest). Added: empties parented to bones
+feet), and per attack clip the shield's point and the feet, frame by frame (in
+place: forward / up), for the contact frames -- the swipe's and the dash's
+furthest reach, the jump's point at its lowest, the dropkick's feet furthest
+forward. Added: empties parented to bones
 (Godot imports them as BoneAttachment3Ds): "ShieldTip" (ARM_L) at the shield's
 point, "EyeL" / "EyeR" (HEAD) at the mask's two pale eyes. The ten parts are
 joined into one mesh with one baked colour atlas (as the enforcer's: one draw,
@@ -43,7 +51,14 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(HERE, "models", "decrepit.glb")
 ATLAS_PX = 2048
 ROOTS = ("TORSO", "FOOT_L.001", "FOOT_R.001")
-MOVING = ("STABS_BAKED", "JUMP_BAKED")
+MOVING = ("SWIPE_BAKED", "JUMP_BAKED", "DROPKICK_BAKED")
+CLIPS = (("CRAWL_BAKED", True), ("SWIPE_BAKED", False), ("JUMP_BAKED", False),
+         ("DROPKICK_BAKED", False), ("DASH_BAKED", False))
+## Clips whose knees are NOT eased: the dropkick somersaults (frames 21-30 the
+## whole body spins, the shield and calves moving 2-3 units a frame), and the
+## flip detector -- a bend angle measured against a fixed forward -- reads the
+## spin itself as a dozen knee flips. Its legs are left exactly as authored.
+NO_KNEE_EASE = ("DROPKICK_BAKED",)
 
 
 def log(*a):
@@ -444,6 +459,62 @@ def smooth_knees(arm, action, cyclic):
             fc.update()
 
 
+## --- One-frame pops (found 2026-10-17) -------------------------------------------
+##
+## DROPKICK_BAKED's shield arm turns ~150 degrees between frames 4 and 5 (its tip
+## 4.24 units in one frame, against ~0.25 either side) -- a snap baked into the
+## clip that no blending can hide, three frames after the clip starts. A bone
+## whose rotation steps more than POP_DEG in one frame AND more than POP_RATIO
+## times both neighbouring steps is a pop (an isolated spike, not fast motion:
+## the dropkick's somersault turns every frame for ten and is left alone). Each
+## is spread over POP_WINDOW frames either side: the window re-keyed as an eased
+## slerp between its ends.
+POP_DEG = 35.0
+POP_RATIO = 3.0
+POP_WINDOW = 3
+
+
+def _local_q(pb):
+    if pb.rotation_mode == "QUATERNION":
+        return pb.rotation_quaternion.copy()
+    return pb.rotation_euler.to_quaternion()
+
+
+def _set_local_q(pb, q):
+    if pb.rotation_mode == "QUATERNION":
+        pb.rotation_quaternion = q
+    else:
+        pb.rotation_euler = q.to_euler(pb.rotation_mode)
+
+
+def depop(arm, action):
+    sc = bpy.context.scene
+    use_action(arm, action)
+    f0, f1 = int(action.frame_range[0]), int(action.frame_range[1])
+    frames = list(range(f0, f1 + 1))
+    fixed = []
+    for pb in arm.pose.bones:
+        qs = []
+        for f in frames:
+            sc.frame_set(f)
+            qs.append(_local_q(pb))
+        steps = [0.0] + [float(np.degrees(qs[i - 1].rotation_difference(qs[i]).angle)) for i in range(1, len(qs))]
+        for i in range(1, len(qs)):
+            prev_s = steps[i - 1] if i - 1 >= 1 else 0.0
+            next_s = steps[i + 1] if i + 1 < len(steps) else 0.0
+            if steps[i] > POP_DEG and steps[i] > POP_RATIO * max(prev_s, next_s, 1.0):
+                a = max(0, i - 1 - POP_WINDOW)
+                b = min(len(qs) - 1, i + POP_WINDOW)
+                qa, qb = qs[a], qs[b]
+                for j in range(a + 1, b):
+                    s = (j - a) / float(b - a)
+                    s = s * s * (3.0 - 2.0 * s)
+                    _set_local_q(pb, qa.slerp(qb, s))
+                    _key(pb, frames[j])
+                fixed.append("%s f%d (%.0f deg in a frame; frames %d-%d eased)" % (pb.name, frames[i], steps[i], frames[a], frames[b]))
+    log("%s pops: %s" % (action.name, fixed if fixed else "none"))
+
+
 def knee_report(arm, action, cyclic):
     sc = bpy.context.scene
     use_action(arm, action)
@@ -481,6 +552,22 @@ def main():
     for t in ad.nla_tracks:
         t.mute = True
 
+    # "X_BAKED.001" (a duplicate's suffix) is X_BAKED.
+    import re
+    for a in list(bpy.data.actions):
+        m = re.match(r"^(.*_BAKED)\.\d+$", a.name)
+        if m and m.group(1) not in bpy.data.actions:
+            log("renamed", a.name, "->", m.group(1))
+            a.name = m.group(1)
+    for t in ad.nla_tracks:
+        m = re.match(r"^(.*_BAKED)\.\d+$", t.name)
+        if m:
+            t.name = m.group(1)
+        for s in t.strips:
+            m = re.match(r"^(.*_BAKED)\.\d+$", s.name)
+            if m:
+                s.name = m.group(1)
+
     # Only the baked actions go out.
     for ob in bpy.data.objects:
         if ob.type != "ARMATURE" and ob.animation_data is not None:
@@ -492,6 +579,8 @@ def main():
         if not a.name.endswith("_BAKED"):
             bpy.data.actions.remove(a)
     log("tracks kept:", [t.name for t in ad.nla_tracks], "fps", sc.render.fps)
+    missing = [n for n, _ in CLIPS if n not in bpy.data.actions]
+    assert not missing, "missing baked clips: %s" % missing
 
     # Root motion out of the clips that travel.
     arm.data.pose_position = "POSE"
@@ -508,12 +597,17 @@ def main():
         drift = max(drift, Vector(((torso_world(arm) - s0).x, (torso_world(arm) - s0).y)).length)
     log("CRAWL_BAKED torso drift %.4f" % drift)
 
-    # Knee flips out of all three (constraints first: the keys are the pose).
+    # Knee flips out of every clip (constraints first: the keys are the pose).
     drop_constraints(arm)
-    for name, cyc in (("CRAWL_BAKED", True), ("STABS_BAKED", False), ("JUMP_BAKED", False)):
+    for name, cyc in CLIPS:
         knee_report(arm, bpy.data.actions[name], cyc)
+        if name in NO_KNEE_EASE:
+            log("%s: knees left as authored" % name)
+            continue
         smooth_knees(arm, bpy.data.actions[name], cyc)
         knee_report(arm, bpy.data.actions[name], cyc)
+    for name, _ in CLIPS:
+        depop(arm, bpy.data.actions[name])
     a = bpy.data.actions["CRAWL_BAKED"]
     use_action(arm, a)
 
@@ -597,24 +691,32 @@ def main():
         log("chest: the ray missed the torso")
     arm.data.pose_position = "POSE"
 
-    # Contacts: the slam's shield furthest forward, the jump's point lowest.
+    # Contacts, in place (the root is out): per frame the shield's point and
+    # the lower foot, forward (-y) and up (z) from the body's start, in authored
+    # units. decrepit.gd's *_CONTACT / *_TIP / *_ROOT_AT_HIT come from these.
     e = bpy.data.objects["ShieldTip"]
-    for name in ("STABS_BAKED", "JUMP_BAKED", "CRAWL_BAKED"):
-        rows = track(arm, bpy.data.actions[name], e)
-        if name == "STABS_BAKED":
-            ys = [(-w.y, f) for f, w in rows]
-            # The first peak of reach after the wind-up.
-            peak = None
-            for i in range(1, len(ys) - 1):
-                if ys[i][1] > 20 and ys[i][0] >= ys[i - 1][0] and ys[i][0] > ys[i + 1][0]:
-                    peak = ys[i]
-                    break
-            log("STABS reach peaks: first %s, max %s" % (peak, max(ys)))
-        if name == "JUMP_BAKED":
-            zs = [(w.z, f) for f, w in rows if f > 20]
-            log("JUMP point lowest at %s" % (min(zs),))
-        for f, w in rows[:: max(1, len(rows) // 14)]:
-            log("  %s f%3d tip (%.2f, %.2f, %.2f)" % (name, f, w.x, w.y, w.z))
+    for name, _ in CLIPS[1:]:
+        act = bpy.data.actions[name]
+        use_action(arm, act)
+        f0, f1 = int(act.frame_range[0]), int(act.frame_range[1])
+        sc.frame_set(f0)
+        base = torso_world(arm).copy()
+        rows = []
+        for f in range(f0, f1 + 1):
+            sc.frame_set(f)
+            bpy.context.view_layer.update()
+            tip = e.matrix_world.translation
+            feet = [arm.matrix_world @ arm.pose.bones[b].head for b in ("FOOT_L", "FOOT_R")]
+            fw = max(feet, key=lambda v: -v.y)
+            rows.append((f, -(tip.y - base.y), tip.z, -(fw.y - base.y), fw.z))
+        tipf = max(rows, key=lambda r: r[1])
+        low = min((r for r in rows if r[0] > f0 + 10), key=lambda r: r[2])
+        footf = max(rows, key=lambda r: r[3])
+        log("%s contacts: tip furthest fwd %.3f at f%d (t %.3f); tip lowest z %.3f at f%d (t %.3f, fwd %.3f); foot furthest fwd %.3f at f%d (t %.3f, up %.3f)" % (
+            name, tipf[1], tipf[0], (tipf[0] - f0) / sc.render.fps, low[2], low[0], (low[0] - f0) / sc.render.fps, low[1],
+            footf[3], footf[0], (footf[0] - f0) / sc.render.fps, footf[4]))
+        for r in rows[::3]:
+            log("  %s f%3d tip fwd %.2f up %.2f | foot fwd %.2f up %.2f" % (name, *r))
     ad.action = None
     for t in ad.nla_tracks:
         t.mute = False

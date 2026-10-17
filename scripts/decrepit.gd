@@ -5,30 +5,42 @@ extends "res://scripts/enemy.gd"
 ## most three at once, each placed alone (maze.gd `_spawn_decrepit`); 250 health.
 ##
 ## The model and its animations are the user's (`models/decrepit.glb`, built by
-## tools/build_decrepit.py from models/source/enforcer/PUTRID_ENFORCER_BAKED.blend):
-## three BAKED clips -- CRAWL_BAKED, a loping crawl (wandering, slow; hunting,
-## frantic), STABS_BAKED, the shield driven forward in three thrusts (the SHIELD
-## SLAM), and JUMP_BAKED, a leap that brings the shield's point down into the
-## floor (the JUMP SLASH). The build takes the root motion out of the slam and
-## the jump, so they play in place, and prints their travel as the ROOT_* tables
-## here: the body is moved along them (scaled, for the jump, to land on its
-## target), so the feet stay where the clip puts them and nothing snaps back.
+## tools/build_decrepit.py from models/source/enforcer/PUTRID_ENFORCER_BAKED.blend;
+## second delivery 2026-10-17): five BAKED clips -- CRAWL_BAKED, a loping crawl
+## (wandering, slow; hunting, frantic), SWIPE_BAKED, the shield swung across its
+## front in a lunge (the close attack), JUMP_BAKED, a leap that brings the
+## shield's point down into the floor (the JUMP SLASH), DROPKICK_BAKED, a dive, a
+## flip and a two-footed kick (the long leap), and DASH_BAKED, a crouch thrown
+## into a wide lunge with the shield out (the DASH STAB; in place -- the body is
+## driven here). The build takes the root motion out of the swipe, the jump and
+## the dropkick, so they play in place, and prints their travel as the ROOT_*
+## tables here: the body is moved along them (scaled, before the blow, to land
+## it on the player), so the feet stay where the clip puts them.
 ##
 ## Like the enforcer, the script is put on an enemy.tscn instance before it
-## enters the tree; it throws the skeleton away for its own model. Clip changes
-## are cross-faded by its reaction layer (decrepit_react.gd, the enforcer's layer
-## with this creature's own clips), so every clip flows into every other.
+## enters the tree; it throws the skeleton away for its own model.
+##
+## SEAMLESS: no clip may be seen to start or end. Every change of clip is
+## INERTIALIZED on the reaction layer (enforcer_react.gd `crossfade`): the pose
+## and how fast it was moving carry across the switch and the difference decays
+## smoothly into the new clip. Coming back to the crawl it starts at the moment
+## of its cycle nearest the pose it leaves (`_match_phase`), not at frame 0. And
+## the BODY's own speed carries too: a move starts with the chase's momentum
+## (`_carry`, shed at CARRY_DECEL), the crawl resumes at the move's last speed.
 ##
 ## Hunting (`_chase`), fast -- CHASE_SPEED, against the player's 4.25 walk:
-##   * close in: the SHIELD SLAM. Each thrust can land once; the first that
-##     lands deals SLAM_DAMAGE and, unguarded, throws the player off their feet
-##     (`player.knock_down`, SLAM_THROW) -- and straight away it LEAPS on them
-##     where they fell: the jump slash, re-aimed through its flight to land its
-##     point on them while they are down. A held guard takes the slam standing
-##     (a tenth through), shoved back.
-##   * at JUMP_MIN..JUMP_MAX with a clear floor between: now and then the JUMP
-##     SLASH on its own, JUMP_DAMAGE where the point comes down.
-##   * a PARRY of either throws it on its back (the whole body toppled about its
+##   * close in: the SWIPE, its lunge stretched to land the shield on them;
+##     SWIPE_DAMAGE, and unguarded it throws the player off their feet
+##     (`player.knock_down`, SWIPE_THROW) -- and as the swipe ends it LEAPS on
+##     them where they fell: the jump slash, re-aimed through its flight, its
+##     point coming down after their invulnerability and before they are up.
+##     A held guard takes it standing (a tenth through), shoved back.
+##   * at DASH_MIN..DASH_MAX: now and then the DASH STAB, the body thrown at
+##     them in a quarter second, DASH_DAMAGE.
+##   * at LEAP_MIN..LEAP_MAX with a clear floor between: now and then a leap --
+##     the JUMP SLASH (JUMP_DAMAGE) or the DROPKICK (DROPKICK_DAMAGE, and
+##     unguarded it knocks them down).
+##   * a PARRY of any throws it on its back (the whole body toppled about its
 ##     heels, the limbs flailing over it), it lies there KNOCK_LIE, then it is up
 ##     fast and straight back into the attack.
 ## Every blow that lands throws sparks off its plating (the enforcer's) and plays
@@ -44,8 +56,10 @@ const MODEL := preload("res://models/decrepit.glb")
 const MODEL_SCALE := 0.65
 const MODEL_LIFT := -0.03
 const CLIP_CRAWL := &"CRAWL_BAKED"
-const CLIP_SLAM := &"STABS_BAKED"
+const CLIP_SWIPE := &"SWIPE_BAKED"
 const CLIP_JUMP := &"JUMP_BAKED"
+const CLIP_DROPKICK := &"DROPKICK_BAKED"
+const CLIP_DASH := &"DASH_BAKED"
 ## Below this the player is in the sewer (sewer.gd SPLIT_Y).
 const SPLIT_Y := -4.0
 ## The crawl's planted feet slide back at 4.886 m/s at the authored size.
@@ -53,37 +67,72 @@ const CRAWL_GROUND := 4.886 * MODEL_SCALE
 const CHASE_SPEED := 7.4
 const WANDER_SPEED := 2.4
 
-const SLAM_DAMAGE := 25.0
-const JUMP_DAMAGE := 50.0
-## How hard an unguarded slam throws the player.
-const SLAM_THROW := 12.0
+## The moves. Contact times, reaches and travel are measured by
+## build_decrepit.py ("contacts" and "root" lines), in authored units where the
+## name says so (x MODEL_SCALE in the game).
+##
+## SWIPE: the shield's point is furthest out at clip 0.533 s (f33), SWIPE_TIP
+## ahead of the body in place, the clip having travelled SWIPE_ROOT_AT_HIT.
+const SWIPE_DAMAGE := 25.0
+const SWIPE_CONTACT := 0.533
+const SWIPE_TIP := 2.74 * MODEL_SCALE
+const SWIPE_ROOT_AT_HIT := 2.36
+const SWIPE_END := 0.733
+const SWIPE_TRIGGER := 3.8
+const SWIPE_COOLDOWN := 1.3
+## The lunge before the blow is stretched (on what is left of it, every frame)
+## so the point arrives on them, within these multiples of the clip's own.
+const SWIPE_STRETCH := Vector2(0.0, 1.6)
+## How hard an unguarded swipe throws the player.
+const SWIPE_THROW := 12.0
 ## A guarded blow shoves the player back this hard.
 const BLOCK_SHOVE := 5.0
-## The slam's three thrusts reach furthest at these clip times (STABS_BAKED
-## frames 28, 45, 72); the reach at each, from the body, is SLAM_REACH.
-const SLAM_HITS := [0.45, 0.733, 1.183]
-const SLAM_REACH := 2.45
-const SLAM_TRIGGER := 2.9
-const SLAM_END := 1.45
-## After a thrust connects (or is guarded) the slam is over this much later.
-const SLAM_AFTER := 0.28
-const SLAM_COOLDOWN := 1.3
-## The jump's point is in the floor at this clip time (JUMP_BAKED frame 43),
-## JUMP_TIP ahead of the body (in place); the clip's travel by then is
-## JUMP_ROOT_AT_HIT (authored units).
-const JUMP_CONTACT := 0.70
-const JUMP_TIP := 2.61 * MODEL_SCALE
+## JUMP SLASH: the point is in the floor at clip 0.50 s (f31), JUMP_TIP ahead.
+const JUMP_DAMAGE := 50.0
+const JUMP_CONTACT := 0.5
+const JUMP_TIP := 2.57 * MODEL_SCALE
 const JUMP_ROOT_AT_HIT := 1.045
-const JUMP_END := 1.5
-const JUMP_MIN := 4.0
-const JUMP_MAX := 9.0
-## As far as it will leap onto a player it has just knocked down.
-const JUMP_COMBO_MAX := 12.0
-const JUMP_COOLDOWN := 3.5
-## After the point lands it barely moves on (the clip's own drift, scaled).
-const JUMP_AFTER := 0.3
-const TURN_SLAM := 12.0
+const JUMP_END := 1.15
+## DROPKICK: the feet are out in front at clip 1.0 s (f61), DROPKICK_TIP ahead
+## and ~1.6 m up. Its early sidestep is left out (it dives straight at them).
+const DROPKICK_DAMAGE := 35.0
+const DROPKICK_CONTACT := 1.0
+const DROPKICK_TIP := 2.53 * MODEL_SCALE
+const DROPKICK_ROOT_AT_HIT := 1.651
+const DROPKICK_END := 1.65
+const DROPKICK_THROW := 10.0
+## Leaps (jump or dropkick): their flight stretched up to LEAP_STRETCH.
+const LEAP_MIN := 4.0
+const LEAP_MAX := 9.0
+const LEAP_COOLDOWN := 3.5
+const LEAP_STRETCH := Vector2(0.0, 9.0)
+## After the blow lands the travel left in the clip is cut to this share.
+const AFTER_CONTACT := 0.3
+## DASH STAB: the shield is out furthest at clip 0.233 s (f15), DASH_TIP ahead.
+## The clip stays in place; the body is thrown along on an eased curve to put
+## the point on them then, at most DASH_TRAVEL.
+const DASH_DAMAGE := 15.0
+const DASH_CONTACT := 0.233
+const DASH_TIP := 2.985 * MODEL_SCALE
+const DASH_END := 0.35
+const DASH_MIN := 3.4
+const DASH_MAX := 7.0
+const DASH_TRAVEL := 5.5
+const DASH_COOLDOWN := 2.2
+const TURN_SWIPE := 12.0
 const TURN_JUMP := 7.0
+const TURN_DASH := 14.0
+
+## Seamless: every clip change is inertialized over at most these (the offset
+## settles sooner when it is small or already closing).
+const BLEND_INTO_MOVE := 0.22
+const BLEND_OUT_OF_MOVE := 0.35
+const BLEND_CRAWL := 0.3
+## How fast the crawl's playback rate may change (per second).
+const CRAWL_RATE_EASE := 7.0
+## The body's speed carried into a move, shed at this rate (m/s^2): from a full
+## chase, gone in ~0.3 s.
+const CARRY_DECEL := 26.0
 ## Parried: it topples back about its heels, lies, and is up again.
 const KNOCK_FALL := 0.4
 const KNOCK_LIE := 1.0
@@ -109,36 +158,37 @@ const GLOW_RANGE := 4.0
 const GLOW_AHEAD := Vector3(0.0, 1.85, -0.75)
 
 ## The clips' travel (build_decrepit.py), every 2 frames: [seconds, forward, left].
-const ROOT_SLAM := [[0.0, 0.0, 0.0], [0.0333, 0.001, 0.0], [0.0667, 0.005, 0.002], [0.1, 0.019, 0.009],
-	[0.1333, 0.051, 0.023], [0.1667, 0.113, 0.052], [0.2, 0.221, 0.102], [0.2333, 0.391, 0.181],
-	[0.2667, 0.392, 0.182], [0.3, 0.4, 0.188], [0.3333, 0.433, 0.216], [0.3667, 0.523, 0.292],
-	[0.4, 0.714, 0.452], [0.4333, 0.835, 0.452], [0.4667, 0.927, 0.452], [0.5, 0.942, 0.452],
-	[0.5333, 0.927, 0.452], [0.5667, 0.832, 0.452], [0.6, 0.714, 0.452], [0.6333, 0.715, 0.452],
-	[0.6667, 0.728, 0.452], [0.7, 0.768, 0.452], [0.7333, 0.863, 0.452], [0.7667, 0.942, 0.452],
-	[0.8, 0.934, 0.452], [0.8333, 0.882, 0.452], [0.8667, 0.714, 0.452], [0.9, 0.714, 0.452],
-	[0.9333, 0.714, 0.452], [0.9667, 0.714, 0.452], [1.0, 0.715, 0.452], [1.0333, 0.727, 0.452],
-	[1.0667, 0.766, 0.452], [1.1, 0.856, 0.452], [1.1333, 1.032, 0.452], [1.1667, 1.165, 0.452],
-	[1.2, 1.165, 0.452], [1.2333, 1.165, 0.452], [1.2667, 1.165, 0.452], [1.3, 1.164, 0.452],
-	[1.3333, 1.163, 0.451], [1.3667, 1.159, 0.45], [1.4, 1.15, 0.446], [1.4333, 1.135, 0.44],
-	[1.4667, 1.109, 0.43], [1.5, 1.07, 0.415], [1.5333, 1.014, 0.393], [1.5667, 0.935, 0.363],
-	[1.6, 0.828, 0.321], [1.6333, 0.688, 0.267], [1.6667, 0.508, 0.197], [1.7, 0.281, 0.109],
-	[1.7333, 0.0, 0.0]]
-const ROOT_JUMP := [[0.0, 0.0, 0.0], [0.0333, 0.0, 0.0], [0.0667, 0.001, -0.002], [0.1, 0.004, -0.006],
-	[0.1333, 0.011, -0.017], [0.1667, 0.025, -0.037], [0.2, 0.049, -0.072], [0.2333, 0.087, -0.128],
-	[0.2667, 0.143, -0.211], [0.3, 0.223, -0.329], [0.3333, 0.289, -0.403], [0.3667, 0.325, -0.403],
-	[0.4, 0.38, -0.402], [0.4333, 0.38, -0.402], [0.4667, 0.383, -0.401], [0.5, 0.397, -0.395],
-	[0.5333, 0.434, -0.378], [0.5667, 0.511, -0.344], [0.6, 0.652, -0.281], [0.6333, 0.884, -0.178],
-	[0.6667, 1.045, -0.107], [0.7, 1.045, -0.107], [0.7333, 1.045, -0.107], [0.7667, 1.049, -0.107],
-	[0.8, 1.084, -0.107], [0.8333, 1.146, -0.107], [0.8667, 1.231, -0.107], [0.9, 1.332, -0.107],
-	[0.9333, 1.443, -0.107], [0.9667, 1.556, -0.107], [1.0, 1.667, -0.107], [1.0333, 1.769, -0.107],
-	[1.0667, 1.858, -0.107], [1.1, 1.943, -0.107], [1.1333, 2.036, -0.107], [1.1667, 2.147, -0.107],
-	[1.2, 2.281, -0.107], [1.2333, 2.407, -0.107], [1.2667, 2.488, -0.107], [1.3, 2.5, -0.107],
-	[1.3333, 2.498, -0.107], [1.3667, 2.492, -0.107], [1.4, 2.478, -0.107], [1.4333, 2.454, -0.107],
-	[1.4667, 2.417, -0.107], [1.5, 2.363, -0.107], [1.5333, 2.29, -0.107], [1.5667, 2.195, -0.107],
-	[1.6, 2.195, -0.107], [1.6333, 2.195, -0.107], [1.6667, 2.195, -0.107], [1.7, 2.195, -0.107],
-	[1.7333, 2.195, -0.107]]
+const ROOT_SWIPE := [[0.0, 0.0, 0.0], [0.0333, 0.142, 0.0], [0.0667, 0.427, 0.0], [0.1, 0.627, 0.0],
+	[0.1333, 0.652, 0.0], [0.1667, 0.703, 0.0], [0.2, 0.779, 0.0], [0.2333, 0.881, 0.0],
+	[0.2667, 0.9, 0.0], [0.3, 0.943, 0.0], [0.3333, 1.022, 0.0], [0.3667, 1.152, 0.0],
+	[0.4, 1.346, 0.0], [0.4333, 1.616, 0.0], [0.4667, 1.978, 0.0], [0.5, 2.073, -0.032],
+	[0.5333, 2.36, -0.128], [0.5667, 2.838, -0.289], [0.6, 3.149, -0.393], [0.6333, 3.149, -0.393],
+	[0.6667, 3.149, -0.393], [0.7, 3.149, -0.393], [0.7333, 3.149, -0.393]]
+const ROOT_JUMP := [[0.0, 0.0, 0.0], [0.0333, 0.002, -0.003], [0.0667, 0.017, -0.025], [0.1, 0.066, -0.097],
+	[0.1333, 0.179, -0.265], [0.1667, 0.295, -0.403], [0.2, 0.332, -0.403], [0.2333, 0.38, -0.402],
+	[0.2667, 0.38, -0.402], [0.3, 0.383, -0.401], [0.3333, 0.397, -0.395], [0.3667, 0.434, -0.378],
+	[0.4, 0.511, -0.344], [0.4333, 0.652, -0.281], [0.4667, 0.884, -0.178], [0.5, 1.045, -0.107],
+	[0.5333, 1.045, -0.107], [0.5667, 1.045, -0.107], [0.6, 1.058, -0.107], [0.6333, 1.155, -0.107],
+	[0.6667, 1.315, -0.107], [0.7, 1.504, -0.107], [0.7333, 1.689, -0.107], [0.7667, 1.836, -0.107],
+	[0.8, 1.95, -0.107], [0.8333, 2.071, -0.107], [0.8667, 2.238, -0.107], [0.9, 2.416, -0.107],
+	[0.9333, 2.5, -0.107], [0.9667, 2.498, -0.107], [1, 2.485, -0.107], [1.0333, 2.45, -0.107],
+	[1.0667, 2.382, -0.107], [1.1, 2.271, -0.107], [1.1333, 2.195, -0.107], [1.1667, 2.195, -0.107],
+	[1.2, 2.195, -0.107], [1.2333, 2.195, -0.107]]
+const ROOT_DROPKICK := [[0.0, 0.0, 0.0], [0.0333, 0.0, -0.351], [0.0667, 0.0, -0.731], [0.1, 0.022, -0.87],
+	[0.1333, 0.175, -0.936], [0.1667, 0.432, -0.982], [0.2, 0.741, -1.012], [0.2333, 1.05, -1.029],
+	[0.2667, 1.307, -1.036], [0.3, 1.46, -1.038], [0.3333, 1.481, -1.038], [0.3667, 1.481, -1.038],
+	[0.4, 1.481, -1.038], [0.4333, 1.481, -1.038], [0.4667, 1.481, -1.038], [0.5, 1.481, -1.038],
+	[0.5333, 1.481, -1.038], [0.5667, 1.481, -1.038], [0.6, 1.481, -1.038], [0.6333, 1.481, -1.038],
+	[0.6667, 1.481, -1.038], [0.7, 1.481, -1.038], [0.7333, 1.481, -1.038], [0.7667, 1.481, -1.038],
+	[0.8, 1.481, -1.038], [0.8333, 1.483, -1.038], [0.8667, 1.489, -1.038], [0.9, 1.495, -1.038],
+	[0.9333, 1.501, -1.038], [0.9667, 1.531, -1.038], [1, 1.651, -1.038], [1.0333, 2.335, -1.038],
+	[1.0667, 3.114, -1.039], [1.1, 3.19, -1.046], [1.1333, 3.179, -1.061], [1.1667, 3.153, -1.084],
+	[1.2, 3.12, -1.111], [1.2333, 3.089, -1.139], [1.2667, 3.069, -1.165], [1.3, 3.066, -1.176],
+	[1.3333, 3.066, -1.176], [1.3667, 3.066, -1.177], [1.4, 3.066, -1.178], [1.4333, 3.066, -1.181],
+	[1.4667, 3.066, -1.187], [1.5, 3.066, -1.197], [1.5333, 3.066, -1.213], [1.5667, 3.066, -1.236],
+	[1.6, 3.067, -1.246], [1.6333, 3.067, -1.257], [1.6667, 3.068, -1.266], [1.7, 3.068, -1.269]]
 
-enum Move { NONE, SLAM, JUMP }
+enum Move { NONE, SWIPE, JUMP, DROPKICK, DASH }
 
 ## The sewer it hunts (maze.gd), for wandering cell to cell.
 var sewer: Node3D = null
@@ -156,18 +206,26 @@ var _visual_rest := Transform3D.IDENTITY
 var _move := Move.NONE
 var _move_t := 0.0
 var _root_prev := Vector2.ZERO
-var _thrusts_tried := 0
 var _connected := false
 var _end_at := INF
 var _guard_seen := -1
 var _target: Node3D = null
-var _slam_ready := 0.0
-var _jump_ready := 0.0
-var _jump_roll_at := 0.0
+var _swipe_ready := 0.0
+var _leap_ready := 0.0
+var _dash_ready := 0.0
+var _roll_at := 0.0
+## The swipe knocked them down: the jump follows as it ends.
+var _combo_pending := false
+## Body speed carried into a move, and the last speed a move moved it at.
+var _carry := Vector3.ZERO
+var _move_vel := Vector3.ZERO
+var _skel: Skeleton3D
+## Per clip: the rotation / position tracks used to match a pose.
+var _match_tracks := {}
 var _twitch_at := 0.0
 ## Seconds into a parried knock-down, or -1.
 var _knock_t := -1.0
-## How many jump slashes followed a knock-down (for the tests).
+## How many jump slashes followed a swipe's knock-down (for the tests).
 var combos := 0
 
 
@@ -187,7 +245,7 @@ func _init() -> void:
 	can_spin = false
 	can_lunge = false
 	can_normal = false
-	attack_damage = SLAM_DAMAGE
+	attack_damage = SWIPE_DAMAGE
 	knockback_resistance = 0.35
 	tint_albedo = false
 	base_glow = 0.0
@@ -271,27 +329,76 @@ func _setup_clips() -> void:
 		return
 	if anim.has_animation(CLIP_CRAWL):
 		anim.get_animation(CLIP_CRAWL).loop_mode = Animation.LOOP_LINEAR
-	for c in [CLIP_SLAM, CLIP_JUMP]:
+	for c in [CLIP_SWIPE, CLIP_JUMP, CLIP_DROPKICK, CLIP_DASH]:
 		if anim.has_animation(c):
 			anim.get_animation(c).loop_mode = Animation.LOOP_NONE
 	_play_clip(CLIP_CRAWL, 0.0, 0.0)
 
 
-## Plays `clip` at `rate`; switching clips cross-fades over `blend` on the
-## reaction layer (see enforcer.gd `_play_clip`: the AnimationPlayer's own fade
-## stalls into a clip held still and lurches at the start of others).
+## Plays `clip` at `rate`; switching clips is inertialized over at most `blend`
+## on the reaction layer (see the header; the AnimationPlayer's own fade stalls
+## into a clip held still and lurches at the start of others). The crawl is
+## entered at the moment of its cycle nearest the pose shown.
 func _play_clip(clip: StringName, rate: float, blend := 0.2, restart := false) -> void:
 	if anim == null or not anim.has_animation(clip):
 		return
 	if _clip == clip and not restart and anim.is_playing():
 		anim.speed_scale = rate
 		return
+	var start := 0.0
+	if clip == CLIP_CRAWL:
+		start = _match_phase(clip)
 	if _react != null:
 		_react.call("crossfade", blend)
 	_clip = clip
 	anim.play(clip, 0.0, 1.0)
 	anim.speed_scale = rate
-	anim.seek(0.0, true)
+	anim.seek(start, true)
+
+
+## The time in `clip` whose pose is nearest the pose shown last frame: every
+## bone's rotation (radians apart) and position (rig units), checked at 48
+## points of the clip. 0 if there is no pose to match.
+func _match_phase(clip: StringName) -> float:
+	if _react == null or _skel == null or anim == null or not _react.has_method(&"shown_rotation"):
+		return 0.0
+	var a := anim.get_animation(clip)
+	if a == null:
+		return 0.0
+	if not _match_tracks.has(clip):
+		var list: Array = []
+		for ti in a.get_track_count():
+			var ty := a.track_get_type(ti)
+			if ty != Animation.TYPE_ROTATION_3D and ty != Animation.TYPE_POSITION_3D:
+				continue
+			var bone := _skel.find_bone(String(a.track_get_path(ti).get_concatenated_subnames()))
+			if bone >= 0:
+				list.append([ti, bone, ty == Animation.TYPE_ROTATION_3D])
+		_match_tracks[clip] = list
+	var tracks: Array = _match_tracks[clip]
+	if tracks.is_empty():
+		return 0.0
+	var shown := {}
+	for tr in tracks:
+		var v = _react.call("shown_rotation" if tr[2] else "shown_position", tr[1])
+		if v == null:
+			return 0.0
+		shown[tr[0]] = v
+	var best := 0.0
+	var best_cost := INF
+	var steps := 48
+	for k in steps:
+		var t := a.length * float(k) / float(steps)
+		var cost := 0.0
+		for tr in tracks:
+			if tr[2]:
+				cost += a.rotation_track_interpolate(tr[0], t).angle_to(shown[tr[0]])
+			else:
+				cost += a.position_track_interpolate(tr[0], t).distance_to(shown[tr[0]])
+		if cost < best_cost:
+			best_cost = cost
+			best = t
+	return best
 
 
 ## The eyes: an X of light in each of the mask's lenses. The face, the chest
@@ -461,9 +568,10 @@ func _attach_react() -> void:
 	var sk := _model.find_children("*", "Skeleton3D", true, false)
 	if sk.is_empty():
 		return
+	_skel = sk[0] as Skeleton3D
 	_react = REACT.new()
 	_react.name = "HitReact"
-	(sk[0] as Skeleton3D).add_child(_react)
+	_skel.add_child(_react)
 
 
 # --- Each tick ----------------------------------------------------------------------
@@ -507,13 +615,24 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		if _react != null:
 			_react.call("twitch", player.global_position)
 	var dy := absf(player.global_position.y - global_position.y)
-	if now >= _slam_ready and distance <= SLAM_TRIGGER and dy < 1.6 and _clear_to(player, 1.3):
-		_start_move(Move.SLAM, player)
+	if now >= _swipe_ready and distance <= SWIPE_TRIGGER and dy < 1.6 and _clear_to(player, 1.3):
+		_start_move(Move.SWIPE, player)
+		_run_move(delta, now)
 		return true
-	if now >= _jump_ready and now >= _jump_roll_at and distance >= JUMP_MIN and distance <= JUMP_MAX and dy < 1.2:
-		_jump_roll_at = now + 0.35
-		if randf() < 0.45 and _clear_to(player, 1.3) and _clear_to(player, 0.45):
-			_start_move(Move.JUMP, player)
+	if now >= _roll_at and dy < 1.2:
+		_roll_at = now + 0.35
+		var floor_clear := _clear_to(player, 1.3) and _clear_to(player, 0.45)
+		if now >= _dash_ready and distance >= DASH_MIN and distance <= DASH_MAX and randf() < 0.3 and floor_clear:
+			_start_move(Move.DASH, player)
+			# Its first step this same tick: a move that begins standing still for
+			# a tick reads as a seam.
+			_run_move(delta, now)
+			return true
+		if now >= _leap_ready and distance >= LEAP_MIN and distance <= LEAP_MAX and randf() < 0.45 and floor_clear:
+			_start_move(Move.JUMP if randf() < 0.5 else Move.DROPKICK, player)
+			# Its first step this same tick: a move that begins standing still for
+			# a tick reads as a seam.
+			_run_move(delta, now)
 			return true
 	_walk_to(delta, now, player.global_position, CHASE_SPEED)
 	_face_velocity(flat)
@@ -611,46 +730,91 @@ func _clear_to(player: Node3D, height: float) -> bool:
 func _animate(delta: float) -> void:
 	if is_stunned():
 		if _clip != CLIP_CRAWL:
-			_play_clip(CLIP_CRAWL, 0.0, 0.25, true)
+			_play_clip(CLIP_CRAWL, 0.0, BLEND_CRAWL, true)
 		elif anim != null:
 			anim.speed_scale = move_toward(anim.speed_scale, 0.0, delta * 6.0)
 		return
 	var v := get_real_velocity()
 	var speed := Vector2(v.x, v.z).length()
-	if speed > 0.2:
-		_play_clip(CLIP_CRAWL, clampf(speed / CRAWL_GROUND, 0.35, 2.6), 0.2)
-	else:
-		if _clip != CLIP_CRAWL:
-			_play_clip(CLIP_CRAWL, 0.0, 0.25, true)
-		elif anim != null:
-			anim.speed_scale = move_toward(anim.speed_scale, 0.0, delta * 4.0)
+	var want := clampf(speed / CRAWL_GROUND, 0.35, 2.6) if speed > 0.2 else 0.0
+	if _clip != CLIP_CRAWL:
+		_play_clip(CLIP_CRAWL, 0.0, BLEND_CRAWL, true)
+	elif anim != null:
+		# Eased, never jumped: a crawl starting at full rate from a standstill
+		# reads as a new clip starting.
+		anim.speed_scale = move_toward(anim.speed_scale, want, delta * CRAWL_RATE_EASE)
 
 
-# --- The slam and the jump ----------------------------------------------------------
+# --- The moves ---------------------------------------------------------------------
+
+## Everything about a move its runner needs.
+static func _spec(kind: int) -> Dictionary:
+	match kind:
+		Move.SWIPE:
+			return {"clip": CLIP_SWIPE, "table": ROOT_SWIPE, "contact": SWIPE_CONTACT, "tip": SWIPE_TIP,
+				"root_at_hit": SWIPE_ROOT_AT_HIT, "stretch": SWIPE_STRETCH, "end": SWIPE_END,
+				"turn": TURN_SWIPE, "straight": false}
+		Move.JUMP:
+			return {"clip": CLIP_JUMP, "table": ROOT_JUMP, "contact": JUMP_CONTACT, "tip": JUMP_TIP,
+				"root_at_hit": JUMP_ROOT_AT_HIT, "stretch": LEAP_STRETCH, "end": JUMP_END,
+				"turn": TURN_JUMP, "straight": false}
+		Move.DROPKICK:
+			return {"clip": CLIP_DROPKICK, "table": ROOT_DROPKICK, "contact": DROPKICK_CONTACT,
+				"tip": DROPKICK_TIP, "root_at_hit": DROPKICK_ROOT_AT_HIT, "stretch": LEAP_STRETCH,
+				"end": DROPKICK_END, "turn": TURN_JUMP, "straight": true}
+		_:
+			return {"clip": CLIP_DASH, "table": [], "contact": DASH_CONTACT, "tip": DASH_TIP,
+				"root_at_hit": 0.0, "stretch": Vector2.ONE, "end": DASH_END, "turn": TURN_DASH,
+				"straight": true}
+
 
 func _start_move(kind: int, player: Node3D) -> void:
+	# The speed it was going at is carried in, not dropped.
+	var v := get_real_velocity()
+	_carry = Vector3(v.x, 0.0, v.z) if _move == Move.NONE else _move_vel
 	_move = kind
 	_move_t = 0.0
 	_root_prev = Vector2.ZERO
-	_thrusts_tried = 0
 	_connected = false
+	_combo_pending = false
 	_target = player
-	_end_at = SLAM_END if kind == Move.SLAM else JUMP_END
+	var s := _spec(kind)
+	_end_at = s["end"]
 	var now := _now()
-	if kind == Move.SLAM:
-		_slam_ready = now + SLAM_COOLDOWN
-		_play_clip(CLIP_SLAM, 1.0, 0.1, true)
-	else:
-		_jump_ready = now + JUMP_COOLDOWN
-		_play_clip(CLIP_JUMP, 1.0, 0.1, true)
+	match kind:
+		Move.SWIPE:
+			_swipe_ready = now + SWIPE_COOLDOWN
+		Move.DASH:
+			_dash_ready = now + DASH_COOLDOWN
+		_:
+			_leap_ready = now + LEAP_COOLDOWN
+	_play_clip(s["clip"], 1.0, BLEND_INTO_MOVE, true)
 	_link_guard(player)
 
 
 func _end_move() -> void:
+	var player := _target
+	if _combo_pending and player != null and is_instance_valid(player) and not _dying:
+		# Down -- and as the swipe ends it is on them before they are up.
+		_combo_pending = false
+		combos += 1
+		_start_move(Move.JUMP, player)
+		return
 	_move = Move.NONE
 	_target = null
-	var v := get_real_velocity()
-	_play_clip(CLIP_CRAWL, clampf(Vector2(v.x, v.z).length() / CRAWL_GROUND, 0.0, 2.6), 0.28, true)
+	_combo_pending = false
+	# The crawl takes up the speed the move left it moving at.
+	velocity.x = _move_vel.x
+	velocity.z = _move_vel.z
+	_play_clip(CLIP_CRAWL, clampf(_move_vel.length() / CRAWL_GROUND, 0.0, 2.6), BLEND_OUT_OF_MOVE, true)
+
+
+## How much further the carried speed will still take it, forward.
+func _carry_ahead() -> float:
+	var c := _carry.length()
+	if c < 0.01:
+		return 0.0
+	return maxf(_carry.dot(-global_basis.z) / c, 0.0) * c * c / (2.0 * CARRY_DECEL)
 
 
 func _run_move(delta: float, _now_t: float) -> void:
@@ -658,52 +822,64 @@ func _run_move(delta: float, _now_t: float) -> void:
 	if player == null or not is_instance_valid(player):
 		_end_move()
 		return
+	var s := _spec(_move)
+	var contact: float = s["contact"]
 	var prev := _move_t
 	_move_t += delta
-	var table: Array = ROOT_SLAM if _move == Move.SLAM else ROOT_JUMP
-	var r := _root_at(table, _move_t)
-	var d := r - _root_prev
-	_root_prev = r
 	var to := player.global_position - global_position
 	var flat := Vector3(to.x, 0.0, to.z)
-	var fwd := d.x * MODEL_SCALE
-	var left := d.y * MODEL_SCALE
-	if _move == Move.JUMP:
-		if _move_t < JUMP_CONTACT:
-			# Scaled so the point comes down on them: what travel is left before
-			# it lands, against how far they are past where it would.
-			var left_root := (JUMP_ROOT_AT_HIT - r.x) * MODEL_SCALE
-			var need := flat.length() - JUMP_TIP
-			var k := 1.0
-			if left_root + d.x * MODEL_SCALE > 0.01:
-				k = clampf(need / (left_root + d.x * MODEL_SCALE), 0.0, 9.0)
-			fwd *= k
+	var fwd := 0.0
+	var left := 0.0
+	if _move == Move.DASH:
+		if prev < contact:
+			# Thrown at them on an eased curve, re-aimed every frame on what is left.
+			var need := clampf(flat.length() - DASH_TIP - _carry_ahead(), 0.0, DASH_TRAVEL)
+			var a := _ease_dash(prev / contact)
+			var b := _ease_dash(minf(_move_t / contact, 1.0))
+			if a < 0.999:
+				fwd = need * (b - a) / (1.0 - a)
+	else:
+		var r := _root_at(s["table"], _move_t)
+		var d := r - _root_prev
+		_root_prev = r
+		fwd = d.x * MODEL_SCALE
+		left = 0.0 if s["straight"] else d.y * MODEL_SCALE
+		if _move_t < contact:
+			# Stretched so the blow arrives on them: the travel left before it
+			# lands, against how far they are past where it would.
+			var left_root: float = (float(s["root_at_hit"]) - r.x) * MODEL_SCALE
+			var need: float = flat.length() - float(s["tip"]) - _carry_ahead()
+			var stretch: Vector2 = s["stretch"]
+			if left_root + fwd > 0.01:
+				fwd *= clampf(need / (left_root + fwd), stretch.x, stretch.y)
 		else:
-			fwd *= JUMP_AFTER
-	# Turning to follow them until just before each blow.
-	var track_until := JUMP_CONTACT - 0.08
-	var rate := TURN_JUMP
-	if _move == Move.SLAM:
-		rate = TURN_SLAM
-		track_until = SLAM_HITS[mini(_thrusts_tried, SLAM_HITS.size() - 1)] - 0.1
-	if _move_t < track_until and flat.length_squared() > 0.01:
+			fwd *= AFTER_CONTACT
+	# Turning to follow them until just before the blow.
+	if _move_t < contact - 0.08 and flat.length_squared() > 0.01:
 		var want := atan2(-flat.x, -flat.z)
-		rotation.y = rotate_toward(rotation.y, want, rate * delta)
+		rotation.y = rotate_toward(rotation.y, want, float(s["turn"]) * delta)
 	var step := -global_basis.z * fwd - global_basis.x * left
+	# The speed it came in with, shed fast: no dead stop as a move begins.
+	step += _carry * delta
+	_carry = _carry.move_toward(Vector3.ZERO, CARRY_DECEL * delta)
 	velocity.x = step.x / delta
 	velocity.z = step.z / delta
 	move_and_slide()
+	var rv := get_real_velocity()
+	_move_vel = Vector3(rv.x, 0.0, rv.z)
 	velocity.x = 0.0
 	velocity.z = 0.0
-	if _move == Move.SLAM:
-		while _thrusts_tried < SLAM_HITS.size() and _move_t >= SLAM_HITS[_thrusts_tried]:
-			_thrusts_tried += 1
-			if not _connected:
-				_try_slam(player)
-	elif prev < JUMP_CONTACT and _move_t >= JUMP_CONTACT:
-		_try_jump(player)
+	if prev < contact and _move_t >= contact:
+		_contact(player)
 	if _move != Move.NONE and _move_t >= _end_at:
 		_end_move()
+
+
+## The dash's share of its travel done at `u` (0..1 of the way to the blow):
+## a hard start easing into the blow.
+static func _ease_dash(u: float) -> float:
+	u = clampf(u, 0.0, 1.0)
+	return 1.0 - pow(1.0 - u, 2.2)
 
 
 static func _root_at(table: Array, t: float) -> Vector2:
@@ -731,43 +907,48 @@ func _tip_near(player: Node3D, reach: float) -> bool:
 	return p.distance_to(Vector3(base.x, y, base.z)) <= reach
 
 
-func _try_slam(player: Node3D) -> void:
+## The blow of the move under way, at its contact time.
+func _contact(player: Node3D) -> void:
 	var to := player.global_position - global_position
 	var flat := Vector3(to.x, 0.0, to.z)
 	var ahead := -global_basis.z
 	var off := ahead.angle_to(flat.normalized()) if flat.length_squared() > 0.0001 else 0.0
-	var reach_ok := flat.length() <= SLAM_REACH + 0.45 and off <= deg_to_rad(55.0)
-	if not (reach_ok or _tip_near(player, 0.85)) or absf(to.y) > 1.6 or not _clear_to(player, 1.3):
+	var away := flat.normalized() if flat.length_squared() > 0.0001 else ahead
+	var reach_ok := false
+	var damage := 0.0
+	var throw := 0.0
+	match _move:
+		Move.SWIPE:
+			reach_ok = (flat.length() <= SWIPE_TIP + 0.45 and off <= deg_to_rad(55.0)) or _tip_near(player, 0.85)
+			reach_ok = reach_ok and absf(to.y) <= 1.6 and _clear_to(player, 1.3)
+			damage = SWIPE_DAMAGE
+			throw = SWIPE_THROW
+		Move.JUMP:
+			_impact_sparks()
+			reach_ok = (flat.length() <= JUMP_TIP + 0.75 and off <= deg_to_rad(45.0)) or _tip_near(player, 1.5)
+			reach_ok = reach_ok and absf(to.y) <= 1.5
+			damage = JUMP_DAMAGE
+		Move.DROPKICK:
+			reach_ok = flat.length() <= DROPKICK_TIP + 0.75 and off <= deg_to_rad(50.0) and absf(to.y) <= 1.6
+			damage = DROPKICK_DAMAGE
+			throw = DROPKICK_THROW
+		Move.DASH:
+			reach_ok = (flat.length() <= DASH_TIP + 0.5 and off <= deg_to_rad(40.0)) or _tip_near(player, 0.8)
+			reach_ok = reach_ok and absf(to.y) <= 1.5
+			damage = DASH_DAMAGE
+	if not reach_ok:
 		return
-	var outcome := _strike(player, SLAM_DAMAGE, flat)
-	if outcome == &"miss":
+	var outcome := _strike(player, damage, flat)
+	if outcome == &"miss" or outcome == &"parried":
 		return
 	_connected = true
-	_end_at = minf(_end_at, _move_t + SLAM_AFTER)
-	var away := flat.normalized() if flat.length_squared() > 0.0001 else ahead
-	if outcome == &"hit":
+	if outcome == &"hit" and throw > 0.0:
 		if player.has_method("knock_down"):
-			player.call("knock_down", away, SLAM_THROW)
-		# Down -- and it is on them before they are up.
-		combos += 1
-		_start_move(Move.JUMP, player)
-		_end_at = JUMP_END
+			player.call("knock_down", away, throw)
+		if _move == Move.SWIPE:
+			_combo_pending = true
 	elif outcome == &"blocked" and player.has_method("apply_knockback"):
 		player.call("apply_knockback", away * BLOCK_SHOVE)
-
-
-func _try_jump(player: Node3D) -> void:
-	_impact_sparks()
-	var to := player.global_position - global_position
-	var flat := Vector3(to.x, 0.0, to.z)
-	var ahead := -global_basis.z
-	var off := ahead.angle_to(flat.normalized()) if flat.length_squared() > 0.0001 else 0.0
-	var reach_ok := flat.length() <= JUMP_TIP + 0.75 and off <= deg_to_rad(45.0)
-	if not (reach_ok or _tip_near(player, 1.5)) or absf(to.y) > 1.5:
-		return
-	var outcome := _strike(player, JUMP_DAMAGE, flat)
-	if outcome == &"blocked" and player.has_method("apply_knockback"):
-		player.call("apply_knockback", flat.normalized() * BLOCK_SHOVE)
 
 
 ## Lands a blow through the player's own guard: &"hit", &"blocked", &"parried"
@@ -814,6 +995,8 @@ func _start_knockdown() -> void:
 		return
 	_move = Move.NONE
 	_target = null
+	_combo_pending = false
+	_move_vel = Vector3.ZERO
 	_knock_t = 0.0
 	_stun_until = maxf(_stun_until, _now() + KNOCK_FALL + KNOCK_LIE + KNOCK_RISE + 0.05)
 	# The pose it was in, held as it goes over; the limbs flail on the layer.
@@ -840,11 +1023,12 @@ func _run_knockdown(delta: float, now: float) -> void:
 		_knock_t = -1.0
 		visual.transform = _visual_rest
 		# Up -- and straight back at them.
-		_slam_ready = now
-		_jump_ready = now
-		_jump_roll_at = now
+		_swipe_ready = now
+		_leap_ready = now
+		_dash_ready = now
+		_roll_at = now
 		alert()
-		_play_clip(CLIP_CRAWL, 1.8, 0.2, true)
+		_play_clip(CLIP_CRAWL, 0.0, BLEND_CRAWL, true)
 
 
 ## How far it is tipped back, `t` seconds after the parry: over and down

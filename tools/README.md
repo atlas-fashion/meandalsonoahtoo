@@ -419,22 +419,36 @@ blender -b models/source/enforcer/PUTRID_ENFORCER_BAKED.blend -P tools/build_dec
 godot --headless --import --path .
 ```
 
-Builds `models/decrepit.glb` from the user's file: only the BAKED clips
-(CRAWL_BAKED, STABS_BAKED, JUMP_BAKED; the unbaked sources, an unmuted JUMP
-track and a never-baked SWIPE are removed), with:
+Builds `models/decrepit.glb` from the user's file (second delivery 2026-10-17):
+only the BAKED clips -- CRAWL_BAKED, SWIPE_BAKED, JUMP_BAKED, DROPKICK_BAKED,
+DASH_BAKED. CRAWL and DASH arrive as `CRAWL_BAKED.001` / `DASH_BAKED.001`
+(Blender's duplicate suffix), which the build drops; every unbaked source
+action and track (some unmuted) and the empty STABS are removed. The build
+asserts all five are present. With:
 
-- the root motion taken out of STABS and JUMP (printed as `root ...` tables,
-  copied into scripts/decrepit.gd's ROOT_SLAM / ROOT_JUMP -- re-copy them if the
-  clips change);
+- the root motion taken out of SWIPE, JUMP and DROPKICK (printed as `root ...`
+  tables, copied into scripts/decrepit.gd's ROOT_SWIPE / ROOT_JUMP /
+  ROOT_DROPKICK -- re-copy them if the clips change); DASH plays in place;
 - the IK constraints dropped and the knee flips eased (`smooth_knees`; the
-  crawl as a cycle, so its loop no longer pops);
+  crawl as a cycle, so its loop no longer pops) -- except DROPKICK, whose
+  somersault the flip detector misreads (`NO_KNEE_EASE`);
+- one-frame pops spread over a few frames (`depop`: a bone turning > 35 deg in
+  a frame and > 3x both neighbouring frames; found SWIPE f16 CALF_R, DROPKICK
+  f93 SHOULDER_L / ARM_L);
 - the parts joined into one mesh on a baked colour atlas
   (`models/source/enforcer/decrepit_atlas.png`) -- with metallic zeroed first, or
   the bake is black;
 - bone markers "ShieldTip" (ARM_L), "EyeL" / "EyeR" (HEAD) and "Chest" (TORSO, the
   plating under the mask, for the crystal);
-- printed for the script: the crawl's ground speed, the slam's thrust frames and
-  the jump's strike frame.
+- printed for the script: the crawl's ground speed, and per attack clip a
+  "contacts" line (shield point furthest forward / lowest, foot furthest
+  forward, with frame and clip time) plus a per-frame track -- decrepit.gd's
+  *_CONTACT / *_TIP / *_ROOT_AT_HIT come from these.
+
+To change the clips: bake in Blender (only names ending `_BAKED` go out), copy
+the file to `models/source/enforcer/`, run the build, re-copy the root tables
+and contact values into decrepit.gd, import, and check every switch (see
+CLAUDE.md docs/notes/59).
 
 After an import, set `models/decrepit_decrepit_atlas.jpg.import` to
 `compress/mode=2` with mipmaps and re-import.
