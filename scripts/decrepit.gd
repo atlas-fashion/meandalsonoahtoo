@@ -39,8 +39,8 @@ extends "res://scripts/enemy.gd"
 ##     those off cooldown (CLOSE_WEIGHTS, the last one used less likely), with a
 ##     short breath between (CLOSE_PAUSE) -- the swipe, the jump, the dropkick
 ##     (their travel shrunk to land on them where they stand) or the dash.
-##   * further off it closes the gap: at DASH_MIN..DASH_MAX now and then the
-##     DASH -- a crouch, the lunge, and then it SLIDES at them along the floor,
+##   * further off it closes the gap: at DASH_MIN..DASH_MAX the DASH, always
+##     first, the moment it is off cooldown -- the -- a crouch, the lunge, and then it SLIDES at them along the floor,
 ##     the lunge held and the shield out, scraping sparks, re-aimed as they move,
 ##     slowing to arrive with its point on them (DASH_DAMAGE); at
 ##     LEAP_MIN..LEAP_MAX with a clear floor between, now and then a leap -- the
@@ -116,6 +116,13 @@ const DROPKICK_COOLDOWN := 3.5
 const LEAP_STRETCH := Vector2(0.0, 9.0)
 ## After the blow lands the travel left in the clip is cut to this share.
 const AFTER_CONTACT := 0.3
+## Close in, every move is in play: within CLOSE_RANGE it picks among those off
+## cooldown by these weights (the move it used last at CLOSE_REPEAT of its
+## weight), after a breath of CLOSE_PAUSE seconds from its last move's end.
+const CLOSE_RANGE := 3.8
+const CLOSE_WEIGHTS := {Move.SWIPE: 0.4, Move.JUMP: 0.2, Move.DROPKICK: 0.2, Move.DASH: 0.2}
+const CLOSE_REPEAT := 0.3
+const CLOSE_PAUSE := Vector2(0.25, 0.7)
 ## DASH, the gap closer (2026-10-17, the user: "he should slide to you"): the
 ## clip crouches and is thrown into a wide lunge, the shield out furthest at
 ## clip DASH_LUNGE 0.233 s (f15), DASH_TIP ahead. Then the body SLIDES at them
@@ -138,18 +145,12 @@ const DASH_END := 0.35
 const DASH_SLIDE_TIME := 0.4
 const DASH_TIP := 2.985 * MODEL_SCALE
 const DASH_TRAVEL := 13.0
-const DASH_MIN := 4.5
+## From the edge of close range out: no gap where it only crawls.
+const DASH_MIN := CLOSE_RANGE
 const DASH_MAX := 14.0
 const DASH_COOLDOWN := 2.2
 ## Sparks off the plating scraping the floor while it slides, this often.
 const SCRAPE_EVERY := 0.05
-## Close in, every move is in play: within CLOSE_RANGE it picks among those off
-## cooldown by these weights (the move it used last at CLOSE_REPEAT of its
-## weight), after a breath of CLOSE_PAUSE seconds from its last move's end.
-const CLOSE_RANGE := 3.8
-const CLOSE_WEIGHTS := {Move.SWIPE: 0.4, Move.JUMP: 0.2, Move.DROPKICK: 0.2, Move.DASH: 0.2}
-const CLOSE_REPEAT := 0.3
-const CLOSE_PAUSE := Vector2(0.25, 0.7)
 const TURN_SWIPE := 12.0
 const TURN_JUMP := 7.0
 const TURN_DASH := 14.0
@@ -686,14 +687,17 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		# Close in: any move that is ready.
 		if now >= _close_ready and dy < 1.6 and _clear_to(player, 1.3):
 			pick = _pick_close(now)
-	elif now >= _roll_at and dy < 1.2:
-		# Further off: now and then it closes the gap.
-		_roll_at = now + 0.35
-		var floor_clear := _clear_to(player, 1.3) and _clear_to(player, 0.45)
-		if floor_clear:
-			if now >= _dash_ready and distance >= DASH_MIN and distance <= DASH_MAX and randf() < 0.35:
-				pick = Move.DASH
-			elif distance >= LEAP_MIN and distance <= LEAP_MAX and randf() < 0.45:
+	elif dy < 1.2:
+		# Further off it closes the gap -- the DASH first, always, the moment it
+		# is ready (the user, 2026-10-17); a leap now and then only while the
+		# dash is cooling down.
+		if now >= _dash_ready and distance >= DASH_MIN and distance <= DASH_MAX \
+				and _clear_to(player, 1.3) and _clear_to(player, 0.45):
+			pick = Move.DASH
+		elif now >= _roll_at:
+			_roll_at = now + 0.35
+			if distance >= LEAP_MIN and distance <= LEAP_MAX and randf() < 0.45 \
+					and _clear_to(player, 1.3) and _clear_to(player, 0.45):
 				var leaps: Array = []
 				if now >= _jump_ready:
 					leaps.append(Move.JUMP)

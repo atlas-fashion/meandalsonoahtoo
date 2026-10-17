@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 66), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 67), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -305,7 +305,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 - Enemies: `enemy.gd` (skeleton; base class; also the boss via
   `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` + `arrow.gd`, `crier.gd`
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
-  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65, 66), `sewer_lizard.gd` +
+  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65-67), `sewer_lizard.gd` +
   `goo.gd`, `stalker.gd` ("the Remnant" / "the Shade"), `mimic.gd`,
   `convoy.gd`; helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
   `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`. Clip changes on the
@@ -423,6 +423,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 64 | 2026-10-17 | Drag a timing marker to change the timing; the enforcers only | [docs/notes/64-drag-a-timing-marker-to-change-the.md](docs/notes/64-drag-a-timing-marker-to-change-the.md) |
 | 65 | 2026-10-17 | Every clip its own parry marker; the dash's slide is a fixed length | [docs/notes/65-every-clip-its-own-parry-marker-the.md](docs/notes/65-every-clip-its-own-parry-marker-the.md) |
 | 66 | 2026-10-17 | Several hits and parry cues per move; add them on the timeline | [docs/notes/66-several-hits-and-parry-cues-per-move.md](docs/notes/66-several-hits-and-parry-cues-per-move.md) |
+| 67 | 2026-10-17 | The dash always closes the gap first | [docs/notes/67-the-dash-always-closes-the-gap-first.md](docs/notes/67-the-dash-always-closes-the-gap-first.md) |
 
 ## Notes by source file
 
@@ -447,7 +448,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/convoy.gd`: 23, 28
 - `scripts/crier.gd`: 43, 48, 60
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24
