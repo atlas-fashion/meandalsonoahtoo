@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 64), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 65), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -305,7 +305,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 - Enemies: `enemy.gd` (skeleton; base class; also the boss via
   `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` + `arrow.gd`, `crier.gd`
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
-  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61), `sewer_lizard.gd` +
+  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65), `sewer_lizard.gd` +
   `goo.gd`, `stalker.gd` ("the Remnant" / "the Shade"), `mimic.gd`,
   `convoy.gd`; helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
   `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`. Clip changes on the
@@ -421,6 +421,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 62 | 2026-10-17 | Parry cues: the attack listens for block | [docs/notes/62-parry-cues-the-attack-listens-for-block.md](docs/notes/62-parry-cues-the-attack-listens-for-block.md) |
 | 63 | 2026-10-17 | Timing preview: every enemy's timings on the animation timeline | [docs/notes/63-timing-preview-every-enemy-s-timings-on.md](docs/notes/63-timing-preview-every-enemy-s-timings-on.md) |
 | 64 | 2026-10-17 | Drag a timing marker to change the timing; the enforcers only | [docs/notes/64-drag-a-timing-marker-to-change-the.md](docs/notes/64-drag-a-timing-marker-to-change-the.md) |
+| 65 | 2026-10-17 | Every clip its own parry marker; the dash's slide is a fixed length | [docs/notes/65-every-clip-its-own-parry-marker-the.md](docs/notes/65-every-clip-its-own-parry-marker-the.md) |
 
 ## Notes by source file
 
@@ -445,7 +446,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/convoy.gd`: 23, 28
 - `scripts/crier.gd`: 43, 48, 60
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24
@@ -515,7 +516,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39
 - `tools/benchmark.gd`: 6.11, 33
 - `tools/build_brick_kit.py`: 27, 28
-- `tools/timing_preview/timing_preview.gd`: 63, 64
+- `tools/timing_preview/timing_preview.gd`: 63, 64, 65
 - `tools/build_decrepit.py`: 56, 57, 59
 - `tools/build_enforcer.py`: 48, 51, 53
 - `tools/build_gate_door.py`: 6.19

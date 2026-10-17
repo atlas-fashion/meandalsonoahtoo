@@ -18,12 +18,14 @@ extends Node3D
 ## (its formatting and comment kept) -- then the markers rebuild from it. If the
 ## script is open in the script editor, Godot will offer to reload it.
 ##
-##   HIT                 -> *_CONTACT (the parry cue moves with it: its listen
-##                          length is kept)
-##   parry cue           -> *_LISTEN (= the hit - the cue: the window always
-##                          closes on the blow)
+##   HIT                 -> *_CONTACT
+##   parry cue           -> *_CUE (its own marker: moving the hit does not move
+##                          it; its label says how long it listens, *_LISTEN,
+##                          and where that window closes)
 ##   move ends           -> *_END
-##   lunge -> slide      -> DASH_LUNGE
+##   lunge -> slide      -> DASH_LUNGE (the dash: also its cue -> DASH_CUE,
+##                          HIT on arrival -> DASH_CONTACT, end -> DASH_END;
+##                          the slide's real length is DASH_SLIDE_TIME)
 ##   settled: BEAM FIRES -> BEAM_SET_EARLY (= the clip's length - the marker)
 ## Gold "info" markers with no single value behind them (cannon up, the recoil)
 ## do not move anything; dragging one is undone at the next rebuild.
@@ -267,17 +269,30 @@ func _decrepit() -> Dictionary:
 		var k: String = move[0]
 		var contact: float = c[k + "_CONTACT"]
 		var listen: float = c[k + "_LISTEN"]
+		var cue: float = c[k + "_CUE"]
+		var closes := cue + listen
+		var note := "closes on the hit" if absf(closes - contact) < 0.002 else 			("closes %s %s the hit" % [_s(absf(closes - contact)), "after" if closes > contact else "BEFORE"])
 		out[StringName(move[1])] = [
-			["HIT %d / parry window closes" % int(c[move[2]]), contact, HIT, _bind(DECREPIT, k + "_CONTACT")],
-			["parry cue (listen %s)" % _s(listen), contact - listen, PARRY,
-				_bind(DECREPIT, k + "_LISTEN", &"before", contact)],
+			["HIT %d" % int(c[move[2]]), contact, HIT, _bind(DECREPIT, k + "_CONTACT")],
+			["parry cue: listens %s, %s" % [_s(listen), note], cue, PARRY, _bind(DECREPIT, k + "_CUE")],
 			["move ends (%s_END)" % k, float(c[k + "_END"]), END, _bind(DECREPIT, k + "_END")],
 		]
+	# The dash: the clip from the lunge to the hit is slowed to fill the
+	# slide, so its cue's window is measured in that slowed time.
 	var lunge: float = c["DASH_LUNGE"]
+	var hit: float = c["DASH_CONTACT"]
+	var slide: float = c["DASH_SLIDE_TIME"]
+	var dcue: float = c["DASH_CUE"]
+	var dlisten: float = c["DASH_LISTEN"]
+	var rate := (hit - lunge) / maxf(slide, 0.01)
+	var cue_to_hit := (hit - dcue) / maxf(rate, 0.0001) if dcue >= lunge else (lunge - dcue) + slide
+	var dnote := "closes on the hit" if absf(cue_to_hit - dlisten) < 0.004 else \
+		("closes %s %s the hit" % [_s(absf(dlisten - cue_to_hit)), "after" if dlisten > cue_to_hit else "BEFORE"])
 	out[&"DASH_BAKED"] = [
-		["lunge held -> SLIDE (hit on arrival, %d)" % int(c["DASH_DAMAGE"]), lunge, INFO,
-			_bind(DECREPIT, "DASH_LUNGE")],
-		["parry cue: %s before arrival" % _s(float(c["DASH_LISTEN"])), lunge, PARRY],
+		["lunge -> SLIDE (%s of slide to the hit)" % _s(slide), lunge, INFO, _bind(DECREPIT, "DASH_LUNGE")],
+		["parry cue: listens %s, %s" % [_s(dlisten), dnote], dcue, PARRY, _bind(DECREPIT, "DASH_CUE")],
+		["HIT %d (arrives)" % int(c["DASH_DAMAGE"]), hit, HIT, _bind(DECREPIT, "DASH_CONTACT")],
+		["move ends (DASH_END)", float(c["DASH_END"]), END, _bind(DECREPIT, "DASH_END")],
 	]
 	return out
 
