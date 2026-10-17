@@ -1579,6 +1579,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			_guard_click_spent = true
 		else:
+			_note_block_press()
 			_start_block()
 	elif event.is_action_released("block"):
 		_guard_click_spent = false
@@ -2097,17 +2098,82 @@ func _guard_pose() -> Transform3D:
 
 ## 0 the blow lands in full, 1 blocked, 2 parried. Only blows from the front
 ## are met by the sword; `blow` is the way the blow travels (attacker to player).
-func _guard(blow: Vector3) -> int:
-	if not _blocking:
-		return 0
+##
+## Two rules for the parry:
+##   * an attack that CUED it (`parry_cue`, 2026-10-17): parried if block was
+##     PRESSED inside the window the cue opened -- a tap counts, held or not --
+##     and the press was not wasted (a weapon in hand, free to guard). Missed,
+##     it is a block if the guard is up, else it lands.
+##   * any other blow: parried if the guard went up within `parry_window` of
+##     it landing; blocked if up longer.
+func _guard(blow: Vector3, attacker: Node3D = null) -> int:
+	var front := true
 	var from := -blow
 	from.y = 0.0
 	if from.length_squared() > 0.0001:
 		var forward := -global_basis.z
 		forward.y = 0.0
-		if rad_to_deg(forward.normalized().angle_to(from.normalized())) > block_arc:
-			return 0
+		front = rad_to_deg(forward.normalized().angle_to(from.normalized())) <= block_arc
+	var cue = _take_parry_cue(attacker)
+	if cue != null:
+		if front and _block_pressed_at >= float(cue[0]) and _block_pressed_at <= float(cue[1]):
+			return 2
+		return 1 if _blocking and front else 0
+	if not _blocking or not front:
+		return 0
 	return 2 if _now() - _block_since <= parry_window else 1
+
+
+## --- Parry cues (2026-10-17) -------------------------------------------------------
+##
+## An attack marks a point in itself -- its cue -- and calls `parry_cue(self,
+## listen)` there: from that moment the game listens `listen` seconds for the
+## block button. When that attacker's blow lands (`_guard`), a press inside the
+## window parries it. Each attack sets its own cue and window (decrepit.gd's
+## moves: `cue` and `listen` in `_spec`), so a slow, telegraphed blow can be
+## forgiving and a fast one tight. A press counts if it could have raised the
+## guard (a weapon in hand, not drinking, ghosting, dead, in a scene or a menu,
+## knocked down or in a slam's recovery) -- mid-attack too: it is the press that is timed, not the guard.
+
+## When block was last pressed (and could have counted), `_now()` seconds.
+var _block_pressed_at := -INF
+## Open cues: attacker instance id -> [opened, closes], `_now()` seconds.
+var _parry_cues := {}
+
+
+## Called by an attack at its cue: listen for block for `listen` seconds.
+func parry_cue(attacker: Node3D, listen: float) -> void:
+	if attacker == null:
+		return
+	var now := _now()
+	_parry_cues[attacker.get_instance_id()] = [now, now + listen]
+	# Forgotten ones (an attack broken off before its blow) are dropped here.
+	for id in _parry_cues.keys():
+		if float(_parry_cues[id][1]) < now - 5.0:
+			_parry_cues.erase(id)
+
+
+## The cue `attacker` opened, used up by its blow; null if it opened none.
+func _take_parry_cue(attacker: Node3D):
+	if attacker == null or not is_instance_valid(attacker):
+		return null
+	var id := attacker.get_instance_id()
+	if not _parry_cues.has(id):
+		return null
+	var cue = _parry_cues[id]
+	_parry_cues.erase(id)
+	return cue
+
+
+## Whether the press that just came would count toward a cued parry.
+func _note_block_press() -> void:
+	if _dead or in_cutscene or ui_open or not Inventory.is_weapon(held_item()) \
+			or is_drinking() or _ghosting:
+		return
+	# Down on the floor (knocked down) or in a slam's recovery: no guard to raise.
+	if _slamming or _now() < _slam_recover_until:
+		return
+	_block_pressed_at = _now()
 
 
 ## `blow_damage`: what the blow would have done unguarded; a parry turns
@@ -3744,7 +3810,7 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 	# The sword up in front takes the blow -- 90% of it blocked, all of it
 	# parried (and half of it turned back on the attacker). Some blows (the
 	# Remnant's) go through any guard.
-	var guard := _guard(_from_direction)
+	var guard := _guard(_from_direction, attacker)
 	if attacker != null and is_instance_valid(attacker) and attacker.get("unblockable") == true:
 		guard = 0
 	match guard:

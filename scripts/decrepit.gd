@@ -149,6 +149,18 @@ const TURN_SWIPE := 12.0
 const TURN_JUMP := 7.0
 const TURN_DASH := 14.0
 
+## PARRY CUES (player.gd `parry_cue`): at each move's cue -- a moment in its
+## clip, `cue` seconds in -- the player is listened to for `listen` seconds; a
+## block press inside that parries the blow when it lands. Here each window is
+## placed to close as the blow lands (cue = contact - listen), the slow and
+## telegraphed blows more forgiving, the fast ones tighter. The dash's blow
+## comes when its slide arrives, so its cue is opened `DASH_LISTEN` before the
+## arrival (`_dash_step`).
+const SWIPE_LISTEN := 0.25
+const JUMP_LISTEN := 0.3
+const DROPKICK_LISTEN := 0.25
+const DASH_LISTEN := 0.2
+
 ## Seamless: every clip change is inertialized over at most these (the offset
 ## settles sooner when it is small or already closing).
 const BLEND_INTO_MOVE := 0.22
@@ -249,6 +261,7 @@ var _slide_len := 0.0
 var _slide_u := 0.0
 var _slide_left := 0.0
 var _scrape_t := 0.0
+var _dash_cued := false
 ## The swipe knocked them down: the jump follows as it ends.
 var _combo_pending := false
 ## Body speed carried into a move, and the last speed a move moved it at.
@@ -818,19 +831,23 @@ static func _spec(kind: int) -> Dictionary:
 	match kind:
 		Move.SWIPE:
 			return {"clip": CLIP_SWIPE, "table": ROOT_SWIPE, "contact": SWIPE_CONTACT, "tip": SWIPE_TIP,
+				"cue": SWIPE_CONTACT - SWIPE_LISTEN, "listen": SWIPE_LISTEN,
 				"root_at_hit": SWIPE_ROOT_AT_HIT, "stretch": SWIPE_STRETCH, "end": SWIPE_END,
 				"turn": TURN_SWIPE, "straight": false}
 		Move.JUMP:
 			return {"clip": CLIP_JUMP, "table": ROOT_JUMP, "contact": JUMP_CONTACT, "tip": JUMP_TIP,
+				"cue": JUMP_CONTACT - JUMP_LISTEN, "listen": JUMP_LISTEN,
 				"root_at_hit": JUMP_ROOT_AT_HIT, "stretch": LEAP_STRETCH, "end": JUMP_END,
 				"turn": TURN_JUMP, "straight": false}
 		Move.DROPKICK:
 			return {"clip": CLIP_DROPKICK, "table": ROOT_DROPKICK, "contact": DROPKICK_CONTACT,
+				"cue": DROPKICK_CONTACT - DROPKICK_LISTEN, "listen": DROPKICK_LISTEN,
 				"tip": DROPKICK_TIP, "root_at_hit": DROPKICK_ROOT_AT_HIT, "stretch": LEAP_STRETCH,
 				"end": DROPKICK_END, "turn": TURN_JUMP, "straight": true}
 		_:
 			# Its blow and its end come when the slide arrives (`_dash_step`).
 			return {"clip": CLIP_DASH, "table": [], "contact": INF, "tip": DASH_TIP,
+				"cue": INF, "listen": DASH_LISTEN,
 				"root_at_hit": 0.0, "stretch": Vector2.ONE, "end": INF, "turn": TURN_DASH,
 				"straight": true}
 
@@ -855,6 +872,7 @@ func _start_move(kind: int, player: Node3D) -> void:
 		Move.DASH:
 			_dash_ready = now + DASH_COOLDOWN
 			_dash_phase = 0
+			_dash_cued = false
 			_scrape_t = 0.0
 		Move.JUMP:
 			_jump_ready = now + JUMP_COOLDOWN
@@ -941,6 +959,10 @@ func _run_move(delta: float, _now_t: float) -> void:
 	_move_vel = Vector3(rv.x, 0.0, rv.z)
 	velocity.x = 0.0
 	velocity.z = 0.0
+	# The parry cue: from here the player is listened to for a block press.
+	var cue: float = s["cue"]
+	if prev < cue and _move_t >= cue and player.has_method("parry_cue"):
+		player.call("parry_cue", self, float(s["listen"]))
 	if prev < contact and _move_t >= contact:
 		_contact(player)
 	if _move != Move.NONE and _move_t >= _end_at:
@@ -954,6 +976,13 @@ func _dash_step(delta: float, flat: Vector3) -> float:
 	var gap := maxf(flat.length() - DASH_TIP - _carry_ahead(), 0.0)
 	match _dash_phase:
 		0:
+			# Its cue, if the whole of what is left -- the lunge and a short
+			# slide -- is inside DASH_LISTEN.
+			if not _dash_cued and _target != null and is_instance_valid(_target):
+				var slide := clampf(minf(gap, DASH_TRAVEL) / DASH_SLIDE_SPEED, DASH_SLIDE_MIN, DASH_SLIDE_MAX)
+				if DASH_LUNGE - _move_t + slide <= DASH_LISTEN and _target.has_method("parry_cue"):
+					_dash_cued = true
+					_target.call("parry_cue", self, DASH_LISTEN)
 			if _move_t >= DASH_LUNGE:
 				# Lunged: held there, and away along the floor.
 				_dash_phase = 1
@@ -975,6 +1004,12 @@ func _dash_step(delta: float, flat: Vector3) -> float:
 			var fwd := left * (b - a) / maxf(1.0 - a, 0.001)
 			_slide_left = maxf(_slide_left - fwd, 0.0)
 			_scrape(delta)
+			# Its parry cue: DASH_LISTEN before it arrives (or at once, if the
+			# whole slide is shorter).
+			if not _dash_cued and (_slide_len - _slide_t <= DASH_LISTEN or left - fwd < 0.1):
+				_dash_cued = true
+				if _target != null and is_instance_valid(_target) and _target.has_method("parry_cue"):
+					_target.call("parry_cue", self, DASH_LISTEN)
 			if u >= 1.0 or left - fwd < 0.1:
 				# Arrived: the blow, and up out of the lunge.
 				_dash_phase = 2

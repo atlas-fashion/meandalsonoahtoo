@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 61), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 62), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -299,7 +299,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 
 **Systems** (all `scripts/`):
 - Player & combat: `player.gd` (movement, sword, block/parry `_start_block`
-  `_guard` `_on_guarded`, spear dash/stab `stab_at`, `take_damage`, `_die`,
+  `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`), `spear.gd`, `hand_torch.gd`, `held_potion.gd`,
   `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt).
 - Enemies: `enemy.gd` (skeleton; base class; also the boss via
@@ -416,6 +416,7 @@ then `godot --headless --import --path .`) are documented in
 | 59 | 2026-10-17 | The decrepit's new moves; every clip change seamless | [docs/notes/59-the-decrepit-s-new-moves-and-seamless-blending.md](docs/notes/59-the-decrepit-s-new-moves-and-seamless-blending.md) |
 | 60 | 2026-10-17 | Sandbox mode; the map becomes an inventory page | [docs/notes/60-sandbox-mode-the-map-becomes-an-inventory.md](docs/notes/60-sandbox-mode-the-map-becomes-an-inventory.md) |
 | 61 | 2026-10-17 | The decrepit's dash slides in; every move close in | [docs/notes/61-the-decrepit-s-dash-slides-every-move-close.md](docs/notes/61-the-decrepit-s-dash-slides-every-move-close.md) |
+| 62 | 2026-10-17 | Parry cues: the attack listens for block | [docs/notes/62-parry-cues-the-attack-listens-for-block.md](docs/notes/62-parry-cues-the-attack-listens-for-block.md) |
 
 ## Notes by source file
 
@@ -440,7 +441,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/convoy.gd`: 23, 28
 - `scripts/crier.gd`: 43, 48, 60
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60, 61
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24
@@ -473,7 +474,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62
 - `scripts/portcullis.gd`: 6.18
 - `scripts/puzzle_room.gd`: 18, 22
 - `scripts/radial_menu.gd`: 25, 30, 44
