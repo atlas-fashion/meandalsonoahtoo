@@ -89,7 +89,7 @@ const SWIPE_DAMAGE := 25.0
 ## is live and lands the blow the first tick it overlaps the player -- once per
 ## window. The first window's start is what the lunge / leap aims to land.
 ## Swipe: the shield sweeps across its front f29-f35.
-const SWIPE_HITS := [[0.4833, 0.5833]]
+const SWIPE_HITS := [[0.4833, 0.6667]]
 const SWIPE_TIP := 2.74 * MODEL_SCALE
 const SWIPE_END := 0.733
 const SWIPE_COOLDOWN := 1.3
@@ -115,7 +115,7 @@ const DROPKICK_DAMAGE := 35.0
 ## (2.2 m ahead, sweeping down from 3.0 to 1.2 m -- head and chest height), at
 ## the floor by f53, planted from f55. (The window first set, f55-f61, came from
 ## "whichever foot is furthest out" and opened after the left one had landed.)
-const DROPKICK_HITS := [[0.8167, 0.8833]]
+const DROPKICK_HITS := [[0.4667, 0.5333], [0.8167, 0.8833], [1.1667, 1.3]]
 ## How far ahead of the body the left foot kicks (metres, in game): what the
 ## leap is stretched to land on the player.
 const DROPKICK_TIP := 2.1
@@ -155,13 +155,19 @@ const DASH_LUNGE := 0.233
 ## The dash's blows, [start, end] clip seconds: the FIRST start is its arrival
 ## (the slide fills the clip from DASH_LUNGE to it); after it the clip plays at
 ## 1x (the shield held out, f18-f21).
-const DASH_HITS := [[0.1667, 0.3]]
+const DASH_HITS := [[0.2667, 0.3333]]
 const DASH_END := 0.35
 const DASH_SLIDE_TIME := 0.4
 const DASH_TIP := 2.985 * MODEL_SCALE
+## Where the slide puts its BODY: this far from the player's (metres) -- in their
+## face, the shield's box over them. (It used to aim the shield's TIP at them,
+## DASH_TIP 1.9 m ahead, and pulled up short: "not close enough", the user.)
+const DASH_ARRIVE := 1.3
 const DASH_TRAVEL := 13.0
-## From the edge of close range out: no gap where it only crawls.
-const DASH_MIN := CLOSE_RANGE
+## Not when they are barely out of reach (the user, 2026-10-17: it dashed "when
+## you're barely away from him"): from DASH_MIN out. Nearer, it crawls in or
+## (now and then, 4-9 m) leaps.
+const DASH_MIN := 7.0
 const DASH_MAX := 14.0
 const DASH_COOLDOWN := 2.2
 ## Sparks off the plating scraping the floor while it slides, this often.
@@ -183,9 +189,9 @@ const TURN_DASH := 14.0
 ## before the arrival. Every time is put on the move's own clock at its start
 ## (`_events`), never read off the clip's position -- far off, the animation
 ## LOD advances that in strides (a cue opened 0.15 s late from 12 m).
-const SWIPE_CUES := [0.283]
-const JUMP_CUES := [0.2]
-const DROPKICK_CUES := [0.75]
+const SWIPE_CUES := [0.4333]
+const JUMP_CUES := [0.4333]
+const DROPKICK_CUES := [0.45, 0.8, 1.1333]
 const DASH_CUES := [0.25]
 const SWIPE_LISTEN := 0.25
 const JUMP_LISTEN := 0.3
@@ -1072,7 +1078,7 @@ func _run_move(delta: float, _now_t: float) -> void:
 ## the speed it came in with); then held at the lunge and slid at them; on
 ## arrival the blow and the clip again, rising. Returns the forward step.
 func _dash_step(delta: float, flat: Vector3) -> float:
-	var gap := maxf(flat.length() - DASH_TIP - _carry_ahead(), 0.0)
+	var gap := maxf(flat.length() - DASH_ARRIVE - _carry_ahead(), 0.0)
 	match _dash_phase:
 		0:
 			if _move_t >= DASH_LUNGE:
