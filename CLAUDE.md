@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 60), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 61), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -305,7 +305,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 - Enemies: `enemy.gd` (skeleton; base class; also the boss via
   `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` + `arrow.gd`, `crier.gd`
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
-  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: note 59), `sewer_lizard.gd` +
+  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61), `sewer_lizard.gd` +
   `goo.gd`, `stalker.gd` ("the Remnant" / "the Shade"), `mimic.gd`,
   `convoy.gd`; helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
   `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`. Clip changes on the
@@ -415,6 +415,7 @@ then `godot --headless --import --path .`) are documented in
 | 58 | 2026-10-16 | Three decrepits, the sewer lizard, a proud grating, walkable manholes | [docs/notes/58-three-decrepits-the-sewer-lizard-a-proud-grating.md](docs/notes/58-three-decrepits-the-sewer-lizard-a-proud-grating.md) |
 | 59 | 2026-10-17 | The decrepit's new moves; every clip change seamless | [docs/notes/59-the-decrepit-s-new-moves-and-seamless-blending.md](docs/notes/59-the-decrepit-s-new-moves-and-seamless-blending.md) |
 | 60 | 2026-10-17 | Sandbox mode; the map becomes an inventory page | [docs/notes/60-sandbox-mode-the-map-becomes-an-inventory.md](docs/notes/60-sandbox-mode-the-map-becomes-an-inventory.md) |
+| 61 | 2026-10-17 | The decrepit's dash slides in; every move close in | [docs/notes/61-the-decrepit-s-dash-slides-every-move-close.md](docs/notes/61-the-decrepit-s-dash-slides-every-move-close.md) |
 
 ## Notes by source file
 
@@ -439,7 +440,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/convoy.gd`: 23, 28
 - `scripts/crier.gd`: 43, 48, 60
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24

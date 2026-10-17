@@ -29,17 +29,23 @@ extends "res://scripts/enemy.gd"
 ## (`_carry`, shed at CARRY_DECEL), the crawl resumes at the move's last speed.
 ##
 ## Hunting (`_chase`), fast -- CHASE_SPEED, against the player's 4.25 walk:
-##   * close in: the SWIPE, its lunge stretched to land the shield on them;
+##   * the SWIPE: its lunge stretched to land the shield on them;
 ##     SWIPE_DAMAGE, and unguarded it throws the player off their feet
 ##     (`player.knock_down`, SWIPE_THROW) -- and as the swipe ends it LEAPS on
 ##     them where they fell: the jump slash, re-aimed through its flight, its
 ##     point coming down after their invulnerability and before they are up.
 ##     A held guard takes it standing (a tenth through), shoved back.
-##   * at DASH_MIN..DASH_MAX: now and then the DASH STAB, the body thrown at
-##     them in a quarter second, DASH_DAMAGE.
-##   * at LEAP_MIN..LEAP_MAX with a clear floor between: now and then a leap --
-##     the JUMP SLASH (JUMP_DAMAGE) or the DROPKICK (DROPKICK_DAMAGE, and
-##     unguarded it knocks them down).
+##   * close in (CLOSE_RANGE): ANY of its four moves -- picked at random among
+##     those off cooldown (CLOSE_WEIGHTS, the last one used less likely), with a
+##     short breath between (CLOSE_PAUSE) -- the swipe, the jump, the dropkick
+##     (their travel shrunk to land on them where they stand) or the dash.
+##   * further off it closes the gap: at DASH_MIN..DASH_MAX now and then the
+##     DASH -- a crouch, the lunge, and then it SLIDES at them along the floor,
+##     the lunge held and the shield out, scraping sparks, re-aimed as they move,
+##     slowing to arrive with its point on them (DASH_DAMAGE); at
+##     LEAP_MIN..LEAP_MAX with a clear floor between, now and then a leap -- the
+##     JUMP SLASH (JUMP_DAMAGE) or the DROPKICK (DROPKICK_DAMAGE, and unguarded
+##     it knocks them down).
 ##   * a PARRY of any throws it on its back (the whole body toppled about its
 ##     heels, the limbs flailing over it), it lies there KNOCK_LIE, then it is up
 ##     fast and straight back into the attack.
@@ -60,6 +66,8 @@ const CLIP_SWIPE := &"SWIPE_BAKED"
 const CLIP_JUMP := &"JUMP_BAKED"
 const CLIP_DROPKICK := &"DROPKICK_BAKED"
 const CLIP_DASH := &"DASH_BAKED"
+
+enum Move { NONE, SWIPE, JUMP, DROPKICK, DASH }
 ## Below this the player is in the sewer (sewer.gd SPLIT_Y).
 const SPLIT_Y := -4.0
 ## The crawl's planted feet slide back at 4.886 m/s at the authored size.
@@ -78,7 +86,6 @@ const SWIPE_CONTACT := 0.533
 const SWIPE_TIP := 2.74 * MODEL_SCALE
 const SWIPE_ROOT_AT_HIT := 2.36
 const SWIPE_END := 0.733
-const SWIPE_TRIGGER := 3.8
 const SWIPE_COOLDOWN := 1.3
 ## The lunge before the blow is stretched (on what is left of it, every frame)
 ## so the point arrives on them, within these multiples of the clip's own.
@@ -101,24 +108,43 @@ const DROPKICK_TIP := 2.53 * MODEL_SCALE
 const DROPKICK_ROOT_AT_HIT := 1.651
 const DROPKICK_END := 1.65
 const DROPKICK_THROW := 10.0
-## Leaps (jump or dropkick): their flight stretched up to LEAP_STRETCH.
+## Leaps (jump or dropkick): their flight stretched up to LEAP_STRETCH (and
+## shrunk to nothing close in), each on its own cooldown.
 const LEAP_MIN := 4.0
 const LEAP_MAX := 9.0
-const LEAP_COOLDOWN := 3.5
+const JUMP_COOLDOWN := 3.0
+const DROPKICK_COOLDOWN := 3.5
 const LEAP_STRETCH := Vector2(0.0, 9.0)
 ## After the blow lands the travel left in the clip is cut to this share.
 const AFTER_CONTACT := 0.3
-## DASH STAB: the shield is out furthest at clip 0.233 s (f15), DASH_TIP ahead.
-## The clip stays in place; the body is thrown along on an eased curve to put
-## the point on them then, at most DASH_TRAVEL.
+## DASH, the gap closer (2026-10-17, the user: "he should slide to you"): the
+## clip crouches and is thrown into a wide lunge, the shield out furthest at
+## clip DASH_LUNGE 0.233 s (f15), DASH_TIP ahead. There it is HELD while the
+## body SLIDES at them along the floor -- fast, easing off (`_ease_slide`) to
+## arrive with the point on them, re-aimed every frame on what is left, at most
+## DASH_TRAVEL -- over DASH_SLIDE_MIN..MAX at DASH_SLIDE_SPEED on average,
+## scraping sparks; on arrival the blow, and the rest of the clip as it rises
+## out of the lunge (DASH_RECOVER).
 const DASH_DAMAGE := 15.0
-const DASH_CONTACT := 0.233
+const DASH_LUNGE := 0.233
 const DASH_TIP := 2.985 * MODEL_SCALE
-const DASH_END := 0.35
-const DASH_MIN := 3.4
-const DASH_MAX := 7.0
-const DASH_TRAVEL := 5.5
+const DASH_RECOVER := 0.2
+const DASH_SLIDE_SPEED := 15.0
+const DASH_SLIDE_MIN := 0.1
+const DASH_SLIDE_MAX := 0.9
+const DASH_TRAVEL := 13.0
+const DASH_MIN := 4.5
+const DASH_MAX := 14.0
 const DASH_COOLDOWN := 2.2
+## Sparks off the plating scraping the floor while it slides, this often.
+const SCRAPE_EVERY := 0.05
+## Close in, every move is in play: within CLOSE_RANGE it picks among those off
+## cooldown by these weights (the move it used last at CLOSE_REPEAT of its
+## weight), after a breath of CLOSE_PAUSE seconds from its last move's end.
+const CLOSE_RANGE := 3.8
+const CLOSE_WEIGHTS := {Move.SWIPE: 0.4, Move.JUMP: 0.2, Move.DROPKICK: 0.2, Move.DASH: 0.2}
+const CLOSE_REPEAT := 0.3
+const CLOSE_PAUSE := Vector2(0.25, 0.7)
 const TURN_SWIPE := 12.0
 const TURN_JUMP := 7.0
 const TURN_DASH := 14.0
@@ -188,8 +214,6 @@ const ROOT_DROPKICK := [[0.0, 0.0, 0.0], [0.0333, 0.0, -0.351], [0.0667, 0.0, -0
 	[1.4667, 3.066, -1.187], [1.5, 3.066, -1.197], [1.5333, 3.066, -1.213], [1.5667, 3.066, -1.236],
 	[1.6, 3.067, -1.246], [1.6333, 3.067, -1.257], [1.6667, 3.068, -1.266], [1.7, 3.068, -1.269]]
 
-enum Move { NONE, SWIPE, JUMP, DROPKICK, DASH }
-
 ## The sewer it hunts (maze.gd), for wandering cell to cell.
 var sewer: Node3D = null
 
@@ -211,9 +235,20 @@ var _end_at := INF
 var _guard_seen := -1
 var _target: Node3D = null
 var _swipe_ready := 0.0
-var _leap_ready := 0.0
+var _jump_ready := 0.0
+var _dropkick_ready := 0.0
 var _dash_ready := 0.0
 var _roll_at := 0.0
+## Close in, no move before this (the breath after the last one).
+var _close_ready := 0.0
+var _last_move := Move.NONE
+## The dash: 0 crouch and lunge, 1 sliding, 2 rising out of it.
+var _dash_phase := 0
+var _slide_t := 0.0
+var _slide_len := 0.0
+var _slide_u := 0.0
+var _slide_left := 0.0
+var _scrape_t := 0.0
 ## The swipe knocked them down: the jump follows as it ends.
 var _combo_pending := false
 ## Body speed carried into a move, and the last speed a move moved it at.
@@ -616,28 +651,58 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		if _react != null:
 			_react.call("twitch", player.global_position)
 	var dy := absf(player.global_position.y - global_position.y)
-	if now >= _swipe_ready and distance <= SWIPE_TRIGGER and dy < 1.6 and _clear_to(player, 1.3):
-		_start_move(Move.SWIPE, player)
-		_run_move(delta, now)
-		return true
-	if now >= _roll_at and dy < 1.2:
+	var pick := Move.NONE
+	if distance <= CLOSE_RANGE:
+		# Close in: any move that is ready.
+		if now >= _close_ready and dy < 1.6 and _clear_to(player, 1.3):
+			pick = _pick_close(now)
+	elif now >= _roll_at and dy < 1.2:
+		# Further off: now and then it closes the gap.
 		_roll_at = now + 0.35
 		var floor_clear := _clear_to(player, 1.3) and _clear_to(player, 0.45)
-		if now >= _dash_ready and distance >= DASH_MIN and distance <= DASH_MAX and randf() < 0.3 and floor_clear:
-			_start_move(Move.DASH, player)
-			# Its first step this same tick: a move that begins standing still for
-			# a tick reads as a seam.
-			_run_move(delta, now)
-			return true
-		if now >= _leap_ready and distance >= LEAP_MIN and distance <= LEAP_MAX and randf() < 0.45 and floor_clear:
-			_start_move(Move.JUMP if randf() < 0.5 else Move.DROPKICK, player)
-			# Its first step this same tick: a move that begins standing still for
-			# a tick reads as a seam.
-			_run_move(delta, now)
-			return true
+		if floor_clear:
+			if now >= _dash_ready and distance >= DASH_MIN and distance <= DASH_MAX and randf() < 0.35:
+				pick = Move.DASH
+			elif distance >= LEAP_MIN and distance <= LEAP_MAX and randf() < 0.45:
+				var leaps: Array = []
+				if now >= _jump_ready:
+					leaps.append(Move.JUMP)
+				if now >= _dropkick_ready:
+					leaps.append(Move.DROPKICK)
+				if not leaps.is_empty():
+					pick = leaps[randi() % leaps.size()]
+	if pick != Move.NONE:
+		_start_move(pick, player)
+		# Its first step this same tick: a move that begins standing still for
+		# a tick reads as a seam.
+		_run_move(delta, now)
+		return true
 	_walk_to(delta, now, player.global_position, CHASE_SPEED)
 	_face_velocity(flat)
 	return true
+
+
+## Close in: one of the moves off cooldown, by CLOSE_WEIGHTS, the last one used
+## less likely. NONE if none is ready.
+func _pick_close(now: float) -> int:
+	var ready := {Move.SWIPE: now >= _swipe_ready, Move.JUMP: now >= _jump_ready,
+		Move.DROPKICK: now >= _dropkick_ready, Move.DASH: now >= _dash_ready}
+	var total := 0.0
+	var weights := {}
+	for m in CLOSE_WEIGHTS:
+		if not ready[m]:
+			continue
+		var w: float = CLOSE_WEIGHTS[m] * (CLOSE_REPEAT if m == _last_move else 1.0)
+		weights[m] = w
+		total += w
+	if total <= 0.0:
+		return Move.NONE
+	var roll := randf() * total
+	for m in weights:
+		roll -= weights[m]
+		if roll <= 0.0:
+			return m
+	return weights.keys()[-1]
 
 
 ## Wandering the sewer: from cell to cell along its navmesh, a few cells at a
@@ -764,8 +829,9 @@ static func _spec(kind: int) -> Dictionary:
 				"tip": DROPKICK_TIP, "root_at_hit": DROPKICK_ROOT_AT_HIT, "stretch": LEAP_STRETCH,
 				"end": DROPKICK_END, "turn": TURN_JUMP, "straight": true}
 		_:
-			return {"clip": CLIP_DASH, "table": [], "contact": DASH_CONTACT, "tip": DASH_TIP,
-				"root_at_hit": 0.0, "stretch": Vector2.ONE, "end": DASH_END, "turn": TURN_DASH,
+			# Its blow and its end come when the slide arrives (`_dash_step`).
+			return {"clip": CLIP_DASH, "table": [], "contact": INF, "tip": DASH_TIP,
+				"root_at_hit": 0.0, "stretch": Vector2.ONE, "end": INF, "turn": TURN_DASH,
 				"straight": true}
 
 
@@ -782,13 +848,18 @@ func _start_move(kind: int, player: Node3D) -> void:
 	var s := _spec(kind)
 	_end_at = s["end"]
 	var now := _now()
+	_last_move = kind
 	match kind:
 		Move.SWIPE:
 			_swipe_ready = now + SWIPE_COOLDOWN
 		Move.DASH:
 			_dash_ready = now + DASH_COOLDOWN
-		_:
-			_leap_ready = now + LEAP_COOLDOWN
+			_dash_phase = 0
+			_scrape_t = 0.0
+		Move.JUMP:
+			_jump_ready = now + JUMP_COOLDOWN
+		Move.DROPKICK:
+			_dropkick_ready = now + DROPKICK_COOLDOWN
 	_play_clip(s["clip"], 1.0, BLEND_INTO_MOVE, true)
 	_link_guard(player)
 
@@ -804,6 +875,8 @@ func _end_move() -> void:
 	_move = Move.NONE
 	_target = null
 	_combo_pending = false
+	# A breath before the next one close in.
+	_close_ready = _now() + randf_range(CLOSE_PAUSE.x, CLOSE_PAUSE.y)
 	# The crawl takes up the speed the move left it moving at.
 	velocity.x = _move_vel.x
 	velocity.z = _move_vel.z
@@ -832,13 +905,7 @@ func _run_move(delta: float, _now_t: float) -> void:
 	var fwd := 0.0
 	var left := 0.0
 	if _move == Move.DASH:
-		if prev < contact:
-			# Thrown at them on an eased curve, re-aimed every frame on what is left.
-			var need := clampf(flat.length() - DASH_TIP - _carry_ahead(), 0.0, DASH_TRAVEL)
-			var a := _ease_dash(prev / contact)
-			var b := _ease_dash(minf(_move_t / contact, 1.0))
-			if a < 0.999:
-				fwd = need * (b - a) / (1.0 - a)
+		fwd = _dash_step(delta, flat)
 	else:
 		var r := _root_at(s["table"], _move_t)
 		var d := r - _root_prev
@@ -855,8 +922,12 @@ func _run_move(delta: float, _now_t: float) -> void:
 				fwd *= clampf(need / (left_root + fwd), stretch.x, stretch.y)
 		else:
 			fwd *= AFTER_CONTACT
-	# Turning to follow them until just before the blow.
-	if _move_t < contact - 0.08 and flat.length_squared() > 0.01:
+	# Turning to follow them until just before the blow (the dash: until the
+	# last quarter of its slide).
+	var tracking := _move_t < contact - 0.08
+	if _move == Move.DASH:
+		tracking = _dash_phase == 0 or (_dash_phase == 1 and _slide_u < 0.75)
+	if tracking and flat.length_squared() > 0.01:
 		var want := atan2(-flat.x, -flat.z)
 		rotation.y = rotate_toward(rotation.y, want, float(s["turn"]) * delta)
 	var step := -global_basis.z * fwd - global_basis.x * left
@@ -876,11 +947,67 @@ func _run_move(delta: float, _now_t: float) -> void:
 		_end_move()
 
 
-## The dash's share of its travel done at `u` (0..1 of the way to the blow):
-## a hard start easing into the blow.
-static func _ease_dash(u: float) -> float:
+## The dash, a step: the crouch and the lunge (the clip, the body still but for
+## the speed it came in with); then held at the lunge and slid at them; on
+## arrival the blow and the clip again, rising. Returns the forward step.
+func _dash_step(delta: float, flat: Vector3) -> float:
+	var gap := maxf(flat.length() - DASH_TIP - _carry_ahead(), 0.0)
+	match _dash_phase:
+		0:
+			if _move_t >= DASH_LUNGE:
+				# Lunged: held there, and away along the floor.
+				_dash_phase = 1
+				if anim != null:
+					anim.speed_scale = 0.0
+				_slide_t = 0.0
+				_slide_u = 0.0
+				_slide_left = minf(gap, DASH_TRAVEL)
+				_slide_len = clampf(_slide_left / DASH_SLIDE_SPEED, DASH_SLIDE_MIN, DASH_SLIDE_MAX)
+			return 0.0
+		1:
+			_slide_t += delta
+			var u := minf(_slide_t / _slide_len, 1.0)
+			var a := _ease_slide(_slide_u)
+			var b := _ease_slide(u)
+			_slide_u = u
+			# Re-aimed on what is left: they may have moved.
+			var left := minf(gap, _slide_left)
+			var fwd := left * (b - a) / maxf(1.0 - a, 0.001)
+			_slide_left = maxf(_slide_left - fwd, 0.0)
+			_scrape(delta)
+			if u >= 1.0 or left - fwd < 0.1:
+				# Arrived: the blow, and up out of the lunge.
+				_dash_phase = 2
+				if _target != null and is_instance_valid(_target):
+					_contact(_target)
+				if _move == Move.DASH:
+					if anim != null:
+						anim.speed_scale = 1.0
+					_end_at = _move_t + DASH_RECOVER
+			return fwd
+	return 0.0
+
+
+## The slide's share done at `u` (0..1 of its time): fast at once, easing off
+## into the blow.
+static func _ease_slide(u: float) -> float:
 	u = clampf(u, 0.0, 1.0)
-	return 1.0 - pow(1.0 - u, 2.2)
+	return 1.0 - (1.0 - u) * (1.0 - u)
+
+
+## Sparks off its plating scraping the floor, under its front, while it slides.
+func _scrape(delta: float) -> void:
+	_scrape_t -= delta
+	if _scrape_t > 0.0 or not Graphics.effects:
+		return
+	_scrape_t = SCRAPE_EVERY
+	var parent := get_parent()
+	if parent == null or not is_inside_tree():
+		return
+	var ahead := -global_basis.z
+	var at := global_position + ahead * 0.7 + Vector3(0.0, 0.06, 0.0)
+	# Up and back, the way it came.
+	_spark_spray(parent, at, (Vector3.UP * 0.6 - ahead).normalized(), randi_range(3, 6), false)
 
 
 static func _root_at(table: Array, t: float) -> Vector2:
@@ -1025,8 +1152,10 @@ func _run_knockdown(delta: float, now: float) -> void:
 		visual.transform = _visual_rest
 		# Up -- and straight back at them.
 		_swipe_ready = now
-		_leap_ready = now
+		_jump_ready = now
+		_dropkick_ready = now
 		_dash_ready = now
+		_close_ready = now
 		_roll_at = now
 		alert()
 		_play_clip(CLIP_CRAWL, 0.0, BLEND_CRAWL, true)
