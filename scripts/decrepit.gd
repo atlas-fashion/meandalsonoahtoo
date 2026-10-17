@@ -109,10 +109,16 @@ const JUMP_END := 1.15
 ## DROPKICK: the feet are out in front at clip 1.0 s (f61), DROPKICK_TIP ahead
 ## and ~1.6 m up. Its early sidestep is left out (it dives straight at them).
 const DROPKICK_DAMAGE := 35.0
-## The dropkick: the feet out in front f55-f61. It kicks, so no shield box:
-## its reach is measured from the body (DROPKICK_TIP) through the window.
-const DROPKICK_HITS := [[0.9167, 1.0167]]
-const DROPKICK_TIP := 2.53 * MODEL_SCALE
+## The dropkick kicks: its box is on the LEFT FOOT (FOOT_L, 1.5x the foot),
+## not the shield. Tracked in game (the foot box's centre, from the body): over
+## the top of the flip at f47 (1.4 m ahead, 4.2 m up), out in front f49-f51
+## (2.2 m ahead, sweeping down from 3.0 to 1.2 m -- head and chest height), at
+## the floor by f53, planted from f55. (The window first set, f55-f61, came from
+## "whichever foot is furthest out" and opened after the left one had landed.)
+const DROPKICK_HITS := [[0.8167, 0.8833]]
+## How far ahead of the body the left foot kicks (metres, in game): what the
+## leap is stretched to land on the player.
+const DROPKICK_TIP := 2.1
 const DROPKICK_END := 1.65
 const DROPKICK_THROW := 10.0
 ## Leaps (jump or dropkick): their flight stretched up to LEAP_STRETCH (and
@@ -149,7 +155,7 @@ const DASH_LUNGE := 0.233
 ## The dash's blows, [start, end] clip seconds: the FIRST start is its arrival
 ## (the slide fills the clip from DASH_LUNGE to it); after it the clip plays at
 ## 1x (the shield held out, f18-f21).
-const DASH_HITS := [[0.3, 0.35]]
+const DASH_HITS := [[0.1667, 0.3]]
 const DASH_END := 0.35
 const DASH_SLIDE_TIME := 0.4
 const DASH_TIP := 2.985 * MODEL_SCALE
@@ -180,7 +186,7 @@ const TURN_DASH := 14.0
 const SWIPE_CUES := [0.283]
 const JUMP_CUES := [0.2]
 const DROPKICK_CUES := [0.75]
-const DASH_CUES := [0.2667]
+const DASH_CUES := [0.25]
 const SWIPE_LISTEN := 0.25
 const JUMP_LISTEN := 0.3
 const DROPKICK_LISTEN := 0.25
@@ -291,8 +297,10 @@ var _hit_windows: Array = []
 var _cue_times: Array = []
 ## Windows whose blow has landed, by index.
 var _landed := {}
-## The shield's hitbox (shield_hitbox.gd), on ARM_L.
+## The shield's hitbox (shield_hitbox.gd), on ARM_L; and the left foot's, on
+## FOOT_L, for the dropkick.
 var _hitbox: Node = null
+var _foot_box: Node = null
 ## The swipe knocked them down: the jump follows as it ends.
 var _combo_pending := false
 ## Body speed carried into a move, and the last speed a move moved it at.
@@ -657,6 +665,10 @@ func _attach_react() -> void:
 	if not _hitbox.call("setup", _skel, "ARM_L", _parts):
 		_hitbox.queue_free()
 		_hitbox = null
+	_foot_box = HITBOX.new()
+	if not _foot_box.call("setup", _skel, "FOOT_L", _parts, "FootHitbox"):
+		_foot_box.queue_free()
+		_foot_box = null
 
 
 # --- Each tick ----------------------------------------------------------------------
@@ -1153,26 +1165,27 @@ func _tick_windows(prev: float, player: Node3D) -> void:
 		if _touches(player):
 			_landed[i] = true
 			_land(player)
-	_set_hitbox(open and _move != Move.DROPKICK and _move != Move.NONE)
+	_set_hitbox(open and _move != Move.DROPKICK and _move != Move.NONE,
+		open and _move == Move.DROPKICK)
 
 
-func _set_hitbox(on: bool) -> void:
-	if _hitbox != null and is_instance_valid(_hitbox) and _hitbox.get("live") != on:
-		_hitbox.call("set_live", on)
+## The shield's box and the foot's shown (live) or not; one argument: both.
+func _set_hitbox(shield: bool, foot = null) -> void:
+	var f: bool = shield if foot == null else foot
+	if _hitbox != null and is_instance_valid(_hitbox) and _hitbox.get("live") != shield:
+		_hitbox.call("set_live", shield)
+	if _foot_box != null and is_instance_valid(_foot_box) and _foot_box.get("live") != f:
+		_foot_box.call("set_live", f)
 
 
 ## Does the move under way reach the player now? The shield's box for the swipe,
-## the jump and the dash (with a clear line, so not through stone); the kick's
-## reach from the body for the dropkick.
+## the jump and the dash, the left foot's for the dropkick (with a clear line,
+## so not through stone; the jump's strike into the floor without).
 func _touches(player: Node3D) -> bool:
-	var to := player.global_position - global_position
-	if _move == Move.DROPKICK:
-		var flat := Vector3(to.x, 0.0, to.z)
-		var off := (-global_basis.z).angle_to(flat.normalized()) if flat.length_squared() > 0.0001 else 0.0
-		return flat.length() <= DROPKICK_TIP + 0.75 and off <= deg_to_rad(50.0) and absf(to.y) <= 1.6
-	if _hitbox == null or not is_instance_valid(_hitbox):
+	var box: Node = _foot_box if _move == Move.DROPKICK else _hitbox
+	if box == null or not is_instance_valid(box):
 		return false
-	if not _hitbox.call("overlaps", player):
+	if not box.call("overlaps", player):
 		return false
 	return _move == Move.JUMP or _clear_to(player, 1.0)
 

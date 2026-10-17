@@ -470,7 +470,7 @@ func _decrepit() -> Dictionary:
 				return lunge + (x - lunge) / span * slide
 			return lunge + slide + (x - arrive)
 		var marks := _hit_marks(DECREPIT, k, hits, cues, listen, int(c[move[2]]), clock,
-			"arrives" if dash else ("(the kick: no shield box)" if k == "DROPKICK" else ""))
+			"arrives" if dash else ("(left-foot box)" if k == "DROPKICK" else ""))
 		marks.append(["move ends (%s_END)" % k, float(c[k + "_END"]), END, _bind(DECREPIT, k + "_END")])
 		if dash:
 			marks.push_front(["lunge -> SLIDE (%s of slide to HIT 1)" % _s(slide), lunge, INFO,

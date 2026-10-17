@@ -1,9 +1,10 @@
 extends BoneAttachment3D
 
-## A SHIELD HITBOX (2026-10-17): a box riding a bone, sized from the shield mesh
-## itself and grown by SIZE_SCALE "to ensure good reach" (the user). Used by the
-## enforcer (enforcer.gd, its swipe) and the decrepit enforcer (decrepit.gd, the
-## swipe, the jump and the dash) -- both carry their shield on ARM_L.
+## A BONE HITBOX (2026-10-17): a box riding a bone, sized from the part of the
+## mesh skinned to it and grown by SIZE_SCALE "to ensure good reach" (the user).
+## First made for the shields -- the enforcer (enforcer.gd, its swipe) and the
+## decrepit enforcer (decrepit.gd, the swipe, the jump and the dash), both on
+## ARM_L -- then the decrepit's left foot (FOOT_L) for its dropkick.
 ##
 ## Size: the vertices skinned mostly (>= MIN_WEIGHT) to the bone, taken into the
 ## bone's rest space through the skin's bind pose; their bounding box, scaled by
@@ -34,8 +35,8 @@ var _query := PhysicsShapeQueryParameters3D.new()
 
 ## Rides `bone` of `skeleton`, sized from `meshes` (the skinned parts). False if
 ## no vertex of them is on that bone.
-func setup(skeleton: Skeleton3D, bone: String, meshes: Array) -> bool:
-	name = "ShieldHitbox"
+func setup(skeleton: Skeleton3D, bone: String, meshes: Array, node_name := "ShieldHitbox") -> bool:
+	name = node_name
 	bone_name = bone
 	skeleton.add_child(self)
 	var box = _bone_box(skeleton, bone, meshes)
