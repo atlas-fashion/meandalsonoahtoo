@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 67), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 68), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -305,10 +305,11 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 - Enemies: `enemy.gd` (skeleton; base class; also the boss via
   `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` + `arrow.gd`, `crier.gd`
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
-  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65-67), `sewer_lizard.gd` +
+  "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65-68), `sewer_lizard.gd` +
   `goo.gd`, `stalker.gd` ("the Remnant" / "the Shade"), `mimic.gd`,
   `convoy.gd`; helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
-  `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`. Clip changes on the
+  `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`, `shield_hitbox.gd`
+  (both enforcers' shield hitboxes and hit windows, note 68). Clip changes on the
   enforcer and decrepit rigs are inertialized by `enforcer_react.gd`
   `crossfade` (note 59) -- use it for any new clip switch.
 - World: `chest.gd`, `gate.gd`, `portcullis.gd`, `workbench.gd`,
@@ -424,6 +425,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 65 | 2026-10-17 | Every clip its own parry marker; the dash's slide is a fixed length | [docs/notes/65-every-clip-its-own-parry-marker-the.md](docs/notes/65-every-clip-its-own-parry-marker-the.md) |
 | 66 | 2026-10-17 | Several hits and parry cues per move; add them on the timeline | [docs/notes/66-several-hits-and-parry-cues-per-move.md](docs/notes/66-several-hits-and-parry-cues-per-move.md) |
 | 67 | 2026-10-17 | The dash always closes the gap first | [docs/notes/67-the-dash-always-closes-the-gap-first.md](docs/notes/67-the-dash-always-closes-the-gap-first.md) |
+| 68 | 2026-10-17 | Shield hitboxes on both enforcers; hit windows | [docs/notes/68-shield-hitboxes-on-both-enforcers-hit-windows.md](docs/notes/68-shield-hitboxes-on-both-enforcers-hit-windows.md) |
 
 ## Notes by source file
 
@@ -448,13 +450,13 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/convoy.gd`: 23, 28
 - `scripts/crier.gd`: 43, 48, 60
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60
 - `scripts/enemy_health_bar.gd`: 6.19
-- `scripts/enforcer.gd`: 48, 51, 53, 59, 64
+- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68
 - `scripts/enforcer_react.gd`: 52, 56, 59
 - `scripts/explore_map.gd`: 6.18, 50, 60
 - `scripts/gate.gd`: 6.18
@@ -487,13 +489,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/radial_menu.gd`: 25, 30, 44
 - `scripts/respawn_anchor.gd`: 8b, 32
 - `scripts/save_system.gd`: 19, 60
-- `scripts/sandbox.gd`: 60
-- `scripts/sandbox_menu.gd`: 60
+- `scripts/sandbox.gd`: 60, 68
+- `scripts/sandbox_menu.gd`: 60, 68
 - `scripts/sandbox_world.gd`: 60
 - `scripts/settings_panel.gd`: 19, 46
 - `scripts/sewer.gd`: 50, 55, 56, 57
 - `scripts/sewer_lizard.gd`: 58, 60
 - `scripts/shard_door.gd`: 18
+- `scripts/shield_hitbox.gd`: 68
 - `scripts/skeleton_eyes.gd`: 13
 - `scripts/skeleton_sword.gd`: 24
 - `scripts/sky_setup.gd`: 6.18
@@ -518,7 +521,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39
 - `tools/benchmark.gd`: 6.11, 33
 - `tools/build_brick_kit.py`: 27, 28
-- `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66
+- `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68
 - `tools/build_decrepit.py`: 56, 57, 59, 66
 - `tools/build_enforcer.py`: 48, 51, 53
 - `tools/build_gate_door.py`: 6.19

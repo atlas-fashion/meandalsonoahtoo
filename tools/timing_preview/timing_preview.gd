@@ -18,7 +18,9 @@ extends Node3D
 ## (its formatting and comment kept) -- then the markers rebuild from it. If the
 ## script is open in the script editor, Godot will offer to reload it.
 ##
-##   HIT n               -> element n of *_HITS (a move may land several blows)
+##   HIT n start / end   -> window n of *_HITS, [start, end] (a move may land
+##                          several blows; the shield's hitbox is live between
+##                          them -- shield_hitbox.gd)
 ##   parry cue n         -> element n of *_CUES (each its own marker: moving a
 ##                          hit does not move it; its label says how long it
 ##                          listens, *_LISTEN, and where that window closes
@@ -27,11 +29,12 @@ extends Node3D
 ##   lunge -> slide      -> DASH_LUNGE (the dash's first hit is its arrival;
 ##                          the slide's real length is DASH_SLIDE_TIME)
 ##
-## ADDING and DELETING (the decrepit's moves): insert a marker on a clip (right-
-## click the timeline -> Insert Marker) and name it "hit" or "parry": its time is
-## added to that move's *_HITS or *_CUES. Delete a HIT n or parry cue n marker
-## and its time is taken out (a move keeps at least one hit: the one its lunge
-## aims at; the last one cannot be deleted). Everything is renumbered after.
+## ADDING and DELETING (the decrepit's moves, the enforcer's swipe): insert a
+## marker on a clip (right-click the timeline -> Insert Marker) and name it
+## "hit" or "parry": a "hit" adds a window from there to NEW_WINDOW later (drag
+## its end), a "parry" a cue. Delete a HIT n start / end (the window goes) or a
+## parry cue n marker and it is taken out (a move keeps at least one hit: the
+## one its lunge aims at; the last one cannot be deleted). Renumbered after.
 ##   settled: BEAM FIRES -> BEAM_SET_EARLY (= the clip's length - the marker)
 ## Gold "info" markers with no single value behind them (cannon up, the recoil)
 ## do not move anything; dragging one is undone at the next rebuild.
@@ -53,6 +56,8 @@ const HIT := Color(0.95, 0.2, 0.15)
 const INFO := Color(0.95, 0.75, 0.3)
 const END := Color(0.6, 0.6, 0.6)
 const FPS := 60.0
+## A hit window added by hand lasts this long until its end is dragged.
+const NEW_WINDOW := 0.1
 const DECREPIT := "res://scripts/decrepit.gd"
 const ENFORCER := "res://scripts/enforcer.gd"
 
@@ -218,7 +223,7 @@ func check_drags() -> bool:
 			t = _snap(t, a.length)
 			known[label][0] = t
 			if bind.get("index") != null:
-				if _edit_list(bind, &"set", int(bind["index"]), t):
+				if _edit_list(bind, &"set", int(bind["index"]), t, int(bind.get("part", -1))):
 					return true
 			elif _write_back(bind, t, a.length):
 				return true
@@ -242,33 +247,58 @@ static func _added_kind(name: String) -> StringName:
 ## Adds `t` to, moves element `index` of, or removes element `index` from the
 ## list constant a binding names; sorted and written back. A *_HITS list never
 ## goes empty.
-func _edit_list(bind: Dictionary, op: StringName, index: int, t: float) -> bool:
+func _edit_list(bind: Dictionary, op: StringName, index: int, t: float, part := -1) -> bool:
 	var c := _consts(bind["script"])
-	var list: Array = (c.get(bind["const"], []) as Array).duplicate()
-	list.sort()
+	var windows := String(bind["const"]).ends_with("_HITS")
+	var list: Array = _sorted(c.get(bind["const"], []) as Array, windows)
 	match op:
 		&"add":
-			list.append(t)
+			list.append([t, t + NEW_WINDOW] if windows else t)
 		&"set":
 			if index < 0 or index >= list.size():
 				return false
-			list[index] = t
+			if windows:
+				list[index][maxi(part, 0)] = t
+			else:
+				list[index] = t
 		&"remove":
 			if index < 0 or index >= list.size():
 				return false
-			if String(bind["const"]).ends_with("_HITS") and list.size() <= 1:
+			if windows and list.size() <= 1:
 				push_warning("timing preview: a move keeps at least one hit (%s)" % bind["const"])
 				return false
 			list.remove_at(index)
-	list.sort()
-	var parts: PackedStringArray = []
+	list = _sorted(list, windows)
+	var items: PackedStringArray = []
 	for v in list:
-		parts.append(String.num(snappedf(float(v), 0.0001), 4))
-	var text := "[" + ", ".join(parts) + "]"
+		if windows:
+			items.append("[%s, %s]" % [_num(v[0]), _num(v[1])])
+		else:
+			items.append(_num(v))
+	var text := "[" + ", ".join(items) + "]"
 	var ok := write_const(bind["script"], bind["const"], text)
 	if ok:
 		print("[timing preview] %s := %s" % [bind["const"], text])
 	return ok
+
+
+static func _num(v) -> String:
+	return String.num(snappedf(float(v), 0.0001), 4)
+
+
+## A list in order: cue times sorted; hit windows each [min, max], by start.
+static func _sorted(list: Array, windows: bool) -> Array:
+	var out: Array = []
+	for v in list:
+		if windows:
+			out.append([minf(float(v[0]), float(v[1])), maxf(float(v[0]), float(v[1]))])
+		else:
+			out.append(float(v))
+	if windows:
+		out.sort_custom(func(x, y): return x[0] < y[0])
+	else:
+		out.sort()
+	return out
 
 
 ## A single value (not a list): {"script", "const", "mode"} -- mode &"at" (the
@@ -337,9 +367,46 @@ static func _bind(script: String, name: String, mode := &"at", ref = null, frame
 	return {"script": script, "const": name, "mode": mode, "ref": ref, "frames": frames}
 
 
-## Element `index` of the (sorted) list constant `name`.
-static func _bind_item(script: String, name: String, index: int) -> Dictionary:
-	return {"script": script, "const": name, "mode": &"at", "index": index}
+## Element `index` of the (sorted) list constant `name`; `part` 0 / 1 for a
+## hit window's start / end.
+static func _bind_item(script: String, name: String, index: int, part := -1) -> Dictionary:
+	return {"script": script, "const": name, "mode": &"at", "index": index, "part": part}
+
+
+## A move's markers for its hit windows and cues: HIT n start / end, and each cue
+## with how its window closes against the next blow's start (and whether a later
+## cue replaces it first). `clock` puts clip seconds on the move's own clock.
+func _hit_marks(script: String, k: String, hits: Array, cues: Array, listen: float, damage: int,
+		clock: Callable, first_note := "") -> Array:
+	var marks: Array = []
+	for i in hits.size():
+		var start_label := "HIT %d start (%d)" % [i + 1, damage]
+		if i == 0 and first_note != "":
+			start_label += " " + first_note
+		marks.append([start_label, float(hits[i][0]), HIT, _bind_item(script, k + "_HITS", i, 0)])
+		marks.append(["HIT %d end" % (i + 1), float(hits[i][1]), HIT, _bind_item(script, k + "_HITS", i, 1)])
+	for i in cues.size():
+		var cue_t: float = clock.call(float(cues[i]))
+		var closes := cue_t + listen
+		var next := -1
+		for j in hits.size():
+			if float(clock.call(float(hits[j][0]))) >= cue_t - 0.0001:
+				next = j
+				break
+		var note := "no hit after it"
+		var replaced := next >= 0 and i + 1 < cues.size() \
+			and float(clock.call(float(cues[i + 1]))) <= float(clock.call(float(hits[next][0])))
+		if replaced:
+			note = "REPLACED by cue %d before HIT %d (no effect)" % [i + 2, next + 1]
+		elif next >= 0:
+			var h: float = clock.call(float(hits[next][0]))
+			if absf(closes - h) < 0.004:
+				note = "closes as HIT %d opens" % (next + 1)
+			else:
+				note = "closes %s %s HIT %d opens" % [_s(absf(closes - h)), "after" if closes > h else "BEFORE", next + 1]
+		marks.append(["parry cue %d: listens %s, %s" % [i + 1, _s(listen), note], float(cues[i]), PARRY,
+			_bind_item(script, k + "_CUES", i)])
+	return marks
 
 
 # --- The decrepit enforcer (scripts/decrepit.gd) ---------------------------------------
@@ -352,15 +419,13 @@ func _decrepit() -> Dictionary:
 			["DROPKICK", "DROPKICK_BAKED", "DROPKICK_DAMAGE"], ["DASH", "DASH_BAKED", "DASH_DAMAGE"]]:
 		var k: String = move[0]
 		var clip := StringName(move[1])
-		var hits: Array = (c[k + "_HITS"] as Array).duplicate()
-		hits.sort()
-		var cues: Array = (c[k + "_CUES"] as Array).duplicate()
-		cues.sort()
+		var hits := _sorted(c[k + "_HITS"] as Array, true)
+		var cues := _sorted(c[k + "_CUES"] as Array, false)
 		var listen: float = c[k + "_LISTEN"]
 		var dash := k == "DASH"
 		var lunge: float = c.get("DASH_LUNGE", 0.0)
 		var slide: float = c.get("DASH_SLIDE_TIME", 0.0)
-		var arrive: float = hits[0] if not hits.is_empty() else lunge
+		var arrive: float = hits[0][0] if not hits.is_empty() else lunge
 		# The move's own clock (the dash's clip runs slowed through its slide).
 		var clock := func(x: float) -> float:
 			if not dash or x <= lunge:
@@ -369,34 +434,8 @@ func _decrepit() -> Dictionary:
 			if x <= arrive:
 				return lunge + (x - lunge) / span * slide
 			return lunge + slide + (x - arrive)
-		var marks: Array = []
-		for i in hits.size():
-			var label := "HIT %d (%d)" % [i + 1, int(c[move[2]])]
-			if dash and i == 0:
-				label += " arrives"
-			marks.append([label, float(hits[i]), HIT, _bind_item(DECREPIT, k + "_HITS", i)])
-		for i in cues.size():
-			var cue_t: float = clock.call(float(cues[i]))
-			var closes := cue_t + listen
-			var next := -1
-			for j in hits.size():
-				if float(clock.call(float(hits[j]))) >= cue_t - 0.0001:
-					next = j
-					break
-			var note := "no hit after it"
-			# A later cue before that hit replaces this one (each blow uses the
-			# latest cue): say so, it does nothing.
-			var replaced := next >= 0 and i + 1 < cues.size() 				and float(clock.call(float(cues[i + 1]))) <= float(clock.call(float(hits[next])))
-			if replaced:
-				note = "REPLACED by cue %d before HIT %d (no effect)" % [i + 2, next + 1]
-			elif next >= 0:
-				var h: float = clock.call(float(hits[next]))
-				if absf(closes - h) < 0.004:
-					note = "closes on HIT %d" % (next + 1)
-				else:
-					note = "closes %s %s HIT %d" % [_s(absf(closes - h)), "after" if closes > h else "BEFORE", next + 1]
-			marks.append(["parry cue %d: listens %s, %s" % [i + 1, _s(listen), note], float(cues[i]), PARRY,
-				_bind_item(DECREPIT, k + "_CUES", i)])
+		var marks := _hit_marks(DECREPIT, k, hits, cues, listen, int(c[move[2]]), clock,
+			"arrives" if dash else ("(the kick: no shield box)" if k == "DROPKICK" else ""))
 		marks.append(["move ends (%s_END)" % k, float(c[k + "_END"]), END, _bind(DECREPIT, k + "_END")])
 		if dash:
 			marks.push_front(["lunge -> SLIDE (%s of slide to HIT 1)" % _s(slide), lunge, INFO,
@@ -415,11 +454,16 @@ func _enforcer() -> Dictionary:
 	var windup := _init_value(ENFORCER, "windup_time", 0.6)
 	var contact: float = c["SWIPE_CONTACT"]
 	var out := {}
-	out[&"SWIPE_1_BAKED"] = [
-		["HIT (plays at x%.2f: lands at windup %s)" % [contact / windup, _s(windup)], contact, HIT,
-			_bind(ENFORCER, "SWIPE_CONTACT", &"at", null, true)],
-		["parry: guard up <= 0.5 s before the HIT", contact, PARRY],
-	]
+	# The swipe: its hit windows (the shield's box), and the frame its clip is
+	# synced to the wind-up's end (it plays at contact / windup). No cues: the
+	# guard-timing parry.
+	var hits := _sorted(c["SWIPE_HITS"] as Array, true)
+	var marks := _hit_marks(ENFORCER, "SWIPE", hits, [], 0.0, int(_init_value(ENFORCER, "attack_damage", 22.0)),
+		func(x: float) -> float: return x, "(parry: guard up <= 0.5 s before it lands)")
+	marks.append(["wind-up ends here (clip at x%.2f over its %s)" % [contact / windup, _s(windup)], contact, INFO,
+		_bind(ENFORCER, "SWIPE_CONTACT", &"at", null, true)])
+	out[&"SWIPE_1_BAKED"] = marks
+	_lists[&"SWIPE_1_BAKED"] = {&"hit": _bind_item(ENFORCER, "SWIPE_HITS", -1)}
 	var beam := _clip_length(&"BEAM_BAKED")
 	out[&"BEAM_BAKED"] = [
 		["settled: BEAM FIRES (charge %s)" % _s(float(c["CHARGE_TIME"])), beam - float(c["BEAM_SET_EARLY"]), HIT,

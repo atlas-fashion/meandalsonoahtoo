@@ -29,6 +29,7 @@ var _status: Label
 var _aggro: CheckButton
 var _damage: CheckButton
 var _population: CheckButton
+var _hitboxes: CheckButton
 var _levels := {}
 var _teleports: VBoxContainer
 var _first: Control
@@ -101,6 +102,7 @@ func _refresh() -> void:
 	_aggro.set_pressed_no_signal(not Sandbox.enemies_passive)
 	_damage.set_pressed_no_signal(not Sandbox.player_god)
 	_population.set_pressed_no_signal(bool(maze.get("sandbox_population")))
+	_hitboxes.set_pressed_no_signal(Sandbox.show_hitboxes)
 	for id in _levels:
 		var spin: SpinBox = _levels[id]
 		var v: int = int(_player.get("armor_level")) if id == &"armor" else int(_player.call("weapon_level", id))
@@ -179,6 +181,8 @@ func _build_switches() -> Control:
 	_population = _switch("Level's own enemies", func(on: bool) -> void:
 		maze.call("set_sandbox_population", on))
 	col.add_child(_population)
+	_hitboxes = _switch("Show hitboxes", func(on: bool) -> void: Sandbox.show_hitboxes = on)
+	col.add_child(_hitboxes)
 	col.add_child(SP.spacer(10))
 	col.add_child(SP.section_label("WEAPON LEVELS"))
 	for entry in [[&"sword", "Sword"], [&"spear", "Spear"], [&"armor", "Armor"]]:

@@ -69,6 +69,14 @@ const BEAM_SET_EARLY := 0.04
 ## and swept across the chest at 22-25 (fastest 23, 47 m/s at the authored
 ## size, seen in renders); the blow lands at frame 22.
 const SWIPE_CONTACT := 21.0 / 60.0
+## HIT WINDOWS (2026-10-17): the swipe's blows, [start, end] clip seconds. While
+## one is open its shield's hitbox (shield_hitbox.gd, ARM_L, 1.5x the shield)
+## is live and lands the blow the first tick it overlaps the player, once per
+## window -- no longer enemy.gd's reach (`_try_connect` lands nothing now).
+## SWIPE_CONTACT above is only where the clip is synced to the wind-up's end.
+## The shield sweeps across the chest f22-f26.
+const SWIPE_HITS := [[22.0 / 60.0, 26.0 / 60.0]]
+const HITBOX := preload("res://scripts/shield_hitbox.gd")
 ## How hard a swipe that lands unguarded throws the player.
 const SWIPE_THROW := 11.0
 ## ...and how hard one taken on a held guard shoves them.
@@ -124,6 +132,12 @@ var _built := false
 var _model: Node3D
 var _muzzle: Node3D
 var _parts: Array[MeshInstance3D] = []
+## The shield's hitbox, the swipe's clock (`_now()` when its clip began, -1 when
+## not swiping) and the windows that have landed.
+var _hitbox: Node = null
+var _swipe_t0 := -1.0
+var _swipe_prev := 0.0
+var _swipe_landed := {}
 ## Stands in for enemy.gd's `mesh`: it takes a copy of this one's material as
 ## the state material, which is then put on the model's crystal and the eyes.
 var _state_proxy: MeshInstance3D
@@ -387,19 +401,66 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 
 # --- The shield swipe ---------------------------------------------------------------
 
-## enemy.gd's blow, then the knock-down: unguarded, the player goes off their
-## feet; a held guard keeps them standing, shoved back; a parry already threw
-## this enforcer and leaves the player alone.
-func _try_connect(player: Node3D, gap: float, reach: float, charge_speed := 0.0) -> void:
-	var had := _attack_connected
+## enemy.gd's reach no longer lands the swipe: its shield's hitbox does, in the
+## swipe's hit windows (`_swipe_windows`).
+func _try_connect(_player: Node3D, _gap: float, _reach: float, _charge_speed := 0.0) -> void:
+	pass
+
+
+## The swipe's hit windows this tick, on the swipe's own clock (the clip runs at
+## SWIPE_CONTACT / windup_time from the wind-up's start -- not read off the
+## clip's position, which the animation LOD steps far off): an open one lands
+## the blow the first tick the shield's box overlaps the player. Shown while
+## open. A stagger, the beam or the end of the swipe shuts them.
+func _swipe_windows(now: float) -> void:
+	var swiping := _swipe_t0 >= 0.0 and _beam == Beam.IDLE and not is_stunned() \
+		and (state == State.WINDUP or state == State.ATTACK or state == State.RECOVER)
+	if not swiping:
+		_swipe_t0 = -1.0
+		_set_hitbox(false)
+		return
+	var rate := SWIPE_CONTACT / maxf(windup_time, 0.05)
+	var clip_t := (now - _swipe_t0) * rate
+	var prev := _swipe_prev
+	_swipe_prev = clip_t
+	var open := false
+	var player := _resolve_player()
+	for i in SWIPE_HITS.size():
+		var w: Array = SWIPE_HITS[i]
+		var a := minf(float(w[0]), float(w[1]))
+		var b := maxf(float(w[0]), float(w[1]))
+		if clip_t < a or prev > b:
+			continue
+		open = true
+		if _swipe_landed.has(i) or player == null:
+			continue
+		if _hitbox != null and _hitbox.call("overlaps", player):
+			_swipe_landed[i] = true
+			_swipe_land(player)
+	_set_hitbox(open)
+
+
+func _set_hitbox(on: bool) -> void:
+	if _hitbox != null and is_instance_valid(_hitbox) and _hitbox.get("live") != on:
+		_hitbox.call("set_live", on)
+
+
+## The swipe's blow, through the player's guard; then the knock-down: unguarded,
+## the player goes off their feet; a held guard keeps them standing, shoved
+## back; a parry already threw this enforcer and leaves the player alone.
+func _swipe_land(player: Node3D) -> void:
 	_guard_seen = -1
 	if player.has_signal("guarded") and not player.is_connected("guarded", _on_player_guarded):
 		player.connect("guarded", _on_player_guarded)
-	super(player, gap, reach, charge_speed)
-	if had or not _attack_connected:
-		return
-	var away := Vector3(_attack_direction.x, 0.0, _attack_direction.z).normalized()
-	if _guard_seen == -1 and player.has_method("knock_down"):
+	var to := player.global_position - global_position
+	var away := Vector3(to.x, 0.0, to.z)
+	away = away.normalized() if away.length_squared() > 0.0001 else -global_basis.z
+	var before = player.get("health")
+	player.call("take_damage", attack_damage, away, self)
+	_attack_connected = true
+	var after = player.get("health")
+	var hurt: bool = before != null and after != null and float(after) < float(before)
+	if _guard_seen == -1 and hurt and player.has_method("knock_down"):
 		player.call("knock_down", away, SWIPE_THROW)
 	elif _guard_seen == 0 and player.has_method("apply_knockback"):
 		player.call("apply_knockback", away * SWIPE_SHOVE)
@@ -773,6 +834,7 @@ func _physics_process(delta: float) -> void:
 			_muzzle.global_position.distance_to(_resolve_player().global_position) if _resolve_player() != null else BEAM_RANGE)
 	_draw_beam(now)
 	_animate(delta, now)
+	_swipe_windows(now)
 
 
 ## Which clip, at what rate. The beam owns the body while it charges and fires,
@@ -809,6 +871,11 @@ func _animate(delta: float, now: float) -> void:
 				# The shield crosses its front as the wind-up ends.
 				var fresh := _clip != ANIM_SWIPE_CLIP or (state == State.WINDUP and entered)
 				_play_clip(ANIM_SWIPE_CLIP, SWIPE_CONTACT / maxf(windup_time, 0.05), 0.18, fresh)
+				if fresh:
+					# The swipe's clock starts with its clip.
+					_swipe_t0 = now
+					_swipe_prev = 0.0
+					_swipe_landed.clear()
 			else:
 				var v := get_real_velocity()
 				var speed := Vector2(v.x, v.z).length()
@@ -939,6 +1006,7 @@ func _unflash() -> void:
 ## a moment before it goes.
 func _die() -> void:
 	_cancel_beam()
+	_set_hitbox(false)
 	_dying = true
 	died.emit()
 	shape.disabled = true
@@ -1175,6 +1243,10 @@ func _attach_react() -> void:
 	_react = REACT.new()
 	_react.name = "HitReact"
 	(sk[0] as Skeleton3D).add_child(_react)
+	_hitbox = HITBOX.new()
+	if not _hitbox.call("setup", sk[0], "ARM_L", _parts):
+		_hitbox.queue_free()
+		_hitbox = null
 
 
 func _flinch(_impulse: Vector3, _time: float) -> void:

@@ -57,6 +57,7 @@ extends "res://scripts/enemy.gd"
 
 const ENF := preload("res://scripts/enforcer.gd")
 const REACT := preload("res://scripts/decrepit_react.gd")
+const HITBOX := preload("res://scripts/shield_hitbox.gd")
 const MODEL := preload("res://models/decrepit.glb")
 ## The mesh crouches ~4 m tall at the authored size; drawn at ~2.6 m.
 const MODEL_SCALE := 0.65
@@ -83,8 +84,12 @@ const WANDER_SPEED := 2.4
 ## ahead of the body in place. (How far the clip has travelled by the first hit
 ## is read off its root table at the time, so moving the hit keeps it aimed.)
 const SWIPE_DAMAGE := 25.0
-## Every blow the swipe lands, clip seconds (the first is the one its lunge aims).
-const SWIPE_HITS := [0.533]
+## HIT WINDOWS (2026-10-17): every blow is a [start, end] of clip seconds; while
+## one is open the shield's hitbox (shield_hitbox.gd, ARM_L, 1.5x the shield)
+## is live and lands the blow the first tick it overlaps the player -- once per
+## window. The first window's start is what the lunge / leap aims to land.
+## Swipe: the shield sweeps across its front f29-f35.
+const SWIPE_HITS := [[0.4833, 0.5833]]
 const SWIPE_TIP := 2.74 * MODEL_SCALE
 const SWIPE_END := 0.733
 const SWIPE_COOLDOWN := 1.3
@@ -97,13 +102,16 @@ const SWIPE_THROW := 12.0
 const BLOCK_SHOVE := 5.0
 ## JUMP SLASH: the point is in the floor at clip 0.50 s (f31), JUMP_TIP ahead.
 const JUMP_DAMAGE := 50.0
-const JUMP_HITS := [0.5]
+## The jump: the point drives into the floor f29-f36.
+const JUMP_HITS := [[0.4833, 0.6]]
 const JUMP_TIP := 2.57 * MODEL_SCALE
 const JUMP_END := 1.15
 ## DROPKICK: the feet are out in front at clip 1.0 s (f61), DROPKICK_TIP ahead
 ## and ~1.6 m up. Its early sidestep is left out (it dives straight at them).
 const DROPKICK_DAMAGE := 35.0
-const DROPKICK_HITS := [1.0]
+## The dropkick: the feet out in front f55-f61. It kicks, so no shield box:
+## its reach is measured from the body (DROPKICK_TIP) through the window.
+const DROPKICK_HITS := [[0.9167, 1.0167]]
 const DROPKICK_TIP := 2.53 * MODEL_SCALE
 const DROPKICK_END := 1.65
 const DROPKICK_THROW := 10.0
@@ -138,9 +146,10 @@ const CLOSE_PAUSE := Vector2(0.25, 0.7)
 ## points in its clip.
 const DASH_DAMAGE := 15.0
 const DASH_LUNGE := 0.233
-## The dash's blows, clip seconds: the FIRST is its arrival (the slide fills the
-## clip from DASH_LUNGE to it); any after play out at 1x.
-const DASH_HITS := [0.3]
+## The dash's blows, [start, end] clip seconds: the FIRST start is its arrival
+## (the slide fills the clip from DASH_LUNGE to it); after it the clip plays at
+## 1x (the shield held out, f18-f21).
+const DASH_HITS := [[0.3, 0.35]]
 const DASH_END := 0.35
 const DASH_SLIDE_TIME := 0.4
 const DASH_TIP := 2.985 * MODEL_SCALE
@@ -278,8 +287,12 @@ var _slide_left := 0.0
 var _scrape_t := 0.0
 ## The move under way's blows and cues, on its own clock (seconds since it
 ## began), sorted; computed at its start (`_events`).
-var _hit_times: Array = []
+var _hit_windows: Array = []
 var _cue_times: Array = []
+## Windows whose blow has landed, by index.
+var _landed := {}
+## The shield's hitbox (shield_hitbox.gd), on ARM_L.
+var _hitbox: Node = null
 ## The swipe knocked them down: the jump follows as it ends.
 var _combo_pending := false
 ## Body speed carried into a move, and the last speed a move moved it at.
@@ -639,6 +652,11 @@ func _attach_react() -> void:
 	_react = REACT.new()
 	_react.name = "HitReact"
 	_skel.add_child(_react)
+	# The shield's hitbox, riding its bone.
+	_hitbox = HITBOX.new()
+	if not _hitbox.call("setup", _skel, "ARM_L", _parts):
+		_hitbox.queue_free()
+		_hitbox = null
 
 
 # --- Each tick ----------------------------------------------------------------------
@@ -911,6 +929,7 @@ func _end_move() -> void:
 	_move = Move.NONE
 	_target = null
 	_combo_pending = false
+	_set_hitbox(false)
 	# A breath before the next one close in.
 	_close_ready = _now() + randf_range(CLOSE_PAUSE.x, CLOSE_PAUSE.y)
 	# The crawl takes up the speed the move left it moving at.
@@ -923,15 +942,18 @@ func _end_move() -> void:
 ## for every move but the dash, whose clip runs slowed through the slide
 ## (`_dash_clock`). Sorted.
 func _events(kind: int, s: Dictionary) -> void:
-	_hit_times.clear()
+	_hit_windows.clear()
 	_cue_times.clear()
-	var hits: Array = (s["hits"] as Array).duplicate()
-	hits.sort()
+	_landed.clear()
+	var hits := _windows(s["hits"])
 	var cues: Array = (s["cues"] as Array).duplicate()
 	cues.sort()
-	var arrive: float = hits[0] if not hits.is_empty() else DASH_LUNGE
-	for h in hits:
-		_hit_times.append(_dash_clock(float(h), arrive) if kind == Move.DASH else float(h))
+	var arrive: float = hits[0][0] if not hits.is_empty() else DASH_LUNGE
+	for w in hits:
+		if kind == Move.DASH:
+			_hit_windows.append([_dash_clock(float(w[0]), arrive), _dash_clock(float(w[1]), arrive)])
+		else:
+			_hit_windows.append([float(w[0]), float(w[1])])
 	for c in cues:
 		_cue_times.append(_dash_clock(float(c), arrive) if kind == Move.DASH else float(c))
 	var end: float = s["end"]
@@ -949,9 +971,20 @@ static func _dash_clock(clip_t: float, arrive: float) -> float:
 	return DASH_LUNGE + DASH_SLIDE_TIME + (clip_t - arrive)
 
 
-## The first blow's time (the one a lunge or a leap aims), INF if none.
+## A move's hit windows, each [start, end] in order, sorted by start.
+static func _windows(list: Array) -> Array:
+	var out: Array = []
+	for w in list:
+		var a := float(w[0])
+		var b := float(w[1])
+		out.append([minf(a, b), maxf(a, b)])
+	out.sort_custom(func(x, y): return x[0] < y[0])
+	return out
+
+
+## The first blow's window opening (the one a lunge or a leap aims), INF if none.
 func _first_hit() -> float:
-	return float(_hit_times[0]) if not _hit_times.is_empty() else INF
+	return float(_hit_windows[0][0]) if not _hit_windows.is_empty() else INF
 
 
 ## How much further the carried speed will still take it, forward.
@@ -1018,11 +1051,7 @@ func _run_move(delta: float, _now_t: float) -> void:
 	for cue in _cue_times:
 		if prev < cue and _move_t >= cue and player.has_method("parry_cue"):
 			player.call("parry_cue", self, float(s["listen"]))
-	for hit in _hit_times:
-		if _move == Move.NONE:
-			break
-		if prev < hit and _move_t >= hit:
-			_contact(player)
+	_tick_windows(prev, player)
 	if _move != Move.NONE and _move_t >= _end_at:
 		_end_move()
 
@@ -1038,7 +1067,8 @@ func _dash_step(delta: float, flat: Vector3) -> float:
 				# Lunged: the slide, its time fixed, the clip slowed to fill it.
 				_dash_phase = 1
 				if anim != null:
-					var arrive: float = DASH_HITS.min() if not DASH_HITS.is_empty() else DASH_LUNGE
+					var w := _windows(DASH_HITS)
+					var arrive: float = w[0][0] if not w.is_empty() else DASH_LUNGE
 					anim.speed_scale = maxf(arrive - DASH_LUNGE, 0.0) / DASH_SLIDE_TIME
 				_slide_t = 0.0
 				_slide_u = 0.0
@@ -1102,47 +1132,71 @@ static func _root_at(table: Array, t: float) -> Vector2:
 	return Vector2(lerpf(a[1], b[1], u), lerpf(a[2], b[2], u))
 
 
-## The shield's point within `reach` of the player's body (an upright segment).
-func _tip_near(player: Node3D, reach: float) -> bool:
-	if _tip == null:
+## The hit windows this tick (the move's clock from `prev` to now): every open
+## one tests the shield's box against the player -- the dropkick its kick's
+## reach -- and lands its blow the first tick it touches; once per window. The
+## shield's box is shown while any window is open.
+func _tick_windows(prev: float, player: Node3D) -> void:
+	var open := false
+	for i in _hit_windows.size():
+		if _move == Move.NONE:
+			break
+		var w: Array = _hit_windows[i]
+		if _move_t < float(w[0]) or prev > float(w[1]):
+			continue
+		open = true
+		# The jump's point strikes the stone as its window opens, hit or miss.
+		if _move == Move.JUMP and prev < float(w[0]):
+			_impact_sparks()
+		if _landed.has(i):
+			continue
+		if _touches(player):
+			_landed[i] = true
+			_land(player)
+	_set_hitbox(open and _move != Move.DROPKICK and _move != Move.NONE)
+
+
+func _set_hitbox(on: bool) -> void:
+	if _hitbox != null and is_instance_valid(_hitbox) and _hitbox.get("live") != on:
+		_hitbox.call("set_live", on)
+
+
+## Does the move under way reach the player now? The shield's box for the swipe,
+## the jump and the dash (with a clear line, so not through stone); the kick's
+## reach from the body for the dropkick.
+func _touches(player: Node3D) -> bool:
+	var to := player.global_position - global_position
+	if _move == Move.DROPKICK:
+		var flat := Vector3(to.x, 0.0, to.z)
+		var off := (-global_basis.z).angle_to(flat.normalized()) if flat.length_squared() > 0.0001 else 0.0
+		return flat.length() <= DROPKICK_TIP + 0.75 and off <= deg_to_rad(50.0) and absf(to.y) <= 1.6
+	if _hitbox == null or not is_instance_valid(_hitbox):
 		return false
-	var p := _tip.global_position
-	var base := player.global_position
-	var y := clampf(p.y, base.y, base.y + 1.8)
-	return p.distance_to(Vector3(base.x, y, base.z)) <= reach
+	if not _hitbox.call("overlaps", player):
+		return false
+	return _move == Move.JUMP or _clear_to(player, 1.0)
 
 
-## The blow of the move under way, at its contact time.
-func _contact(player: Node3D) -> void:
+## A blow of the move under way has landed: through the guard, and then what it
+## does -- the swipe's and the dropkick's throw, the swipe's follow-up jump, a
+## blocked blow's shove.
+func _land(player: Node3D) -> void:
 	var to := player.global_position - global_position
 	var flat := Vector3(to.x, 0.0, to.z)
-	var ahead := -global_basis.z
-	var off := ahead.angle_to(flat.normalized()) if flat.length_squared() > 0.0001 else 0.0
-	var away := flat.normalized() if flat.length_squared() > 0.0001 else ahead
-	var reach_ok := false
+	var away := flat.normalized() if flat.length_squared() > 0.0001 else -global_basis.z
 	var damage := 0.0
 	var throw := 0.0
 	match _move:
 		Move.SWIPE:
-			reach_ok = (flat.length() <= SWIPE_TIP + 0.45 and off <= deg_to_rad(55.0)) or _tip_near(player, 0.85)
-			reach_ok = reach_ok and absf(to.y) <= 1.6 and _clear_to(player, 1.3)
 			damage = SWIPE_DAMAGE
 			throw = SWIPE_THROW
 		Move.JUMP:
-			_impact_sparks()
-			reach_ok = (flat.length() <= JUMP_TIP + 0.75 and off <= deg_to_rad(45.0)) or _tip_near(player, 1.5)
-			reach_ok = reach_ok and absf(to.y) <= 1.5
 			damage = JUMP_DAMAGE
 		Move.DROPKICK:
-			reach_ok = flat.length() <= DROPKICK_TIP + 0.75 and off <= deg_to_rad(50.0) and absf(to.y) <= 1.6
 			damage = DROPKICK_DAMAGE
 			throw = DROPKICK_THROW
 		Move.DASH:
-			reach_ok = (flat.length() <= DASH_TIP + 0.5 and off <= deg_to_rad(40.0)) or _tip_near(player, 0.8)
-			reach_ok = reach_ok and absf(to.y) <= 1.5
 			damage = DASH_DAMAGE
-	if not reach_ok:
-		return
 	var outcome := _strike(player, damage, flat)
 	if outcome == &"miss" or outcome == &"parried":
 		return
@@ -1201,6 +1255,7 @@ func _start_knockdown() -> void:
 	_move = Move.NONE
 	_target = null
 	_combo_pending = false
+	_set_hitbox(false)
 	_move_vel = Vector3.ZERO
 	_knock_t = 0.0
 	_stun_until = maxf(_stun_until, _now() + KNOCK_FALL + KNOCK_LIE + KNOCK_RISE + 0.05)
@@ -1380,6 +1435,7 @@ func _unflash() -> void:
 func _die() -> void:
 	_dying = true
 	_move = Move.NONE
+	_set_hitbox(false)
 	died.emit()
 	shape.disabled = true
 	_grant_drop()

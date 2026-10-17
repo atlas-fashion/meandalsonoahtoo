@@ -22,6 +22,9 @@ var active := false
 var enemies_passive := false
 ## The player takes no damage.
 var player_god := false
+## Attack hitboxes (shield_hitbox.gd) are drawn while their hit window is open.
+## On by default, in a real game too; the sandbox menu switches it.
+var show_hitboxes := true
 
 
 ## Into a fresh sandbox (from the title).
