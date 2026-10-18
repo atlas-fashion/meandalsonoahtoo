@@ -376,7 +376,8 @@ godot --headless --import --path .
 
 Builds `models/enforcer.glb` from the user's rigged mech: only the BAKED clips
 (second delivery: WALK_BAKED, BEAM_BAKED, BEAM_RECOIL_BAKED, SWIPE_1_BAKED; every
-unbaked track and action is removed, one of them was an UNMUTED NLA track),
+unbaked track and action is removed, one of them was an UNMUTED NLA track;
+SWIPE_1_BAKED was replaced by the user's re-bake, CLAUDE.md 73),
 bone markers (EyeL/EyeR, Muzzle, Shield), the parts joined into one mesh with a
 2K baked atlas (`models/source/enforcer/enforcer_atlas.png`). Set the extracted
 atlas texture to `compress/mode=2` after the first import. See CLAUDE.md 48.

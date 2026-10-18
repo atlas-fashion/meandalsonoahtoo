@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 72), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 73), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -430,6 +430,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 68 | 2026-10-17 | Shield hitboxes on both enforcers; hit windows | [docs/notes/68-shield-hitboxes-on-both-enforcers-hit-windows.md](docs/notes/68-shield-hitboxes-on-both-enforcers-hit-windows.md) |
 | 69 | 2026-10-17 | The dropkick's left-foot hitbox | [docs/notes/69-the-dropkick-s-left-foot-hitbox.md](docs/notes/69-the-dropkick-s-left-foot-hitbox.md) |
 | 70 | 2026-10-17 | The dash arrives in their face, and only from 7 m | [docs/notes/70-the-dash-arrives-in-their-face-from.md](docs/notes/70-the-dash-arrives-in-their-face-from.md) |
+| 73 | 2026-10-17 | The enforcer's swipe, re-baked by the user | [docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md](docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md) |
 | 71 | 2026-10-17 | No dash at close range | [docs/notes/71-no-dash-at-close-range.md](docs/notes/71-no-dash-at-close-range.md) |
 | 72 | 2026-10-17 | The enforcer's beam fires with the recoil; the arms aim it; seamless blends | [docs/notes/72-the-enforcer-s-beam-fires-with-the-recoil.md](docs/notes/72-the-enforcer-s-beam-fires-with-the-recoil.md) |
 
@@ -462,7 +463,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/dungeon_room.gd`: 22, 24
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60
 - `scripts/enemy_health_bar.gd`: 6.19
-- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72
+- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
 - `scripts/explore_map.gd`: 6.18, 50, 60
 - `scripts/gate.gd`: 6.18
@@ -529,7 +530,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72
 - `tools/build_decrepit.py`: 56, 57, 59, 66
-- `tools/build_enforcer.py`: 48, 51, 53
+- `tools/build_enforcer.py`: 48, 51, 53, 73
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18
 - `tools/build_potion.py`: 6.19
