@@ -17,6 +17,12 @@ const BLOOD := Color(0.45, 0.2, 0.18)
 ## Seconds "DESCENDING..." is shown, then to fade it to black.
 const LOADING_HOLD := 0.7
 const LOADING_FADE := 1.0
+## The title theme (2026-10-17, the user's; "it loops perfectly"): a WAV, so the
+## loop is sample-exact -- its import loops the whole file (loop_end = its last
+## sample). Fades in, and out with the descent's fade to black.
+const MUSIC := preload("res://audio/music/title_theme.wav")
+const MUSIC_DB := -4.0
+const MUSIC_FADE_IN := 1.5
 
 var _serif: Font
 var _main: Control
@@ -32,6 +38,7 @@ var _delete_slot := -1
 var _embers: CPUParticles2D
 var _time := 0.0
 var _title: Label
+var _music: AudioStreamPlayer
 
 
 func _ready() -> void:
@@ -53,6 +60,18 @@ func _ready() -> void:
 	_serif = serif
 	_build()
 	_show(&"main")
+	_start_music()
+
+
+func _start_music() -> void:
+	_music = AudioStreamPlayer.new()
+	_music.name = "Music"
+	_music.stream = MUSIC
+	_music.volume_db = -60.0
+	add_child(_music)
+	_music.play()
+	create_tween().tween_property(_music, "volume_db", MUSIC_DB, MUSIC_FADE_IN) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
 func _process(delta: float) -> void:
@@ -371,6 +390,10 @@ func _descend() -> void:
 	var t := create_tween()
 	t.tween_interval(LOADING_HOLD)
 	t.tween_property(black, "modulate:a", 1.0, LOADING_FADE).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	# The music goes down with the light, over the whole descent.
+	if _music != null:
+		create_tween().tween_property(_music, "volume_db", -60.0, LOADING_HOLD + LOADING_FADE) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	await t.finished
 	# One frame drawn fully black before the level's build stalls the window.
 	await get_tree().process_frame

@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 75), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 76), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -437,6 +437,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 73 | 2026-10-17 | The enforcer's swipe, re-baked by the user | [docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md](docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md) |
 | 74 | 2026-10-17 | Every enforcer clip at 1x: the swipe a move of its own | [docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md](docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md) |
 | 75 | 2026-10-17 | The enforcer's swipe loop: swipe 2 dashes; beams broken off | [docs/notes/75-the-enforcer-s-swipe-loop.md](docs/notes/75-the-enforcer-s-swipe-loop.md) |
+| 76 | 2026-10-17 | The title theme | [docs/notes/76-the-title-theme.md](docs/notes/76-the-title-theme.md) |
 
 ## Notes by source file
 
@@ -513,7 +514,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14
 - `scripts/stalker.gd`: 11, 16, 22, 60
-- `scripts/title_screen.gd`: 19, 60
+- `scripts/title_screen.gd`: 19, 60, 76
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50
 - `scripts/wood_door.gd`: 6.18
 - `scripts/workbench.gd`: 32
