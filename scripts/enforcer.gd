@@ -134,10 +134,17 @@ const SWIPE1_LOOP_ENTRY := 0.2333
 const BLEND_CHAIN_12 := 0.15
 const BLEND_CHAIN_21 := 0.2
 const LOOP_BREAK := 7.0
+## A breather (2026-10-17, the user: "far too pressuring"): after every
+## LOOP_PAUSE_EVERY-th swipe of a loop that did not connect, LOOP_PAUSE before
+## the next -- the swipe plays on through its own follow-through meanwhile,
+## turning to face the player, rather than freezing. The count starts again with
+## each new loop (from close in, out of a beam, after a parry).
+const LOOP_PAUSE_EVERY := 3
+const LOOP_PAUSE := 0.5
 ## Swipe 2 (clip seconds, at 1x but for the slide): its blows, cues and end.
 ## Its first blow's start is where the slide arrives.
 const ANIM_SWIPE2_CLIP := &"SWIPE_2_BAKED"
-const SWIPE2_HITS := [[0.15, 0.2333]]
+const SWIPE2_HITS := [[0.1667, 0.2333]]
 const SWIPE2_CUES := [0.1333]
 const SWIPE2_LISTEN := 0.25
 const SWIPE2_END := 0.6833
@@ -233,6 +240,10 @@ var _swipe_frame := -1
 var _swipe_kind := 1
 var _swipe_hit := false
 var _resume_loop := false
+## Swipes so far in this loop, and when (on the swipe's clock) its pause ends --
+## -1 when not pausing.
+var _loop_count := 0
+var _pause_end := -1.0
 ## The swipe's events on its own clock: hit windows, cues, where it chains into
 ## the other swipe (if nothing connected), and its end.
 var _sw_hits: Array = []
@@ -564,8 +575,11 @@ func _try_connect(_player: Node3D, _gap: float, _reach: float, _charge_speed := 
 
 
 ## Into swipe `kind` (1 or 2): its clip from the first frame at 1x, its clock at
-## 0. `blend`: how long the switch from the pose shown may take.
-func _start_swipe(player: Node3D, kind := 1, blend := BLEND_INTO_MOVE, from := 0.0) -> void:
+## 0. `blend`: how long the switch from the pose shown may take. `chained`: the
+## loop going on (counted towards its pause), not a new loop.
+func _start_swipe(player: Node3D, kind := 1, blend := BLEND_INTO_MOVE, from := 0.0, chained := false) -> void:
+	_loop_count = _loop_count + 1 if chained else 1
+	_pause_end = -1.0
 	_swipe_kind = kind
 	_swipe_t = from
 	_swipe_hit = false
@@ -636,6 +650,8 @@ func _run_swipe(delta: float, player: Node3D, flat: Vector3) -> void:
 	else:
 		var first: float = _sw_hits[0][0] if not _sw_hits.is_empty() else INF
 		tracking = _swipe_t < first - 0.08
+	# Pausing (LOOP_PAUSE), it turns to face them for the next.
+	tracking = tracking or _pause_end >= 0.0
 	if tracking and flat.length_squared() > 0.01:
 		rotation.y = rotate_toward(rotation.y, atan2(-flat.x, -flat.z), TURN_SWIPE * delta)
 	if fwd > 0.0:
@@ -667,21 +683,29 @@ func _run_swipe(delta: float, player: Node3D, flat: Vector3) -> void:
 	if _swipe_t < 0.0:
 		return
 	if not _swipe_hit and _swipe_t >= _sw_chain:
-		_loop_on(player, flat)
+		# Every LOOP_PAUSE_EVERY-th swipe: the clip plays on for LOOP_PAUSE first.
+		if _pause_end < 0.0 and _loop_count % LOOP_PAUSE_EVERY == 0:
+			_pause_end = _swipe_t + LOOP_PAUSE
+		if _pause_end < 0.0 or _swipe_t >= _pause_end:
+			_loop_on(player, flat)
 	elif _swipe_t >= _sw_end:
 		_end_swipe()
 
 
 ## Round the loop: nothing connected, so the other swipe -- unless the player
 ## is out of the dash's reach (C), where the loop ends and the beam may follow.
+## After a pause the pose is no longer the chain's, so the plain blend into a
+## move -- swipe 1 still from its loop entry, so both pauses come out the same
+## length (from its start, its whole wind-up made one 0.18 s longer).
 func _loop_on(player: Node3D, flat: Vector3) -> void:
 	if flat.length() > LOOP_BREAK:
 		_end_swipe()
 		return
+	var paused := _pause_end >= 0.0
 	if _swipe_kind == 1:
-		_start_swipe(player, 2, BLEND_CHAIN_12)
+		_start_swipe(player, 2, BLEND_INTO_MOVE if paused else BLEND_CHAIN_12, 0.0, true)
 	else:
-		_start_swipe(player, 1, BLEND_CHAIN_21, SWIPE1_LOOP_ENTRY)
+		_start_swipe(player, 1, BLEND_INTO_MOVE if paused else BLEND_CHAIN_21, SWIPE1_LOOP_ENTRY, true)
 
 
 ## Swipe 2's dash, a step (metres forward): nothing until the lunge; then the

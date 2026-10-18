@@ -59,3 +59,10 @@ for the beam. "make sure to create a blend between swipe 2 and 1."
 - **Parry stagger 1.5 s** (was 2.1; the user: "0.6 seconds shorter"): enforcer.gd
   PARRY_STAGGER and enforcer_react.gd STAGGER, every key time scaled by 1.5/2.1
   so the whole reaction plays, faster. Measured: 3 parries, stunned 1.50 s each.
+- **A breather** (the user: "far too pressuring"): after every LOOP_PAUSE_EVERY 3rd
+  swipe of a loop that did not connect, LOOP_PAUSE 0.5 s before the next -- the
+  swipe plays on through its follow-through meanwhile, turning to face the
+  player; then the next with the plain move blend (swipe 1 still at its loop
+  entry: from its start, that pause came out 0.18 s longer). The count restarts
+  with each new loop. Measured, block held: blows 0.30-0.35 s apart, 0.85 and
+  0.75 s across the pauses. SWIPE2_HITS start moved to 0.1667 by the user.
