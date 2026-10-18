@@ -432,10 +432,10 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 68 | 2026-10-17 | Shield hitboxes on both enforcers; hit windows | [docs/notes/68-shield-hitboxes-on-both-enforcers-hit-windows.md](docs/notes/68-shield-hitboxes-on-both-enforcers-hit-windows.md) |
 | 69 | 2026-10-17 | The dropkick's left-foot hitbox | [docs/notes/69-the-dropkick-s-left-foot-hitbox.md](docs/notes/69-the-dropkick-s-left-foot-hitbox.md) |
 | 70 | 2026-10-17 | The dash arrives in their face, and only from 7 m | [docs/notes/70-the-dash-arrives-in-their-face-from.md](docs/notes/70-the-dash-arrives-in-their-face-from.md) |
-| 73 | 2026-10-17 | The enforcer's swipe, re-baked by the user | [docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md](docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md) |
-| 74 | 2026-10-17 | Every enforcer clip at 1x: the swipe a move of its own | [docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md](docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md) |
 | 71 | 2026-10-17 | No dash at close range | [docs/notes/71-no-dash-at-close-range.md](docs/notes/71-no-dash-at-close-range.md) |
 | 72 | 2026-10-17 | The enforcer's beam fires with the recoil; the arms aim it; seamless blends | [docs/notes/72-the-enforcer-s-beam-fires-with-the-recoil.md](docs/notes/72-the-enforcer-s-beam-fires-with-the-recoil.md) |
+| 73 | 2026-10-17 | The enforcer's swipe, re-baked by the user | [docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md](docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md) |
+| 74 | 2026-10-17 | Every enforcer clip at 1x: the swipe a move of its own | [docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md](docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md) |
 
 ## Notes by source file
 
