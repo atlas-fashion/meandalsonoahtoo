@@ -103,7 +103,36 @@ func _process(delta: float) -> void:
 		if FileAccess.get_modified_time(path) != _watched[path]:
 			_rebuild()
 			return
+	# The model re-imported with clips added or removed (2026-10-17: SWIPE_2_BAKED
+	# never showed -- only the script was watched, and the copy kept the old list).
+	if _clips_changed():
+		_rebuild()
+		return
 	check_drags()
+
+
+## The model's clips are not the ones copied onto Timeline.
+func _clips_changed() -> bool:
+	var tl := _timeline()
+	var model := _model()
+	if tl == null or model == null:
+		return false
+	var src: AnimationPlayer = null
+	for n in model.find_children("*", "AnimationPlayer", true, false):
+		src = n
+		break
+	if src == null:
+		return false
+	var have: Array = []
+	for n in tl.get_animation_list():
+		have.append(String(n))
+	var want: Array = []
+	for n in src.get_animation_list():
+		if n != &"RESET":
+			want.append(String(n))
+	have.sort()
+	want.sort()
+	return have != want
 
 
 func _notification(what: int) -> void:
