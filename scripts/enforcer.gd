@@ -25,9 +25,11 @@ extends "res://scripts/enemy.gd"
 ## Hunting (`_chase`, enemy.gd's hook):
 ##   * the BEAM: with a clear line through stone and the player within
 ##     BEAM_RANGE, it plants itself and raises the cannon (CHARGE_TIME: the
-##     BEAM_BAKED clip up to the aim; firing ping-pongs BEAM_RECOIL_BAKED so the
-##     cannon keeps jolting, the crystal and eyes flaring, a thin aiming
-##     line), then holds a beam on the player for up to BEAM_TIME:
+##     BEAM_BAKED clip up to the aim, the crystal and eyes flaring; no beam
+##     yet), then fires: BEAM_RECOIL_BAKED plays once and the beam comes on with
+##     its kick (RECOIL_BEAM), both arms pitched so the barrel points along it
+##     (enforcer_react.gd `aim_at`), and it holds the beam on the player for up
+##     to BEAM_TIME:
 ##     `player.beam_hit` -- BEAM_DPS a second and slowed, a raised guard taking a
 ##     tenth. It swings after the player at TRACK_RATE; stone stops it, its
 ##     fellows do not. Then it vents for VENT_TIME.
@@ -50,12 +52,20 @@ const ANIM_BEAM_CLIP := &"BEAM_BAKED"
 const ANIM_SWIPE_CLIP := &"SWIPE_1_BAKED"
 ## Firing: starts on BEAM_BAKED's settled pose (measured: the muzzle 0.000 m
 ## apart) and kicks the cannon back 0.23 m by its frame 18 without returning.
-## Played once and held it was a single small kick at the start of a 3.2 s beam
-## -- "I couldn't tell if it was" -- so it PING-PONGS for as long as the beam
-## runs (RECOIL_RATE): the cannon jolts back and recovers, over and over, and
-## every pass starts and ends on the aimed pose, so it joins the charge smoothly.
+## Played ONCE as the beam fires, then held on its last frame for the rest of
+## it (2026-10-17, the user: the beam and the recoil "should work together",
+## and "remove any dynamic shaking of the beam arm for now" -- it ping-ponged
+## the whole beam). The beam only comes on with the kick: RECOIL_BEAM into the
+## clip (frame 9, the cannon starting back fastest), on the fire's own clock.
 const ANIM_RECOIL_CLIP := &"BEAM_RECOIL_BAKED"
-const RECOIL_RATE := 1.6
+const RECOIL_BEAM := 8.0 / 60.0
+## A clip held on its last frame is held this short of its end (still
+## "playing", frozen, rather than finished).
+const HOLD_EARLY := 0.04
+## The walk's rate changes at most this fast (per second): eased, never jumped
+## (a walk starting at full rate reads as a new clip starting). As the
+## decrepit's crawl (CLAUDE.md 59).
+const WALK_RATE_EASE := 7.0
 ## A planted foot slides back at this speed with the walk at rate 1 (measured
 ## in Blender: 1.4 m/s at the authored size).
 const WALK_GROUND_SPEED := 0.82
@@ -86,6 +96,8 @@ const BEAM_DPS := 5.0
 const BEAM_RANGE := 20.0
 const CHARGE_TIME := 0.65
 const BEAM_TIME := 3.2
+## The beam opens from a third of its width to full over this, from the kick.
+const BEAM_FLARE_IN := 0.08
 const VENT_TIME := 1.6
 ## After first seeing the player, how long until it may first charge.
 const FIRST_BEAM := 0.6
@@ -127,6 +139,12 @@ var _next_clear := 0.0
 var _lost_line_at := -1.0
 var _beam_end := Vector3.ZERO
 var _beam_on_player := false
+## When the fire (the recoil) began, -1 when not firing.
+var _fire_t0 := -1.0
+## The body's extra turn that puts the barrel on the aim (`_barrel_facing`).
+var _yaw_fix := 0.0
+const BARREL_YAW_MAX := 0.35
+const BARREL_YAW_RATE := 1.5
 
 var _built := false
 var _model: Node3D
@@ -344,28 +362,80 @@ func _setup_clips() -> void:
 		if anim.has_animation(c):
 			anim.get_animation(c).loop_mode = Animation.LOOP_NONE
 	if anim.has_animation(ANIM_RECOIL_CLIP):
-		anim.get_animation(ANIM_RECOIL_CLIP).loop_mode = Animation.LOOP_PINGPONG
+		anim.get_animation(ANIM_RECOIL_CLIP).loop_mode = Animation.LOOP_NONE
 	_play_clip(ANIM_WALK_CLIP, 0.0, 0.0)
 
 
 ## Plays `clip` at `rate`, cross-fading over `blend` -- unless it is already the
 ## clip playing, when only the rate changes. The fade is the reaction layer's
-## (enforcer_react.gd `crossfade`), not the AnimationPlayer's: that one stalled
-## fading into a clip held at speed 0 and lurched at the start of every other
-## fade. So the clip is switched outright, from its first frame, and the layer
-## eases the rig from the last pose shown into it.
+## (enforcer_react.gd `crossfade`, inertialized), not the AnimationPlayer's:
+## that one stalled fading into a clip held at speed 0 and lurched at the start
+## of every other fade. So the clip is switched outright and the layer eases the
+## rig from the last pose shown into it. The walk is entered at the moment of
+## its cycle nearest the pose shown (`_match_phase`), as the decrepit's crawl.
 func _play_clip(clip: StringName, rate: float, blend := 0.2, restart := false) -> void:
 	if anim == null or not anim.has_animation(clip):
 		return
 	if _clip == clip and not restart and anim.is_playing():
 		anim.speed_scale = rate
 		return
+	var start := 0.0
+	if clip == ANIM_WALK_CLIP:
+		start = _match_phase(clip)
 	if _react != null:
 		_react.call("crossfade", blend)
 	_clip = clip
 	anim.play(clip, 0.0, 1.0)
 	anim.speed_scale = rate
-	anim.seek(0.0, true)
+	anim.seek(start, true)
+
+
+## The time in `clip` whose pose is nearest the pose shown last frame: every
+## bone's rotation (radians apart) and position (rig units), checked at 48
+## points of the clip. 0 if there is no pose to match. (decrepit.gd's.)
+var _match_tracks := {}
+
+
+func _match_phase(clip: StringName) -> float:
+	if _react == null or _skel == null or anim == null or not _react.has_method(&"shown_rotation"):
+		return 0.0
+	var a := anim.get_animation(clip)
+	if a == null:
+		return 0.0
+	if not _match_tracks.has(clip):
+		var list: Array = []
+		for ti in a.get_track_count():
+			var ty := a.track_get_type(ti)
+			if ty != Animation.TYPE_ROTATION_3D and ty != Animation.TYPE_POSITION_3D:
+				continue
+			var bone := _skel.find_bone(String(a.track_get_path(ti).get_concatenated_subnames()))
+			if bone >= 0:
+				list.append([ti, bone, ty == Animation.TYPE_ROTATION_3D])
+		_match_tracks[clip] = list
+	var tracks: Array = _match_tracks[clip]
+	if tracks.is_empty():
+		return 0.0
+	var shown := {}
+	for tr in tracks:
+		var v = _react.call("shown_rotation" if tr[2] else "shown_position", tr[1])
+		if v == null:
+			return 0.0
+		shown[tr[0]] = v
+	var best := 0.0
+	var best_cost := INF
+	var steps := 48
+	for k in steps:
+		var t := a.length * float(k) / float(steps)
+		var cost := 0.0
+		for tr in tracks:
+			if tr[2]:
+				cost += a.rotation_track_interpolate(tr[0], t).angle_to(shown[tr[0]])
+			else:
+				cost += a.position_track_interpolate(tr[0], t).distance_to(shown[tr[0]])
+		if cost < best_cost:
+			best_cost = cost
+			best = t
+	return best
 
 
 static func _cyl(top: float, bottom: float, height: float, sides: int) -> CylinderMesh:
@@ -531,15 +601,17 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 			_face(flat)
 			_aim_dir = _turn_toward(_aim_dir, _target_dir(player), TRACK_RATE * 3.0 * delta)
 			if now >= _phase_until:
+				# The recoil starts; the beam comes on with its kick.
 				_beam = Beam.FIRE
-				_phase_until = now + BEAM_TIME
+				_fire_t0 = now
+				_phase_until = now + RECOIL_BEAM + BEAM_TIME
 				_lost_line_at = -1.0
 			return true
 		Beam.FIRE:
 			_hold(delta)
 			_aim_dir = _turn_toward(_aim_dir, _target_dir(player), TRACK_RATE * delta)
 			var aim_flat := Vector3(_aim_dir.x, 0.0, _aim_dir.z)
-			_face(aim_flat)
+			_face(_barrel_facing(aim_flat, delta))
 			if not _clear:
 				if _lost_line_at < 0.0:
 					_lost_line_at = now
@@ -593,6 +665,28 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		_hold(delta)
 		_face(flat)
 	return true
+
+
+## The beam is on: firing, and past the recoil's kick (on the fire's own clock).
+func _beam_live(now: float) -> bool:
+	return _beam == Beam.FIRE and _fire_t0 >= 0.0 and now - _fire_t0 >= RECOIL_BEAM
+
+
+## Which way to face so the BARREL, not the chest, points along `aim_flat`: the
+## cannon sits off the body's front in the firing pose (~5 deg, measured; the
+## reaction layer reads it off the rig every frame, `barrel_world`), so the body
+## turns that much more -- eased in, so it does not snap as the fire starts.
+func _barrel_facing(aim_flat: Vector3, delta: float) -> Vector3:
+	var want := 0.0
+	if _react != null:
+		var bw: Vector3 = _react.get("barrel_world")
+		var b := Vector3(bw.x, 0.0, bw.z)
+		var fwd := -global_basis.z
+		fwd.y = 0.0
+		if b.length_squared() > 0.01 and fwd.length_squared() > 0.01:
+			want = clampf(fwd.signed_angle_to(b, Vector3.UP), -BARREL_YAW_MAX, BARREL_YAW_MAX)
+	_yaw_fix = move_toward(_yaw_fix, want, BARREL_YAW_RATE * delta)
+	return aim_flat.rotated(Vector3.UP, -_yaw_fix)
 
 
 func _start_charge(delta: float, player: Node3D, flat: Vector3) -> void:
@@ -702,6 +796,8 @@ func _vent(now: float) -> void:
 	_beam = Beam.VENT
 	_beam_ready = now + VENT_TIME
 	_beam_on_player = false
+	_fire_t0 = -1.0
+	_yaw_fix = 0.0
 
 
 ## Lowers the beam the moment it stops hunting -- shoved, swinging, lost the
@@ -767,8 +863,10 @@ func _fire(delta: float) -> void:
 				player.call("beam_hit", BEAM_DPS, delta, _aim_dir)
 
 
+## The beam, drawn only while it is on (`_beam_live`): no aiming line through
+## the charge any more -- it starts with the recoil's kick (the user, 2026-10-17).
 func _draw_beam(now: float) -> void:
-	var on := _beam == Beam.CHARGE or _beam == Beam.FIRE
+	var on := _beam_live(now)
 	_beam_root.visible = on
 	if not on:
 		if _beam_light != null:
@@ -784,22 +882,22 @@ func _draw_beam(now: float) -> void:
 		length = maxf(length - SHORT_OF_PLAYER, 0.1)
 	var up := Vector3.UP if absf(dir.y) < 0.95 else Vector3.FORWARD
 	_beam_root.global_transform = Transform3D(Basis.looking_at(dir, up), from)
-	var charging := _beam == Beam.CHARGE
-	# Charging: a thin, faint aiming line. Firing: a full beam that shivers.
-	var t := 1.0 - clampf((_phase_until - now) / CHARGE_TIME, 0.0, 1.0) if charging else 1.0
-	var width := lerpf(0.15, 0.35, t) if charging else 1.0 + 0.18 * sin(now * 61.0) + 0.1 * sin(now * 23.0)
+	# A full beam that shivers, flaring up over its first BEAM_FLARE_IN.
+	var grow := clampf((now - _fire_t0 - RECOIL_BEAM) / BEAM_FLARE_IN, 0.0, 1.0)
+	grow = grow * grow * (3.0 - 2.0 * grow)
+	var width := (1.0 + 0.18 * sin(now * 61.0) + 0.1 * sin(now * 23.0)) * lerpf(0.3, 1.0, grow)
 	# By reference: two siblings named alike get renamed, and a lookup by name
 	# left the glow a metre long while the core reached the target.
 	for holder in _spans:
 		holder.scale = Vector3(width, width, length)
-	_beam_mat.albedo_color.a = lerpf(0.15, 0.45, t) if charging else 0.95
-	_glow_mat.albedo_color.a = lerpf(0.05, 0.12, t) if charging else 0.26
+	_beam_mat.albedo_color.a = 0.95
+	_glow_mat.albedo_color.a = 0.26
 	# Not on the player: a flare right under their eyes is a blot on the view, and
 	# the HUD's gold edge already says they are in it.
-	_beam_flare.visible = not charging and not _beam_on_player
+	_beam_flare.visible = not _beam_on_player
 	_beam_flare.position = Vector3(0.0, 0.0, -length)
 	_beam_flare.scale = Vector3.ONE * (0.6 if _beam_on_player else 0.9) * width
-	if Graphics.effects and not charging:
+	if Graphics.effects:
 		if _beam_light == null:
 			_beam_light = OmniLight3D.new()
 			_beam_light.light_color = CRYSTAL
@@ -827,14 +925,29 @@ func _physics_process(delta: float) -> void:
 	if (_beam == Beam.CHARGE or _beam == Beam.FIRE) \
 			and (state != State.CHASE or not engaged or is_stunned()):
 		_cancel_beam()
-	if _beam == Beam.FIRE:
+	if _beam_live(now):
 		_fire(delta)
-	elif _beam == Beam.CHARGE:
-		_beam_end = _muzzle.global_position + _aim_dir * minf(BEAM_RANGE,
-			_muzzle.global_position.distance_to(_resolve_player().global_position) if _resolve_player() != null else BEAM_RANGE)
 	_draw_beam(now)
 	_animate(delta, now)
 	_swipe_windows(now)
+	_aim_arms()
+
+
+## Both arms pitched so the barrel points along the beam, from the moment the
+## fire starts (so they are on it by the kick); let go as it ends. And, awake,
+## the reaction layer keeps tracking the rig's motion, so every clip change
+## starts from how it was really moving (CLAUDE.md 59; the decrepit always does).
+func _aim_arms() -> void:
+	if _react == null:
+		return
+	_react.set("keep_tracking", engaged)
+	if engaged and not _react.active:
+		# Off since it last went idle: tracking only starts with it on.
+		_react.active = true
+	if _beam == Beam.FIRE and _muzzle != null:
+		_react.call("aim_at", _muzzle.global_position + _aim_dir * 30.0)
+	else:
+		_react.call("aim_at", null)
 
 
 ## Which clip, at what rate. The beam owns the body while it charges and fires,
@@ -847,17 +960,19 @@ func _animate(delta: float, now: float) -> void:
 		Beam.CHARGE:
 			# The whole clip, settling on the shield arm as the charge ends.
 			_play_clip(ANIM_BEAM_CLIP, _beam_set_at() / CHARGE_TIME, 0.12, _clip != ANIM_BEAM_CLIP)
-			_freeze_at_set()
+			_freeze_at(ANIM_BEAM_CLIP, _beam_set_at())
 		Beam.FIRE:
-			# The cannon jolting as it fires, back and forth for the whole beam.
+			# The recoil, once -- the beam comes on with its kick -- then held
+			# on its last frame while the beam lasts. No ping-pong.
 			if anim == null or not anim.has_animation(ANIM_RECOIL_CLIP):
 				if _clip != ANIM_BEAM_CLIP:
 					_play_clip(ANIM_BEAM_CLIP, 0.0, 0.1, true)
 					anim.seek(_beam_set_at(), true)
-				_freeze_at_set()
+				_freeze_at(ANIM_BEAM_CLIP, _beam_set_at())
 			else:
 				if _clip != ANIM_RECOIL_CLIP:
-					_play_clip(ANIM_RECOIL_CLIP, RECOIL_RATE, 0.05, true)
+					_play_clip(ANIM_RECOIL_CLIP, 1.0, 0.1, true)
+				_freeze_at(ANIM_RECOIL_CLIP, anim.get_animation(ANIM_RECOIL_CLIP).length - HOLD_EARLY)
 		_:
 			if is_stunned():
 				# Reeling (a parry, a stagger): it stands while the reaction
@@ -877,16 +992,17 @@ func _animate(delta: float, now: float) -> void:
 					_swipe_prev = 0.0
 					_swipe_landed.clear()
 			else:
+				# The walk at the rate that keeps its feet on the floor, eased to a
+				# stop where it stands (no idle clip); entered from a move at the
+				# phase nearest its pose, from a standstill, and eased up.
 				var v := get_real_velocity()
 				var speed := Vector2(v.x, v.z).length()
-				if speed > 0.15:
-					_play_clip(ANIM_WALK_CLIP, clampf(speed / WALK_GROUND_SPEED, 0.4, 3.2), 0.25)
-				else:
-					# Standing: the walk eased to a stop.
-					if _clip != ANIM_WALK_CLIP:
-						_play_clip(ANIM_WALK_CLIP, 0.0, 0.3, true)
-					elif anim != null:
-						anim.speed_scale = move_toward(anim.speed_scale, 0.0, delta * 4.0)
+				var want := clampf(speed / WALK_GROUND_SPEED, 0.4, 3.2) if speed > 0.15 else 0.0
+				if _clip != ANIM_WALK_CLIP:
+					_play_clip(ANIM_WALK_CLIP, 0.0, 0.3, true)
+				elif anim != null:
+					anim.speed_scale = move_toward(anim.speed_scale, want,
+						delta * (WALK_RATE_EASE if want > 0.0 else 4.0))
 
 	# The crystal and the eyes: their rest glow, flaring through a charge and
 	# burning hot while it fires. (enemy.gd's state colours ride on the same
@@ -926,9 +1042,10 @@ func _beam_set_at() -> float:
 	return anim.get_animation(ANIM_BEAM_CLIP).length - BEAM_SET_EARLY
 
 
-func _freeze_at_set() -> void:
-	if anim != null and anim.current_animation == ANIM_BEAM_CLIP \
-			and anim.current_animation_position >= _beam_set_at():
+## Holds `clip` once it reaches `at`: still playing, at speed 0.
+func _freeze_at(clip: StringName, at: float) -> void:
+	if anim != null and anim.current_animation == clip \
+			and anim.current_animation_position >= at:
 		anim.speed_scale = 0.0
 
 
@@ -1234,15 +1351,22 @@ const PARRY_STAGGER := 2.1
 const HIT_FULL := 20.0
 
 var _react: SkeletonModifier3D
+var _skel: Skeleton3D
 
 
 func _attach_react() -> void:
 	var sk := _model.find_children("*", "Skeleton3D", true, false)
 	if sk.is_empty():
 		return
+	_skel = sk[0] as Skeleton3D
 	_react = REACT.new()
 	_react.name = "HitReact"
-	(sk[0] as Skeleton3D).add_child(_react)
+	_skel.add_child(_react)
+	# The barrel, for aiming the arms: from the cannon arm's joint to the
+	# muzzle (a marker on that bone, so its position is in the bone's space).
+	var holder := _muzzle.get_parent() as BoneAttachment3D if _muzzle != null else null
+	if holder != null:
+		_react.call("set_barrel", StringName(holder.bone_name), _muzzle.position)
 	_hitbox = HITBOX.new()
 	if not _hitbox.call("setup", sk[0], "ARM_L", _parts):
 		_hitbox.queue_free()

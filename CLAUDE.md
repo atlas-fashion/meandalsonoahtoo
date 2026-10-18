@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 71), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 72), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -311,7 +311,9 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`, `shield_hitbox.gd`
   (bone hitboxes: both enforcers' shields, the decrepit's left foot; hit windows; notes 68-69). Clip changes on the
   enforcer and decrepit rigs are inertialized by `enforcer_react.gd`
-  `crossfade` (note 59) -- use it for any new clip switch.
+  `crossfade` (note 59) -- use it for any new clip switch. The enforcer's beam
+  timing and arm aim (`aim_at`): note 72. Rigs with 60 fps clips import at
+  `animation/fps=60` (at 30 Godot resamples and swings limbs across the gaps).
 - World: `chest.gd`, `gate.gd`, `portcullis.gd`, `workbench.gd`,
   `screen_fade.gd`, `sky_setup.gd` (sky, moon).
 - UI: `hud.gd`, `attack_icons.gd`, `inventory.gd` (data),
@@ -429,6 +431,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 69 | 2026-10-17 | The dropkick's left-foot hitbox | [docs/notes/69-the-dropkick-s-left-foot-hitbox.md](docs/notes/69-the-dropkick-s-left-foot-hitbox.md) |
 | 70 | 2026-10-17 | The dash arrives in their face, and only from 7 m | [docs/notes/70-the-dash-arrives-in-their-face-from.md](docs/notes/70-the-dash-arrives-in-their-face-from.md) |
 | 71 | 2026-10-17 | No dash at close range | [docs/notes/71-no-dash-at-close-range.md](docs/notes/71-no-dash-at-close-range.md) |
+| 72 | 2026-10-17 | The enforcer's beam fires with the recoil; the arms aim it; seamless blends | [docs/notes/72-the-enforcer-s-beam-fires-with-the-recoil.md](docs/notes/72-the-enforcer-s-beam-fires-with-the-recoil.md) |
 
 ## Notes by source file
 
@@ -459,8 +462,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/dungeon_room.gd`: 22, 24
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60
 - `scripts/enemy_health_bar.gd`: 6.19
-- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68
-- `scripts/enforcer_react.gd`: 52, 56, 59
+- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72
+- `scripts/enforcer_react.gd`: 52, 56, 59, 72
 - `scripts/explore_map.gd`: 6.18, 50, 60
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58
@@ -524,7 +527,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39
 - `tools/benchmark.gd`: 6.11, 33
 - `tools/build_brick_kit.py`: 27, 28
-- `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69
+- `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72
 - `tools/build_decrepit.py`: 56, 57, 59, 66
 - `tools/build_enforcer.py`: 48, 51, 53
 - `tools/build_gate_door.py`: 6.19

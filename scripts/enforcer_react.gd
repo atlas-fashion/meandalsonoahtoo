@@ -193,6 +193,7 @@ func _process_modification_with_delta(delta: float) -> void:
 	if not _ready_bones:
 		_find_bones(sk)
 	_blend_clips(sk, delta)
+	_aim(sk)
 	if _active.is_empty() or not _bone.has(TORSO):
 		return
 	_clock += delta
@@ -450,7 +451,11 @@ func crossfade(time: float) -> void:
 		_from_prev_rot = (_prev_rot if moving else _base_rot).duplicate()
 		_from_prev_pos = (_prev_pos if moving else _base_pos).duplicate()
 		_from_dt = _base_dt * float(maxi(span, 1))
-		_from_frame = _base_change
+		# Shown until last frame -- NOT since the frame it last changed: a rig
+		# standing still had changed seconds ago, its fade counted as long over,
+		# and the switch snapped (2026-10-17: the enforcer's walk -> beam, the
+		# shield arm 0.3 m in one frame).
+		_from_frame = _base_frame
 	else:
 		_from_rot.clear()
 		_from_pos.clear()
@@ -605,5 +610,120 @@ func _blend_clips(sk: Skeleton3D, delta: float) -> void:
 	_base_frame = f
 	# Nothing left to do: off, so a far-off or sleeping rig is not updated every
 	# frame for nothing.
-	if _fade_len <= 0.0 and not _pending and _active.is_empty() and not keep_tracking:
+	if _fade_len <= 0.0 and not _pending and _active.is_empty() and not keep_tracking \
+			and _aim_target == null and _aim_w <= 0.0:
 		set_deferred(&"active", false)
+
+
+## --- Aiming the cannon (2026-10-17) ------------------------------------------------
+##
+## The user: "once beaming, both arms should adjust vertical rotation to face the
+## player, since the beam comes out at an angle". In the firing pose the barrel
+## points 12-15 deg down (measured), while the beam goes from the muzzle to its
+## target. So while the enforcer aims (`aim_at`), BOTH arms -- the cannon rests
+## on the shield arm -- are pitched together about the body's left-right axis
+## (+X), around a pivot midway between the shoulders, until the barrel's
+## elevation is the target's. Yaw is the body's: enforcer.gd turns by the
+## barrel's side angle (`barrel_world`, ~5 deg). The barrel is the line from the
+## cannon arm's joint to the muzzle (`set_barrel`; the Muzzle marker's own axis
+## is not the barrel's). Eased in and out over AIM_EASE, at most AIM_MAX, and
+## applied under the hit reactions.
+const AIM_EASE := 0.15
+const AIM_MAX := 0.7
+const AIM_SHOULDERS := [&"SHOULDER_L", &"SHOULDER_R"]
+
+var _aim_target = null
+var _aim_last := Vector3.ZERO
+var _aim_w := 0.0
+var _aim_theta := 0.0
+var _aim_frame := -1
+var _barrel_name := &""
+var _barrel_bone := -1
+## The muzzle in the barrel bone's space.
+var _barrel_tip := Vector3.ZERO
+## The barrel's direction in the world as the clip poses it (before the aim),
+## updated every frame the layer runs.
+var barrel_world := Vector3.ZERO
+
+
+## The barrel: from bone `bone`'s joint to `tip` (in that bone's space).
+func set_barrel(bone: StringName, tip: Vector3) -> void:
+	_barrel_name = bone
+	_barrel_bone = -1
+	_barrel_tip = tip
+
+
+## Aim the barrel at `target` (world), or stop aiming (null): eased either way.
+func aim_at(target) -> void:
+	_aim_target = target
+	if target != null:
+		if _aim_w <= 0.0:
+			_aim_theta = 0.0
+		_aim_last = target
+		active = true
+
+
+## The barrel's elevation in the body's front-up plane (radians).
+static func _pitch_of(v: Vector3) -> float:
+	return atan2(v.y, v.z)
+
+
+func _aim(sk: Skeleton3D) -> void:
+	if _barrel_name == &"":
+		return
+	if _barrel_bone < 0:
+		_barrel_bone = sk.find_bone(_barrel_name)
+		if _barrel_bone < 0:
+			_barrel_name = &""
+			return
+	var f := Engine.get_process_frames()
+	if f != _aim_frame:
+		var dt := get_process_delta_time()
+		_aim_frame = f
+		_aim_w = move_toward(_aim_w, 1.0 if _aim_target != null else 0.0, maxf(dt, 0.0) / AIM_EASE)
+	var g := sk.get_bone_global_pose(_barrel_bone)
+	var tip := g * _barrel_tip
+	var b := tip - g.origin
+	if b.length_squared() < 1e-10:
+		return
+	barrel_world = (sk.global_basis * b).normalized()
+	if _aim_w <= 0.0:
+		return
+	var sh: Array = []
+	for n in AIM_SHOULDERS:
+		var i := sk.find_bone(n)
+		if i >= 0:
+			sh.append(i)
+	if sh.is_empty():
+		return
+	var pivot := Vector3.ZERO
+	for i in sh:
+		pivot += sk.get_bone_global_pose(i).origin
+	pivot /= float(sh.size())
+	# While aiming, the turn is worked out from the clip's pose each frame; letting
+	# go, the last one is eased out as it was -- the clip under it changes (the
+	# walk's hanging arm would ask for a big turn up, a snap).
+	if _aim_target != null:
+		var target := sk.global_transform.affine_inverse() * _aim_last
+		# Twice: turning about the pivot moves the muzzle, and with it the line
+		# to the target.
+		var theta := 0.0
+		for k in 2:
+			var r := Basis(Vector3.RIGHT, theta)
+			var tip_r := pivot + r * (tip - pivot)
+			theta += _pitch_of(r * b) - _pitch_of(target - tip_r)
+		_aim_theta = clampf(theta, -AIM_MAX, AIM_MAX)
+	var w := _aim_w * _aim_w * (3.0 - 2.0 * _aim_w)
+	var theta := _aim_theta * w
+	var rot := Basis(Vector3.RIGHT, theta)
+	var poses: Array = []
+	for i in sh:
+		poses.append(sk.get_bone_global_pose(i))
+	for k in sh.size():
+		var i: int = sh[k]
+		var gs: Transform3D = poses[k]
+		var moved := Transform3D(rot * gs.basis, pivot + rot * (gs.origin - pivot))
+		var parent := sk.get_bone_parent(i)
+		var local := moved if parent < 0 else sk.get_bone_global_pose(parent).affine_inverse() * moved
+		sk.set_bone_pose_rotation(i, local.basis.get_rotation_quaternion())
+		sk.set_bone_pose_position(i, local.origin)

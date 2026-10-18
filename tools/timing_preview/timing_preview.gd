@@ -35,8 +35,9 @@ extends Node3D
 ## its end), a "parry" a cue. Delete a HIT n start / end (the window goes) or a
 ## parry cue n marker and it is taken out (a move keeps at least one hit: the
 ## one its lunge aims at; the last one cannot be deleted). Renumbered after.
-##   settled: BEAM FIRES -> BEAM_SET_EARLY (= the clip's length - the marker)
-## Gold "info" markers with no single value behind them (cannon up, the recoil)
+##   settled: the recoil starts -> BEAM_SET_EARLY (= the clip's length - the marker)
+##   BEAM ON (the kick)          -> RECOIL_BEAM (frames)
+## Gold "info" markers with no single value behind them (cannon up)
 ## do not move anything; dragging one is undone at the next rebuild.
 ##
 ## Why markers are not simply authored on the clips: the clips are imported from
@@ -368,7 +369,7 @@ static func write_const(path: String, name: String, value_text: String) -> bool:
 ## Whether the script compiles and has what the markers are built from.
 static func _readable(path: String) -> bool:
 	var c := _consts(path)
-	var need := ["SWIPE_HITS", "SWIPE_CUES", "JUMP_HITS", "DASH_HITS", "DASH_LUNGE"] if path == DECREPIT 		else ["SWIPE_HITS", "SWIPE_CONTACT", "BEAM_SET_EARLY"]
+	var need := ["SWIPE_HITS", "SWIPE_CUES", "JUMP_HITS", "DASH_HITS", "DASH_LUNGE"] if path == DECREPIT 		else ["SWIPE_HITS", "SWIPE_CONTACT", "BEAM_SET_EARLY", "RECOIL_BEAM"]
 	for k in need:
 		if not c.has(k):
 			return false
@@ -501,13 +502,15 @@ func _enforcer() -> Dictionary:
 	_lists[&"SWIPE_1_BAKED"] = {&"hit": _bind_item(ENFORCER, "SWIPE_HITS", -1)}
 	var beam := _clip_length(&"BEAM_BAKED")
 	out[&"BEAM_BAKED"] = [
-		["settled: BEAM FIRES (charge %s)" % _s(float(c["CHARGE_TIME"])), beam - float(c["BEAM_SET_EARLY"]), HIT,
+		["settled: the recoil starts (charge %s)" % _s(float(c["CHARGE_TIME"])), beam - float(c["BEAM_SET_EARLY"]), INFO,
 			_bind(ENFORCER, "BEAM_SET_EARLY", &"before")],
 		["cannon up (f37)", 37.0 / 60.0, INFO],
 	]
+	# The recoil plays once; the beam comes on at its kick, then the clip holds
+	# its last frame while the beam lasts.
 	out[&"BEAM_RECOIL_BAKED"] = [
-		["firing: ping-pong x%.1f for %s, then vent %s" % [float(c["RECOIL_RATE"]), _s(float(c["BEAM_TIME"])),
-			_s(float(c["VENT_TIME"]))], 0.0, INFO],
+		["BEAM ON: the kick (fires %s, then vent %s)" % [_s(float(c["BEAM_TIME"])), _s(float(c["VENT_TIME"]))],
+			float(c["RECOIL_BEAM"]), HIT, _bind(ENFORCER, "RECOIL_BEAM", &"at", null, true)],
 	]
 	return out
 
