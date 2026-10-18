@@ -1624,7 +1624,7 @@ func _warm_hit_sparks() -> void:
 ## while it reels.
 
 const REACT := preload("res://scripts/enforcer_react.gd")
-const PARRY_STAGGER := 2.1
+const PARRY_STAGGER := 1.5
 ## Damage that plays a hit at full size; lighter blows play it smaller.
 const HIT_FULL := 20.0
 

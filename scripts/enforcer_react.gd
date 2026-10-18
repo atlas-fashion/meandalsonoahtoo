@@ -75,23 +75,24 @@ const HITS := [HIT_CHEST, HIT_TWIST, HIT_CRUSH]
 ## Parried: thrown right back on its heels, arms flung wide, the knees buckle
 ## and it staggers to one side and back, flailing, catches itself leaning
 ## forward, and only slowly straightens. `len` is how long the enforcer is
-## stunned for (enforcer.gd PARRY_STAGGER).
+## stunned for (enforcer.gd PARRY_STAGGER). 2.1 s at first; 1.5 since
+## 2026-10-17 (the user: 0.6 s shorter) -- every key's time scaled to fit.
 const STAGGER := {
-	"len": 2.1,
-	"torso": [[0.0, Vector3.ZERO], [0.12, Vector3(-21, 0, 3)], [0.32, Vector3(-17, -6, 11)], [0.58, Vector3(-12, 5, -7)], [0.86, Vector3(-6, -3, 6)],
-		[1.18, Vector3(7, 2, -2)], [1.5, Vector3(3, 0, 1)], [1.8, Vector3(-0.8, 0, 0)], [2.1, Vector3.ZERO]],
-	"hip": [[0.0, Vector3.ZERO], [0.1, Vector3(0, -0.02, -0.12)], [0.34, Vector3(-0.04, -0.11, -0.1)], [0.62, Vector3(0.05, -0.09, -0.07)],
-		[0.9, Vector3(-0.02, -0.07, -0.03)], [1.2, Vector3(0, -0.06, 0.03)], [1.55, Vector3(0, -0.02, 0.01)], [2.1, Vector3.ZERO]],
-	"head": [[0.0, Vector3.ZERO], [0.07, Vector3(-6, 0, 0)], [0.17, Vector3(-27, 4, 0)], [0.42, Vector3(-14, -10, 9)], [0.7, Vector3(-6, 9, -8)],
-		[1.0, Vector3(4, -4, 3)], [1.3, Vector3(10, 0, 0)], [1.65, Vector3(2, 0, 0)], [2.1, Vector3.ZERO]],
-	"sh_l": [[0.0, Vector3.ZERO], [0.13, Vector3(-10, 0, -20)], [0.45, Vector3(-4, 4, -14)], [0.8, Vector3(3, 0, -6)], [1.2, Vector3(4, 0, 2)], [2.1, Vector3.ZERO]],
-	"sh_r": [[0.0, Vector3.ZERO], [0.13, Vector3(-10, 0, 20)], [0.45, Vector3(-4, -4, 14)], [0.8, Vector3(3, 0, 6)], [1.2, Vector3(4, 0, -2)], [2.1, Vector3.ZERO]],
-	"arm_l": [[0.0, Vector3.ZERO], [0.1, Vector3(-8, 0, -6)], [0.2, Vector3(-28, 0, -16)], [0.45, Vector3(-10, 6, -10)], [0.7, Vector3(16, -4, 2)],
-		[0.98, Vector3(-9, 2, -4)], [1.28, Vector3(8, 0, 2)], [1.65, Vector3(-2, 0, 0)], [2.1, Vector3.ZERO]],
-	"arm_r": [[0.0, Vector3.ZERO], [0.1, Vector3(-8, 0, 6)], [0.2, Vector3(-28, 0, 16)], [0.45, Vector3(-10, -6, 10)], [0.7, Vector3(16, 4, -2)],
-		[0.98, Vector3(-9, -2, 4)], [1.28, Vector3(8, 0, -2)], [1.65, Vector3(-2, 0, 0)], [2.1, Vector3.ZERO]],
+	"len": 1.5,
+	"torso": [[0.0, Vector3.ZERO], [0.086, Vector3(-21, 0, 3)], [0.229, Vector3(-17, -6, 11)], [0.414, Vector3(-12, 5, -7)], [0.614, Vector3(-6, -3, 6)],
+		[0.843, Vector3(7, 2, -2)], [1.071, Vector3(3, 0, 1)], [1.286, Vector3(-0.8, 0, 0)], [1.5, Vector3.ZERO]],
+	"hip": [[0.0, Vector3.ZERO], [0.071, Vector3(0, -0.02, -0.12)], [0.243, Vector3(-0.04, -0.11, -0.1)], [0.443, Vector3(0.05, -0.09, -0.07)],
+		[0.643, Vector3(-0.02, -0.07, -0.03)], [0.857, Vector3(0, -0.06, 0.03)], [1.107, Vector3(0, -0.02, 0.01)], [1.5, Vector3.ZERO]],
+	"head": [[0.0, Vector3.ZERO], [0.05, Vector3(-6, 0, 0)], [0.121, Vector3(-27, 4, 0)], [0.3, Vector3(-14, -10, 9)], [0.5, Vector3(-6, 9, -8)],
+		[0.714, Vector3(4, -4, 3)], [0.929, Vector3(10, 0, 0)], [1.179, Vector3(2, 0, 0)], [1.5, Vector3.ZERO]],
+	"sh_l": [[0.0, Vector3.ZERO], [0.093, Vector3(-10, 0, -20)], [0.321, Vector3(-4, 4, -14)], [0.571, Vector3(3, 0, -6)], [0.857, Vector3(4, 0, 2)], [1.5, Vector3.ZERO]],
+	"sh_r": [[0.0, Vector3.ZERO], [0.093, Vector3(-10, 0, 20)], [0.321, Vector3(-4, -4, 14)], [0.571, Vector3(3, 0, 6)], [0.857, Vector3(4, 0, -2)], [1.5, Vector3.ZERO]],
+	"arm_l": [[0.0, Vector3.ZERO], [0.071, Vector3(-8, 0, -6)], [0.143, Vector3(-28, 0, -16)], [0.321, Vector3(-10, 6, -10)], [0.5, Vector3(16, -4, 2)],
+		[0.7, Vector3(-9, 2, -4)], [0.914, Vector3(8, 0, 2)], [1.179, Vector3(-2, 0, 0)], [1.5, Vector3.ZERO]],
+	"arm_r": [[0.0, Vector3.ZERO], [0.071, Vector3(-8, 0, 6)], [0.143, Vector3(-28, 0, 16)], [0.321, Vector3(-10, -6, 10)], [0.5, Vector3(16, 4, -2)],
+		[0.7, Vector3(-9, -2, 4)], [0.914, Vector3(8, 0, -2)], [1.179, Vector3(-2, 0, 0)], [1.5, Vector3.ZERO]],
 	# Servo judder: degrees of shake on head and arms, fading out.
-	"judder": [[0.0, Vector3.ZERO], [0.1, Vector3(2.2, 0, 0)], [0.6, Vector3(1.0, 0, 0)], [1.1, Vector3(0.3, 0, 0)], [1.4, Vector3.ZERO]],
+	"judder": [[0.0, Vector3.ZERO], [0.071, Vector3(2.2, 0, 0)], [0.429, Vector3(1.0, 0, 0)], [0.786, Vector3(0.3, 0, 0)], [1.0, Vector3.ZERO]],
 }
 
 const CHANNELS := ["torso", "head", "sh_l", "sh_r", "arm_l", "arm_r"]

@@ -56,3 +56,6 @@ for the beam. "make sure to create a blend between swipe 2 and 1."
   while it fired -> beam broken off, swipe 1; parried at the cue -> stagger
   2.1 s, swipe 1 again (three times). Blends (shown pose): walk->S1 0.10x,
   S1->S2 0.28x, S2->S1 0.52x of the clips' own p99.
+- **Parry stagger 1.5 s** (was 2.1; the user: "0.6 seconds shorter"): enforcer.gd
+  PARRY_STAGGER and enforcer_react.gd STAGGER, every key time scaled by 1.5/2.1
+  so the whole reaction plays, faster. Measured: 3 parries, stunned 1.50 s each.
