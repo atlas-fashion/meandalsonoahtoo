@@ -65,3 +65,6 @@ notes 59 / 61 (decrepit `_contact`, enforcer via enemy.gd `_try_connect`).
   markers kept, warning, retrying; repaired: rebuilt, 16, retry off. (A fresh
   editor built every marker all along: Project > Reload Current Project
   clears it.)
+
+- **2026-10-18**: drawn in the SANDBOX only (`Sandbox.active` and its "Show
+  hitboxes" switch); never in a real game, whatever the switch (the user).

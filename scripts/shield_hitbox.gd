@@ -14,7 +14,8 @@ extends BoneAttachment3D
 ## its owner) and the box overlaps the target's collision body
 ## (`overlaps`, a physics shape query -- the box is turned into world units,
 ## since a query shape cannot be scaled). `set_live` shows it, a translucent
-## red box, while a window is open (and `Sandbox.show_hitboxes` is on).
+## red box, while a window is open -- in the sandbox only, with its
+## `Sandbox.show_hitboxes` switch on (never in a real game, 2026-10-18).
 
 const SIZE_SCALE := 1.5
 const MIN_WEIGHT := 0.5
@@ -138,7 +139,8 @@ func _build_visual() -> void:
 func set_live(on: bool) -> void:
 	live = on
 	if _vis != null:
-		_vis.visible = on and Sandbox.show_hitboxes
+		# Drawn in the sandbox only (its menu's switch); never in a real game.
+		_vis.visible = on and Sandbox.active and Sandbox.show_hitboxes
 
 
 ## The box in the world: its transform (unscaled) and its size in metres.
