@@ -369,7 +369,7 @@ static func write_const(path: String, name: String, value_text: String) -> bool:
 ## Whether the script compiles and has what the markers are built from.
 static func _readable(path: String) -> bool:
 	var c := _consts(path)
-	var need := ["SWIPE_HITS", "SWIPE_CUES", "JUMP_HITS", "DASH_HITS", "DASH_LUNGE"] if path == DECREPIT 		else ["SWIPE_HITS", "SWIPE_CONTACT", "BEAM_SET_EARLY", "RECOIL_BEAM"]
+	var need := ["SWIPE_HITS", "SWIPE_CUES", "JUMP_HITS", "DASH_HITS", "DASH_LUNGE"] if path == DECREPIT 		else ["SWIPE_HITS", "SWIPE_CUES", "SWIPE_END", "BEAM_SET_EARLY", "RECOIL_BEAM"]
 	for k in need:
 		if not c.has(k):
 			return false
@@ -487,22 +487,21 @@ func _decrepit() -> Dictionary:
 func _enforcer() -> Dictionary:
 	_watch([ENFORCER])
 	var c := _consts(ENFORCER)
-	var windup := _init_value(ENFORCER, "windup_time", 0.6)
-	var contact: float = c["SWIPE_CONTACT"]
 	var out := {}
-	# The swipe: its hit windows (the shield's box), and the frame its clip is
-	# synced to the wind-up's end (it plays at contact / windup). No cues: the
-	# guard-timing parry.
+	# The swipe, a move like the decrepit's (2026-10-17): its clip at 1x, its
+	# hit windows (the shield's box), parry cues and end all clip seconds.
 	var hits := _sorted(c["SWIPE_HITS"] as Array, true)
-	var marks := _hit_marks(ENFORCER, "SWIPE", hits, [], 0.0, int(_init_value(ENFORCER, "attack_damage", 22.0)),
-		func(x: float) -> float: return x, "(parry: guard up <= 0.5 s before it lands)")
-	marks.append(["wind-up ends here (clip at x%.2f over its %s)" % [contact / windup, _s(windup)], contact, INFO,
-		_bind(ENFORCER, "SWIPE_CONTACT", &"at", null, true)])
+	var cues := _sorted(c["SWIPE_CUES"] as Array, false)
+	var marks := _hit_marks(ENFORCER, "SWIPE", hits, cues, float(c["SWIPE_LISTEN"]),
+		int(_init_value(ENFORCER, "attack_damage", 22.0)), func(x: float) -> float: return x)
+	marks.append(["move ends (SWIPE_END)", float(c["SWIPE_END"]), END, _bind(ENFORCER, "SWIPE_END")])
 	out[&"SWIPE_1_BAKED"] = marks
-	_lists[&"SWIPE_1_BAKED"] = {&"hit": _bind_item(ENFORCER, "SWIPE_HITS", -1)}
+	_lists[&"SWIPE_1_BAKED"] = {&"hit": _bind_item(ENFORCER, "SWIPE_HITS", -1),
+		&"parry": _bind_item(ENFORCER, "SWIPE_CUES", -1)}
+	# The charge plays BEAM_BAKED at 1x up to where it settles.
 	var beam := _clip_length(&"BEAM_BAKED")
 	out[&"BEAM_BAKED"] = [
-		["settled: the recoil starts (charge %s)" % _s(float(c["CHARGE_TIME"])), beam - float(c["BEAM_SET_EARLY"]), INFO,
+		["settled: the recoil starts (charge %s)" % _s(beam - float(c["BEAM_SET_EARLY"])), beam - float(c["BEAM_SET_EARLY"]), INFO,
 			_bind(ENFORCER, "BEAM_SET_EARLY", &"before")],
 		["cannon up (f37)", 37.0 / 60.0, INFO],
 	]

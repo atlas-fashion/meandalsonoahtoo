@@ -24,9 +24,8 @@ extends "res://scripts/enemy.gd"
 ##
 ## Hunting (`_chase`, enemy.gd's hook):
 ##   * the BEAM: with a clear line through stone and the player within
-##     BEAM_RANGE, it plants itself and raises the cannon (CHARGE_TIME: the
-##     BEAM_BAKED clip up to the aim, the crystal and eyes flaring; no beam
-##     yet), then fires: BEAM_RECOIL_BAKED plays once and the beam comes on with
+##     BEAM_RANGE, it plants itself and raises the cannon (the BEAM_BAKED
+##     clip at 1x up to the aim, the crystal and eyes flaring; no beam yet), then fires: BEAM_RECOIL_BAKED plays once and the beam comes on with
 ##     its kick (RECOIL_BEAM), both arms pitched so the barrel points along it
 ##     (enforcer_react.gd `aim_at`), and it holds the beam on the player for up
 ##     to BEAM_TIME:
@@ -34,7 +33,7 @@ extends "res://scripts/enemy.gd"
 ##     tenth. It swings after the player at TRACK_RATE; stone stops it, its
 ##     fellows do not. Then it vents for VENT_TIME.
 ##   * otherwise it walks in, and close enough it swipes with the shield
-##     (SWIPE_1_BAKED, timed so the shield crosses its front as the wind-up ends):
+##     (SWIPE_1_BAKED at 1x, a move on its own clock: SWIPE_HITS, SWIPE_CUES):
 ##     `attack_damage`, and a player it catches unguarded is knocked off their
 ##     feet (`player.knock_down`: thrown back, on the floor, half a second to
 ##     get up). A held guard takes the blow standing, shoved back; a parry throws
@@ -75,17 +74,34 @@ const WALK_GROUND_SPEED := 0.82
 ## setting on the shield arm", 2026-10-15.) A hair short of the end, so the
 ## clip is still playing, frozen, rather than finished.
 const BEAM_SET_EARLY := 0.04
-## SWIPE_1_BAKED (second delivery): the shield is drawn back over frames 11-21
-## and swept across the chest at 22-25 (fastest 23, 47 m/s at the authored
-## size, seen in renders); the blow lands at frame 22.
-const SWIPE_CONTACT := 21.0 / 60.0
-## HIT WINDOWS (2026-10-17): the swipe's blows, [start, end] clip seconds. While
-## one is open its shield's hitbox (shield_hitbox.gd, ARM_L, 1.5x the shield)
-## is live and lands the blow the first tick it overlaps the player, once per
-## window -- no longer enemy.gd's reach (`_try_connect` lands nothing now).
-## SWIPE_CONTACT above is only where the clip is synced to the wind-up's end.
-## The shield sweeps across the chest f22-f26.
+## THE SWIPE, a move of its own (2026-10-17, the user: "all enemy animations
+## should have the same principles" -- the decrepit's): SWIPE_1_BAKED plays at
+## 1x from its first frame, and everything it does is a time in that clip, on
+## the move's own clock (`_swipe_t`; never read off the clip's position, which
+## the animation LOD steps far off). It used to run on enemy.gd's wind-up timer,
+## its clip slowed to x0.58 so the strike met the wind-up's end. The user's
+## re-bake (CLAUDE.md 73): drawn back over frames 11-21, swept across the
+## chest 22-26 (fastest 23-25).
+## HIT WINDOWS: the swipe's blows, [start, end] clip seconds. While one is open
+## its shield's hitbox (shield_hitbox.gd, ARM_L, 1.5x the shield) is live and
+## lands the blow the first tick it overlaps the player, once per window.
 const SWIPE_HITS := [[22.0 / 60.0, 26.0 / 60.0]]
+## PARRY CUES (player.gd `parry_cue`): from each, a block press inside
+## SWIPE_LISTEN parries the next blow (as the decrepit's; set so the window
+## closes as the blow lands).
+const SWIPE_CUES := [0.1167]
+const SWIPE_LISTEN := 0.25
+## The move is over here (clip seconds); the walk takes it from there.
+const SWIPE_END := 1.1
+## It swings when the gap (edge to edge) is this or less, once this long after
+## its last swing began.
+const SWIPE_TRIGGER := 1.65
+const SWIPE_COOLDOWN := 2.2
+## It turns to follow the player (rad/s) until just before the blow.
+const TURN_SWIPE := 6.0
+## Clip changes into and out of the swipe settle within these (inertialized).
+const BLEND_INTO_MOVE := 0.22
+const BLEND_OUT_OF_MOVE := 0.35
 const HITBOX := preload("res://scripts/shield_hitbox.gd")
 ## How hard a swipe that lands unguarded throws the player.
 const SWIPE_THROW := 11.0
@@ -94,7 +110,6 @@ const SWIPE_SHOVE := 4.0
 
 const BEAM_DPS := 5.0
 const BEAM_RANGE := 20.0
-const CHARGE_TIME := 0.65
 const BEAM_TIME := 3.2
 ## The beam opens from a third of its width to full over this, from the kick.
 const BEAM_FLARE_IN := 0.08
@@ -150,12 +165,14 @@ var _built := false
 var _model: Node3D
 var _muzzle: Node3D
 var _parts: Array[MeshInstance3D] = []
-## The shield's hitbox, the swipe's clock (`_now()` when its clip began, -1 when
-## not swiping) and the windows that have landed.
+## The shield's hitbox; the swipe's own clock (clip seconds since it began, -1
+## when not swiping), the windows that have landed, when it may swing again,
+## and the physics frame it last ran (it is broken off if `_chase` skips one).
 var _hitbox: Node = null
-var _swipe_t0 := -1.0
-var _swipe_prev := 0.0
+var _swipe_t := -1.0
 var _swipe_landed := {}
+var _swipe_ready := 0.0
+var _swipe_frame := -1
 ## Stands in for enemy.gd's `mesh`: it takes a copy of this one's material as
 ## the state material, which is then put on the model's crystal and the eyes.
 var _state_proxy: MeshInstance3D
@@ -192,14 +209,10 @@ func _init() -> void:
 	eye_height = 2.15
 	wanders = true
 	wander_speed = 1.3
+	# Its swipe is its own move (SWIPE_*), not enemy.gd's wind-up / strike /
+	# recover: the base chase never swings for it (`_chase` always handles it).
 	can_slam = false
-	can_normal = true
-	# The shield's sweep reaches about a metre past its body.
-	normal_range = 1.25
-	normal_duration = 0.3
-	normal_cooldown = 2.2
-	windup_time = 0.6
-	recover_time = 0.75
+	can_normal = false
 	attack_damage = 22.0
 	knockback_resistance = 0.85
 	tint_albedo = false
@@ -471,43 +484,84 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 
 # --- The shield swipe ---------------------------------------------------------------
 
-## enemy.gd's reach no longer lands the swipe: its shield's hitbox does, in the
-## swipe's hit windows (`_swipe_windows`).
+## enemy.gd's reach never lands the swipe: its shield's hitbox does, in the
+## swipe's hit windows (`_run_swipe`).
 func _try_connect(_player: Node3D, _gap: float, _reach: float, _charge_speed := 0.0) -> void:
 	pass
 
 
-## The swipe's hit windows this tick, on the swipe's own clock (the clip runs at
-## SWIPE_CONTACT / windup_time from the wind-up's start -- not read off the
-## clip's position, which the animation LOD steps far off): an open one lands
-## the blow the first tick the shield's box overlaps the player. Shown while
-## open. A stagger, the beam or the end of the swipe shuts them.
-func _swipe_windows(now: float) -> void:
-	var swiping := _swipe_t0 >= 0.0 and _beam == Beam.IDLE and not is_stunned() \
-		and (state == State.WINDUP or state == State.ATTACK or state == State.RECOVER)
-	if not swiping:
-		_swipe_t0 = -1.0
-		_set_hitbox(false)
-		return
-	var rate := SWIPE_CONTACT / maxf(windup_time, 0.05)
-	var clip_t := (now - _swipe_t0) * rate
-	var prev := _swipe_prev
-	_swipe_prev = clip_t
+## Into the swipe: its clip from the first frame at 1x, its clock at 0.
+func _start_swipe(player: Node3D) -> void:
+	_swipe_t = 0.0
+	_swipe_landed.clear()
+	_swipe_ready = _now() + SWIPE_COOLDOWN
+	_attack_connected = false
+	if player.has_signal("guarded") and not player.is_connected("guarded", _on_player_guarded):
+		player.connect("guarded", _on_player_guarded)
+	_play_clip(ANIM_SWIPE_CLIP, 1.0, BLEND_INTO_MOVE, true)
+
+
+## A tick of the swipe on its own clock: it stands, turning after the player
+## until just before the first blow; its cues open the player's parry listening
+## as the clock passes them; an open hit window lands the blow the first tick
+## the shield's box overlaps the player (shown while open); at SWIPE_END it is
+## over.
+func _run_swipe(delta: float, player: Node3D, flat: Vector3) -> void:
+	_swipe_frame = Engine.get_physics_frames()
+	var prev := _swipe_t
+	_swipe_t += delta
+	_hold(delta)
+	var hits := _swipe_hits()
+	var first: float = hits[0][0] if not hits.is_empty() else INF
+	if _swipe_t < first - 0.08 and flat.length_squared() > 0.01:
+		rotation.y = rotate_toward(rotation.y, atan2(-flat.x, -flat.z), TURN_SWIPE * delta)
+	for cue in SWIPE_CUES:
+		if prev < float(cue) and _swipe_t >= float(cue) and player.has_method("parry_cue"):
+			player.call("parry_cue", self, SWIPE_LISTEN)
 	var open := false
-	var player := _resolve_player()
-	for i in SWIPE_HITS.size():
-		var w: Array = SWIPE_HITS[i]
-		var a := minf(float(w[0]), float(w[1]))
-		var b := maxf(float(w[0]), float(w[1]))
-		if clip_t < a or prev > b:
+	for i in hits.size():
+		var w: Array = hits[i]
+		if _swipe_t < float(w[0]) or prev > float(w[1]):
 			continue
 		open = true
-		if _swipe_landed.has(i) or player == null:
+		if _swipe_landed.has(i):
 			continue
 		if _hitbox != null and _hitbox.call("overlaps", player):
 			_swipe_landed[i] = true
 			_swipe_land(player)
 	_set_hitbox(open)
+	if _swipe_t >= SWIPE_END:
+		_end_swipe()
+
+
+## The swipe over -- or broken off (a stagger, the beam, the hunt dropped): the
+## box shut, and the walk takes over, eased in from the pose shown.
+func _end_swipe() -> void:
+	if _swipe_t < 0.0:
+		return
+	_swipe_t = -1.0
+	_set_hitbox(false)
+	if not _dying and _beam != Beam.CHARGE and _beam != Beam.FIRE:
+		_play_clip(ANIM_WALK_CLIP, 0.0, BLEND_OUT_OF_MOVE, true)
+
+
+## SWIPE_HITS, each [start, end], by start.
+static func _swipe_hits() -> Array:
+	var out: Array = []
+	for w in SWIPE_HITS:
+		out.append([minf(float(w[0]), float(w[1])), maxf(float(w[0]), float(w[1]))])
+	out.sort_custom(func(x, y): return x[0] < y[0])
+	return out
+
+
+## True while a hit window of the swipe is open.
+func is_attacking() -> bool:
+	if _swipe_t < 0.0:
+		return false
+	for w in _swipe_hits():
+		if _swipe_t >= float(w[0]) and _swipe_t <= float(w[1]):
+			return true
+	return false
 
 
 func _set_hitbox(on: bool) -> void:
@@ -620,12 +674,17 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 			if now >= _phase_until or (_lost_line_at >= 0.0 and now - _lost_line_at > 0.7):
 				_vent(now)
 			return true
+	# A swipe under way runs to its end on its own clock.
+	if _swipe_t >= 0.0:
+		_run_swipe(delta, player, flat)
+		return true
 	_update_role(now, player, distance)
 	match _role:
 		Role.MELEE:
 			# The shield: in close and swipe; the beam is someone else's.
-			if gap <= normal_range + 0.4:
-				return false
+			if gap <= SWIPE_TRIGGER:
+				_close_in(delta, now, player, flat)
+				return true
 			_walk_to(delta, now, player.global_position, move_speed)
 			_face_velocity(flat)
 			return true
@@ -645,15 +704,12 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 				_hold(delta)
 				_face(flat)
 			return true
-	# Alone, it does both. Up close it swipes; the base chase steps in and swings.
-	if gap <= normal_range + 0.4:
-		return false
+	# Alone, it does both. Up close it swipes.
+	if gap <= SWIPE_TRIGGER:
+		_close_in(delta, now, player, flat)
+		return true
 	if now >= _beam_ready and _clear and distance <= BEAM_RANGE:
-		_beam = Beam.CHARGE
-		_phase_until = now + CHARGE_TIME
-		_aim_dir = _target_dir(player)
-		_hold(delta)
-		_face(flat)
+		_start_charge(delta, player, flat)
 		return true
 	# Between beams it keeps its range: on if too far or out of line, otherwise
 	# it stands its ground and watches. It does not walk into a fist fight --
@@ -689,9 +745,23 @@ func _barrel_facing(aim_flat: Vector3, delta: float) -> Vector3:
 	return aim_flat.rotated(Vector3.UP, -_yaw_fix)
 
 
+## In swiping range: it swings the moment it may (its first step this same
+## tick: a move that starts standing still for a tick reads as a seam), and
+## otherwise stands and faces them.
+func _close_in(delta: float, now: float, player: Node3D, flat: Vector3) -> void:
+	if now >= _swipe_ready:
+		_start_swipe(player)
+		_run_swipe(delta, player, flat)
+		return
+	_hold(delta)
+	_face(flat)
+
+
+## The charge: BEAM_BAKED at 1x up to where it settles (`_beam_set_at`) -- the
+## clip's own length is the charge's (it was squeezed into a CHARGE_TIME).
 func _start_charge(delta: float, player: Node3D, flat: Vector3) -> void:
 	_beam = Beam.CHARGE
-	_phase_until = _now() + CHARGE_TIME
+	_phase_until = _now() + _beam_set_at()
 	_aim_dir = _target_dir(player)
 	_hold(delta)
 	_face(flat)
@@ -747,7 +817,7 @@ func _update_role(now: float, player: Node3D, distance: float) -> void:
 
 
 func _swiping() -> bool:
-	return state == State.WINDUP or state == State.ATTACK or state == State.RECOVER
+	return _swipe_t >= 0.0
 
 
 ## Another enforcer charging or firing at this player.
@@ -921,15 +991,18 @@ func _physics_process(delta: float) -> void:
 			_cancel_beam()
 		return
 	var now := _now()
-	# Anything that takes it off its feet or out of the hunt drops the beam.
+	# Anything that takes it off its feet or out of the hunt drops the beam --
+	# and the swipe (as does a tick its hunt did not run it).
 	if (_beam == Beam.CHARGE or _beam == Beam.FIRE) \
 			and (state != State.CHASE or not engaged or is_stunned()):
 		_cancel_beam()
+	if _swipe_t >= 0.0 and (state != State.CHASE or not engaged or is_stunned()
+			or _swipe_frame != Engine.get_physics_frames()):
+		_end_swipe()
 	if _beam_live(now):
 		_fire(delta)
 	_draw_beam(now)
 	_animate(delta, now)
-	_swipe_windows(now)
 	_aim_arms()
 
 
@@ -955,11 +1028,10 @@ func _aim_arms() -> void:
 ## rest of the time -- played at the rate that keeps its feet on the floor, and
 ## eased to a stop where it stands (there is no idle clip).
 func _animate(delta: float, now: float) -> void:
-	var entered := _state_fresh()
 	match _beam:
 		Beam.CHARGE:
 			# The whole clip, settling on the shield arm as the charge ends.
-			_play_clip(ANIM_BEAM_CLIP, _beam_set_at() / CHARGE_TIME, 0.12, _clip != ANIM_BEAM_CLIP)
+			_play_clip(ANIM_BEAM_CLIP, 1.0, 0.12, _clip != ANIM_BEAM_CLIP)
 			_freeze_at(ANIM_BEAM_CLIP, _beam_set_at())
 		Beam.FIRE:
 			# The recoil, once -- the beam comes on with its kick -- then held
@@ -982,15 +1054,9 @@ func _animate(delta: float, now: float) -> void:
 					_play_clip(ANIM_WALK_CLIP, 0.0, 0.3, true)
 				elif anim != null:
 					anim.speed_scale = move_toward(anim.speed_scale, 0.0, delta * 6.0)
-			elif state == State.WINDUP or state == State.ATTACK or state == State.RECOVER:
-				# The shield crosses its front as the wind-up ends.
-				var fresh := _clip != ANIM_SWIPE_CLIP or (state == State.WINDUP and entered)
-				_play_clip(ANIM_SWIPE_CLIP, SWIPE_CONTACT / maxf(windup_time, 0.05), 0.18, fresh)
-				if fresh:
-					# The swipe's clock starts with its clip.
-					_swipe_t0 = now
-					_swipe_prev = 0.0
-					_swipe_landed.clear()
+			elif _swipe_t >= 0.0:
+				# The swipe's clip, started with the move (`_start_swipe`), at 1x.
+				pass
 			else:
 				# The walk at the rate that keeps its feet on the floor, eased to a
 				# stop where it stands (no idle clip); entered from a move at the
@@ -1012,7 +1078,7 @@ func _animate(delta: float, now: float) -> void:
 		var col := CRYSTAL
 		match _beam:
 			Beam.CHARGE:
-				var t := 1.0 - clampf((_phase_until - now) / CHARGE_TIME, 0.0, 1.0)
+				var t := 1.0 - clampf((_phase_until - now) / maxf(_beam_set_at(), 0.05), 0.0, 1.0)
 				e = lerpf(base_glow, 6.0, t) * (1.0 + 0.25 * sin(now * 40.0))
 				col = CRYSTAL.lerp(HOT, t)
 			Beam.FIRE:
@@ -1020,12 +1086,15 @@ func _animate(delta: float, now: float) -> void:
 				col = HOT
 			Beam.VENT:
 				e = base_glow * 0.5
-		if state == State.WINDUP:
-			e = windup_glow
-			col = windup_color
-		elif state == State.ATTACK:
-			e = attack_glow
-			col = attack_color
+		# The swipe: its wind-up colour until the blow, the strike's while it lands.
+		if _swipe_t >= 0.0:
+			var hits := _swipe_hits()
+			if not hits.is_empty() and _swipe_t < float(hits[0][0]):
+				e = windup_glow
+				col = windup_color
+			elif is_attacking():
+				e = attack_glow
+				col = attack_color
 		_material.albedo_color = col
 		_material.emission = col
 		_material.emission_energy_multiplier = e
@@ -1047,17 +1116,6 @@ func _freeze_at(clip: StringName, at: float) -> void:
 	if anim != null and anim.current_animation == clip \
 			and anim.current_animation_position >= at:
 		anim.speed_scale = 0.0
-
-
-var _last_state := -1
-
-
-## True on the first tick of a state, so a second swipe in a row restarts the
-## clip rather than finding it already played out.
-func _state_fresh() -> bool:
-	var fresh := state != _last_state
-	_last_state = state
-	return fresh
 
 
 ## Ambling with its pack: it keeps close to its escort rather than wandering
