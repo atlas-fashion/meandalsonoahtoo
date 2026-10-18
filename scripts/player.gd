@@ -82,6 +82,10 @@ extends CharacterBody3D
 ## Grace period after taking a hit, so standing next to an enemy drains health
 ## at a readable rate instead of every frame.
 @export var invulnerable_time := 0.6
+## ...but a blow taken on the guard (blocked or parried) only this long: the
+## grace is for a hit that hurts. At 0.6 the enforcer's swipe 2, landing 0.36 s
+## after a blocked swipe 1, always met an invulnerable player (2026-10-17).
+@export var guarded_invulnerable_time := 0.25
 @export var respawn_delay := 1.5
 
 @export_group("Ghost mode")
@@ -3823,7 +3827,7 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 			var share = attacker.get("block_damage_share") if attacker != null and is_instance_valid(attacker) else null
 			amount *= float(share) if share != null else block_damage_taken
 			_on_guarded(false, _from_direction, attacker)
-	_invulnerable_until = now + invulnerable_time
+	_invulnerable_until = now + (guarded_invulnerable_time if guard > 0 else invulnerable_time)
 	# A ghost is mostly not there: it takes only ghost_damage_taken of a hit.
 	if _ghosting:
 		amount *= ghost_damage_taken

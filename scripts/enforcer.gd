@@ -36,8 +36,13 @@ extends "res://scripts/enemy.gd"
 ##     (SWIPE_1_BAKED at 1x, a move on its own clock: SWIPE_HITS, SWIPE_CUES):
 ##     `attack_damage`, and a player it catches unguarded is knocked off their
 ##     feet (`player.knock_down`: thrown back, on the floor, half a second to
-##     get up). A held guard takes the blow standing, shoved back; a parry throws
-##     the enforcer instead, as with any enemy.
+##     get up) -- swipe 1 SWIPE1_THROW_SCALE harder. A held guard takes the blow
+##     standing, shoved back; a parry throws the enforcer instead. Close in it
+##     breaks off a beam for it. Missed or blocked, swipe 1 runs on into swipe 2
+##     (SWIPE_2_BAKED), dashing at the player, then swipe 1 again, and so on --
+##     THE SWIPE LOOP (SWIPE_CHAIN and below) -- until a blow connects, it is
+##     parried (after which it takes the loop up again), or the player is out
+##     of LOOP_BREAK.
 ## Heavy: 240 health, hard to shove, slow on its feet.
 
 const MODEL := preload("res://models/enforcer.glb")
@@ -85,18 +90,68 @@ const BEAM_SET_EARLY := 0.04
 ## HIT WINDOWS: the swipe's blows, [start, end] clip seconds. While one is open
 ## its shield's hitbox (shield_hitbox.gd, ARM_L, 1.5x the shield) is live and
 ## lands the blow the first tick it overlaps the player, once per window.
-const SWIPE_HITS := [[22.0 / 60.0, 26.0 / 60.0]]
+const SWIPE_HITS := [[0.3333, 0.5167]]
 ## PARRY CUES (player.gd `parry_cue`): from each, a block press inside
 ## SWIPE_LISTEN parries the next blow (as the decrepit's; set so the window
 ## closes as the blow lands).
-const SWIPE_CUES := [0.1167]
+const SWIPE_CUES := [0.3]
 const SWIPE_LISTEN := 0.25
 ## The move is over here (clip seconds); the walk takes it from there.
 const SWIPE_END := 1.1
-## It swings when the gap (edge to edge) is this or less, once this long after
-## its last swing began.
+## It swings when the gap (edge to edge) is this or less -- at once if it was
+## beaming (the beam is broken off for it), otherwise this long after its last
+## swipe loop ended.
 const SWIPE_TRIGGER := 1.65
-const SWIPE_COOLDOWN := 2.2
+const SWIPE_COOLDOWN := 1.1
+## Swipe 1 landing unguarded throws the player this much FURTHER (the user:
+## "1.75x the current amount"). Distance goes with the throw's speed squared, so
+## the throw itself is sqrt of it (x1.75 on the throw sent them 17.6 m, ~3x).
+const SWIPE1_THROW_SCALE := 1.75
+
+## THE SWIPE LOOP (2026-10-17, the user). Close in it always opens with swipe
+## 1. If it does not connect (missed or blocked), SWIPE_2_BAKED -- a backhand
+## -- follows straight from swipe 1's follow-through (SWIPE_CHAIN, after its
+## hit window: its pose there is swipe 2's first, the joints 0.1-0.8 units
+## apart, measured) and DASHES at the player as it swings, as the decrepit's
+## dash; if that does not connect either, swipe 1 again (blended from swipe 2's
+## end, BLEND_CHAIN_21 -- no authored link: a straight blend lifts the shield
+## from its side up across the chest, clear of the body, seen in renders), and
+## so on until (A) a blow connects -- the loop ends with that swipe -- or (B)
+## it is parried -- thrown, and as it recovers it takes up the loop again -- or
+## (C) the player is further than LOOP_BREAK, out of the dash's reach, where the
+## beam takes over.
+const SWIPE_CHAIN := 0.5333
+## Swipe 2 runs on into swipe 1 at SWIPE2_CHAIN (f22, just after its blow,
+## still crouched), into swipe 1 at SWIPE1_LOOP_ENTRY (f15, crouched in its
+## wind-up). Played to its end, swipe 2 stands up (f30-42) and swipe 1's start
+## stands too, then crouches -- the user: "he shouldn't get back up briefly
+## between swipe 2 and 1". Swipe 1's own crouch (f15-16) then ducks the torso
+## under the blend -- kept: the user liked the duck, and entering after it
+## (f16 -> f17) made the time between swipes uneven. The straight blend between
+## the two poses keeps the shield out in front (renders).
+const SWIPE2_CHAIN := 0.35
+const SWIPE1_LOOP_ENTRY := 0.2333
+const BLEND_CHAIN_12 := 0.15
+const BLEND_CHAIN_21 := 0.2
+const LOOP_BREAK := 7.0
+## Swipe 2 (clip seconds, at 1x but for the slide): its blows, cues and end.
+## Its first blow's start is where the slide arrives.
+const ANIM_SWIPE2_CLIP := &"SWIPE_2_BAKED"
+const SWIPE2_HITS := [[0.15, 0.2333]]
+const SWIPE2_CUES := [0.1333]
+const SWIPE2_LISTEN := 0.25
+const SWIPE2_END := 0.6833
+## THE DASH: at SWIPE2_LUNGE the body slides at the player -- fast at once,
+## easing off into the blow, re-aimed every frame -- to put its body
+## SWIPE2_ARRIVE from theirs; the clip from the lunge to the first blow is
+## slowed to fill the slide. The slide lasts the distance over
+## SWIPE2_SLIDE_SPEED, at most SWIPE2_SLIDE_MAX, and never less than that bit
+## of clip at 1x (no slow motion when they are already close: the decrepit's
+## lesson, CLAUDE.md 71).
+const SWIPE2_LUNGE := 0.0833
+const SWIPE2_ARRIVE := 1.3
+const SWIPE2_SLIDE_SPEED := 14.0
+const SWIPE2_SLIDE_MAX := 0.45
 ## It turns to follow the player (rad/s) until just before the blow.
 const TURN_SWIPE := 6.0
 ## Clip changes into and out of the swipe settle within these (inertialized).
@@ -173,6 +228,24 @@ var _swipe_t := -1.0
 var _swipe_landed := {}
 var _swipe_ready := 0.0
 var _swipe_frame := -1
+## Which swipe is under way: 1 or 2; whether it has connected (unguarded); and,
+## parried, to take up the loop again once it has recovered.
+var _swipe_kind := 1
+var _swipe_hit := false
+var _resume_loop := false
+## The swipe's events on its own clock: hit windows, cues, where it chains into
+## the other swipe (if nothing connected), and its end.
+var _sw_hits: Array = []
+var _sw_cues: Array = []
+var _sw_chain := INF
+var _sw_end := 0.0
+## Swipe 2's slide: 0 before the lunge, 1 sliding, 2 after; its length, the time
+## in it, the eased share done, the distance still to cover.
+var _slide_phase := 0
+var _slide_len := 0.0
+var _slide_t := 0.0
+var _slide_u := 0.0
+var _slide_left := 0.0
 ## Stands in for enemy.gd's `mesh`: it takes a copy of this one's material as
 ## the state material, which is then put on the model's crystal and the eyes.
 var _state_proxy: MeshInstance3D
@@ -371,7 +444,7 @@ func _setup_clips() -> void:
 		return
 	if anim.has_animation(ANIM_WALK_CLIP):
 		anim.get_animation(ANIM_WALK_CLIP).loop_mode = Animation.LOOP_LINEAR
-	for c in [ANIM_BEAM_CLIP, ANIM_SWIPE_CLIP]:
+	for c in [ANIM_BEAM_CLIP, ANIM_SWIPE_CLIP, ANIM_SWIPE2_CLIP]:
 		if anim.has_animation(c):
 			anim.get_animation(c).loop_mode = Animation.LOOP_NONE
 	if anim.has_animation(ANIM_RECOIL_CLIP):
@@ -386,13 +459,13 @@ func _setup_clips() -> void:
 ## of every other fade. So the clip is switched outright and the layer eases the
 ## rig from the last pose shown into it. The walk is entered at the moment of
 ## its cycle nearest the pose shown (`_match_phase`), as the decrepit's crawl.
-func _play_clip(clip: StringName, rate: float, blend := 0.2, restart := false) -> void:
+func _play_clip(clip: StringName, rate: float, blend := 0.2, restart := false, at := 0.0) -> void:
 	if anim == null or not anim.has_animation(clip):
 		return
 	if _clip == clip and not restart and anim.is_playing():
 		anim.speed_scale = rate
 		return
-	var start := 0.0
+	var start := at
 	if clip == ANIM_WALK_CLIP:
 		start = _match_phase(clip)
 	if _react != null:
@@ -490,37 +563,97 @@ func _try_connect(_player: Node3D, _gap: float, _reach: float, _charge_speed := 
 	pass
 
 
-## Into the swipe: its clip from the first frame at 1x, its clock at 0.
-func _start_swipe(player: Node3D) -> void:
-	_swipe_t = 0.0
+## Into swipe `kind` (1 or 2): its clip from the first frame at 1x, its clock at
+## 0. `blend`: how long the switch from the pose shown may take.
+func _start_swipe(player: Node3D, kind := 1, blend := BLEND_INTO_MOVE, from := 0.0) -> void:
+	_swipe_kind = kind
+	_swipe_t = from
+	_swipe_hit = false
 	_swipe_landed.clear()
-	_swipe_ready = _now() + SWIPE_COOLDOWN
 	_attack_connected = false
+	_slide_phase = 0
+	_slide_len = 0.0
+	_swipe_events()
 	if player.has_signal("guarded") and not player.is_connected("guarded", _on_player_guarded):
 		player.connect("guarded", _on_player_guarded)
-	_play_clip(ANIM_SWIPE_CLIP, 1.0, BLEND_INTO_MOVE, true)
+	_play_clip(ANIM_SWIPE_CLIP if kind == 1 else ANIM_SWIPE2_CLIP, 1.0, blend, true, from)
 
 
-## A tick of the swipe on its own clock: it stands, turning after the player
-## until just before the first blow; its cues open the player's parry listening
-## as the clock passes them; an open hit window lands the blow the first tick
-## the shield's box overlaps the player (shown while open); at SWIPE_END it is
-## over.
+## The swipe's blows, cues, chain point and end, from clip seconds onto its own
+## clock (swipe 2's through its slide, `_swipe2_clock`). Sorted.
+func _swipe_events() -> void:
+	var one := _swipe_kind == 1
+	_sw_hits.clear()
+	_sw_cues.clear()
+	var last_shut := 0.0
+	for w in _sorted_windows(SWIPE_HITS if one else SWIPE2_HITS):
+		_sw_hits.append([_swipe_clock(float(w[0])), _swipe_clock(float(w[1]))])
+		last_shut = maxf(last_shut, float(w[1]))
+	for c in (SWIPE_CUES if one else SWIPE2_CUES):
+		_sw_cues.append(_swipe_clock(float(c)))
+	_sw_cues.sort()
+	# Each chains into the other at its chain point -- never before its last
+	# blow could still land.
+	_sw_chain = _swipe_clock(maxf(SWIPE_CHAIN if one else SWIPE2_CHAIN, last_shut))
+	_sw_end = _swipe_clock(SWIPE_END if one else SWIPE2_END)
+
+
+## A moment of the swipe's clip on its own clock: swipe 1's is its clip's;
+## swipe 2's runs at 1x to the lunge, its lunge-to-first-blow stretched over the
+## slide (`_slide_len`; until the lunge, that bit at 1x), then 1x again.
+func _swipe_clock(clip_t: float) -> float:
+	if _swipe_kind == 1 or clip_t <= SWIPE2_LUNGE:
+		return clip_t
+	var arrive := _swipe2_arrive()
+	var span := maxf(arrive - SWIPE2_LUNGE, 0.0001)
+	var slide := maxf(_slide_len, span)
+	if clip_t <= arrive:
+		return SWIPE2_LUNGE + (clip_t - SWIPE2_LUNGE) / span * slide
+	return SWIPE2_LUNGE + slide + (clip_t - arrive)
+
+
+## Swipe 2's first blow (clip seconds): where its slide arrives.
+static func _swipe2_arrive() -> float:
+	var w := _sorted_windows(SWIPE2_HITS)
+	return maxf(float(w[0][0]), SWIPE2_LUNGE) if not w.is_empty() else SWIPE2_LUNGE
+
+
+## A tick of the swipe on its own clock: swipe 1 stands, turning after the
+## player until just before its blow; swipe 2 slides at them (`_slide_step`).
+## Its cues open the player's parry listening as the clock passes them; an open
+## hit window lands the blow the first tick the shield's box overlaps the
+## player (shown while open). Nothing connected by the chain point: on round
+## the loop (`_loop_on`); otherwise it plays out to its end.
 func _run_swipe(delta: float, player: Node3D, flat: Vector3) -> void:
 	_swipe_frame = Engine.get_physics_frames()
 	var prev := _swipe_t
 	_swipe_t += delta
-	_hold(delta)
-	var hits := _swipe_hits()
-	var first: float = hits[0][0] if not hits.is_empty() else INF
-	if _swipe_t < first - 0.08 and flat.length_squared() > 0.01:
+	var fwd := 0.0
+	var tracking := false
+	if _swipe_kind == 2:
+		fwd = _slide_step(delta, flat)
+		tracking = _slide_phase == 0 or (_slide_phase == 1 and _slide_u < 0.75)
+	else:
+		var first: float = _sw_hits[0][0] if not _sw_hits.is_empty() else INF
+		tracking = _swipe_t < first - 0.08
+	if tracking and flat.length_squared() > 0.01:
 		rotation.y = rotate_toward(rotation.y, atan2(-flat.x, -flat.z), TURN_SWIPE * delta)
-	for cue in SWIPE_CUES:
+	if fwd > 0.0:
+		var step := -global_basis.z * fwd
+		velocity.x = step.x / delta
+		velocity.z = step.z / delta
+		move_and_slide()
+		velocity.x = 0.0
+		velocity.z = 0.0
+	else:
+		_hold(delta)
+	var listen := SWIPE_LISTEN if _swipe_kind == 1 else SWIPE2_LISTEN
+	for cue in _sw_cues:
 		if prev < float(cue) and _swipe_t >= float(cue) and player.has_method("parry_cue"):
-			player.call("parry_cue", self, SWIPE_LISTEN)
+			player.call("parry_cue", self, listen)
 	var open := false
-	for i in hits.size():
-		var w: Array = hits[i]
+	for i in _sw_hits.size():
+		var w: Array = _sw_hits[i]
 		if _swipe_t < float(w[0]) or prev > float(w[1]):
 			continue
 		open = true
@@ -528,37 +661,94 @@ func _run_swipe(delta: float, player: Node3D, flat: Vector3) -> void:
 			continue
 		if _hitbox != null and _hitbox.call("overlaps", player):
 			_swipe_landed[i] = true
-			_swipe_land(player)
+			if _swipe_land(player) == &"hit":
+				_swipe_hit = true
 	_set_hitbox(open)
-	if _swipe_t >= SWIPE_END:
+	if _swipe_t < 0.0:
+		return
+	if not _swipe_hit and _swipe_t >= _sw_chain:
+		_loop_on(player, flat)
+	elif _swipe_t >= _sw_end:
 		_end_swipe()
 
 
+## Round the loop: nothing connected, so the other swipe -- unless the player
+## is out of the dash's reach (C), where the loop ends and the beam may follow.
+func _loop_on(player: Node3D, flat: Vector3) -> void:
+	if flat.length() > LOOP_BREAK:
+		_end_swipe()
+		return
+	if _swipe_kind == 1:
+		_start_swipe(player, 2, BLEND_CHAIN_12)
+	else:
+		_start_swipe(player, 1, BLEND_CHAIN_21, SWIPE1_LOOP_ENTRY)
+
+
+## Swipe 2's dash, a step (metres forward): nothing until the lunge; then the
+## slide, its length fixed there from the distance, the clip slowed to fill it,
+## fast at once and easing off, re-aimed on what is left each frame; then 1x.
+func _slide_step(delta: float, flat: Vector3) -> float:
+	var gap := maxf(flat.length() - SWIPE2_ARRIVE, 0.0)
+	match _slide_phase:
+		0:
+			if _swipe_t >= SWIPE2_LUNGE:
+				var span := maxf(_swipe2_arrive() - SWIPE2_LUNGE, 0.0001)
+				_slide_len = clampf(gap / SWIPE2_SLIDE_SPEED, span, maxf(SWIPE2_SLIDE_MAX, span))
+				_slide_left = minf(gap, SWIPE2_SLIDE_SPEED * _slide_len)
+				_slide_t = 0.0
+				_slide_u = 0.0
+				_slide_phase = 1
+				# Its blows, cues and end now sit where the slide puts them.
+				_swipe_events()
+				if anim != null:
+					anim.speed_scale = span / _slide_len
+			return 0.0
+		1:
+			_slide_t += delta
+			var u := minf(_slide_t / _slide_len, 1.0)
+			var a := 1.0 - (1.0 - _slide_u) * (1.0 - _slide_u)
+			var b := 1.0 - (1.0 - u) * (1.0 - u)
+			_slide_u = u
+			var left := minf(gap, _slide_left)
+			var fwd := left * (b - a) / maxf(1.0 - a, 0.001)
+			_slide_left = maxf(_slide_left - fwd, 0.0)
+			if u >= 1.0:
+				_slide_phase = 2
+				if anim != null:
+					anim.speed_scale = 1.0
+			return fwd
+	return 0.0
+
+
 ## The swipe over -- or broken off (a stagger, the beam, the hunt dropped): the
-## box shut, and the walk takes over, eased in from the pose shown.
+## box shut, and the walk takes over, eased in from the pose shown. The next
+## loop may start SWIPE_COOLDOWN from now.
 func _end_swipe() -> void:
 	if _swipe_t < 0.0:
 		return
 	_swipe_t = -1.0
 	_set_hitbox(false)
+	_swipe_ready = _now() + SWIPE_COOLDOWN
+	if anim != null and anim.speed_scale != 1.0 and _clip == ANIM_SWIPE2_CLIP:
+		anim.speed_scale = 1.0
 	if not _dying and _beam != Beam.CHARGE and _beam != Beam.FIRE:
 		_play_clip(ANIM_WALK_CLIP, 0.0, BLEND_OUT_OF_MOVE, true)
 
 
-## SWIPE_HITS, each [start, end], by start.
-static func _swipe_hits() -> Array:
+## Windows [start, end] in order, by start.
+static func _sorted_windows(list: Array) -> Array:
 	var out: Array = []
-	for w in SWIPE_HITS:
+	for w in list:
 		out.append([minf(float(w[0]), float(w[1])), maxf(float(w[0]), float(w[1]))])
 	out.sort_custom(func(x, y): return x[0] < y[0])
 	return out
 
 
-## True while a hit window of the swipe is open.
+## True while a hit window of the swipe under way is open.
 func is_attacking() -> bool:
 	if _swipe_t < 0.0:
 		return false
-	for w in _swipe_hits():
+	for w in _sw_hits:
 		if _swipe_t >= float(w[0]) and _swipe_t <= float(w[1]):
 			return true
 	return false
@@ -570,9 +760,11 @@ func _set_hitbox(on: bool) -> void:
 
 
 ## The swipe's blow, through the player's guard; then the knock-down: unguarded,
-## the player goes off their feet; a held guard keeps them standing, shoved
-## back; a parry already threw this enforcer and leaves the player alone.
-func _swipe_land(player: Node3D) -> void:
+## the player goes off their feet (swipe 1 throws them SWIPE1_THROW_SCALE
+## harder); a held guard keeps them standing, shoved back; a parry already threw
+## this enforcer and leaves the player alone. Returns &"hit", &"blocked",
+## &"parried" or &"miss" (it did not get through: an invulnerable moment).
+func _swipe_land(player: Node3D) -> StringName:
 	_guard_seen = -1
 	if player.has_signal("guarded") and not player.is_connected("guarded", _on_player_guarded):
 		player.connect("guarded", _on_player_guarded)
@@ -584,10 +776,17 @@ func _swipe_land(player: Node3D) -> void:
 	_attack_connected = true
 	var after = player.get("health")
 	var hurt: bool = before != null and after != null and float(after) < float(before)
-	if _guard_seen == -1 and hurt and player.has_method("knock_down"):
-		player.call("knock_down", away, SWIPE_THROW)
-	elif _guard_seen == 0 and player.has_method("apply_knockback"):
-		player.call("apply_knockback", away * SWIPE_SHOVE)
+	if _guard_seen == 1:
+		return &"parried"
+	if _guard_seen == 0:
+		if player.has_method("apply_knockback"):
+			player.call("apply_knockback", away * SWIPE_SHOVE)
+		return &"blocked"
+	if not hurt:
+		return &"miss"
+	if player.has_method("knock_down"):
+		player.call("knock_down", away, SWIPE_THROW * (sqrt(SWIPE1_THROW_SCALE) if _swipe_kind == 1 else 1.0))
+	return &"hit"
 
 
 func _on_player_guarded(parried: bool, attacker: Node3D) -> void:
@@ -595,6 +794,8 @@ func _on_player_guarded(parried: bool, attacker: Node3D) -> void:
 		_guard_seen = 1 if parried else 0
 		if parried:
 			_parry_stagger()
+			# (B) Thrown -- and once it has recovered, back into the loop.
+			_resume_loop = true
 
 
 # --- The beam ---------------------------------------------------------------------
@@ -649,6 +850,13 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		_clear = _line_to(player)
 	if _beam_ready < 0.0:
 		_beam_ready = now + FIRST_BEAM
+	# Close in, it ALWAYS breaks off its beam -- charging or firing -- for swipe
+	# 1 (the user, 2026-10-17), whatever its role.
+	if (_beam == Beam.CHARGE or _beam == Beam.FIRE) and gap <= SWIPE_TRIGGER and _swipe_t < 0.0:
+		_cancel_beam()
+		_start_swipe(player, 1)
+		_run_swipe(delta, player, flat)
+		return true
 	match _beam:
 		Beam.CHARGE:
 			_hold(delta)
@@ -678,6 +886,18 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 	if _swipe_t >= 0.0:
 		_run_swipe(delta, player, flat)
 		return true
+	# (B) Up again after a parry: straight back into the loop -- swipe 1 if
+	# they are close, the dash (swipe 2) if they are within its reach.
+	if _resume_loop:
+		_resume_loop = false
+		if gap <= SWIPE_TRIGGER:
+			_start_swipe(player, 1)
+			_run_swipe(delta, player, flat)
+			return true
+		if distance <= LOOP_BREAK:
+			_start_swipe(player, 2)
+			_run_swipe(delta, player, flat)
+			return true
 	_update_role(now, player, distance)
 	match _role:
 		Role.MELEE:
@@ -1088,7 +1308,7 @@ func _animate(delta: float, now: float) -> void:
 				e = base_glow * 0.5
 		# The swipe: its wind-up colour until the blow, the strike's while it lands.
 		if _swipe_t >= 0.0:
-			var hits := _swipe_hits()
+			var hits := _sw_hits
 			if not hits.is_empty() and _swipe_t < float(hits[0][0]):
 				e = windup_glow
 				col = windup_color

@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 74), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 75), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -436,6 +436,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 72 | 2026-10-17 | The enforcer's beam fires with the recoil; the arms aim it; seamless blends | [docs/notes/72-the-enforcer-s-beam-fires-with-the-recoil.md](docs/notes/72-the-enforcer-s-beam-fires-with-the-recoil.md) |
 | 73 | 2026-10-17 | The enforcer's swipe, re-baked by the user | [docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md](docs/notes/73-the-enforcer-s-swipe-re-baked-by-the-user.md) |
 | 74 | 2026-10-17 | Every enforcer clip at 1x: the swipe a move of its own | [docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md](docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md) |
+| 75 | 2026-10-17 | The enforcer's swipe loop: swipe 2 dashes; beams broken off | [docs/notes/75-the-enforcer-s-swipe-loop.md](docs/notes/75-the-enforcer-s-swipe-loop.md) |
 
 ## Notes by source file
 
@@ -466,7 +467,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/dungeon_room.gd`: 22, 24
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60
 - `scripts/enemy_health_bar.gd`: 6.19
-- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74
+- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
 - `scripts/explore_map.gd`: 6.18, 50, 60
 - `scripts/gate.gd`: 6.18
@@ -493,7 +494,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75
 - `scripts/portcullis.gd`: 6.18
 - `scripts/puzzle_room.gd`: 18, 22
 - `scripts/radial_menu.gd`: 25, 30, 44
@@ -531,9 +532,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39
 - `tools/benchmark.gd`: 6.11, 33
 - `tools/build_brick_kit.py`: 27, 28
-- `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74
+- `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66
-- `tools/build_enforcer.py`: 48, 51, 53, 73
+- `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18
 - `tools/build_potion.py`: 6.19

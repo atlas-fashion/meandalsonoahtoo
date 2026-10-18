@@ -369,7 +369,7 @@ static func write_const(path: String, name: String, value_text: String) -> bool:
 ## Whether the script compiles and has what the markers are built from.
 static func _readable(path: String) -> bool:
 	var c := _consts(path)
-	var need := ["SWIPE_HITS", "SWIPE_CUES", "JUMP_HITS", "DASH_HITS", "DASH_LUNGE"] if path == DECREPIT 		else ["SWIPE_HITS", "SWIPE_CUES", "SWIPE_END", "BEAM_SET_EARLY", "RECOIL_BEAM"]
+	var need := ["SWIPE_HITS", "SWIPE_CUES", "JUMP_HITS", "DASH_HITS", "DASH_LUNGE"] if path == DECREPIT 		else ["SWIPE_HITS", "SWIPE_CUES", "SWIPE_END", "SWIPE_CHAIN", "SWIPE2_HITS", "SWIPE2_CUES", "SWIPE2_END", "SWIPE2_LUNGE", "SWIPE2_CHAIN", "SWIPE1_LOOP_ENTRY", "BEAM_SET_EARLY", "RECOIL_BEAM"]
 	for k in need:
 		if not c.has(k):
 			return false
@@ -494,10 +494,30 @@ func _enforcer() -> Dictionary:
 	var cues := _sorted(c["SWIPE_CUES"] as Array, false)
 	var marks := _hit_marks(ENFORCER, "SWIPE", hits, cues, float(c["SWIPE_LISTEN"]),
 		int(_init_value(ENFORCER, "attack_damage", 22.0)), func(x: float) -> float: return x)
-	marks.append(["move ends (SWIPE_END)", float(c["SWIPE_END"]), END, _bind(ENFORCER, "SWIPE_END")])
+	marks.append(["move ends, a blow connected (SWIPE_END)", float(c["SWIPE_END"]), END, _bind(ENFORCER, "SWIPE_END")])
+	marks.append(["nothing connected: on into SWIPE 2 (SWIPE_CHAIN; not before the last HIT end)",
+		float(c["SWIPE_CHAIN"]), INFO, _bind(ENFORCER, "SWIPE_CHAIN")])
+	marks.append(["the loop comes back in here from SWIPE 2 (SWIPE1_LOOP_ENTRY)",
+		float(c["SWIPE1_LOOP_ENTRY"]), INFO, _bind(ENFORCER, "SWIPE1_LOOP_ENTRY")])
 	out[&"SWIPE_1_BAKED"] = marks
 	_lists[&"SWIPE_1_BAKED"] = {&"hit": _bind_item(ENFORCER, "SWIPE_HITS", -1),
 		&"parry": _bind_item(ENFORCER, "SWIPE_CUES", -1)}
+	# Swipe 2, the loop's backhand: it dashes from the lunge, the clip from there
+	# to HIT 1's start slowed to fill the slide (its length set by the distance:
+	# the markers are clip times, a cue inside the slide moves with it).
+	var hits2 := _sorted(c["SWIPE2_HITS"] as Array, true)
+	var cues2 := _sorted(c["SWIPE2_CUES"] as Array, false)
+	var marks2 := _hit_marks(ENFORCER, "SWIPE2", hits2, cues2, float(c["SWIPE2_LISTEN"]),
+		int(_init_value(ENFORCER, "attack_damage", 22.0)), func(x: float) -> float: return x, "the slide arrives")
+	marks2.push_front(["lunge -> DASH (slides until HIT 1)", float(c["SWIPE2_LUNGE"]), INFO,
+		_bind(ENFORCER, "SWIPE2_LUNGE")])
+	marks2.append(["nothing connected: on into SWIPE 1 (SWIPE2_CHAIN; not before the last HIT end)",
+		float(c["SWIPE2_CHAIN"]), INFO, _bind(ENFORCER, "SWIPE2_CHAIN")])
+	marks2.append(["move ends, a blow connected (SWIPE2_END)", float(c["SWIPE2_END"]), END,
+		_bind(ENFORCER, "SWIPE2_END")])
+	out[&"SWIPE_2_BAKED"] = marks2
+	_lists[&"SWIPE_2_BAKED"] = {&"hit": _bind_item(ENFORCER, "SWIPE2_HITS", -1),
+		&"parry": _bind_item(ENFORCER, "SWIPE2_CUES", -1)}
 	# The charge plays BEAM_BAKED at 1x up to where it settles.
 	var beam := _clip_length(&"BEAM_BAKED")
 	out[&"BEAM_BAKED"] = [

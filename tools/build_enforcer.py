@@ -7,7 +7,9 @@ The source (models/source/enforcer/ENFORCER_BAKED.blend, from the user) is a
 rusty Tripo mech on a 16-bone rig with four BAKED actions on NLA tracks --
 WALK_BAKED (120 frames), BEAM_BAKED (47, the gun arm raised onto the shield
 arm), BEAM_RECOIL_BAKED (20, the cannon kicking as it fires) and SWIPE_1_BAKED
-(70, the shield arm swung) -- at 60 fps (second delivery, 2026-10-15). The
+(70, the shield arm swung) -- at 60 fps (second delivery, 2026-10-15); then
+SWIPE_1_BAKED re-baked and SWIPE_2_BAKED (42, the backhand that follows it)
+added from the user's ENFORCER_UNBAKED.blend (2026-10-17, CLAUDE.md 73, 75). The
 file also carries the unbaked actions they were made from (WALK, BEAM,
 BEAM_RECOIL, SWIPE_1; BEAM_RECOIL on an UNMUTED NLA track): every track and
 action not ending in _BAKED is removed before export -- only the baked ones
@@ -406,7 +408,7 @@ def main():
     for t in arm.animation_data.nla_tracks:
         t.mute = True
     for name, track_action in (("SWIPE_1_BAKED", "SWIPE_1_BAKED"), ("BEAM_BAKED", "BEAM_BAKED"),
-                              ("BEAM_RECOIL_BAKED", "BEAM_RECOIL_BAKED")):
+                              ("BEAM_RECOIL_BAKED", "BEAM_RECOIL_BAKED"), ("SWIPE_2_BAKED", "SWIPE_2_BAKED")):
         act = bpy.data.actions[track_action]
         arm.animation_data.action = act
         e = bpy.data.objects["Shield" if name.startswith("SWIPE") else "Muzzle"]
