@@ -695,8 +695,8 @@ func _run_swipe(delta: float, player: Node3D, flat: Vector3) -> void:
 ## Round the loop: nothing connected, so the other swipe -- unless the player
 ## is out of the dash's reach (C), where the loop ends and the beam may follow.
 ## After a pause the pose is no longer the chain's, so the plain blend into a
-## move -- swipe 1 still from its loop entry, so both pauses come out the same
-## length (from its start, its whole wind-up made one 0.18 s longer).
+## move -- and swipe 1 from its start, its whole wind-up (the user preferred
+## that to entering at its loop entry, which evened the two pauses out).
 func _loop_on(player: Node3D, flat: Vector3) -> void:
 	if flat.length() > LOOP_BREAK:
 		_end_swipe()
@@ -705,7 +705,8 @@ func _loop_on(player: Node3D, flat: Vector3) -> void:
 	if _swipe_kind == 1:
 		_start_swipe(player, 2, BLEND_INTO_MOVE if paused else BLEND_CHAIN_12, 0.0, true)
 	else:
-		_start_swipe(player, 1, BLEND_INTO_MOVE if paused else BLEND_CHAIN_21, SWIPE1_LOOP_ENTRY, true)
+		_start_swipe(player, 1, BLEND_INTO_MOVE if paused else BLEND_CHAIN_21,
+			0.0 if paused else SWIPE1_LOOP_ENTRY, true)
 
 
 ## Swipe 2's dash, a step (metres forward): nothing until the lunge; then the

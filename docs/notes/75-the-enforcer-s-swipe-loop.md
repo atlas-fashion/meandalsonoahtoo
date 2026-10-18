@@ -62,7 +62,7 @@ for the beam. "make sure to create a blend between swipe 2 and 1."
 - **A breather** (the user: "far too pressuring"): after every LOOP_PAUSE_EVERY 3rd
   swipe of a loop that did not connect, LOOP_PAUSE 0.5 s before the next -- the
   swipe plays on through its follow-through meanwhile, turning to face the
-  player; then the next with the plain move blend (swipe 1 still at its loop
-  entry: from its start, that pause came out 0.18 s longer). The count restarts
-  with each new loop. Measured, block held: blows 0.30-0.35 s apart, 0.85 and
-  0.75 s across the pauses. SWIPE2_HITS start moved to 0.1667 by the user.
+  player; then the next with the plain move blend, swipe 1 from its START (its
+  whole wind-up; entering it at its loop entry evened the pauses out, but the
+  user preferred this). The count restarts with each new loop. Measured, block
+  held: blows 0.30-0.35 s apart, 0.85 and 1.03 s across the pauses. SWIPE2_HITS start moved to 0.1667 by the user.
