@@ -200,6 +200,19 @@ func _build_switches() -> Control:
 		_levels[id] = spin
 		col.add_child(row)
 	col.add_child(SP.dim_label("Each level: +8% weapon damage, +4% armor"))
+	# GIVE (2026-10-18): the utility items and what the workbench wants, to try
+	# the rats without catching one first.
+	col.add_child(SP.spacer(10))
+	col.add_child(SP.section_label("GIVE ITEMS"))
+	for entry in [[&"live_rat", 1, "Live rat"], [&"robot_rat", 1, "Robot rat"],
+			[&"gold_crystal", 10, "10 gold crystals"]]:
+		var id: StringName = entry[0]
+		var n: int = entry[1]
+		var b := SP.menu_button(entry[2], func() -> void:
+			if _player != null and is_instance_valid(_player):
+				_player.call("add_item", id, n))
+		b.custom_minimum_size.y = 32
+		col.add_child(b)
 	return col
 
 

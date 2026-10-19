@@ -6,9 +6,11 @@ extends RefCounted
 ## "count": int}.
 ##
 ##   0 - 3    the WEAPON wheel (C / right stick click): up, right, down, left.
-##            Weapons only. The one in hand is `player.selected_slot`.
+##            Weapons, and utility items with "wheel": "weapon" (the robot
+##            rat). The one in hand is `player.selected_slot`.
 ##   4 - 7    the QUICK ITEM wheel (R, or the d-pad): up, right, down, left.
-##            Consumables only.
+##            Consumables, and utility items with "wheel": "quick" (the live
+##            rat). See `wheel_of`.
 ##   8 - 37   the bag: anything.
 ##
 ## HOTBAR keeps its old name for "the slots before the bag" (both wheels).
@@ -94,6 +96,18 @@ const ITEMS := {
 		"kind": "Relic",
 		"desc": "A splinter of violet crystal that never quite stops glowing. It hums when it is carried toward the great door.",
 		"quote": "One of five. The door remembers its shape."},
+	# UTILITY (2026-10-18): things put to use that are neither a weapon nor
+	# drunk -- bombs, tools. Each names the wheel it rides on ("wheel"): a live
+	# rat is a quick item (thrown, rat.gd), a robot rat sits on the weapon wheel
+	# (set down and driven, rat_control.gd). Neither blocks: only "Weapon" does.
+	&"live_rat": {"name": "Live Rat", "stack": 5, "color": Color(0.5, 0.4, 0.33),
+		"kind": "Utility", "wheel": "quick",
+		"desc": "A dungeon rat, caught by the scruff and very unhappy about it. Thrown, it lands squealing, and whatever was close enough to hear it wants to be somewhere else.",
+		"quote": "Even the dead do not like rats."},
+	&"robot_rat": {"name": "Robot Rat", "stack": 3, "color": Color(0.0, 0.91, 1.0),
+		"kind": "Utility", "wheel": "weapon",
+		"desc": "A rat worked over at the workbench: iron ribs, a gold crystal for a heart, an enforcer's eyes. Set it down and see through those eyes; it goes off for 100 when told to, or on its own after ten seconds.",
+		"quote": "It still twitches its whiskers. Nobody knows why."},
 }
 
 ## The shards, in the order the puzzle rooms are given them.
@@ -171,24 +185,40 @@ static func is_consumable(id: StringName) -> bool:
 	return item_kind(id) == "Consumable"
 
 
-## Whether slot `i` may hold `id`: weapons on the weapon wheel, consumables on
-## the quick wheel, anything in the bag. Nothing (&"") fits anywhere.
+static func is_utility(id: StringName) -> bool:
+	return item_kind(id) == "Utility"
+
+
+## The wheel `id` rides on: &"weapon" (weapons, and utility items marked so),
+## &"quick" (consumables, and utility items marked so), or &"" (the bag only).
+static func wheel_of(id: StringName) -> StringName:
+	if is_weapon(id):
+		return &"weapon"
+	if is_consumable(id):
+		return &"quick"
+	return StringName(ITEMS.get(id, {}).get("wheel", ""))
+
+
+## Whether slot `i` may hold `id`: the weapon wheel takes what rides on it
+## (weapons, the robot rat), the quick wheel likewise (consumables, the live
+## rat), the bag anything. Nothing (&"") fits anywhere.
 static func slot_accepts(i: int, id: StringName) -> bool:
 	if id == &"":
 		return true
 	if i < WEAPONS:
-		return is_weapon(id)
+		return wheel_of(id) == &"weapon"
 	if i < HOTBAR:
-		return is_consumable(id)
+		return wheel_of(id) == &"quick"
 	return true
 
 
 ## Where a new stack of `id` may go, in the order to try: its wheel, then the bag.
 static func _home_order(id: StringName) -> Array:
-	if is_weapon(id):
-		return range(WEAPONS) + range(HOTBAR, SIZE)
-	if is_consumable(id):
-		return range(QUICK_FIRST, HOTBAR) + range(HOTBAR, SIZE)
+	match wheel_of(id):
+		&"weapon":
+			return range(WEAPONS) + range(HOTBAR, SIZE)
+		&"quick":
+			return range(QUICK_FIRST, HOTBAR) + range(HOTBAR, SIZE)
 	return range(HOTBAR, SIZE)
 
 
@@ -421,14 +451,15 @@ func quick_move(i: int) -> void:
 	var lo := HOTBAR
 	var hi := SIZE
 	if i >= HOTBAR:
-		if is_weapon(id):
-			lo = 0
-			hi = WEAPONS
-		elif is_consumable(id):
-			lo = QUICK_FIRST
-			hi = HOTBAR
-		else:
-			return
+		match wheel_of(id):
+			&"weapon":
+				lo = 0
+				hi = WEAPONS
+			&"quick":
+				lo = QUICK_FIRST
+				hi = HOTBAR
+			_:
+				return
 	var cap := stack_size(id)
 	for j in range(lo, hi):
 		if count_at(i) <= 0:

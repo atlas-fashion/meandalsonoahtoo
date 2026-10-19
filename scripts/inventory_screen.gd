@@ -54,6 +54,7 @@ const CATEGORIES := [
 	["Consumables", ["Consumable"], &"health_potion"],
 	["Treasure", ["Treasure", "Relic"], &"coins"],
 	["Materials", ["Material", "Trophy"], &"bone_fragment"],
+	["Utility", ["Utility"], &"live_rat"],
 ]
 
 const INK := Color(0.047, 0.044, 0.041, 0.97)
@@ -216,7 +217,8 @@ func _input(event: InputEvent) -> void:
 	if visible and m != null and m.call("editor_open"):
 		return
 	if event.is_action_pressed("toggle_map"):
-		if not player.in_cutscene and not player.get("_dead"):
+		# Not while seeing through a robot rat's eyes (rat_control.gd).
+		if not player.in_cutscene and not player.get("_dead") and not player.get("remote_view"):
 			if not visible:
 				set_open(true, &"map")
 			elif _page == &"map":
@@ -226,7 +228,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("inventory"):
-		if not player.in_cutscene and not player.get("_dead"):
+		if not player.in_cutscene and not player.get("_dead") and not player.get("remote_view"):
 			set_open(not visible)
 		get_viewport().set_input_as_handled()
 		return
@@ -474,6 +476,32 @@ func _stats_for(id: StringName) -> Array:
 			return [
 				Inventory.item_kind(id), [["Carried", str(player.inventory.count(id))]],
 				"Dropped by", [["Skeletons", "%d%%" % roundi(_drop_chance(id) * 100.0)]],
+			]
+		&"live_rat":
+			var rat := preload("res://scripts/rat.gd")
+			return [
+				"Thrown", [
+					["Scares", "%d m round" % roundi(rat.SCARE_RADIUS)],
+					["For", "%d s" % roundi(rat.SCARE_TIME)],
+					["Carried", str(player.inventory.count(id))],
+				],
+				"Use", [["Quick wheel", "hold X"], ["Pad", "D-pad"], ["Caught", "E, quickly"]],
+			]
+		&"robot_rat":
+			var rc := preload("res://scripts/rat_control.gd")
+			return [
+				"Blast", [
+					["Damage", str(roundi(rc.BLAST_DAMAGE))],
+					["Reach", "%.1f m" % rc.BLAST_RADIUS],
+					["Fuse", "%d s" % roundi(rc.FUSE)],
+					["Cooldown", "%d s" % roundi(rc.COOLDOWN)],
+					["Built from", "rat + %d gold" % rc.CRAFT_COST],
+				],
+				"Controls", [
+					["Set down", "LMB / RB"],
+					["Drive", "WASD / stick"],
+					["Detonate", "LMB / RB"],
+				],
 			]
 	var type: ConsumableType = player._consumable_for(id)
 	if type != null:
@@ -831,7 +859,9 @@ func _build_items() -> Control:
 	tabs.add_child(_centred(_keycap("Q")))
 	for c in CATEGORIES.size():
 		var tab := Control.new()
-		tab.custom_minimum_size = Vector2(54, 42)
+		# 44 wide since the sixth tab (Utility), so the row still fits over
+		# the five-across bag.
+		tab.custom_minimum_size = Vector2(44, 42)
 		tab.tooltip_text = CATEGORIES[c][0]
 		tab.draw.connect(func() -> void: _draw_tab(tab, c))
 		tab.gui_input.connect(func(e: InputEvent) -> void:

@@ -471,6 +471,12 @@ func _on_staggered() -> void:
 		_next_shot = maxf(_next_shot, _now() + 0.6)
 
 
+## Scared off by a thrown rat (enemy.gd `scare`): the arrow is lost, as when
+## staggered.
+func _on_scared() -> void:
+	_on_staggered()
+
+
 func _die() -> void:
 	_drawing = false
 	super()

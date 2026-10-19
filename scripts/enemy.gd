@@ -485,6 +485,14 @@ func _physics_process(delta: float) -> void:
 		return
 	_decay_knockback(delta)
 
+	# Scared off by a thrown rat (rat.gd, `scare`): it runs from the spot until
+	# the fright wears off, whatever it was about. Not engaged meanwhile, so an
+	# enforcer's beam or swipe is dropped (enforcer.gd).
+	if now < _scared_until:
+		engaged = false
+		_run_scared(delta, now)
+		return
+
 	var player := _resolve_player()
 	if player == null:
 		move_and_slide()
@@ -806,6 +814,75 @@ func _run_retreat(delta: float, now: float) -> void:
 
 static func _flat_gap(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+## --- Scared off by a thrown rat (rat.gd, 2026-10-18) -------------------------------
+##
+## `scare(from, time)`: for `time` seconds it drops whatever it was doing (a
+## wind-up or a swing here; a beam, a swipe or a move in the kinds that have
+## them -- `_on_scared`) and runs from `from` along the navmesh at its full
+## speed, to a spot SCARE_RUN m off, and stands there till the fright is over.
+## Then it hunts as before. The bosses (`announce_death`) stand their ground, as
+## does anything mid-summon, staggered or hauling a cart. Returns whether it
+## took fright.
+const SCARE_RUN := 12.0
+var _scared_until := 0.0
+var _scared_to := Vector3.ZERO
+
+
+func scare(from: Vector3, time: float) -> bool:
+	if _dying or announce_death or hauled_by != null or state == State.SUMMON or state == State.STAGGER:
+		return false
+	var now := _now()
+	_scared_until = maxf(_scared_until, now + time)
+	# Awake for the whole fright, however far off the player is.
+	_dormant = false
+	_next_dormant_check = _scared_until
+	var away := Vector3(global_position.x - from.x, 0.0, global_position.z - from.z)
+	if away.length_squared() < 0.01:
+		var a := randf() * TAU
+		away = Vector3(cos(a), 0.0, sin(a))
+	var map := get_world_3d().navigation_map
+	_scared_to = NavigationServer3D.map_get_closest_point(map, global_position + away.normalized() * SCARE_RUN)
+	_next_repath = 0.0
+	_retreating = false
+	if state != State.CHASE:
+		_enter_chase()
+	_on_scared()
+	return true
+
+
+func is_scared() -> bool:
+	return _now() < _scared_until
+
+
+## For a kind with moves of its own to drop when scared.
+func _on_scared() -> void:
+	pass
+
+
+func _run_scared(delta: float, now: float) -> void:
+	var to := _scared_to - global_position
+	to.y = 0.0
+	if to.length() < 1.0:
+		velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
+		velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
+		move_and_slide()
+		return
+	var heading := to.normalized()
+	if agent != null:
+		if now >= _next_repath:
+			_next_repath = now + repath_interval
+			agent.target_position = _scared_to
+		if not agent.is_navigation_finished():
+			var step := agent.get_next_path_position() - global_position
+			step.y = 0.0
+			if step.length() > 0.1:
+				heading = step.normalized()
+	_face(heading)
+	velocity.x = move_toward(velocity.x, heading.x * move_speed, acceleration * delta)
+	velocity.z = move_toward(velocity.z, heading.z * move_speed, acceleration * delta)
+	move_and_slide()
 
 
 ## Can it see the player right now? Range, then the cone, then the wall check --

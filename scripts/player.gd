@@ -410,6 +410,11 @@ var ui_open := false
 ## True while a scene needs the player's hands (kicking a door in): whatever is
 ## held is put away, as the sword is when it would go into a wall.
 var hands_busy := false
+## True while the view is a robot rat's (rat_control.gd): the body stands where
+## it was and takes no movement, look or attack input -- the rat does.
+var remote_view := false
+## Live rats thrown and the robot rat driven (scripts/rat_control.gd).
+var rats: Node3D
 
 ## Coins are carried in the inventory like anything else; this is their total.
 var currency: int:
@@ -985,6 +990,11 @@ func _ready() -> void:
 	spear.set_script(load("res://scripts/spear.gd"))
 	head.add_child(spear)
 	spear.setup(self)
+	# Rats: the live ones thrown, the robot one set down and driven.
+	rats = Node3D.new()
+	rats.set_script(load("res://scripts/rat_control.gd"))
+	head.add_child(rats)
+	rats.setup(self)
 	get_tree().create_timer(0.4).timeout.connect(_warm_guard_flash)
 	# A torch in the left hand, down in the corner of the view (hand_torch.gd).
 	var torch_hand := Node3D.new()
@@ -1489,7 +1499,7 @@ var wheel_open := false
 
 
 func _pad_look(delta: float) -> void:
-	if ui_open or wheel_open or in_cutscene or _dead:
+	if ui_open or wheel_open or in_cutscene or _dead or remote_view:
 		return
 	var v := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
 	if v == Vector2.ZERO:
@@ -1518,6 +1528,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				-HIDE_LOOK_PITCH, HIDE_LOOK_PITCH)
 		return
 	if in_cutscene or ui_open:
+		return
+	# Seeing through a robot rat: rat_control.gd reads the keys and the mouse.
+	if remote_view:
 		return
 	# A wheel is up (radial_menu.gd): it has the mouse; no attacking meanwhile.
 	if wheel_open:
@@ -1553,6 +1566,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif held_item() == &"spear":
 				if _spear_free():
 					spear.stab()
+			elif held_item() == &"robot_rat":
+				# Set down, and the view goes to its eyes (rat_control.gd).
+				if not _ghosting and not is_drinking():
+					rats.deploy()
 		else:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif event.is_action_pressed("thrust"):
@@ -1677,7 +1694,7 @@ func _physics_process(delta: float) -> void:
 	# hand out a second jump in mid-air.
 	if is_on_floor():
 		_coyote_until = _now() + coyote_time
-	if not ui_open and not down and not _ghosting \
+	if not ui_open and not down and not _ghosting and not remote_view \
 			and Input.is_action_just_pressed("jump") and (_now() < _coyote_until or _swimming):
 		velocity.y = jump_velocity
 		_coyote_until = 0.0
@@ -3224,6 +3241,8 @@ func attack_cooldowns() -> Array:
 			if float(entry[1]) >= 0.0:
 				entry[1] = maxf(float(entry[1]), recover)
 		return list
+	if held == &"robot_rat" and rats != null:
+		return rats.call("attack_cooldowns")
 	return []
 
 
@@ -3553,7 +3572,8 @@ func _update_ghost(delta: float) -> void:
 
 ## Whether the ghost key (Shift) is down RIGHT NOW.
 func _dodge_held() -> bool:
-	return _action_held(&"dodge")
+	# Not while the view is a robot rat's: the body stays put.
+	return not remote_view and _action_held(&"dodge")
 
 
 ## Whether anything bound to `action` is down RIGHT NOW, asked of the keyboard
@@ -3924,7 +3944,7 @@ func _beam_speed_scale() -> float:
 
 ## Movement keys, or nothing while the inventory screen is open.
 func _move_input() -> Vector2:
-	if ui_open:
+	if ui_open or remote_view:
 		return Vector2.ZERO
 	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 
@@ -3942,6 +3962,9 @@ func use_consumable(slot: int) -> bool:
 		return false
 	if _attacking and _pose_time < _bite_end():
 		return false
+	# A live rat (a utility quick item) is thrown, not drunk (rat_control.gd).
+	if inventory.id_at(slot) == &"live_rat":
+		return rats.throw_rat(slot)
 	var type := _consumable_for(inventory.id_at(slot))
 	if type == null or health >= max_health:
 		return false
@@ -4290,6 +4313,8 @@ func _respawn() -> void:
 	_spear_dash_until = 0.0
 	if spear != null:
 		spear.reset()
+	if rats != null:
+		rats.call("reset")
 	if _hidden_in != null:
 		_hidden_in = null
 		hands_busy = false

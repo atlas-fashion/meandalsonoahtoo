@@ -6,12 +6,16 @@ extends Node3D
 ## ("interact") to open it: gold crystals buy levels for each weapon carried
 ## (more damage) and for the armor (less damage taken). The numbers live on
 ## the player (`player.upgrade`, `weapon_damage_scale`, `damage_negation`,
-## `upgrade_cost`); this is the bench and its screen.
+## `upgrade_cost`); this is the bench and its screen. Below the upgrades it
+## BUILDS (2026-10-18): one live rat and rat_control.gd CRAFT_COST gold
+## crystals make a robot rat (`_build_robot_rat`).
 ##
 ## Local frame: the bench runs along X, its front (where the player stands)
 ## faces +Z, origin on the floor at its middle.
 
 const PLAYER := preload("res://scripts/player.gd")
+const RAT_CONTROL := preload("res://scripts/rat_control.gd")
+const RAT_MODEL := preload("res://scripts/rat_model.gd")
 
 const REACH := 2.6
 const LENGTH := 2.2
@@ -26,6 +30,7 @@ var _spin := 0.0
 
 var _screen: CanvasLayer
 var _rows: Array = []        # [{what, name, level, effect, cost, button}]
+var _craft := {}             # the robot rat's row: {carried, needs, button}
 var _crystals_label: Label
 var _serif: Font
 
@@ -172,6 +177,49 @@ func _refresh() -> void:
 				GOLD if have >= cost else Color(0.6, 0.35, 0.3))
 			b.text = "Upgrade"
 			b.disabled = have < cost
+	_refresh_craft(inv, have)
+
+
+## The robot rat's row: what is carried, what it takes, whether it can be built.
+func _refresh_craft(inv, gold: int) -> void:
+	if _craft.is_empty():
+		return
+	var rats: int = inv.count(&"live_rat")
+	var cost: int = RAT_CONTROL.CRAFT_COST
+	(_craft["carried"] as Label).text = "Carried %d" % inv.count(&"robot_rat")
+	var needs: Label = _craft["needs"]
+	needs.text = "1 live rat (%d)  +  %d gold crystals" % [rats, cost]
+	var can := rats >= 1 and gold >= cost
+	needs.add_theme_color_override("font_color", GOLD if can else Color(0.6, 0.35, 0.3))
+	(_craft["button"] as Button).disabled = not can
+
+
+## One live rat and CRAFT_COST gold crystals in, one robot rat out. Refunded if
+## there is nowhere to put it.
+func _build_robot_rat() -> bool:
+	var inv = _player.get("inventory")
+	var cost: int = RAT_CONTROL.CRAFT_COST
+	if inv.count(&"live_rat") < 1 or inv.count(&"gold_crystal") < cost:
+		return false
+	inv.remove(&"live_rat", 1)
+	inv.remove(&"gold_crystal", cost)
+	if inv.add(&"robot_rat", 1) <= 0:
+		inv.add(&"live_rat", 1)
+		inv.add(&"gold_crystal", cost)
+		var full := get_tree().get_first_node_in_group("hud")
+		if full != null and full.has_method("announce"):
+			full.announce("NO ROOM", "Make space for the robot rat first")
+		_refresh()
+		return false
+	_spin = 1.0
+	var hud := get_tree().get_first_node_in_group("hud")
+	if hud != null and hud.has_method("announce"):
+		hud.announce("ROBOT RAT", "Built at the workbench")
+	if _player.has_method("_guard_flash"):
+		_player.call("_guard_flash", to_global(Vector3(LENGTH * 0.38, TOP + 0.45, 0.0)),
+			RAT_MODEL.enforcer_eye_colour(), false)
+	_refresh()
+	return true
 
 
 func _upgrade(i: int) -> void:
@@ -267,6 +315,37 @@ func _build_screen() -> void:
 		row.add_child(b)
 		_rows.append({"box": row, "what": &"", "name": name_label, "level": level, "effect": effect,
 			"cost": cost, "button": b})
+	# BUILD (2026-10-18): a live rat and gold crystals make a robot rat.
+	var rule2 := ColorRect.new()
+	rule2.custom_minimum_size = Vector2(0, 1)
+	rule2.color = Color(0.45, 0.36, 0.22, 0.8)
+	column.add_child(rule2)
+	var craft := HBoxContainer.new()
+	craft.add_theme_constant_override("separation", 16)
+	column.add_child(craft)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 2)
+	craft.add_child(info)
+	var head2 := HBoxContainer.new()
+	head2.add_theme_constant_override("separation", 12)
+	info.add_child(head2)
+	head2.add_child(_label(Inventory.item_name(&"robot_rat"), 22, PARCHMENT))
+	var carried := _label("", 16, GOLD)
+	carried.size_flags_vertical = Control.SIZE_SHRINK_END
+	head2.add_child(carried)
+	info.add_child(_label("Iron ribs, a crystal heart, an enforcer's eyes. Drive it, then blow it up.", 15, DIM))
+	var needs := _label("", 15, GOLD)
+	info.add_child(needs)
+	var build := Button.new()
+	build.custom_minimum_size = Vector2(150, 46)
+	build.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	build.add_theme_font_override("font", _serif)
+	build.add_theme_font_size_override("font_size", 18)
+	build.text = "Build"
+	build.pressed.connect(_build_robot_rat)
+	craft.add_child(build)
+	_craft = {"carried": carried, "needs": needs, "button": build}
 	column.add_child(_label("Esc / B / E: close", 14, DIM))
 	_screen.visible = false
 

@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 76), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 77), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -267,7 +267,7 @@ save's) -> level builder -> `_build_gates`, `_place_player`,
 `Graphics.apply_all` -> `_seal_cells`, `restore_world(save)`, `_populate()`,
 `restore_player(save)` -> `is_built = true`, emits **`level_built`**.
 `_populate()` spawns: boss, jail-cell stock, enemies, convoys, stalker,
-decrepits, sewer lizards, chests.
+decrepits, sewer lizards, rats (own `_rat_rng`), chests.
 
 **The live level path** is `maze.gd` `modules = true` ->
 `_build_module_level()`:
@@ -326,6 +326,13 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   `pad_keyboard_input.gd` (controller, on-screen keyboard).
 - Sandbox (test mode, never saves): `sandbox.gd` (autoload `Sandbox`),
   `sandbox_world.gd` (test plane, spawning, teleports), `sandbox_menu.gd` (` key).
+- Rats (note 77): `rat.gd` (the harmless rat; grabbed with E, thrown it
+  scares -- enemy.gd / crier.gd `scare`), `rat_model.gd` (both looks; the
+  robot's glow is the enforcer's crystal colour), `rat_control.gd`
+  (`player.rats`: throwing live rats, the robot rat in hand, set down, driven
+  through its eyes with `player.remote_view`, detonated), `robot_rat.gd` (its
+  body and camera). Items of kind "Utility" ride the wheel their ITEMS
+  "wheel" names (inventory.gd `wheel_of`).
 - Saving: `save_system.gd` (4 slots, `request()` / `save_now()`, autosave);
   maze.gd supplies `save_state()`, `restore_world()`, `restore_player()`.
 
@@ -438,6 +445,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 74 | 2026-10-17 | Every enforcer clip at 1x: the swipe a move of its own | [docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md](docs/notes/74-every-enforcer-clip-at-1x-the-swipe-a-move.md) |
 | 75 | 2026-10-17 | The enforcer's swipe loop: swipe 2 dashes; beams broken off | [docs/notes/75-the-enforcer-s-swipe-loop.md](docs/notes/75-the-enforcer-s-swipe-loop.md) |
 | 76 | 2026-10-17 | The title theme | [docs/notes/76-the-title-theme.md](docs/notes/76-the-title-theme.md) |
+| 77 | 2026-10-18 | Rats: utility items, live rats thrown, the robot rat | [docs/notes/77-rats-utility-items-and-the-robot-rat.md](docs/notes/77-rats-utility-items-and-the-robot-rat.md) |
 
 ## Notes by source file
 
@@ -452,21 +460,21 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scenes/player.tscn`: 9
 - `scenes/title.tscn`: 19
 - `scenes/torch.tscn`: 6.15, 6.18, 7, 19, 24, 27, 46
-- `scripts/archer.gd`: 20
+- `scripts/archer.gd`: 20, 77
 - `scripts/arrow.gd`: 20
-- `scripts/attack_icons.gd`: 24
+- `scripts/attack_icons.gd`: 24, 77
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27
 - `scripts/chest.gd`: 18
 - `scripts/convoy.gd`: 23, 28
-- `scripts/crier.gd`: 43, 48, 60
+- `scripts/crier.gd`: 43, 48, 60, 77
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24
-- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60
+- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
@@ -478,14 +486,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35
 - `scripts/hud.gd`: 6.19, 24
 - `scripts/interact.gd`: 6.18
-- `scripts/inventory.gd`: 6.19, 25
-- `scripts/inventory_screen.gd`: 6.19, 30, 60
+- `scripts/inventory.gd`: 6.19, 25, 77
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77
 - `scripts/item_drop.gd`: 6.19, 16, 51
-- `scripts/item_icon.gd`: 6.19
+- `scripts/item_icon.gd`: 6.19, 77
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b
@@ -495,15 +503,19 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77
 - `scripts/portcullis.gd`: 6.18
 - `scripts/puzzle_room.gd`: 18, 22
-- `scripts/radial_menu.gd`: 25, 30, 44
+- `scripts/radial_menu.gd`: 25, 30, 44, 77
+- `scripts/rat.gd`: 77
+- `scripts/rat_control.gd`: 77
+- `scripts/rat_model.gd`: 77
 - `scripts/respawn_anchor.gd`: 8b, 32
+- `scripts/robot_rat.gd`: 77
 - `scripts/save_system.gd`: 19, 60
 - `scripts/sandbox.gd`: 60, 68
-- `scripts/sandbox_menu.gd`: 60, 68
-- `scripts/sandbox_world.gd`: 60
+- `scripts/sandbox_menu.gd`: 60, 68, 77
+- `scripts/sandbox_world.gd`: 60, 77
 - `scripts/settings_panel.gd`: 19, 46
 - `scripts/sewer.gd`: 50, 55, 56, 57
 - `scripts/sewer_lizard.gd`: 58, 60
@@ -517,7 +529,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/title_screen.gd`: 19, 60, 76
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50
 - `scripts/wood_door.gd`: 6.18
-- `scripts/workbench.gd`: 32
+- `scripts/workbench.gd`: 32, 77
 - `shaders/blood_screen.gdshader`: 15
 - `shaders/debris_dissolve.gdshader`: 6.19
 - `shaders/dread.gdshader`: 11, 16

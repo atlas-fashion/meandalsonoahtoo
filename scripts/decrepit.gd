@@ -938,6 +938,14 @@ func _start_move(kind: int, player: Node3D) -> void:
 	_link_guard(player)
 
 
+## Scared off by a thrown rat (enemy.gd `scare`): the move in hand is dropped,
+## no combo after it.
+func _on_scared() -> void:
+	if _move != Move.NONE:
+		_combo_pending = false
+		_end_move()
+
+
 func _end_move() -> void:
 	var player := _target
 	if _combo_pending and player != null and is_instance_valid(player) and not _dying:

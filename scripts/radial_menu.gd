@@ -69,7 +69,7 @@ func _dpad_slot(event: InputEvent) -> int:
 
 func _can_open() -> bool:
 	return player != null and not player.get("ui_open") and not player.get("in_cutscene") \
-		and player.get("_dead") != true and not player.get("wheel_open") \
+		and player.get("_dead") != true and not player.get("wheel_open") and not player.get("remote_view") \
 		and not player.call("is_hidden") and not get_tree().paused
 
 

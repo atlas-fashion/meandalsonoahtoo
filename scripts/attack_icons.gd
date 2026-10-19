@@ -40,6 +40,8 @@ func setup(p: Node) -> void:
 	name = "AttackIcons"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_theme_constant_override("separation", int(SEPARATION))
+	# Packed to the right: a single tile sits by the health bar.
+	alignment = BoxContainer.ALIGNMENT_END
 	# Anchored to the bottom centre and set off to the left of the health bar
 	# (hud.gd HEALTH_WIDTH).
 	var bar_width := 570.0
@@ -134,7 +136,13 @@ func _process(delta: float) -> void:
 		return
 	for i in _tiles.size():
 		var t: Dictionary = _tiles[i]
-		var entry: Array = list[i]
+		# Fewer than three for a thing with fewer uses (the robot rat: one).
+		# Hidden from the left, so what is shown stays by the health bar.
+		var at := i - (_tiles.size() - list.size())
+		(t["tile"] as Control).visible = at >= 0
+		if at < 0:
+			continue
+		var entry: Array = list[at]
 		var kind: StringName = entry[0]
 		if t["kind"] != kind:
 			t["kind"] = kind
@@ -208,6 +216,15 @@ func _draw_glyph(t: Dictionary) -> void:
 			for k in 3:
 				var y := (float(k) - 1.0) * s * 0.45
 				g.draw_line(c + Vector2(-s * 1.2, y + 1), c + Vector2(-s * 0.7, y + 1), INK_DIM, 2.0, true)
+		&"rat_bomb":
+			# The robot rat (rat_control.gd): its icon, and a burst over it.
+			ItemIcon.paint(g, &"robot_rat", Rect2(c - Vector2(s, s * 1.05), Vector2(s, s) * 2.0))
+			var burst := c + Vector2(s * 0.75, -s * 0.85)
+			for k in 8:
+				var ang := TAU * float(k) / 8.0
+				var r1 := s * (0.36 if k % 2 == 0 else 0.24)
+				g.draw_line(burst + Vector2(cos(ang), sin(ang)) * s * 0.12, burst + Vector2(cos(ang), sin(ang)) * r1,
+					Color(1.0, 0.7, 0.35), 2.0, true)
 		&"throw":
 			var a := c + Vector2(-s * 0.95, s * 0.75)
 			var b := c + Vector2(s * 0.45, -s * 0.45)

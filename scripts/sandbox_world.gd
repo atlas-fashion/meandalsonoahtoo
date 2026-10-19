@@ -31,6 +31,7 @@ const ENFORCER_SCRIPT := preload("res://scripts/enforcer.gd")
 const DECREPIT_SCRIPT := preload("res://scripts/decrepit.gd")
 const LIZARD_SCRIPT := preload("res://scripts/sewer_lizard.gd")
 const STALKER_SCRIPT := preload("res://scripts/stalker.gd")
+const RAT_SCRIPT := preload("res://scripts/rat.gd")
 
 ## What the menu offers: id -> label. Kept in this order.
 const KINDS := [
@@ -44,6 +45,7 @@ const KINDS := [
 	[&"stalker", "The Remnant"],
 	[&"mimic", "Mimic (press E on it)"],
 	[&"boss", "The Warden (boss)"],
+	[&"rat", "Rat (harmless; E to grab)"],
 ]
 
 var maze: Node3D
@@ -264,6 +266,12 @@ func _make(kind: StringName, at: Vector3) -> Node:
 			var boss_scene: PackedScene = maze.get("boss_scene")
 			var e: CharacterBody3D = boss_scene.instantiate()
 			e.position = at + Vector3(0.0, 0.1, 0.0)
+			add_child(e)
+			return e
+		&"rat":
+			var e := CharacterBody3D.new()
+			e.set_script(RAT_SCRIPT)
+			e.position = at + Vector3(0.0, 0.05, 0.0)
 			add_child(e)
 			return e
 	return null

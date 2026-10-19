@@ -251,6 +251,19 @@ func _physics_process(delta: float) -> void:
 
 	_bob += delta * bob_speed
 	var now := Time.get_ticks_msec() / 1000.0
+	# Scared off by a thrown rat (`scare`): away from the spot at its rush
+	# speed, keeping its height, until the fright is over.
+	if now < _scared_until:
+		var away := global_position - _scared_from
+		away.y = 0.0
+		if away.length_squared() < 0.01:
+			away = Vector3.FORWARD
+		var flee := away.normalized() * rush_speed
+		flee.y = clampf(_scared_from.y + hover_height + 0.6 - global_position.y, -1.0, 1.0) * move_speed * 0.8
+		velocity = velocity.move_toward(flee, acceleration * 2.0 * delta)
+		_turn_to(away)
+		move_and_slide()
+		return
 	var eye := _eye(player)
 	if _sees or now >= _next_look:
 		_next_look = now + LOOK_EVERY
@@ -298,6 +311,29 @@ func _physics_process(delta: float) -> void:
 	if heading.length_squared() > 0.001:
 		_turn_to(heading)
 	move_and_slide()
+
+
+## --- Scared off by a thrown rat (rat.gd, 2026-10-18) ---------------------------
+## Like the walkers' (enemy.gd `scare`): `time` seconds flying away from
+## `from`, and it forgets where it last saw the player. Too late once it is
+## on the face. Returns whether it took fright.
+var _scared_until := 0.0
+var _scared_from := Vector3.ZERO
+
+
+func scare(from: Vector3, time: float) -> bool:
+	if _dying or _state == FACE:
+		return false
+	_scared_until = maxf(_scared_until, Time.get_ticks_msec() / 1000.0 + time)
+	_scared_from = from
+	_dormant = false
+	_sees = false
+	_seen_time = -100.0
+	return true
+
+
+func is_scared() -> bool:
+	return Time.get_ticks_msec() / 1000.0 < _scared_until
 
 
 func _turn_to(dir: Vector3) -> void:

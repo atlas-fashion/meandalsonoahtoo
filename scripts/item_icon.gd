@@ -47,6 +47,10 @@ static func paint(c: CanvasItem, id: StringName, rect: Rect2, tint := Color.WHIT
 			_bone(c, o, s, tint)
 		&"skeleton_skull":
 			_skull(c, o, s, tint)
+		&"live_rat":
+			_rat(c, o, s, tint, false)
+		&"robot_rat":
+			_rat(c, o, s, tint, true)
 		&"":
 			pass
 		&"gold_crystal", &"red_crystal":
@@ -192,6 +196,52 @@ static func _skull(c: CanvasItem, o: Vector2, s: float, tint: Color) -> void:
 	for k in 4:
 		var x := 0.38 + k * 0.08
 		c.draw_line(p.call(x, 0.68), p.call(x, 0.76), hole, maxf(1.0, s * 0.02))
+
+
+## A rat side on, nose to the left: a long tail curling up behind, a round ear
+## and a bright eye. The robot one is grey iron with riveted plates and an
+## enforcer's cyan eye and heart crystal (rat_model.gd).
+static func _rat(c: CanvasItem, o: Vector2, s: float, tint: Color, robot: bool) -> void:
+	var p := func(x: float, y: float) -> Vector2: return o + Vector2(x, y) * s
+	var body := (Color(0.42, 0.44, 0.47) if robot else Color(0.4, 0.32, 0.26)) * tint
+	var shade := (Color(0.24, 0.25, 0.27) if robot else Color(0.24, 0.19, 0.15)) * tint
+	var skin := (Color(0.3, 0.31, 0.33) if robot else Color(0.82, 0.56, 0.54)) * tint
+	var dark := Color(0.08, 0.07, 0.07) * tint
+	var glow := Color(0.0, 0.91, 1.0) * tint
+	# The tail, from the rump curling up and back.
+	var tail := PackedVector2Array()
+	for k in 9:
+		var t := float(k) / 8.0
+		tail.append(p.call(0.72 + t * 0.2, 0.68 - sin(t * PI * 0.9) * 0.22 - t * 0.05))
+	c.draw_polyline(tail, skin, maxf(1.5, s * 0.035), true)
+	# Body and haunch, then the head and the snout.
+	c.draw_set_transform(p.call(0.56, 0.6), 0.0, Vector2(1.0, 0.68))
+	c.draw_circle(Vector2.ZERO, s * 0.22, shade)
+	c.draw_circle(Vector2(0.0, -s * 0.02), s * 0.2, body)
+	c.draw_set_transform(Vector2.ZERO)
+	c.draw_circle(p.call(0.33, 0.56), s * 0.12, body)
+	c.draw_colored_polygon(PackedVector2Array([p.call(0.3, 0.48), p.call(0.1, 0.6), p.call(0.3, 0.66)]), body)
+	c.draw_circle(p.call(0.1, 0.6), s * 0.025, skin)
+	# Feet.
+	for x: float in [0.34, 0.66]:
+		c.draw_line(p.call(x, 0.7), p.call(x - 0.03, 0.75), skin, maxf(1.0, s * 0.035))
+	# The ear.
+	c.draw_circle(p.call(0.36, 0.42), s * 0.07, shade)
+	c.draw_circle(p.call(0.36, 0.43), s * 0.045, skin)
+	if robot:
+		# Plates and rivets down the back, the heart crystal, the antenna.
+		c.draw_line(p.call(0.44, 0.48), p.call(0.72, 0.52), shade, maxf(1.0, s * 0.02))
+		for x: float in [0.48, 0.58, 0.68]:
+			c.draw_circle(p.call(x, 0.5), s * 0.014, Color(0.7, 0.72, 0.75) * tint)
+		c.draw_circle(p.call(0.56, 0.62), s * 0.06, Color(glow, 0.3))
+		c.draw_circle(p.call(0.56, 0.62), s * 0.03, glow)
+		c.draw_line(p.call(0.4, 0.46), p.call(0.46, 0.3), shade, maxf(1.0, s * 0.02))
+		c.draw_circle(p.call(0.46, 0.3), s * 0.025, glow)
+		c.draw_circle(p.call(0.24, 0.54), s * 0.05, Color(glow, 0.35))
+		c.draw_circle(p.call(0.24, 0.54), s * 0.028, glow)
+	else:
+		c.draw_circle(p.call(0.24, 0.54), s * 0.026, dark)
+		c.draw_circle(p.call(0.235, 0.535), s * 0.009, Color(1, 1, 1, 0.8) * tint)
 
 
 static func _coins(c: CanvasItem, o: Vector2, s: float, tint: Color) -> void:

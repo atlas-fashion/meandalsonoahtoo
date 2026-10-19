@@ -4122,6 +4122,9 @@ func _populate() -> void:
 	_mimic_committed = false
 	for room in _gates.size():
 		seal_room(room, false)
+	if _rats_node != null and is_instance_valid(_rats_node):
+		_rats_node.free()
+		_rats_node = null
 	# The sandbox's level is empty unless its menu asks for the population.
 	if Sandbox.active and not sandbox_population:
 		return
@@ -4135,6 +4138,7 @@ func _populate() -> void:
 	_spawn_stalker()
 	_spawn_decrepits()
 	_spawn_sewer_lizards()
+	_spawn_rats()
 	_spawn_chests()
 	if modules and _module_level != null:
 		_report_room_intruders()
@@ -4825,6 +4829,75 @@ func _sewer_spot(clear: float, others: Array, apart: float):
 	var roll := RandomNumberGenerator.new()
 	roll.randomize()
 	return ok[roll.randi_range(0, ok.size() - 1)]
+
+
+## --- Rats (rat.gd, 2026-10-18) ---------------------------------------------------
+##
+## Harmless, fast, catchable with E: `rats_in_corridors` on corridor tiles (the
+## patrol points `_spawn_enemies` gathered), each at least `rat_clear` from the
+## player and `rat_apart` from every other, and `rats_in_sewer` in the sewer's
+## cells. (A share of the patrol points was 293 rats: they are tiles, not
+## cells.) With the population, so a death resets them -- under their own
+## node, not `_spawned`, so the room census (`_report_room_intruders`) does not
+## count them as guards.
+const RAT_SCRIPT := preload("res://scripts/rat.gd")
+@export var rats_in_corridors := 24
+@export var rats_in_sewer := 8
+@export var rat_clear := 10.0
+@export var rat_apart := 6.0
+var _rats_node: Node3D
+var _rat_rng := RandomNumberGenerator.new()
+
+
+func _spawn_rats() -> void:
+	if _rats_node != null and is_instance_valid(_rats_node):
+		_rats_node.free()
+	_rats_node = Node3D.new()
+	_rats_node.name = "Rats"
+	add_child(_rats_node)
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	var from: Vector3 = player.global_position if player != null else Vector3.ZERO
+	var placed: Array[Vector3] = []
+	var spots := _patrol_points.duplicate()
+	var want := rats_in_corridors
+	var tries := 0
+	# Their own generator, off the level seed: drawing from `_rng` shifted every
+	# roll after it (the chests and all they bring), and the population was no
+	# longer the one this seed has always made.
+	_rat_rng.seed = hash(_active_seed + 7919)
+	while placed.size() < want and not spots.is_empty() and tries < want * 40:
+		tries += 1
+		var p: Vector3 = spots[_rat_rng.randi_range(0, spots.size() - 1)]
+		if p.distance_to(from) < rat_clear:
+			continue
+		var crowded := false
+		for o in placed:
+			if o.distance_to(p) < rat_apart:
+				crowded = true
+				break
+		if crowded:
+			continue
+		spots.erase(p)
+		placed.append(p)
+		_add_rat(p)
+	var corridor := placed.size()
+	if _sewer != null and rats_in_sewer > 0:
+		var below: Array = []
+		for i in rats_in_sewer:
+			var spot = _sewer_spot(rat_clear, below, rat_apart)
+			if spot == null:
+				break
+			var r := _add_rat(spot as Vector3)
+			below.append(r)
+	print("[rats] %d in the corridors, %d in the sewer" % [corridor, _rats_node.get_child_count() - corridor])
+
+
+func _add_rat(at: Vector3) -> Node3D:
+	var r := CharacterBody3D.new()
+	r.set_script(RAT_SCRIPT)
+	r.position = at + Vector3(_rat_rng.randf_range(-0.8, 0.8), 0.15, _rat_rng.randf_range(-0.8, 0.8))
+	_rats_node.add_child(r)
+	return r
 
 
 func _on_decrepit_died() -> void:
