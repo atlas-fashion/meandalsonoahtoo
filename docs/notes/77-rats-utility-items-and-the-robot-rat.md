@@ -7,6 +7,8 @@ quick wheel and thrown to scare enemies (landed, it scurries out of sight); live
 rats made into ROBOT rats at the workbench with crystals, the enforcer's eye
 colour, on the weapon wheel: attacking sets it down and the view goes to its
 eyes; it detonates for 100 on command, or by itself after 10 s, with a cooldown.
+(Amended the same day, below: no cooldown after all, and the blast hurts the
+player too.)
 
 - **Utility** (inventory.gd): kind "Utility"; each utility item names its wheel
   (`"wheel": "quick"` / `"weapon"`). `wheel_of(id)` now decides `slot_accepts`,
@@ -62,9 +64,9 @@ eyes; it detonates for 100 on command, or by itself after 10 s, with a cooldown.
   5.5 m/s, mouse / right stick turn it; LMB / RB DETONATES: BLAST_DAMAGE 100
   whole (no falloff -- it is a bomb) to everything damageable within
   BLAST_RADIUS 4 m not sheltered by stone, thrown out and staggered, the
-  spear's firepot burst for the look. FUSE 10 s, then it goes off by itself;
-  then COOLDOWN 12 s before another can be set down (the one attack tile shows
-  it). Death, a scene, or falling 30 m sets it off at once. Overlay: corner
+  spear's firepot burst for the look. FUSE 10 s, then it goes off by itself.
+  NO cooldown: another can be set down at once (see the amendment below).
+  Death, a scene, or falling 30 m sets it off at once. Overlay: corner
   brackets, the fuse bar (red its last 3 s), keys, "YOUR BODY IS UNDER ATTACK"
   when the left body is struck -- lines and text only, no full-screen fill.
   A small cyan OmniLight (3.5 m, shadowless) at the eyes only with
@@ -123,3 +125,17 @@ eyes; it detonates for 100 on command, or by itself after 10 s, with a cooldown.
   and 20 / 25 m: 128.1 fps with rats against 129.9 and 130.8 in two runs
   without -- inside the run-to-run spread (the two no-rat runs differed by 45
   draws and 0.9 fps). No quality knob: the per-rat cost is at the noise floor.
+- **Amended (2026-10-18, the user): no cooldown between robot rats, and the
+  blast hurts the player.** rat_control.gd: COOLDOWN and `charge()` are gone
+  (the 12 s first shipped); the attack tile is never shaded; `deploy` asks
+  only for free hands and the floor -- so after its own blast throws the
+  player up, the next can go down the moment they land (37 ticks measured).
+  `_blast_player`: if the player's capsule (0.4 x 1.8 m) is within
+  BLAST_RADIUS 4 m of the blast and stone does not shelter them, they take
+  BLAST_DAMAGE 100 through `take_damage` (armor applies; the sandbox's god
+  switch spares them) and are thrown back. 100 kills from full health at
+  armor 1 -- setting one off where it was put down, 1.1 m ahead, is death.
+  Measured (throwaway harness, deleted): blown at the feet, 100 -> 0, dead;
+  god mode, nothing; three set down back to back; driven 7.2 m off, untouched;
+  armor 6, took 80. Re-broken (the player's blast off): both damage checks
+  failed.

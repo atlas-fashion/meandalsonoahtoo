@@ -15,8 +15,9 @@ extends Node3D
 ## it, the mouse / right stick turn it, and the attack key again DETONATES it --
 ## BLAST_DAMAGE to everything within BLAST_RADIUS that stone does not shelter,
 ## thrown outward (the spear's firepot burst, spear.gd `_blast_visual`). Not
-## detonated, it goes off by itself when the FUSE runs out. Then COOLDOWN
-## before another can be set down (the attack icon shows it).
+## detonated, it goes off by itself when the FUSE runs out. No cooldown (the
+## user, 2026-10-18): another can be set down at once. The blast hurts the
+## player too, if they are in it (`_blast_player`).
 ##
 ## While driving, `player.remote_view` is on: the body stands where it was,
 ## takes no input (player.gd), opens no wheel, inventory or map; `hands_busy`
@@ -36,11 +37,13 @@ const THROW_EVERY := 0.6
 
 ## The robot rat.
 const FUSE := 10.0
-const COOLDOWN := 12.0
 const BLAST_DAMAGE := 100.0
 const BLAST_RADIUS := 4.0
 const BLAST_PUSH := 12.0
 const BLAST_STAGGER := 1.0
+## The player's capsule, for whether the blast reaches them (scenes/player.tscn).
+const PLAYER_RADIUS := 0.4
+const PLAYER_HEIGHT := 1.8
 ## Gold crystals, with one live rat, at the workbench (workbench.gd).
 const CRAFT_COST := 3
 ## Set down this far ahead of the feet (less if stone is nearer).
@@ -66,7 +69,6 @@ var _raise := 0.0
 var _rat: CharacterBody3D
 var _rat_from := Vector3.ZERO
 var _fuse_left := 0.0
-var _ready_at := 0.0
 var _next_throw := 0.0
 var _clock := 0.0
 var _hurt_flash := 0.0
@@ -104,9 +106,6 @@ func is_driving() -> bool:
 	return _rat != null and is_instance_valid(_rat)
 
 
-## 0 just used -> 1 ready to set another down.
-func charge() -> float:
-	return clampf(1.0 - (_ready_at - _clock) / COOLDOWN, 0.0, 1.0)
 
 
 func fuse_left() -> float:
@@ -114,20 +113,17 @@ func fuse_left() -> float:
 
 
 ## For the HUD's attack icons (player.gd `attack_cooldowns`): one tile, the
-## set-down / detonate key, shaded while it recharges.
+## set-down / detonate key; never shaded (no cooldown).
 func attack_cooldowns() -> Array:
-	if is_driving():
-		return [[&"rat_bomb", 0.0, COOLDOWN, "LMB"]]
-	return [[&"rat_bomb", maxf(_ready_at - _clock, 0.0), COOLDOWN, "LMB"]]
+	return [[&"rat_bomb", 0.0, FUSE, "LMB"]]
 
 
-## A respawn: nothing in flight, nothing being driven, the cooldown fresh.
+## A respawn: nothing in flight, nothing being driven.
 func reset() -> void:
 	if is_driving():
 		_rat.queue_free()
 		_end_view()
 	_rat = null
-	_ready_at = 0.0
 	_next_throw = 0.0
 
 
@@ -165,7 +161,7 @@ func throw_rat(slot: int) -> bool:
 
 ## The attack key with the robot rat in hand: set it down and see through it.
 func deploy() -> bool:
-	if _busy() or _clock < _ready_at or not player.is_on_floor():
+	if _busy() or not player.is_on_floor():
 		return false
 	var slot: int = player.selected_slot
 	if player.inventory.id_at(slot) != &"robot_rat":
@@ -218,8 +214,7 @@ func _end_view() -> void:
 	_show_overlay(false)
 
 
-## Goes off where it stands: the blast, then the view comes home and the
-## cooldown starts.
+## Goes off where it stands: the blast, then the view comes home.
 func detonate() -> void:
 	if not is_driving():
 		return
@@ -229,7 +224,6 @@ func detonate() -> void:
 	_rat = null
 	_fuse_left = 0.0
 	_end_view()
-	_ready_at = _clock + COOLDOWN
 
 
 ## Everything damageable within BLAST_RADIUS that stone does not shelter takes
@@ -270,11 +264,39 @@ func _blast(at: Vector3) -> int:
 			body.call("alert")
 		player.hit_landed.emit(body)
 		struck += 1
+	_blast_player(at)
 	var near: float = player.global_position.distance_to(at)
 	player.set("_shake", maxf(float(player.get("_shake")), clampf(1.0 - near / 25.0, 0.15, 0.9)))
 	if player.spear != null and player.spear.has_method("_blast_visual"):
 		player.spear.call("_blast_visual", at)
 	return struck
+
+
+## The player is not spared (the user, 2026-10-18): within BLAST_RADIUS of
+## their body (its capsule, as the enemies' colliders are met by the sphere)
+## and not sheltered by stone, they take BLAST_DAMAGE too -- through
+## take_damage, so armor and the sandbox's god switch apply -- and are thrown
+## back. Returns whether they were caught.
+func _blast_player(at: Vector3) -> bool:
+	if player.get("_dead") == true:
+		return false
+	var feet: Vector3 = player.global_position
+	var spine := Vector3(feet.x, clampf(at.y, feet.y + PLAYER_RADIUS, feet.y + PLAYER_HEIGHT - PLAYER_RADIUS), feet.z)
+	if spine.distance_to(at) - PLAYER_RADIUS > BLAST_RADIUS:
+		return false
+	var centre := feet + Vector3(0.0, 0.9, 0.0)
+	var ray := PhysicsRayQueryParameters3D.create(at, centre, player.geometry_mask)
+	ray.exclude = [player.get_rid()]
+	var wall := get_world_3d().direct_space_state.intersect_ray(ray)
+	if not wall.is_empty() and (wall["position"] as Vector3).distance_to(at) > 0.4:
+		return false
+	var away := centre - at
+	away = away / maxf(away.length(), 0.01)
+	player.take_damage(BLAST_DAMAGE, away)
+	var flat := Vector3(away.x, 0.0, away.z)
+	if flat.length_squared() > 0.0001:
+		player.apply_knockback(flat.normalized() * BLAST_PUSH * 0.6 + Vector3(0.0, 3.0, 0.0))
+	return true
 
 
 # --- Each tick -----------------------------------------------------------------------
@@ -344,9 +366,7 @@ func _process(delta: float) -> void:
 	_held.visible = _raise > 0.01
 	if _held.visible:
 		var k := _raise * _raise * (3.0 - 2.0 * _raise)
-		var charged := charge() >= 1.0
-		# Waiting out the cooldown it is held lower.
-		var at := HELD_AT + Vector3(0.0, -0.05 if not charged else 0.0, 0.0)
+		var at := HELD_AT
 		_held.position = (at + Vector3(0.05, -0.45, 0.2)).lerp(at, k)
 		_held.rotation = HELD_TURN + Vector3(sin(_clock * 3.1) * 0.02, 0.0, 0.0)
 		_held_tail.rotation.y = sin(_clock * 2.3) * 0.35

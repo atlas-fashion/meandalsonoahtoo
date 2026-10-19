@@ -494,7 +494,7 @@ func _stats_for(id: StringName) -> Array:
 					["Damage", str(roundi(rc.BLAST_DAMAGE))],
 					["Reach", "%.1f m" % rc.BLAST_RADIUS],
 					["Fuse", "%d s" % roundi(rc.FUSE)],
-					["Cooldown", "%d s" % roundi(rc.COOLDOWN)],
+					["Hurts you", "if within %.0f m" % rc.BLAST_RADIUS],
 					["Built from", "rat + %d gold" % rc.CRAFT_COST],
 				],
 				"Controls", [
