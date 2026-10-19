@@ -113,13 +113,14 @@ func _physics_process(delta: float) -> void:
 	# Stone.
 	var q := PhysicsRayQueryParameters3D.create(from, to, WORLD_MASK)
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
-	# The player.
-	var player := get_tree().get_first_node_in_group("player") as Node3D
-	if player != null and _meets(player, from, hit.get("position", to)):
-		var dir := velocity.normalized()
-		player.call("take_damage", damage, dir, _proxy)
-		_splash(global_position, -dir)
-		return
+	# A player (co-op: either).
+	for pl in Coop.all():
+		var player := pl as Node3D
+		if _meets(player, from, hit.get("position", to)):
+			var dir := velocity.normalized()
+			player.call("take_damage", damage, dir, _proxy)
+			_splash(global_position, -dir)
+			return
 	if not hit.is_empty():
 		_splash(hit.position, hit.normal)
 		return

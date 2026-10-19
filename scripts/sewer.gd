@@ -1187,6 +1187,19 @@ func _build_fireflies() -> void:
 # --- Running ------------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
+	# Co-op (split_screen.gd): each half hazes its own Environment by its own
+	# camera, and the sewer is drawn while either camera is down here.
+	if Coop.active and Coop.split != null and is_instance_valid(Coop.split):
+		var any := false
+		for p in Coop.all():
+			var c := Coop.view_camera(p)
+			if c == null:
+				continue
+			var down := c.global_position.y < SPLIT_Y
+			any = any or down
+			_haze_env(c.environment, down)
+		_set_below(any, false, false)
+		return
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player") as Node3D
 		if _player == null:
@@ -1198,14 +1211,15 @@ func _process(_delta: float) -> void:
 
 ## The sewer draws only while the camera is down here, and the air goes thick and
 ## musty. (The dungeon stays drawn below: the shafts look up into it.)
-func _set_below(below: bool, force := false) -> void:
+func _set_below(below: bool, force := false, haze := true) -> void:
 	if below == _below and not force:
 		return
 	_below = below
 	for c in _chunks:
 		if is_instance_valid(c):
 			c.visible = below
-	_haze(below)
+	if haze:
+		_haze(below)
 	# Lights spawned up there since the level was built (the boss, a chest's
 	# room light) are kept off this layer too.
 	if below and get_parent() != null and get_parent().has_method("_wall_off_sewer"):
@@ -1214,30 +1228,47 @@ func _set_below(below: bool, force := false) -> void:
 
 func _haze(on: bool) -> void:
 	var world := get_viewport().find_world_3d() if is_inside_tree() else null
-	var env: Environment = world.environment if world != null else null
+	_haze_env(world.environment if world != null else null, on)
+
+
+## The musty air on `env`, or off it again; what it had is kept per Environment
+## (co-op: one per half).
+func _haze_env(env: Environment, on: bool) -> void:
 	if env == null:
 		return
+	var key := env.get_instance_id()
+	var saved: Dictionary = _fog_saved.get(key, {})
 	if on:
-		if _fog_saved.is_empty():
-			_fog_saved = {"colour": env.fog_light_color, "energy": env.fog_light_energy,
+		if saved.is_empty():
+			saved = {"env": env, "colour": env.fog_light_color, "energy": env.fog_light_energy,
 				"density": env.fog_density, "ambient": env.ambient_light_color,
 				"ambient_energy": env.ambient_light_energy}
+			_fog_saved[key] = saved
 		env.fog_light_color = HAZE_COLOUR
 		env.fog_light_energy = HAZE_ENERGY
 		env.fog_density = HAZE_DENSITY
 		env.ambient_light_color = DAMP_AMBIENT
-		env.ambient_light_energy = float(_fog_saved["ambient_energy"]) * DAMP_AMBIENT_SCALE
-	elif not _fog_saved.is_empty():
-		env.fog_light_color = _fog_saved["colour"]
-		env.fog_light_energy = _fog_saved["energy"]
-		env.fog_density = _fog_saved["density"]
-		env.ambient_light_color = _fog_saved["ambient"]
-		env.ambient_light_energy = _fog_saved["ambient_energy"]
-		_fog_saved = {}
+		env.ambient_light_energy = float(saved["ambient_energy"]) * DAMP_AMBIENT_SCALE
+	elif not saved.is_empty():
+		_unhaze(saved)
+		_fog_saved.erase(key)
+
+
+func _unhaze(saved: Dictionary) -> void:
+	var env: Environment = saved["env"]
+	env.fog_light_color = saved["colour"]
+	env.fog_light_energy = saved["energy"]
+	env.fog_density = saved["density"]
+	env.ambient_light_color = saved["ambient"]
+	env.ambient_light_energy = saved["ambient_energy"]
 
 
 func _exit_tree() -> void:
-	_haze(false)
+	for key in _fog_saved:
+		var saved: Dictionary = _fog_saved[key]
+		if is_instance_valid(saved["env"]):
+			_unhaze(saved)
+	_fog_saved.clear()
 
 
 func is_below() -> bool:

@@ -332,7 +332,14 @@ func destinations() -> Array:
 
 ## Puts the player at `at` facing `yaw`, out of anything that holds them.
 func teleport(at: Vector3, yaw: float) -> void:
-	var player := get_tree().get_first_node_in_group("player") as CharacterBody3D
+	# Co-op: the party goes together, player 2 a step beside player 1.
+	var spot := _floor_at(at)
+	for p in Coop.all():
+		var here: Vector3 = spot if Coop.index_of(p) == 0 else maze.call("_partner_spot", spot, yaw)
+		_teleport_one(p as CharacterBody3D, here, yaw)
+
+
+func _teleport_one(player: CharacterBody3D, at: Vector3, yaw: float) -> void:
 	if player == null:
 		return
 	if player.has_method("is_hidden") and player.is_hidden() and player.has_method("leave_hiding"):
@@ -341,12 +348,12 @@ func teleport(at: Vector3, yaw: float) -> void:
 		player.call("end_climb")
 	if player.has_method("_release_phasing"):
 		player.call("_release_phasing", true)
-	player.global_position = _floor_at(at) + Vector3(0.0, 0.1, 0.0)
+	player.global_position = at + Vector3(0.0, 0.1, 0.0)
 	player.velocity = Vector3.ZERO
 	player.rotation.y = yaw
 	player.set("_look_pitch", 0.0)
 	player.set("_was_grounded", true)
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(player)
 	if hud != null and hud.has_method("fade_black"):
 		hud.call("fade_black", 1.0, 0.0)
 		hud.call("fade_black", 0.0, 0.35)

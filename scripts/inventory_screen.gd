@@ -142,11 +142,11 @@ func set_open(open: bool, page := &"items") -> void:
 	# The pad: the left stick moves a cursor (pad.gd) whose hover is the
 	# highlight; A still lifts and drops, so the cursor makes no clicks.
 	Pad.want_cursor(self, open, false)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
+	Coop.set_mouse(player, Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED)
 	if open:
 		_refresh()
 		# Opened from the pad: something is highlighted to start from.
-		if Pad.using_pad:
+		if Pad.for_player(player):
 			_set_hovered(int(player.selected_slot))
 		_show_page(page)
 
@@ -154,7 +154,12 @@ func set_open(open: bool, page := &"items") -> void:
 ## The explore map (a child of the maze), if the level has one.
 func _map() -> CanvasLayer:
 	if _map_node == null or not is_instance_valid(_map_node):
-		_map_node = get_tree().get_first_node_in_group(&"explore_map") as CanvasLayer
+		# Co-op: this player's own map (maze.gd makes one each).
+		for m in get_tree().get_nodes_in_group(&"explore_map"):
+			if m.get("_player") == player:
+				_map_node = m as CanvasLayer
+		if _map_node == null:
+			_map_node = get_tree().get_first_node_in_group(&"explore_map") as CanvasLayer
 	return _map_node
 
 
@@ -189,7 +194,7 @@ func _show_page(which: StringName, live := true) -> void:
 	# The map moves under a cursor fixed mid-panel (mouse captured); the items
 	# take a free mouse and the pad cursor.
 	Pad.want_cursor(self, not on_map, false)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if on_map else Input.MOUSE_MODE_VISIBLE
+	Coop.set_mouse(player, Input.MOUSE_MODE_CAPTURED if on_map else Input.MOUSE_MODE_VISIBLE)
 
 
 func _process(_delta: float) -> void:
@@ -211,6 +216,9 @@ func _process(_delta: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if player == null or get_tree().paused:
+		return
+	# Co-op: this player's keys, mouse or pad only (coop.gd).
+	if not Coop.owns(player, event):
 		return
 	# A map note being typed: every key is the note's (explore_map.gd).
 	var m := _map()
@@ -712,7 +720,7 @@ func _build() -> void:
 		slot.mouse_entered.connect(func() -> void: _set_hovered(i))
 		slot.mouse_exited.connect(func() -> void:
 			# The pad cursor between slots keeps the last one lit, for A.
-			if _hovered == i and not Pad.using_pad:
+			if _hovered == i and not Pad.for_player(player):
 				_set_hovered(-1))
 
 	panels.add_child(_build_items())

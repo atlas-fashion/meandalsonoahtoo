@@ -125,10 +125,10 @@ func _set_lid(angle: float) -> void:
 
 
 func _process(_delta: float) -> void:
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	if state == State.OCCUPIED and not _busy and _player.call("hidden_in") != self:
 		# Taken out some other way (a respawn): left open, as they found it.
 		state = State.OPEN
@@ -142,12 +142,13 @@ func _process(_delta: float) -> void:
 	var to := _player.global_position - global_position
 	var in_front := to.dot(global_basis.z) > 0.2
 	_near = in_front and Vector2(to.x, to.z).length() <= REACH + WIDTH * 0.5 and absf(to.y) < 1.5 \
-		and not _player.get("in_cutscene") and Interact.looked_at(self, 3.4, 0.08)
+		and not _player.get("in_cutscene") and Interact.looked_at(self, 3.4, 0.08, [], _player)
 	_prompt.visible = _near
+	_prompt.player = _player
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _busy or not Interact.pressed(event) or _player == null:
+	if _busy or not Interact.pressed(event, _player) or _player == null:
 		return
 	if state == State.OCCUPIED and _player.call("hidden_in") == self:
 		get_viewport().set_input_as_handled()
@@ -253,7 +254,7 @@ func _lay_find(find: Array, wait: float) -> void:
 
 
 func _toast(text: String) -> void:
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(_player)
 	if hud != null and hud.has_method("_show_toast"):
 		hud.call("_show_toast", text)
 

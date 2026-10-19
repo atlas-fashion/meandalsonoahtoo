@@ -147,7 +147,9 @@ func _process(delta: float) -> void:
 		if t["kind"] != kind:
 			t["kind"] = kind
 			(t["glyph"] as Control).queue_redraw()
-		(t["key"] as Label).text = PAD_KEYS.get(String(entry[3]), "") if _pad else String(entry[3])
+		# Co-op: player 2 always on the pad, player 1 never (coop.gd).
+		var pad := Coop.on_pad(player) if Coop.active else _pad
+		(t["key"] as Label).text = PAD_KEYS.get(String(entry[3]), "") if pad else String(entry[3])
 		var left: float = entry[1]
 		var total: float = entry[2]
 		_show(t, left, total, delta)

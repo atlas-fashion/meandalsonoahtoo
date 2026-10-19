@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 78), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 79), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -255,11 +255,22 @@ rebuild and re-run `tools/verify_modules.py`.
 
 **Boot.** `scenes/title.tscn` (`title_screen.gd`) -> `Saves.start(i)` ->
 `scenes/main.tscn`: WorldEnvironment, MoonLight, **Maze** (`scenes/maze.tscn`,
-`scripts/maze.gd`), Player (`player.gd`), HUD (`hud.gd`), Benchmark
-(`tools/benchmark.gd`, idle without `--bench`), PauseMenu. `--bench` or
-`--skip-title` skips the title. Autoloads: `Graphics`
-(`graphics_settings.gd`), `Saves` (`save_system.gd`), `Pad` (`pad.gd`), `Sandbox`
-(`sandbox.gd`).
+`scripts/maze.gd`), Player (`player.gd`), Player2, HUD (`hud.gd`), HUD2, Benchmark
+(`tools/benchmark.gd`, idle without `--bench`), PauseMenu, SplitScreen
+(`split_screen.gd`). Player2, HUD2 and SplitScreen take themselves away
+outside CO-OP (note 79; `-- --coop`). `--bench` or `--skip-title` skips the
+title. Autoloads: `Coop` (`coop.gd`: the players, whose input an event is,
+polled input per player), `Graphics` (`graphics_settings.gd`), `Saves`
+(`save_system.gd`), `Pad` (`pad.gd`), `Sandbox` (`sandbox.gd`).
+
+**Co-op rule for new code** (note 79): there may be TWO players. Never
+`get_first_node_in_group("player")` for "the player" -- use `Coop.nearest`,
+`Coop.user_for` (an interactable's user), `Coop.all()`; check
+`Coop.owns(player, event)` in a player's input handlers, poll with
+`Coop.held` / `Coop.vector`, free or capture the mouse with `Coop.set_mouse`,
+put a player's full-screen panel under `Coop.ui_root(player)`, give an
+`Interact` call the player (`looked_at(..., by)`, `pressed(event, by)`,
+`prompt.player`).
 
 **`maze.gd` `_ready()` builds the whole level:** seed (`maze_seed`, or the
 save's) -> level builder -> `_build_gates`, `_place_player`,
@@ -449,6 +460,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 76 | 2026-10-17 | The title theme | [docs/notes/76-the-title-theme.md](docs/notes/76-the-title-theme.md) |
 | 77 | 2026-10-18 | Rats: utility items, live rats thrown, the robot rat | [docs/notes/77-rats-utility-items-and-the-robot-rat.md](docs/notes/77-rats-utility-items-and-the-robot-rat.md) |
 | 78 | 2026-10-18 | The Tripo rat, animated, and held by the tail | [docs/notes/78-the-tripo-rat-animated-and-held-by-the-tail.md](docs/notes/78-the-tripo-rat-animated-and-held-by-the-tail.md) |
+| 79 | 2026-10-18 | Local co-op split-screen | [docs/notes/79-local-co-op-split-screen.md](docs/notes/79-local-co-op-split-screen.md) |
 
 ## Notes by source file
 
@@ -464,76 +476,80 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scenes/title.tscn`: 19
 - `scenes/torch.tscn`: 6.15, 6.18, 7, 19, 24, 27, 46
 - `scripts/archer.gd`: 20, 77
-- `scripts/arrow.gd`: 20
-- `scripts/attack_icons.gd`: 24, 77
-- `scripts/bone_cage.gd`: 6.18, 6.19, 28
+- `scripts/arrow.gd`: 20, 79
+- `scripts/attack_icons.gd`: 24, 77, 79
+- `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27
-- `scripts/chest.gd`: 18
-- `scripts/convoy.gd`: 23, 28
-- `scripts/crier.gd`: 43, 48, 60, 77
+- `scripts/chest.gd`: 18, 79
+- `scripts/coop.gd`: 79
+- `scripts/coop_avatar.gd`: 79
+- `scripts/convoy.gd`: 23, 28, 79
+- `scripts/crier.gd`: 43, 48, 60, 77, 79
 - `scripts/damp.gd`: 39, 40, 41
 - `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
-- `scripts/dungeon_room.gd`: 22, 24
-- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77
+- `scripts/dungeon_room.gd`: 22, 24, 79
+- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
-- `scripts/explore_map.gd`: 6.18, 50, 60
+- `scripts/explore_map.gd`: 6.18, 50, 60, 79
 - `scripts/gate.gd`: 6.18
-- `scripts/goo.gd`: 58
+- `scripts/goo.gd`: 58, 79
+- `scripts/graphics_settings.gd`: 79
 - `scripts/hand_torch.gd`: 24, 29
 - `scripts/held_potion.gd`: 6.19
-- `scripts/hiding_spot.gd`: 11, 26, 28, 35
-- `scripts/hud.gd`: 6.19, 24
-- `scripts/interact.gd`: 6.18
+- `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
+- `scripts/hud.gd`: 6.19, 24, 79
+- `scripts/interact.gd`: 6.18, 79
 - `scripts/inventory.gd`: 6.19, 25, 77
-- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78
-- `scripts/item_drop.gd`: 6.19, 16, 51
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79
+- `scripts/item_drop.gd`: 6.19, 16, 51, 79
 - `scripts/item_icon.gd`: 6.19, 77
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
-- `scripts/manhole.gd`: 50, 51
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77
+- `scripts/manhole.gd`: 50, 51, 79
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79
 - `scripts/maze_graph.gd`: 6.16
-- `scripts/mimic.gd`: 8, 60
+- `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
-- `scripts/morgue.gd`: 17
-- `scripts/pad.gd`: 26, 30, 44
+- `scripts/morgue.gd`: 17, 79
+- `scripts/pad.gd`: 26, 30, 44, 79
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79
 - `scripts/portcullis.gd`: 6.18
-- `scripts/puzzle_room.gd`: 18, 22
-- `scripts/radial_menu.gd`: 25, 30, 44, 77
-- `scripts/rat.gd`: 77, 78
-- `scripts/rat_control.gd`: 77, 78
+- `scripts/puzzle_room.gd`: 18, 22, 79
+- `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
+- `scripts/rat.gd`: 77, 78, 79
+- `scripts/rat_control.gd`: 77, 78, 79
 - `scripts/rat_look.gd`: 78
 - `scripts/rat_model.gd`: 77
-- `scripts/respawn_anchor.gd`: 8b, 32
+- `scripts/respawn_anchor.gd`: 8b, 32, 79
 - `scripts/robot_rat.gd`: 77
-- `scripts/save_system.gd`: 19, 60
+- `scripts/save_system.gd`: 19, 60, 79
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77
-- `scripts/sandbox_world.gd`: 60, 77
+- `scripts/sandbox_world.gd`: 60, 77, 79
 - `scripts/settings_panel.gd`: 19, 46
-- `scripts/sewer.gd`: 50, 55, 56, 57
+- `scripts/sewer.gd`: 50, 55, 56, 57, 79
+- `scripts/split_screen.gd`: 79
 - `scripts/sewer_lizard.gd`: 58, 60
-- `scripts/shard_door.gd`: 18
+- `scripts/shard_door.gd`: 18, 79
 - `scripts/shield_hitbox.gd`: 68, 69
 - `scripts/skeleton_eyes.gd`: 13
 - `scripts/skeleton_sword.gd`: 24
 - `scripts/sky_setup.gd`: 6.18
-- `scripts/spear.gd`: 14, 78
-- `scripts/stalker.gd`: 11, 16, 22, 60
-- `scripts/title_screen.gd`: 19, 60, 76
-- `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50
-- `scripts/wood_door.gd`: 6.18
-- `scripts/workbench.gd`: 32, 77
+- `scripts/spear.gd`: 14, 78, 79
+- `scripts/stalker.gd`: 11, 16, 22, 60, 79
+- `scripts/title_screen.gd`: 19, 60, 76, 79
+- `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79
+- `scripts/wood_door.gd`: 6.18, 79
+- `scripts/workbench.gd`: 32, 77, 79
 - `shaders/blood_screen.gdshader`: 15
 - `shaders/debris_dissolve.gdshader`: 6.19
 - `shaders/dread.gdshader`: 11, 16

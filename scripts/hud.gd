@@ -123,9 +123,28 @@ var _drink_box: VBoxContainer
 var _drink_bar: ProgressBar
 ## 0 = plain crosshair, 1 = interact cursor; eased between.
 var _interact_k := 0.0
+## CO-OP (coop.gd): whose HUD this is -- 0 player 1, 1 player 2. HUD2 is in
+## scenes/main.tscn always and takes itself away outside co-op; in co-op
+## split_screen.gd moves each HUD into its player's half.
+@export var player_index := 0
+var _discarded := false
+## The player this HUD shows (coop.gd `hud`).
+var player: Node:
+	get:
+		return _player
+
+
+func _enter_tree() -> void:
+	if player_index == 1 and not Coop.active and not _discarded:
+		_discarded = true
+		remove_from_group(&"hud")
+		process_mode = Node.PROCESS_MODE_DISABLED
+		queue_free()
 
 
 func _ready() -> void:
+	if _discarded:
+		return
 	toast.modulate.a = 0.0
 	# Duplicate so recolouring the fill does not mutate the shared stylebox.
 	_fill = (bar.get_theme_stylebox("fill") as StyleBoxFlat).duplicate()
@@ -224,7 +243,7 @@ func black_amount() -> float:
 
 
 func _bind_player() -> void:
-	_player = get_tree().get_first_node_in_group("player")
+	_player = Coop.player(player_index) if Coop.active else get_tree().get_first_node_in_group("player")
 	if _player == null:
 		push_warning("HUD found no node in the 'player' group; it will not update.")
 		return
@@ -386,6 +405,8 @@ var _chill := 0.0
 var ice_override := 0.0
 var _hunted_shown := 0.0
 var _environment: Environment
+## This HUD's share of the torches' chill (co-op: the colder HUD wins).
+var torch_chill := 0.0
 var _ice_gradient: Gradient
 var _ice_lut: GradientTexture1D
 var _ice_applied := -1.0
@@ -518,14 +539,20 @@ func _update_dread(delta: float) -> void:
 	if _stalker != null and not _stalker.get("_dying"):
 		var to: Vector3 = _stalker.global_position - (_player as Node3D).global_position
 		near = 1.0 - smoothstep(CHILL_NEAR, CHILL_FAR, Vector2(to.x, to.z).length())
-		hunted = _stalker.get("hunting") == true
+		# Co-op: hunted only if it is this player it is after (stalker.gd `_player`).
+		hunted = _stalker.get("hunting") == true and (not Coop.active or _stalker.get("_player") == _player)
 	# The torches go cold over about a second either way, never in a snap.
 	_chill = move_toward(_chill, near, delta * 1.2)
 	_hunted_shown = move_toward(_hunted_shown, 1.0 if hunted else 0.0,
 		delta / (HUNT_IN if hunted else HUNT_OUT))
 	# A scene may force the cold in faster and harder (the morgue's royal
 	# sarcophagus): `ice_override` 0..1, eased by whoever sets it.
-	Torch.chill = maxf(_chill, ice_override)
+	torch_chill = maxf(_chill, ice_override)
+	# Co-op: the torches are both players'; the colder of the two holds.
+	var cold := torch_chill
+	for h in Coop.huds():
+		cold = maxf(cold, float(h.get("torch_chill")))
+	Torch.chill = cold
 	_apply_ice_grade(maxf(_hunted_shown, ice_override))
 	if _player.has_method("set_remnant_hunt"):
 		_player.set_remnant_hunt(_hunted_shown)
@@ -540,10 +567,15 @@ func _apply_ice_grade(amount: float) -> void:
 		return
 	_ice_applied = amount
 	if _environment == null:
-		var world := get_tree().get_first_node_in_group("world_environment") as WorldEnvironment
-		if world == null or world.environment == null:
-			return
-		_environment = world.environment
+		# Co-op: this half's own Environment (split_screen.gd).
+		var own: Camera3D = Coop.view_camera(_player) if Coop.active else null
+		if own != null and own.environment != null:
+			_environment = own.environment
+		else:
+			var world := get_tree().get_first_node_in_group("world_environment") as WorldEnvironment
+			if world == null or world.environment == null:
+				return
+			_environment = world.environment
 	if amount <= 0.001:
 		_environment.adjustment_color_correction = null
 		return
@@ -682,7 +714,7 @@ func _process(delta: float) -> void:
 
 ## The brackets close in while any prompt is up.
 func _update_interact_mark(delta: float) -> void:
-	var focus := Interact.focus(get_tree())
+	var focus := Interact.focus(get_tree(), _player)
 	var want := 1.0 if focus != null and not _player.in_cutscene and not _player.ui_open else 0.0
 	if want == _interact_k:
 		return

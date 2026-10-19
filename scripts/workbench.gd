@@ -50,10 +50,12 @@ func _process(delta: float) -> void:
 	if _wheel != null:
 		_spin = move_toward(_spin, 0.0, delta * 3.0)
 		_wheel.rotation.z -= delta * (0.4 + _spin * 14.0)
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest (coop.gd `user_for`) -- kept while the screen
+	# is open for them.
+	if not is_open():
+		_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	if is_open():
 		# Something took the screen (death, a scene, the pause menu): shut it.
 		if get_tree().paused or _player.get("in_cutscene") or _player.get("_dead"):
@@ -62,12 +64,13 @@ func _process(delta: float) -> void:
 	var to := _player.global_position - global_position
 	_near = Vector2(to.x, to.z).length() <= REACH and absf(to.y) < 1.5 \
 		and not _player.get("in_cutscene") and not _player.get("ui_open") \
-		and Interact.looked_at(self, 3.4, 0.1)
+		and Interact.looked_at(self, 3.4, 0.1, [], _player)
 	_prompt.visible = _near
+	_prompt.player = _player
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_open() or not _near or not Interact.pressed(event):
+	if is_open() or not _near or not Interact.pressed(event, _player):
 		return
 	get_viewport().set_input_as_handled()
 	_open()
@@ -84,8 +87,11 @@ class Screen extends CanvasLayer:
 
 
 func _screen_input(event: InputEvent) -> void:
+	# Co-op: the screen is its user's; the other player's keys pass by.
+	if not Coop.owns(_player, event):
+		return
 	if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause") \
-			or event.is_action_pressed("inventory") or Interact.pressed(event):
+			or event.is_action_pressed("inventory") or Interact.pressed(event, _player):
 		_close()
 		get_viewport().set_input_as_handled()
 
@@ -102,10 +108,14 @@ func _exit_tree() -> void:
 func _open() -> void:
 	if _screen == null:
 		_build_screen()
+	# Co-op: up in its user's half of the screen (coop.gd `ui_root`).
+	var where := Coop.ui_root(_player)
+	if _screen.get_parent() != where:
+		_screen.reparent(where, false)
 	_screen.visible = true
 	_prompt.visible = false
 	_player.set("ui_open", true)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Coop.set_mouse(_player, Input.MOUSE_MODE_VISIBLE)
 	_refresh()
 	# A pad works it by focus: the first upgrade that can be bought.
 	for row in _rows:
@@ -124,7 +134,7 @@ func _close() -> void:
 		f.release_focus()
 	if is_instance_valid(_player):
 		_player.set("ui_open", false)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	Coop.set_mouse(_player, Input.MOUSE_MODE_CAPTURED)
 
 
 ## What the bench can work on: every upgradable weapon carried, and the armor.
@@ -206,13 +216,13 @@ func _build_robot_rat() -> bool:
 	if inv.add(&"robot_rat", 1) <= 0:
 		inv.add(&"live_rat", 1)
 		inv.add(&"gold_crystal", cost)
-		var full := get_tree().get_first_node_in_group("hud")
+		var full := Coop.hud(_player)
 		if full != null and full.has_method("announce"):
 			full.announce("NO ROOM", "Make space for the robot rat first")
 		_refresh()
 		return false
 	_spin = 1.0
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(_player)
 	if hud != null and hud.has_method("announce"):
 		hud.announce("ROBOT RAT", "Built at the workbench")
 	if _player.has_method("_guard_flash"):
@@ -228,7 +238,7 @@ func _upgrade(i: int) -> void:
 		return
 	_spin = 1.0
 	var level: int = _player.get("armor_level") if what == &"armor" else _player.call("weapon_level", what)
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(_player)
 	if hud != null and hud.has_method("announce"):
 		var title := "ARMOR" if what == &"armor" else Inventory.item_name(what).to_upper()
 		hud.announce("%s  LEVEL %d" % [title, level], "Tempered at the workbench")

@@ -76,6 +76,9 @@ func _can_open() -> bool:
 func _input(event: InputEvent) -> void:
 	if player == null:
 		return
+	# Co-op: only this wheel's player's keys, mouse or pad (coop.gd).
+	if not Coop.owns(player, event):
+		return
 	if not _open:
 		if event.is_action_pressed(_action) and not event.is_echo() and _can_open():
 			_open_wheel()
@@ -164,10 +167,10 @@ func _process(_delta: float) -> void:
 		_close(false)
 		return
 	# The key let go without the release reaching us (focus lost): the same.
-	if not Input.is_action_pressed(_held if _held != &"" else _action):
+	if not Coop.held(player, _held if _held != &"" else _action):
 		_close(true)
 		return
-	var stick := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
+	var stick := Coop.vector(player, &"look_left", &"look_right", &"look_up", &"look_down")
 	if stick.length() > 0.5:
 		_aim = stick.normalized() * AIM_MAX
 		_update_choice()

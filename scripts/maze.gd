@@ -626,18 +626,18 @@ func _ready() -> void:
 		# A new game: the player wakes on the cell floor and gets up, as after a
 		# death. Only from the title (a slot) -- the benchmark and harnesses
 		# start standing.
-		var player := get_tree().get_first_node_in_group("player")
-		if player != null and player.has_method("wake_up"):
-			player.call("wake_up")
+		for player in Coop.all():
+			if player.has_method("wake_up"):
+				player.call("wake_up")
 		# Creating the game writes its slot (once up: a save waits out the
 		# getting up), so it is there to load. The only automatic save after
 		# this is the one every minute.
 		Saves.request("new game")
 	elif Saves.slot >= 0:
 		# A loaded game: out of the loading screen's black.
-		var hud := get_tree().get_first_node_in_group("hud")
-		if hud != null and hud.has_method("fade_black_when_steady"):
-			hud.call("fade_black_when_steady", 0.0, 1.0)
+		for hud in Coop.huds():
+			if hud.has_method("fade_black_when_steady"):
+				hud.call("fade_black_when_steady", 0.0, 1.0)
 
 
 ## Centre of a tile in world space, with the whole maze centred on the origin.
@@ -1137,8 +1137,13 @@ func save_state() -> Dictionary:
 	var player := get_tree().get_first_node_in_group("player")
 	if player != null and player.has_method("save_state"):
 		data["player"] = player.call("save_state")
+	# Co-op: player 2 too, and the save marked as a co-op game's.
+	var second := Coop.player(1) if Coop.active else null
+	if second != null:
+		data["player2"] = second.call("save_state")
+		data["coop"] = true
 	data["anchor"] = _anchors.find(active_anchor()) if active_anchor() != null else -1
-	var map := get_node_or_null(^"ExploreMap")
+	var map = _explore_map_node()
 	if map != null:
 		data["map"] = map.snapshot()
 		# The player's own marks; a death does not forget them.
@@ -1194,7 +1199,7 @@ func restore_world(data: Dictionary) -> void:
 			other.set_active(false)
 		_anchors[a].set_active(true)
 		_active_anchor = _anchors[a]
-	var map := get_node_or_null(^"ExploreMap")
+	var map = _explore_map_node()
 	if map != null and data.has("map"):
 		map.restore(data["map"])
 	if map != null and data.has("pins"):
@@ -1220,6 +1225,15 @@ func restore_player(data: Dictionary) -> void:
 		player.set_spawn_point(anchor.spawn_point())
 	if data.has("player") and player.has_method("restore_state"):
 		player.call("restore_state", data["player"])
+	# Co-op: player 2 as saved -- beside player 1, wherever that put them.
+	var second := Coop.player(1) if Coop.active else null
+	if second != null:
+		if anchor != null:
+			second.set_spawn_point(anchor.spawn_point())
+		if data.has("player2"):
+			second.call("restore_state", data["player2"])
+		(second as Node3D).global_position = _partner_spot((player as Node3D).global_position,
+			(player as Node3D).rotation.y)
 	print("[save] loaded: anchor %d, %d doors, %d cages, %d coffins, boss %s"
 		% [int(data.get("anchor", -1)), (data.get("doors", []) as Array).size(),
 			(data.get("cages", []) as Array).size(), (data.get("coffins", []) as Array).size(),
@@ -1637,12 +1651,13 @@ func _on_anchor_attuned(anchor: Node3D) -> void:
 			other.set_active(false)
 	anchor.set_active(true)
 	_active_anchor = anchor
-	var map := get_node_or_null(^"ExploreMap")
+	var map = _explore_map_node()
 	if map != null:
 		_map_snapshot = map.snapshot()
-	var player := get_tree().get_first_node_in_group("player")
-	if player != null and player.has_method("set_spawn_point"):
-		player.set_spawn_point(anchor.spawn_point())
+	# Co-op: the party rises there, both of them.
+	for player in Coop.all():
+		if player.has_method("set_spawn_point"):
+			player.set_spawn_point(anchor.spawn_point())
 
 
 ## The anchor the player rises at, or null for the start.
@@ -1723,17 +1738,32 @@ func _attach_explore_map() -> void:
 	if script == null or player == null:
 		push_warning("exploration map not attached (script or player missing)")
 		return
-	var map = script.new()
-	map.name = "ExploreMap"
-	add_child(map)
-	map.setup(_module_level, player)
-	if _sewer != null:
-		map.add_level(&"sewer", _sewer.get("map"))
-	# The sandbox has the whole map charted (and a death keeps it so).
-	if Sandbox.active:
-		map.reveal_all()
+	# Co-op: one for each player, each charting where its own player goes
+	# (split_screen.gd shows each in its player's half). Player 1's is the one
+	# saved and restored.
+	for p in (Coop.all() if Coop.active else [player]):
+		var map = script.new()
+		map.name = "ExploreMap" if Coop.index_of(p) == 0 else "ExploreMap2"
+		add_child(map)
+		map.setup(_module_level, p)
+		if _sewer != null:
+			map.add_level(&"sewer", _sewer.get("map"))
+		# The sandbox has the whole map charted (and a death keeps it so).
+		if Sandbox.active:
+			map.reveal_all()
+		if Coop.index_of(p) == 0:
+			_explore_map = map
 	# What dying before any anchor is attuned leaves charted.
-	_map_snapshot = map.snapshot()
+	_map_snapshot = _explore_map.snapshot()
+
+
+## Player 1's explore map (a reference: in co-op it moves into their half of
+## the screen, out from under the maze).
+var _explore_map = null
+
+
+func _explore_map_node():
+	return _explore_map if _explore_map != null and is_instance_valid(_explore_map) else null
 
 
 ## What `boss_hall.gd` returned: the boss's spot, the throne's seat, the hall's
@@ -4007,13 +4037,41 @@ func _append_tinted(
 		st.add_vertex(xform * verts[i])
 
 
+## Every player to the start (or the attuned anchor, or the sandbox's plane);
+## co-op, player 2 a step beside player 1 (`_partner_spot`).
 func _place_player() -> void:
-	var player := get_tree().get_first_node_in_group("player") as Node3D
+	for p in Coop.all():
+		_place_one(p)
+	if Coop.active:
+		_settle_partner()
+
+
+## Co-op: player 2 placed again beside player 1 once the physics has the
+## level -- built this very frame, its floors are not in the space yet, and
+## `_partner_spot` found none and put them on player 1's spot.
+func _settle_partner() -> void:
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var a := Coop.player(0) as Node3D
+	var b := Coop.player(1) as Node3D
+	if a == null or b == null or b.get("_dead") == true or b.get("in_cutscene") == true:
+		return
+	if Vector2(a.global_position.x - b.global_position.x, a.global_position.z - b.global_position.z).length() > 0.3:
+		return
+	var at := _partner_spot(a.global_position, a.rotation.y)
+	b.global_position = at
+	b.call("set_spawn_point", at)
+
+
+func _place_one(player: Node3D) -> void:
 	if player == null:
 		return
+	var second := Coop.index_of(player) == 1
 	# The sandbox starts -- and, after a death, rises -- on its test plane.
 	if _sandbox_world != null:
 		var at: Vector3 = _sandbox_world.call("spawn_point")
+		if second:
+			at = _partner_spot(at, 0.0)
 		player.global_position = at
 		player.velocity = Vector3.ZERO
 		player.rotation.y = 0.0
@@ -4025,6 +4083,8 @@ func _place_player() -> void:
 	if anchor != null:
 		# Risen at the attuned anchor, facing out of its dead end.
 		spawn = anchor.spawn_point()
+		if second:
+			spawn = _partner_spot(spawn, anchor.spawn_yaw())
 		player.global_position = spawn
 		player.velocity = Vector3.ZERO
 		player.rotation.y = anchor.spawn_yaw()
@@ -4035,6 +4095,10 @@ func _place_player() -> void:
 	# tile grid, which could put the door out of reach of the first E.
 	if _module_level != null and not _module_level.spawn_door.is_empty():
 		spawn = _module_level.spawn + Vector3(0, 0.1, 0)
+	var yaw: float = _module_level.spawn_yaw if _module_level != null and not _module_level.spawn_door.is_empty() \
+		else player.rotation.y
+	if second:
+		spawn = _partner_spot(spawn, yaw)
 	player.global_position = spawn
 	player.velocity = Vector3.ZERO
 	# Facing the door that shuts the spawn's dead end -- on every respawn too.
@@ -4046,10 +4110,59 @@ func _place_player() -> void:
 		player.set_spawn_point(spawn)
 
 
+## Co-op: where player 2 stands beside player 1's `spot` (facing `yaw`) -- a
+## step to the right, else the left, behind, ahead, whichever has floor and
+## no stone in the way; the spot itself if none does.
+func _partner_spot(spot: Vector3, yaw: float) -> Vector3:
+	var basis := Basis(Vector3.UP, yaw)
+	var space := get_world_3d().direct_space_state
+	var waist := spot + Vector3(0.0, 0.9, 0.0)
+	var tries: Array[Vector3] = []
+	for step: float in [1.0, 0.7]:
+		for dir: Vector3 in [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD,
+				(Vector3.RIGHT + Vector3.BACK).normalized(), (Vector3.LEFT + Vector3.BACK).normalized()]:
+			tries.append(dir * step)
+	for t in tries:
+		var off := basis * t
+		var q := PhysicsRayQueryParameters3D.create(waist, waist + off + off.normalized() * 0.45, 1 | 2 | 256)
+		var skip: Array[RID] = []
+		for p in Coop.all():
+			skip.append((p as CollisionObject3D).get_rid())
+		q.exclude = skip
+		if not space.intersect_ray(q).is_empty():
+			continue
+		var down := PhysicsRayQueryParameters3D.create(waist + off, waist + off - Vector3(0.0, 2.5, 0.0), 1 | 2 | 256)
+		var floor_hit := space.intersect_ray(down)
+		if floor_hit.is_empty():
+			continue
+		return (floor_hit["position"] as Vector3) + Vector3(0.0, 0.1, 0.0)
+	return spot
+
+
 func _connect_player() -> void:
-	var player := get_tree().get_first_node_in_group("player")
-	if player != null and player.has_signal("respawned"):
-		player.respawned.connect(_on_player_respawned)
+	# Co-op: each player rises on their own (`_on_player_respawned`).
+	for p in Coop.all():
+		if p.has_signal("respawned"):
+			p.respawned.connect(_on_player_respawned.bind(p))
+
+
+func _on_player_respawned(player: Node3D = null) -> void:
+	# Co-op: a fallen player rises at the anchor and joins back in; the world
+	# resets (the map, the dead coming back) only when nobody was left standing.
+	if Coop.active and player != null:
+		var standing := false
+		for p in Coop.all():
+			if p != player and p.get("_dead") != true:
+				standing = true
+		_place_one(player)
+		if standing:
+			return
+	else:
+		_place_player()
+	var map = _explore_map_node()
+	if map != null and map.has_method("restore"):
+		map.restore(_map_snapshot)
+	_populate()
 
 
 ## --- The sandbox (sandbox.gd, 2026-10-17) -------------------------------------------
@@ -4099,14 +4212,6 @@ func set_sandbox_population(on: bool) -> void:
 ## Dying resets the run: the same layout, but every enemy and the boss restored
 ## and the player back at their attuned anchor (or the entrance). The map
 ## forgets everything charted since that anchor was attuned.
-func _on_player_respawned() -> void:
-	_place_player()
-	var map := get_node_or_null(^"ExploreMap")
-	if map != null and map.has_method("restore"):
-		map.restore(_map_snapshot)
-	_populate()
-
-
 func _populate() -> void:
 	for node in _spawned:
 		if is_instance_valid(node):

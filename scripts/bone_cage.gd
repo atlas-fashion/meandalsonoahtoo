@@ -83,10 +83,10 @@ func _process(delta: float) -> void:
 		return
 	if looted or _busy:
 		return
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	var to := _player.global_position - global_position
 	var flat := Vector2(to.x, to.z)
 	# In front of the cage and close to it: never from behind the wall, or from
@@ -94,8 +94,9 @@ func _process(delta: float) -> void:
 	# (and drained) from a little further, whichever way the player looks.
 	var in_front := to.dot(global_basis.z) > 0.3
 	_watching = in_front and flat.length() <= watch_reach
-	_near = in_front and flat.length() <= reach and Interact.looked_at(self)
+	_near = in_front and flat.length() <= reach and Interact.looked_at(self, 3.4, 0.1, [], _player)
 	_prompt.visible = _near
+	_prompt.player = _player
 
 
 func _update_skull(delta: float) -> void:
@@ -129,7 +130,7 @@ func _update_skull(delta: float) -> void:
 	var pos := _skull_rest.origin + Vector3(0.0, -_settle_now + e * (SKULL_FLOAT + sin(_bob * 2.1) * 0.018), 0.0)
 	var rot := rest_rot
 	if e > 0.001 and is_instance_valid(_player):
-		var camera := get_viewport().get_camera_3d()
+		var camera := Coop.camera(_player)
 		var eye: Vector3 = camera.global_position if camera else _player.global_position + Vector3(0, 1.6, 0)
 		var to := to_local(eye) - pos
 		if to.length_squared() > 0.01:
@@ -273,7 +274,7 @@ func _make_wisp_node() -> void:
 
 func _draw_wisps() -> void:
 	_wisp_mesh.clear_surfaces()
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	if camera == null:
 		return
 	var eye := camera.global_position
@@ -364,7 +365,7 @@ const EYE_DEPTH := 0.13
 ## On the input EVENT rather than polling is_action_just_pressed each frame,
 ## which can miss a press that lands between frames.
 func _unhandled_input(event: InputEvent) -> void:
-	if _near and not looted and not _busy and Interact.pressed(event):
+	if _near and not looted and not _busy and Interact.pressed(event, _player):
 		_near = false
 		get_viewport().set_input_as_handled()
 		_play()
@@ -540,7 +541,7 @@ func _stab_skull() -> void:
 	_eye_flare = 3.0
 	_player.scene_frame(18.0, 4.0, 14.0)
 	await _player.stab_wrenched
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	var from: Vector3 = camera.global_position if camera else _player.global_position
 	_shatter_skull((centre - from).normalized())
 
@@ -568,7 +569,7 @@ func _warm_up() -> void:
 	var mi := _skull as MeshInstance3D
 	if _warmed or mi == null or mi.mesh == null:
 		return
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	if camera == null:
 		return
 	_warmed = true
@@ -777,7 +778,7 @@ func _glow_material(source: Material, jewel: bool) -> Material:
 
 func _update_flight(delta: float) -> void:
 	_flight_clock += delta
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	var eye: Vector3 = camera.global_position if camera else global_position + global_basis.z
 	var ahead: Vector3 = -camera.global_basis.z if camera else -global_basis.z
 	var down: Vector3 = -camera.global_basis.y if camera else Vector3.DOWN

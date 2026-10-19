@@ -115,16 +115,17 @@ const TORCH_STANDOFF := 0.12
 func _process(_delta: float) -> void:
 	if opened:
 		return
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	var to := _player.global_position - global_position
 	# In reach AND looked at: the crosshair has to be on the door.
 	_near = Vector2(to.x, to.z).length() <= reach and _aimed_at()
 	# Which side the player is on, so the door swings away from them.
 	_side = 1.0 if to.dot(global_basis.z) >= 0.0 else -1.0
 	_prompt.visible = _near
+	_prompt.player = _player
 	# On the player's side of the leaves, not buried in them.
 	_prompt.position.z = 0.25 * _side
 
@@ -139,7 +140,7 @@ const AIM_RANGE := 3.6
 ## is not caught by the jambs or the moulding around the leaves.
 func _aimed_at() -> bool:
 	var shape := _shape()
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	if shape == null or camera == null or not (shape.shape is BoxShape3D):
 		return false
 	var half := (shape.shape as BoxShape3D).size * 0.5
@@ -157,7 +158,7 @@ func _aimed_at() -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _near and not opened and Interact.pressed(event) and _player != null \
+	if _near and not opened and Interact.pressed(event, _player) and _player != null \
 			and not _player.get("in_cutscene"):
 		get_viewport().set_input_as_handled()
 		_kick()

@@ -39,10 +39,17 @@ var _embers: CPUParticles2D
 var _time := 0.0
 var _title: Label
 var _music: AudioStreamPlayer
+var _coop: Control
+var _coop_status: Label
+var _slots_head: Label
 
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
+	# `-- --coop`: whatever starts next is a co-op game (coop.gd) -- with
+	# `--sandbox` or `--skip-title`, straight in.
+	if args.has("--coop"):
+		Coop.start()
 	# `-- --sandbox`: straight into the sandbox (sandbox.gd).
 	if args.has("--sandbox"):
 		Sandbox.start.call_deferred()
@@ -74,8 +81,17 @@ func _start_music() -> void:
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
+## Co-op wants a controller for player 2; without one the page says so and
+## the buttons wait.
+func _pad_ready() -> bool:
+	return not Input.get_connected_joypads().is_empty()
+
+
 func _process(delta: float) -> void:
 	_time += delta
+	if _coop != null and _coop.visible:
+		_coop_status.text = "Controller found -- ready." if _pad_ready() \
+			else "Connect a controller for player 2."
 	if _title != null:
 		# A slow breath of light through the title.
 		var k := 0.5 + 0.5 * sin(_time * 0.9)
@@ -98,13 +114,16 @@ func _show(page: StringName) -> void:
 	_main.visible = page == &"main"
 	_slots.visible = page == &"slots"
 	_settings.visible = page == &"settings"
+	_coop.visible = page == &"coop"
+	_slots_head.text = "CHOOSE A CO-OP SAVE" if Coop.active else "CHOOSE A SAVE"
 	_naming.visible = false
 	if page == &"slots":
 		_fill_slots()
 	elif page == &"settings":
 		_settings.sync()
 	# A pad needs something focused to move from (the mouse ignores focus).
-	var shown: Control = _main if page == &"main" else (_slots if page == &"slots" else _settings)
+	var shown: Control = _main if page == &"main" else (_slots if page == &"slots" \
+		else (_coop if page == &"coop" else _settings))
 	_focus_first.call_deferred(shown)
 
 
@@ -203,8 +222,13 @@ func _build() -> void:
 	rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(rule)
 	col.add_child(SettingsPanel.spacer(30))
-	for entry in [["Play", func() -> void: _show(&"slots")],
-			["Sandbox", func() -> void: _play_sandbox()],
+	for entry in [["Play", func() -> void:
+				Coop.stop()
+				_show(&"slots")],
+			["Co-op", func() -> void: _show(&"coop")],
+			["Sandbox", func() -> void:
+				Coop.stop()
+				_play_sandbox()],
 			["Settings", func() -> void: _show(&"settings")],
 			["Quit", func() -> void: get_tree().quit()]]:
 		col.add_child(_big_button(entry[0], entry[1]))
@@ -213,6 +237,7 @@ func _build() -> void:
 	_slots = _page()
 	var box := SettingsPanel.panel_box(_slots, 620)
 	var head := SettingsPanel.title_label("CHOOSE A SAVE")
+	_slots_head = head
 	head.add_theme_font_override("font", _spaced(6))
 	box.add_child(head)
 	box.add_child(SettingsPanel.dim_label("The game saves itself every minute. Save by hand from the pause menu."))
@@ -222,6 +247,28 @@ func _build() -> void:
 	box.add_child(_slot_rows)
 	box.add_child(SettingsPanel.spacer(6))
 	box.add_child(SettingsPanel.menu_button("Back", func() -> void: _show(&"main")))
+
+	# Co-op (coop.gd): two players, one screen split down the middle.
+	_coop = _page()
+	var cbox := SettingsPanel.panel_box(_coop, 560)
+	var chead := SettingsPanel.title_label("CO-OP")
+	chead.add_theme_font_override("font", _spaced(6))
+	cbox.add_child(chead)
+	cbox.add_child(SettingsPanel.dim_label("Two players, side by side on one screen."))
+	cbox.add_child(SettingsPanel.dim_label("Player 1 (left): keyboard and mouse.   Player 2 (right): a controller."))
+	cbox.add_child(SettingsPanel.spacer(6))
+	_coop_status = SettingsPanel.dim_label("")
+	cbox.add_child(_coop_status)
+	cbox.add_child(SettingsPanel.spacer(6))
+	cbox.add_child(SettingsPanel.menu_button("Play together", func() -> void:
+		if _pad_ready():
+			Coop.start()
+			_show(&"slots")))
+	cbox.add_child(SettingsPanel.menu_button("Sandbox together", func() -> void:
+		if _pad_ready():
+			Coop.start()
+			_play_sandbox()))
+	cbox.add_child(SettingsPanel.menu_button("Back", func() -> void: _show(&"main")))
 
 	# Naming a new game.
 	_naming = _page()

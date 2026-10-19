@@ -170,8 +170,8 @@ func _physics_process(delta: float) -> void:
 		velocity.z = 0.0
 		move_and_slide()
 		return
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
 	var player := _player
 	if player == null:
 		move_and_slide()
@@ -196,8 +196,9 @@ func _physics_process(delta: float) -> void:
 			# And, as for a chest, only with the crosshair on it.
 			_near_player = flat.length() <= wake_radius \
 					and to_player.y >= wake_floor and to_player.y <= wake_height \
-					and Interact.looked_at(self, 3.4, 0.1, [$Body, $LidPivot])
+					and Interact.looked_at(self, 3.4, 0.1, [$Body, $LidPivot], _player)
 			_prompt.visible = _near_player
+			_prompt.player = _player
 			return
 
 		State.WAKING:
@@ -265,7 +266,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if state == State.DORMANT and _near_player and _player != null and Interact.pressed(event):
+	if state == State.DORMANT and _near_player and _player != null and Interact.pressed(event, _player):
 		get_viewport().set_input_as_handled()
 		_wake(_player)
 
@@ -521,7 +522,8 @@ func _die() -> void:
 	if _chomp_tween != null and _chomp_tween.is_valid():
 		_chomp_tween.kill()
 
-	var player := get_tree().get_first_node_in_group("player")
+	# Co-op: the reward to whoever is nearest (who killed it, most likely).
+	var player := Coop.nearest(global_position, false)
 	if player != null and player.has_method("add_consumable") and reward != null:
 		# Quietly: the banner below already says what was won.
 		player.add_consumable(reward, reward_amount, false)
@@ -563,14 +565,11 @@ func _burst() -> void:
 
 
 func _announce(potions: int) -> void:
-	var hud := get_tree().get_first_node_in_group("hud")
-	if hud == null or not hud.has_method("announce"):
-		return
 	var noun := "health potion" if potions == 1 else "health potions"
 	var sub := "+%d %s" % [potions, noun]
 	if shard != &"":
 		sub = Inventory.item_name(shard) + "    " + sub
-	hud.announce("%s HAS FALLEN" % display_name, sub)
+	Coop.announce_all("%s HAS FALLEN" % display_name, sub)
 
 
 func _player_radius(player: Node) -> float:

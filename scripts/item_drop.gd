@@ -143,7 +143,7 @@ func _process(delta: float) -> void:
 			set_meta("fly_wait", wait - delta)
 			return
 		_lie_in_wait = false
-		_player = get_tree().get_first_node_in_group("player") as Node3D
+		_player = Coop.nearest(global_position, false) as Node3D
 		_take_off()
 		return
 		_escape_solid()
@@ -164,16 +164,17 @@ func _process(delta: float) -> void:
 		if _support_timer <= 0.0:
 			_support_timer = SUPPORT_CHECK
 			_check_support()
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	var to := _player.global_position - global_position
 	if _resting and _auto_take(to):
 		return
 	_near = _resting and Vector2(to.x, to.z).length() <= REACH \
-		and absf(to.y) < 2.0 and Interact.looked_at(self, 3.2, 0.22)
+		and absf(to.y) < 2.0 and Interact.looked_at(self, 3.2, 0.22, [], _player)
 	_prompt.visible = _near
+	_prompt.player = _player
 
 
 ## Taken by walking over it: resting, at the player's feet, already carried,
@@ -198,7 +199,7 @@ func _auto_take(to: Vector3) -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _near or _flying or not Interact.pressed(event):
+	if not _near or _flying or not Interact.pressed(event, _player):
 		return
 	if _player == null or _player.get("in_cutscene") or _player.get("ui_open"):
 		return
@@ -310,7 +311,7 @@ func _is_buried(p: Vector3) -> bool:
 func _escape_solid() -> void:
 	if not _is_buried(global_position):
 		return
-	var player := get_tree().get_first_node_in_group("player") as Node3D
+	var player := Coop.nearest(global_position, false) as Node3D
 	if player == null:
 		return
 	var goal := player.global_position + Vector3(0.0, 1.0, 0.0)
@@ -373,7 +374,7 @@ func _take_off() -> void:
 	_glint.visible = false
 	_flight = 0.0
 	_from = global_position
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	var side: Vector3 = camera.global_basis.x if camera else Vector3.RIGHT
 	_via = _from + Vector3(0.0, randf_range(0.7, 1.1), 0.0) + side * randf_range(-0.4, 0.4)
 	_spin = Vector3(randf_range(-10.0, 10.0), randf_range(-10.0, 10.0), randf_range(-10.0, 10.0))
@@ -398,7 +399,7 @@ func _take_off() -> void:
 
 func _update_flight(delta: float) -> void:
 	_flight += delta
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	var eye: Vector3 = camera.global_position if camera else _from + Vector3.UP
 	if _visual.visible:
 		var k := clampf(_flight / FLIGHT_TIME, 0.0, 1.0)

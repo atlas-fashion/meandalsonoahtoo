@@ -416,6 +416,78 @@ var remote_view := false
 ## Live rats thrown and the robot rat driven (scripts/rat_control.gd).
 var rats: Node3D
 
+## CO-OP (coop.gd, split_screen.gd): 0 is player 1 (keyboard and mouse, the
+## left half), 1 player 2 (a controller, the right half). Player 2 is in
+## scenes/main.tscn always and takes itself away outside co-op.
+@export var player_index := 0
+var _discarded := false
+## This player as the other one sees them (coop_avatar.gd), co-op only.
+var _avatar: Node3D
+## The visual layer this player's first-person pieces are drawn on, co-op only.
+var _viewmodel_layer := 0
+var _layer_sweep := 0.0
+
+
+func _enter_tree() -> void:
+	if player_index == 1 and not Coop.active:
+		# One player: player 2 is not here at all.
+		_discarded = true
+		remove_from_group(&"player")
+		process_mode = Node.PROCESS_MODE_DISABLED
+		queue_free()
+		return
+	Coop.register(self)
+	# Co-op: the players pass through each other -- in a one-cell corridor
+	# neither could get by, and starting on one spot would throw them apart.
+	for other in Coop.all():
+		if other != self:
+			add_collision_exception_with(other)
+			(other as PhysicsBody3D).add_collision_exception_with(self)
+
+
+func _exit_tree() -> void:
+	Coop.unregister(self)
+
+
+## Co-op: this half's own Environment (split_screen.gd), so a dash or low
+## health greys only this player's view (`_update_colour`).
+func use_view_environment(env: Environment) -> void:
+	if env == null:
+		return
+	_environment = env
+	_base_saturation = env.adjustment_saturation
+
+
+## Co-op: this player's first-person pieces onto `viewmodel` (only their own
+## half draws it), and their stand-in body for the other half on `avatar`.
+func set_view_layers(viewmodel: int, avatar: int) -> void:
+	_viewmodel_layer = viewmodel
+	_sweep_view_layers()
+	if _avatar == null:
+		_avatar = Node3D.new()
+		_avatar.set_script(load("res://scripts/coop_avatar.gd"))
+		# Built, layers and all, before it is in the scene (see above).
+		_avatar.call("setup", self, avatar)
+		add_child(_avatar)
+
+
+## Everything drawn under the head -- sword, spear, potion, the torch in the
+## hand, rats in the hand -- onto this player's viewmodel layer. Re-run now and
+## then: some of it is built later (rat_control.gd, held_potion.gd).
+func _sweep_view_layers() -> void:
+	if _viewmodel_layer == 0:
+		return
+	for g in head.find_children("*", "GeometryInstance3D", true, false):
+		var gi := g as GeometryInstance3D
+		if gi.layers != _viewmodel_layer:
+			# Hidden while it changes: a lit instance whose layers change in
+			# place is left paired with its lights ("BUG, indexing did not
+			# unpair geometries from light", a flood of them).
+			var shown := gi.visible
+			gi.visible = false
+			gi.layers = _viewmodel_layer
+			gi.visible = shown
+
 ## Coins are carried in the inventory like anything else; this is their total.
 var currency: int:
 	get:
@@ -970,6 +1042,8 @@ var _slam_tween: Tween
 
 
 func _ready() -> void:
+	if _discarded:
+		return
 	health = max_health
 	_spawn_point = global_position
 
@@ -1025,7 +1099,7 @@ func _ready() -> void:
 		sweep_trail.top_level = true
 		sweep_trail.visible = false
 	anim.play(&"idle")
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 	_base_fov = camera.fov
 	_look_pitch = head.rotation.x
 	_head_rest = head.position
@@ -1045,6 +1119,11 @@ func _ready() -> void:
 ## Camera flourishes run here rather than in _physics_process: they are purely
 ## visual, and at 60 Hz physics a fast punch like this would visibly step.
 func _process(delta: float) -> void:
+	if _viewmodel_layer != 0:
+		_layer_sweep -= delta
+		if _layer_sweep <= 0.0:
+			_layer_sweep = 0.5
+			_sweep_view_layers()
 	_pad_look(delta)
 	_update_cine()
 	_update_scene_camera()
@@ -1503,7 +1582,7 @@ var wheel_open := false
 func _pad_look(delta: float) -> void:
 	if ui_open or wheel_open or in_cutscene or _dead or remote_view:
 		return
-	var v := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
+	var v := Coop.vector(self, &"look_left", &"look_right", &"look_up", &"look_down")
 	if v == Vector2.ZERO:
 		return
 	v *= v.length()
@@ -1520,6 +1599,9 @@ func _pad_look(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Co-op: only this player's keys and mouse, or pad (coop.gd).
+	if not Coop.owns(self, event):
+		return
 	if is_hidden():
 		# Shut in a hiding place: only looking about, and only out of its doors.
 		if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not ui_open:
@@ -1558,7 +1640,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_attack_key_spills_drink()
 		# While the mouse is free, a click is the player asking for it back
 		# rather than asking to swing.
-		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if Coop.aim_ready(self):
 			# The button does whatever the weapon in hand does: the sword swings,
 			# the spear stabs. (Potions are drunk from the quick-item wheel.)
 			if held_item() == &"sword":
@@ -1573,33 +1655,33 @@ func _unhandled_input(event: InputEvent) -> void:
 				if not _ghosting and not is_drinking():
 					rats.deploy()
 		else:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 	elif event.is_action_pressed("thrust"):
 		_attack_key_spills_drink()
 		# Q: the spin with the sword; the dash with the spear.
-		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and held_item() == &"sword" \
+		if Coop.aim_ready(self) and held_item() == &"sword" \
 				and not _ghosting:
 			_start_spin()
-		elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and held_item() == &"spear" \
+		elif Coop.aim_ready(self) and held_item() == &"spear" \
 				and _spear_free():
 			spear.dash()
 	elif event.is_action_pressed("slam"):
 		_attack_key_spills_drink()
 		# F: the heavy attack. With the sword, a dive in the air or the blade
 		# brought down where you stand; with the spear, the throw.
-		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not _ghosting \
+		if Coop.aim_ready(self) and not _ghosting \
 				and held_item() == &"sword" and not _slamming and _now() >= _slam_recover_until \
 				and _pose_kind != &"haft" and not is_drinking():
 			_end_block()
 			_start_slam()
-		elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and held_item() == &"spear" \
+		elif Coop.aim_ready(self) and held_item() == &"spear" \
 				and _spear_free():
 			spear.throw()
 	elif event.is_action_pressed("block"):
 		# Right click, held: the block. With the mouse free, a click takes it
 		# back instead.
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if not Coop.aim_ready(self):
+			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 			_guard_click_spent = true
 		else:
 			_note_block_press()
@@ -1697,7 +1779,7 @@ func _physics_process(delta: float) -> void:
 	if is_on_floor():
 		_coyote_until = _now() + coyote_time
 	if not ui_open and not down and not _ghosting and not remote_view \
-			and Input.is_action_just_pressed("jump") and (_now() < _coyote_until or _swimming):
+			and Coop.just_pressed(self, &"jump") and (_now() < _coyote_until or _swimming):
 		velocity.y = jump_velocity
 		_coyote_until = 0.0
 		_jump_kick = 1.0
@@ -2066,7 +2148,7 @@ var _guard_click_spent := false
 
 
 func _hold_guard() -> void:
-	if not _blocking and not _guard_click_spent and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
+	if not _blocking and not _guard_click_spent and Coop.aim_ready(self) \
 			and _action_held(&"block"):
 		_start_block()
 
@@ -3005,6 +3087,9 @@ func _haft_slowmo() -> void:
 
 ## Slow motion at `scale` for `hold` real seconds, eased back over `back`.
 func _slowmo(scale: float, hold: float, back: float) -> void:
+	# Co-op: no slow motion -- the clock is both players'.
+	if Coop.active:
+		return
 	if not is_equal_approx(Engine.time_scale, 1.0) and (_slowmo_tween == null or not _slowmo_tween.is_valid()):
 		return
 	if _slowmo_tween != null and _slowmo_tween.is_valid():
@@ -3584,7 +3669,13 @@ func _dodge_held() -> bool:
 ## mid-press) and the ghost carried on after its key was let go. Pad bindings
 ## still go through the action.
 func _action_held(action: StringName) -> bool:
+	# Co-op: player 2 holds it on their pad only (the split "p2_" action);
+	# player 1 by keys and mouse alone, below, never the pad's binding.
+	if Coop.active and Coop.index_of(self) == 1:
+		return Coop.held(self, action)
 	for e in InputMap.action_get_events(action):
+		if Coop.active and (e is InputEventJoypadButton or e is InputEventJoypadMotion):
+			continue
 		var key := e as InputEventKey
 		var button := e as InputEventMouseButton
 		if key != null:
@@ -3948,7 +4039,7 @@ func _beam_speed_scale() -> float:
 func _move_input() -> Vector2:
 	if ui_open or remote_view:
 		return Vector2.ZERO
-	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	return Coop.vector(self, &"move_left", &"move_right", &"move_forward", &"move_back")
 
 
 ## Starts drinking one of whatever consumable is in inventory slot `slot`
@@ -4035,7 +4126,7 @@ func _finish_drink(interrupted: bool) -> void:
 ## attack goes ahead. (Left click with the potion in hand is the drink itself,
 ## not an attack.)
 func _attack_key_spills_drink() -> void:
-	if is_drinking() and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
+	if is_drinking() and Coop.aim_ready(self) \
 			and Inventory.is_weapon(held_item()) and not in_cutscene and not ui_open:
 		_interrupt_drink()
 
@@ -4139,7 +4230,7 @@ func _die() -> void:
 	died.emit()
 	# The world goes out over most of the wait; the respawn fades back in from
 	# black (`_begin_wake`). A scene that has already cut to black keeps it.
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(self)
 	if hud != null and hud.has_method("fade_black") and hud.black_amount() < 0.99:
 		hud.fade_black(1.0, respawn_delay * 0.75)
 	await get_tree().create_timer(respawn_delay).timeout
@@ -4201,7 +4292,7 @@ func _begin_wake(hold := false) -> void:
 	# target, and left to it the view came up in full colour.
 	if _environment != null:
 		_environment.adjustment_saturation = 0.0
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(self)
 	if hud != null and hud.has_method("fade_black"):
 		hud.fade_black(1.0, 0.0)
 	_wake_steady = 0
@@ -4211,7 +4302,7 @@ func _begin_wake(hold := false) -> void:
 
 
 func _wake_fade_in() -> void:
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(self)
 	if hud != null and hud.has_method("fade_black"):
 		hud.fade_black(0.0, WAKE_FADE)
 

@@ -115,6 +115,8 @@ static func clean_name(typed: String, i: int) -> String:
 ## Back to the title. Does not save: the pause menu asks first.
 func exit_to_title() -> void:
 	Sandbox.reset()
+	# Co-op ends at the title (coop.gd); it is chosen again from there.
+	Coop.stop()
 	slot = -1
 	pending = {}
 	get_tree().paused = false
@@ -170,9 +172,10 @@ func save_now(reason: String) -> String:
 	_since = 0.0
 	since_saved = 0.0
 	_requested = ""
-	var hud := get_tree().get_first_node_in_group("hud")
-	if hud != null and hud.has_method("_show_toast") and (reason == "autosave" or reason == "death"):
-		hud.call("_show_toast", "Autosaved", 1.0)
+	if reason == "autosave" or reason == "death":
+		for hud in Coop.huds():
+			if hud.has_method("_show_toast"):
+				hud.call("_show_toast", "Autosaved", 1.0)
 	saved.emit(slot, reason)
 	print("[save] slot %d (%s), %.0f s played" % [slot + 1, reason, play_time])
 	return ""
@@ -196,9 +199,17 @@ func _maze() -> Node:
 
 ## Never mid-scene, dead, hidden or getting up.
 func _safe() -> bool:
-	var player := get_tree().get_first_node_in_group("player")
-	if player == null:
+	# Co-op: safe only if it is for both players.
+	var all := Coop.all()
+	if all.is_empty():
 		return false
+	for p in all:
+		if not _safe_for(p):
+			return false
+	return true
+
+
+func _safe_for(player: Node) -> bool:
 	if player.get("_dead") == true or player.get("in_cutscene") == true:
 		return false
 	if player.has_method("is_hidden") and player.call("is_hidden"):

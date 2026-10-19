@@ -914,10 +914,10 @@ func _gather_cold_lights(centre: Vector3, span: float) -> void:
 # --- Opening it ------------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	if _busy or _royal == null:
 		_near = false
 		_prompt.visible = false
@@ -926,12 +926,13 @@ func _process(_delta: float) -> void:
 	var to := _player.global_position - _royal.global_position
 	_near = to.dot(front) > 0.5 and Vector2(to.x, to.z).length() <= REACH \
 		and not _player.get("in_cutscene") and not _player.get("_dead") \
-		and Interact.looked_at(_royal, 5.0, 0.1)
+		and Interact.looked_at(_royal, 5.0, 0.1, [], _player)
 	_prompt.visible = _near
+	_prompt.player = _player
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _near or _busy or not Interact.pressed(event):
+	if not _near or _busy or not Interact.pressed(event, _player):
 		return
 	get_viewport().set_input_as_handled()
 	_open_royal()
@@ -942,7 +943,7 @@ func _wait(seconds: float) -> void:
 
 
 func _hud() -> Node:
-	return get_tree().get_first_node_in_group("hud")
+	return Coop.hud(_player)
 
 
 func _open_royal() -> void:

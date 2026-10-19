@@ -159,6 +159,12 @@ func is_driving() -> bool:
 	return _rat != null and is_instance_valid(_rat)
 
 
+## The robot rat's eyes while driven, else null -- co-op, the split screen
+## follows it in this player's half (split_screen.gd).
+func view_camera() -> Camera3D:
+	return _rat.get("camera") as Camera3D if is_driving() else null
+
+
 
 
 func fuse_left() -> float:
@@ -421,9 +427,9 @@ func _physics_process(delta: float) -> void:
 		return
 	var steer := Vector2.ZERO
 	if not player.ui_open:
-		steer = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+		steer = Coop.vector(player, &"move_left", &"move_right", &"move_forward", &"move_back")
 		# The right stick turns it, as it turns the player (player.gd `_pad_look`).
-		var v := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
+		var v := Coop.vector(player, &"look_left", &"look_right", &"look_up", &"look_down")
 		if v != Vector2.ZERO:
 			v *= v.length()
 			var k: float = float(player.get("pad_look_speed")) * Graphics.mouse_sensitivity * delta
@@ -435,11 +441,14 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Co-op: this player's keys, mouse or pad only (coop.gd).
+	if not Coop.owns(player, event):
+		return
 	# A live rat held: the attack key throws it, block puts it away, the other
 	# attacks do nothing (the weapon is down). This node is under the player's
 	# head, so it hears the keys before player.gd does.
 	if holding and not is_driving() and not player.ui_open \
-			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			and Coop.aim_ready(player):
 		if event.is_action_pressed("attack") and not event.is_echo():
 			throw_held()
 			get_viewport().set_input_as_handled()
@@ -458,8 +467,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("attack") and not event.is_echo():
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if not Coop.aim_ready(player):
+			Coop.set_mouse(player, Input.MOUSE_MODE_CAPTURED)
 		else:
 			detonate()
 		get_viewport().set_input_as_handled()
@@ -547,6 +556,10 @@ func _show_overlay(on: bool) -> void:
 		_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_frame.draw.connect(_draw_overlay)
 		_overlay.add_child(_frame)
+	# Co-op: over this player's half only (coop.gd `ui_root`).
+	var where := Coop.ui_root(player)
+	if _overlay.get_parent() != where:
+		_overlay.reparent(where, false)
 	_overlay.visible = on
 
 
@@ -585,7 +598,8 @@ func _draw_overlay() -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, bar_w * 0.5, 18, Color(col, 0.9))
 	_frame.draw_string(_font, Vector2(bar.position.x + bar_w * 0.5, bar.position.y - 8.0),
 		"%.1f s" % maxf(_fuse_left, 0.0), HORIZONTAL_ALIGNMENT_RIGHT, bar_w * 0.5, 18, Color(col, 0.9))
-	var keys := "RB  detonate      Left stick  drive" if Input.get_connected_joypads().size() > 0 \
+	var on_pad := Coop.on_pad(player) if Coop.active else Input.get_connected_joypads().size() > 0
+	var keys := "RB  detonate      Left stick  drive" if on_pad \
 		else "LMB  detonate      WASD  drive      Mouse  turn"
 	# Above the health bar and the attack icons, not on them.
 	_frame.draw_string(_font, Vector2(0.0, size.y - 130.0), keys, HORIZONTAL_ALIGNMENT_CENTER, size.x, 16,

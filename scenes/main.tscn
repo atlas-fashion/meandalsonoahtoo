@@ -6,6 +6,7 @@
 [ext_resource type="Texture2D" uid="uid://bcpe3v84t7mmx" path="res://textures/sky_panorama.png" id="4_sky"]
 [ext_resource type="Script" uid="uid://worruayry8ah" path="res://tools/benchmark.gd" id="5_bench"]
 [ext_resource type="Script" uid="uid://dww8nshn8d28w" path="res://scripts/pause_menu.gd" id="6_pause"]
+[ext_resource type="Script" path="res://scripts/split_screen.gd" id="7_split"]
 
 [sub_resource type="PanoramaSkyMaterial" id="Sky_red"]
 panorama = ExtResource("4_sky")
@@ -56,10 +57,20 @@ light_specular = 0.0
 [node name="Player" parent="." unique_id=1410571730 instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
 
+[node name="Player2" parent="." unique_id=1410571731 instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0.3, 0)
+player_index = 1
+
 [node name="HUD" parent="." unique_id=1021502971 instance=ExtResource("3_hud")]
+
+[node name="HUD2" parent="." unique_id=1021502972 instance=ExtResource("3_hud")]
+player_index = 1
 
 [node name="Benchmark" type="Node" parent="." unique_id=844484132]
 script = ExtResource("5_bench")
 
 [node name="PauseMenu" type="CanvasLayer" parent="." unique_id=39896355]
 script = ExtResource("6_pause")
+
+[node name="SplitScreen" type="Node" parent="." unique_id=39896356]
+script = ExtResource("7_split")

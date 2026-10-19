@@ -197,19 +197,20 @@ func _process(_delta: float) -> void:
 		_near = false
 		_prompt.visible = false
 		return
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	var p := to_local(_player.global_position)
 	_near = p.z < -LEAF_THICK and -p.z - LEAF_THICK <= REACH and absf(p.x) < _width * 0.5 + 0.3 \
 		and p.y > -1.2 and p.y < 2.0 and _player.get("in_cutscene") != true and _player.get("_dead") != true \
-		and Interact.looked_at(self, REACH + 3.0, 0.1)
+		and Interact.looked_at(self, REACH + 3.0, 0.1, [], _player)
 	_prompt.visible = _near
+	_prompt.player = _player
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _near or _busy or opened or not Interact.pressed(event):
+	if not _near or _busy or opened or not Interact.pressed(event, _player):
 		return
 	get_viewport().set_input_as_handled()
 	_use()
@@ -283,7 +284,7 @@ func _set_shards(to_set: Array[int]) -> void:
 func _fly_shard(k: int, player: Node3D) -> void:
 	var s: Dictionary = _sockets[k]
 	var to: Vector3 = _seal.to_global(s["at"] + Vector3(0.0, 0.0, -0.06))
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	var from := player.global_position + Vector3(0.0, 1.3, 0.0)
 	if camera != null:
 		from = camera.global_position - camera.global_basis.z * 0.7 - camera.global_basis.y * 0.25
@@ -320,7 +321,7 @@ func _open(player: Node3D) -> void:
 		player.set("_shake", maxf(float(player.get("_shake")), 0.05 + 0.02 * float(i)))
 		await _wait(0.1)
 	# The seal burns away.
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(_player)
 	_seal.visible = false
 	_blocker.queue_free()
 	_blocker = null
@@ -404,7 +405,7 @@ func fill_all() -> void:
 # --- Helpers ---------------------------------------------------------------------------
 
 func _toast(text: String, hold: float) -> void:
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(_player)
 	if hud != null and hud.has_method("_show_toast"):
 		hud.call("_show_toast", text, hold)
 

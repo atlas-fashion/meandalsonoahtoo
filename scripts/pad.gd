@@ -88,10 +88,18 @@ func _input(event: InputEvent) -> void:
 ## the left mouse button for it (the inventory works A itself, on the slot the
 ## cursor highlights, so it asks for no clicks).
 func want_cursor(owner: Object, on: bool, click := true) -> void:
+	# Co-op: the cursor is player 2's (the pad's); player 1's screens have
+	# the real mouse.
+	var who = owner.get("player") if owner.get("player") != null else owner.get("_player")
+	if on and Coop.active and who != null and Coop.index_of(who) == 0:
+		return
 	if on:
 		if _cursor_owners.is_empty():
-			# Start where the real pointer is, so nothing jumps.
-			cursor_pos = get_viewport().get_mouse_position()
+			# Start where the real pointer is, so nothing jumps -- co-op, in the
+			# middle of player 2's half.
+			var r := get_viewport().get_visible_rect()
+			cursor_pos = Vector2(r.position.x + r.size.x * 0.75, r.position.y + r.size.y * 0.5) if Coop.active \
+				else get_viewport().get_mouse_position()
 		_cursor_owners[owner] = click
 	else:
 		_cursor_owners.erase(owner)
@@ -103,7 +111,13 @@ func want_cursor(owner: Object, on: bool, click := true) -> void:
 
 
 func cursor_active() -> bool:
-	return not _cursor_owners.is_empty() and using_pad and not keyboard_open()
+	return not _cursor_owners.is_empty() and (using_pad or Coop.active) and not keyboard_open()
+
+
+## Whether `p` is working a screen with a pad -- co-op, player 2 always and
+## player 1 never; otherwise whichever was touched last.
+func for_player(p: Node) -> bool:
+	return Coop.on_pad(p) if Coop.active else using_pad
 
 
 func _process(delta: float) -> void:
@@ -118,7 +132,8 @@ func _process(delta: float) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			_hid_mouse = false
 		return
-	if Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
+	# Co-op: the real pointer is player 1's; it is left alone.
+	if not Coop.active and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 		_hid_mouse = true
 	# The LEFT STICK moves it (2026-10-14; it used to be the ui_* actions, which
@@ -130,6 +145,9 @@ func _process(delta: float) -> void:
 		v = v.limit_length(1.0)
 	if v != Vector2.ZERO:
 		var rect := get_viewport().get_visible_rect()
+		# Co-op: kept on the right half, player 2's.
+		if Coop.active:
+			rect = Rect2(rect.position + Vector2(rect.size.x * 0.5, 0.0), Vector2(rect.size.x * 0.5, rect.size.y))
 		cursor_pos = (cursor_pos + v * v.length() * CURSOR_SPEED * delta).clamp(rect.position, rect.end - Vector2(2, 2))
 		_send_motion(v * v.length() * CURSOR_SPEED * delta)
 	# A is the left mouse button -- for screens that asked for clicks.

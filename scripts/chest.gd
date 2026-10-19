@@ -41,19 +41,20 @@ func _process(_delta: float) -> void:
 		_near = false
 		_prompt.visible = false
 		return
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
 	if _player == null or not _player.has_method("add_consumable"):
 		return
 	# Measure to the player's centre of mass, not the floor at their feet.
 	# ...and the crosshair has to be on it.
 	_near = global_position.distance_to(_player.global_position + Vector3(0, 0.9, 0)) <= open_radius \
-		and Interact.looked_at(self)
+		and Interact.looked_at(self, 3.4, 0.1, [], _player)
 	_prompt.visible = _near
+	_prompt.player = _player
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _near and not opened_already and Interact.pressed(event):
+	if _near and not opened_already and Interact.pressed(event, _player):
 		get_viewport().set_input_as_handled()
 		_try_open(_player)
 
@@ -83,7 +84,7 @@ func _try_open(player: Node3D) -> void:
 			lines.append("+%d %s%s" % [given, consumable.item_name.to_lower(), "" if given == 1 else "s"])
 		if coins > 0:
 			lines.append("+%d coins" % coins)
-		var hud := get_tree().get_first_node_in_group("hud")
+		var hud := Coop.hud(_player)
 		if hud != null and hud.has_method("announce"):
 			hud.announce(opened_title, "    ".join(lines))
 	else:
@@ -108,7 +109,7 @@ func _full() -> void:
 ## The same headline treatment a felled mimic gets, since opening a chest is
 ## the other moment the player is handed a pile of something.
 func _announce(amount: int) -> void:
-	var hud := get_tree().get_first_node_in_group("hud")
+	var hud := Coop.hud(_player)
 	if hud == null or not hud.has_method("announce") or consumable == null:
 		return
 	var noun := consumable.item_name.to_lower()

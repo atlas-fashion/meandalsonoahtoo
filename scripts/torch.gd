@@ -164,16 +164,20 @@ func _exit_tree() -> void:
 
 ## Ranks every managed torch by distance from the camera and sets each one's
 ## target: only the nearest `Graphics.torch_lights` give light.
-static func _rank(camera_at: Vector3, limit: int) -> void:
+static func _rank(cameras: Array[Vector3], limit: int) -> void:
 	var distances := PackedFloat32Array()
 	distances.resize(_managed.size())
-	var below := camera_at.y < SEWER_SPLIT_Y
 	for i in _managed.size():
-		distances[i] = (_managed[i]._fixed_position as Vector3).distance_to(camera_at)
-		# Torches on the other level (sewer / dungeon) light nothing the camera
-		# can see through the rock: rank them last.
-		if _managed[i].sewer != below:
-			distances[i] += OTHER_LEVEL
+		# Co-op: by the nearer of the two cameras (one point outside co-op).
+		var best := INF
+		for camera_at in cameras:
+			var d := (_managed[i]._fixed_position as Vector3).distance_to(camera_at)
+			# Torches on the other level (sewer / dungeon) light nothing the
+			# camera can see through the rock: rank them last.
+			if _managed[i].sewer != (camera_at.y < SEWER_SPLIT_Y):
+				d += OTHER_LEVEL
+			best = minf(best, d)
+		distances[i] = best
 	var cut := INF
 	if limit <= 0:
 		cut = -INF
@@ -261,18 +265,21 @@ func _process(delta: float) -> void:
 	var now_frame := Engine.get_process_frames()
 	if _is_managed and now_frame != _rank_frame and now_frame % RANK_PERIOD == 0:
 		_rank_frame = now_frame
-		var cam := _shared_camera()
+		var points := _camera_points()
 		var gfx := get_node_or_null("/root/Graphics")
-		if cam != null:
-			_rank(cam.global_position, int(gfx.get("torch_lights")) if gfx != null else 12)
+		if not points.is_empty():
+			_rank(points, int(gfx.get("torch_lights")) if gfx != null else 12)
 	if (Engine.get_process_frames() + _cull_phase) % CULL_PERIOD == 0:
-		var camera := _shared_camera()
-		if camera == null:
+		var points := _camera_points()
+		if points.is_empty():
 			_in_range = true
 		else:
+			# Co-op: in range of either camera.
 			var cutoff := light_range + cull_margin
-			_in_range = _fixed_position.distance_squared_to(camera.global_position) \
-				<= cutoff * cutoff
+			_in_range = false
+			for at in points:
+				if _fixed_position.distance_squared_to(at) <= cutoff * cutoff:
+					_in_range = true
 		# Out of range the embers stop simulating too, not just drawing.
 		if embers != null and embers.emitting != (_effects_on and _in_range):
 			embers.emitting = _effects_on and _in_range
@@ -332,3 +339,24 @@ func _shared_camera() -> Camera3D:
 		_camera_frame = frame
 		_camera = get_viewport().get_camera_3d()
 	return _camera
+
+
+## Where the cameras are: co-op, both halves' (split_screen.gd); otherwise the
+## one drawing. Gathered once a frame for every torch.
+static var _points: Array[Vector3] = []
+static var _points_frame := -1
+
+
+func _camera_points() -> Array[Vector3]:
+	var frame := Engine.get_process_frames()
+	if frame != _points_frame:
+		_points_frame = frame
+		_points.clear()
+		if Coop.active and Coop.split != null and is_instance_valid(Coop.split):
+			for c: Camera3D in Coop.split.call("cameras"):
+				_points.append(c.global_position)
+		else:
+			var cam := _shared_camera()
+			if cam != null:
+				_points.append(cam.global_position)
+	return _points

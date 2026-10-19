@@ -470,10 +470,21 @@ func _set_hunting(on: bool) -> void:
 	hunt_changed.emit(on)
 
 
+## Co-op (coop.gd): it hunts one player at a time -- the nearest not hidden,
+## chosen again each second while it is not on someone's trail.
 func _resolve_player() -> Node3D:
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
+	if not Coop.active:
+		if _player == null or not is_instance_valid(_player):
+			_player = get_tree().get_first_node_in_group("player") as Node3D
+		return _player
+	var now := Time.get_ticks_msec() / 1000.0
+	if _player == null or not is_instance_valid(_player) or (not hunting and now >= _next_pick):
+		_next_pick = now + 1.0
+		_player = Coop.nearest(global_position) as Node3D
 	return _player
+
+
+var _next_pick := 0.0
 
 
 # --- The strike -----------------------------------------------------------------
@@ -613,9 +624,7 @@ func _die() -> void:
 	var player := _resolve_player()
 	if player != null and death_coins > 0 and player.has_method("add_currency"):
 		player.add_currency(death_coins)
-	var hud := get_tree().get_first_node_in_group("hud")
-	if hud != null and hud.has_method("announce"):
-		hud.announce("%s IS BANISHED" % display_name, "Its wailing fades from the halls")
+	Coop.announce_all("%s IS BANISHED" % display_name, "Its wailing fades from the halls")
 	# Flares and thins away.
 	var t := create_tween()
 	t.tween_method(func(k: float) -> void:

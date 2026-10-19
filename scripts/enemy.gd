@@ -1007,10 +1007,33 @@ func _pick_wander_target() -> void:
 
 
 ## Cached because a group lookup per enemy per frame adds up across dozens.
+## Co-op (coop.gd): the player it is after, chosen again every TARGET_EVERY --
+## the nearest standing and not hidden, but it keeps its quarry unless the
+## other is clearly nearer (TARGET_STICK), and never changes mid-swing.
 func _resolve_player() -> Node3D:
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
+	if not Coop.active:
+		if _player == null or not is_instance_valid(_player):
+			_player = get_tree().get_first_node_in_group("player") as Node3D
+		return _player
+	var now := _now()
+	var lost: bool = _player == null or not is_instance_valid(_player) or _player.get("_dead") == true
+	if lost or (now >= _next_target_check and state == State.CHASE):
+		_next_target_check = now + TARGET_EVERY
+		var best := Coop.nearest(global_position) as Node3D
+		if lost or best == null:
+			_player = best
+		elif best != _player:
+			var keep := global_position.distance_to(_player.global_position)
+			var other := global_position.distance_to(best.global_position)
+			var hidden: bool = _player.has_method("is_hidden") and _player.is_hidden()
+			if hidden or other * TARGET_STICK < keep:
+				_player = best
 	return _player
+
+
+const TARGET_EVERY := 0.5
+const TARGET_STICK := 1.3
+var _next_target_check := 0.0
 
 
 ## True when this frame's simulation should be skipped entirely. Polled rather
@@ -1815,9 +1838,8 @@ func _die() -> void:
 	_grant_drop()
 
 	if announce_death:
-		var hud := get_tree().get_first_node_in_group("hud")
-		if hud != null and hud.has_method("announce"):
-			hud.announce("%s HAS FALLEN" % display_name)
+		# To everyone (co-op: both HUDs).
+		Coop.announce_all("%s HAS FALLEN" % display_name)
 
 	if death_burst == null:
 		# An ordinary enemy just folds up and goes.

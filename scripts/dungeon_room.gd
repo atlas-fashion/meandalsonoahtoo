@@ -1417,10 +1417,10 @@ func _arm_doors() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	if kind != &"prison" and kind != &"mine":
 		return
 	_run_generator(delta)
@@ -1484,15 +1484,16 @@ func _update_focus() -> void:
 		or _player.get("ui_open") == true
 	if not blocked:
 		var to := _crystal.global_position - _player.global_position
-		if Vector2(to.x, to.z).length() <= 2.8 and Interact.looked_at(_crystal, 3.6, 0.12):
+		if Vector2(to.x, to.z).length() <= 2.8 and Interact.looked_at(_crystal, 3.6, 0.12, [], _player):
 			_focus = true
 	_prompt.visible = _focus
+	_prompt.player = _player
 	if _focus:
 		_prompt.global_position = _crystal.global_position
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _focus or not Interact.pressed(event):
+	if not _focus or not Interact.pressed(event, _player):
 		return
 	get_viewport().set_input_as_handled()
 	_cut_power()
@@ -1828,7 +1829,7 @@ func _power_off_now(alive: Array) -> void:
 # --- Helpers -----------------------------------------------------------------------
 
 func _hud() -> Node:
-	return get_tree().get_first_node_in_group("hud")
+	return Coop.hud(_player)
 
 
 func _box(parent: Node3D, size: Vector3, at: Vector3, mat: Material) -> MeshInstance3D:

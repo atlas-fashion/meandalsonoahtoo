@@ -524,7 +524,7 @@ func _update_tether() -> void:
 	if _flying == null or not is_instance_valid(_flying) or _fly_state == 0 and _fly_travelled < 1.0:
 		_tether.visible = false
 		return
-	var cam := get_viewport().get_camera_3d()
+	var cam := Coop.camera(player)
 	if cam == null:
 		return
 	_tether.visible = true
@@ -656,7 +656,7 @@ func _blast_visual(at: Vector3) -> void:
 ## The blast's and the tether's materials compiling on first use would stall
 ## that frame: draw a speck of each in front of the camera at load.
 func _warm_up() -> void:
-	var cam := get_viewport().get_camera_3d()
+	var cam := Coop.camera(player)
 	if cam == null:
 		return
 	for key in [&"fire", &"flash", &"ring", &"tether"]:

@@ -187,6 +187,9 @@ func _process(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if get_tree().paused:
 		return
+	# Co-op: this map's player's keys, mouse or pad only (coop.gd).
+	if _player != null and is_instance_valid(_player) and not Coop.owns(_player, event):
+		return
 	# Typing a note: every key is the note's, the map key included.
 	if editor_open() and _editor_note.has_focus() and event is InputEventKey:
 		if (event as InputEventKey).physical_keycode == KEY_ESCAPE and event.pressed:
@@ -238,9 +241,9 @@ func set_full_map_open(open: bool, embedded := false) -> void:
 		elif not open and _took_ui:
 			_player.set("ui_open", false)
 			_took_ui = false
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		Coop.set_mouse(_player, Input.MOUSE_MODE_CAPTURED)
 	elif embedded and open:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		Coop.set_mouse(_player, Input.MOUSE_MODE_CAPTURED)
 	if not open:
 		_close_editor()
 		_pressed = false
@@ -946,7 +949,7 @@ func _build_editor(overlay: Control) -> void:
 	_editor_note.custom_minimum_size = Vector2(0, 40)
 	_editor_note.add_theme_font_size_override("font_size", 17)
 	_editor_note.text_submitted.connect(func(_t: String) -> void:
-		if not Pad.using_pad:
+		if not Pad.for_player(_player):
 			_save_pin())
 	column.add_child(_editor_note)
 	Pad.attach_keyboard(_editor_note)
@@ -1019,7 +1022,7 @@ func _open_editor(index: int, world: Vector2) -> void:
 	_editor_delete.visible = index >= 0
 	_editor.visible = true
 	# The editor is worked with the pointer (or, on a pad, by focus).
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Coop.set_mouse(_player, Input.MOUSE_MODE_VISIBLE)
 	_restyle_editor()
 	# The note box first: typing (or, on a pad, the on-screen keyboard) at once.
 	_editor_note.grab_focus.call_deferred()
@@ -1065,7 +1068,7 @@ func _close_editor() -> void:
 	_editor_note.release_focus()
 	Pad.hide_keyboard()
 	if was_open and _full_open:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		Coop.set_mouse(_player, Input.MOUSE_MODE_CAPTURED)
 	if _pin_layer != null:
 		_pin_layer.queue_redraw()
 
@@ -1107,15 +1110,18 @@ func pin_count() -> int:
 func _pad_map(delta: float) -> void:
 	if not _full_open or editor_open() or _full_panel == null:
 		return
-	var zoom := Input.get_axis(&"look_down", &"look_up")
+	var zoom := Coop.axis(_player, &"look_down", &"look_up")
 	if absf(zoom) > 0.15:
 		_zoom_at(exp(zoom * PAD_ZOOM_RATE * delta), _full_panel.size * 0.5)
 	# Left stick (and the d-pad, and W/A/S/D) moves the map under the cursor.
-	var pan := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
+	var pan := Coop.vector(_player, &"move_left", &"move_right", &"move_forward", &"move_back")
 	var dpad := Vector2(float(Input.is_joy_button_pressed(_pad_device(), JOY_BUTTON_DPAD_RIGHT))
 		- float(Input.is_joy_button_pressed(_pad_device(), JOY_BUTTON_DPAD_LEFT)),
 		float(Input.is_joy_button_pressed(_pad_device(), JOY_BUTTON_DPAD_DOWN))
 		- float(Input.is_joy_button_pressed(_pad_device(), JOY_BUTTON_DPAD_UP)))
+	# Co-op: the pad is player 2's alone.
+	if Coop.active and Coop.index_of(_player) == 0:
+		dpad = Vector2.ZERO
 	if dpad != Vector2.ZERO:
 		pan = dpad.normalized()
 	if pan.length() > 0.12:

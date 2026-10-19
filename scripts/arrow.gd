@@ -158,13 +158,15 @@ func _physics_process(delta: float) -> void:
 	var from := global_position
 	var to := from + velocity * delta
 
-	# The player, or (on its way back) the archer.
-	var player := get_tree().get_first_node_in_group("player") as Node3D
-	if not _falling and not reflected and player != null and player.get("_dead") != true \
-			and _hits_body(from, to, player):
-		global_position = _closest_on(from, to, player)
-		_strike_player(player)
-		return
+	# A player (co-op: either), or (on its way back) the archer.
+	for pl in Coop.all():
+		var body := pl as Node3D
+		if not _falling and not reflected and body.get("_dead") != true and _hits_body(from, to, body):
+			global_position = _closest_on(from, to, body)
+			_strike_player(body)
+			return
+	# Credit for a parried arrow goes to whoever is nearest it.
+	var player := Coop.nearest(global_position, false) as Node3D
 	if reflected and is_instance_valid(shooter) and not shooter.get("_dying") and _hits_body(from, to, shooter):
 		shooter.call("take_damage", damage, velocity.normalized())
 		var p := player as Node

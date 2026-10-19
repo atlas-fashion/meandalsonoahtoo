@@ -67,19 +67,20 @@ func _process(delta: float) -> void:
 		_crystal_mat.emission_energy_multiplier = 4.0 + sin(_clock * 3.0) * 0.8
 		if _light != null:
 			_light.light_energy = 3.0 + sin(_clock * 3.0) * 0.4
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	var to := _player.global_position - global_position
 	_near = Vector2(to.x, to.z).length() <= REACH and absf(to.y) < 2.0 \
-		and Interact.looked_at(self, 3.4, 0.1)
+		and Interact.looked_at(self, 3.4, 0.1, [], _player)
 	_prompt.text = "E   Save progress" if active else "E   Attune"
 	_prompt.visible = _near
+	_prompt.player = _player
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _near or not Interact.pressed(event):
+	if not _near or not Interact.pressed(event, _player):
 		return
 	if _player == null or _player.get("in_cutscene") or _player.get("_dead"):
 		return

@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Coop="*res://scripts/coop.gd"
 Graphics="*res://scripts/graphics_settings.gd"
 Saves="*res://scripts/save_system.gd"
 Pad="*res://scripts/pad.gd"

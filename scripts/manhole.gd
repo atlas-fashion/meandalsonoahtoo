@@ -195,10 +195,10 @@ func set_open_now() -> void:
 # --- Running ----------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	if _busy or _player.get("in_cutscene") or _player.get("_dead"):
 		_near_top = false
 		_near_bottom = false
@@ -208,20 +208,22 @@ func _process(_delta: float) -> void:
 	var at := _player.global_position
 	var flat := Vector2(at.x - global_position.x, at.z - global_position.z).length()
 	_near_top = absf(at.y - global_position.y) < 1.2 and flat <= REACH \
-		and Interact.looked_at(self, REACH, 0.12, [_frame])
+		and Interact.looked_at(self, REACH, 0.12, [_frame], _player)
 	_prompt.text = "E   Lift" if state == State.COVERED else "E   Climb down"
 	_prompt.visible = _near_top
+	_prompt.player = _player
 	var foot: Vector3 = shaft["foot"]
 	var ladder: Node3D = shaft.get("ladder")
 	_near_bottom = ladder != null and absf(at.y - foot.y) < 1.2 \
 		and Vector2(at.x - foot.x, at.z - foot.z).length() <= 2.2 \
-		and Interact.looked_at(ladder, 2.6, 0.2)
+		and Interact.looked_at(ladder, 2.6, 0.2, [], _player)
 	_ladder_prompt.text = "E   Climb up" if state == State.OPEN else "E   Sealed"
 	_ladder_prompt.visible = _near_bottom
+	_ladder_prompt.player = _player
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _busy or _player == null or not Interact.pressed(event):
+	if _busy or _player == null or not Interact.pressed(event, _player):
 		return
 	if _near_top:
 		get_viewport().set_input_as_handled()
@@ -244,7 +246,7 @@ func _toast(text: String) -> void:
 
 
 func _hud() -> Node:
-	return get_tree().get_first_node_in_group("hud")
+	return Coop.hud(_player)
 
 
 func _ok() -> bool:

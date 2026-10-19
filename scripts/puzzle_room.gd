@@ -334,10 +334,10 @@ func _set_sky(share: float, time: float) -> void:
 # --- Running -----------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player == null:
-			return
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
+	if _player == null:
+		return
 	_time += delta
 	if not solved and not sealed:
 		_check_seal()
@@ -415,19 +415,20 @@ func _update_focus() -> void:
 			var reach := float(u["reach"])
 			if flat > reach or absf(to.y) > 2.6:
 				continue
-			if not Interact.looked_at(node, reach + 1.6, 0.08):
+			if not Interact.looked_at(node, reach + 1.6, 0.08, [], _player):
 				continue
 			if flat < best:
 				best = flat
 				_focus = u
 	_prompt.visible = not _focus.is_empty()
+	_prompt.player = _player
 	if _prompt.visible:
 		var text = _focus["text"]
 		_prompt.text = String((text as Callable).call() if text is Callable else text)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not Interact.pressed(event):
+	if not Interact.pressed(event, _player):
 		return
 	if _focus.is_empty():
 		# Carrying something in the weighing room: E with nothing in the
@@ -1422,7 +1423,7 @@ func _lift_item(k: int) -> void:
 ## Into the player's hands: held before the view, the hands' own weapon away,
 ## and slowed by what it weighs.
 func _take_up(k: int) -> void:
-	var camera := get_viewport().get_camera_3d()
+	var camera := Coop.camera(_player)
 	var node: Node3D = _items[k]["node"]
 	if camera == null:
 		return
@@ -2781,7 +2782,7 @@ func _reset_veil() -> void:
 # --- Helpers ---------------------------------------------------------------------------
 
 func _hud() -> Node:
-	return get_tree().get_first_node_in_group("hud")
+	return Coop.hud(_player)
 
 
 func _shake(amount: float) -> void:

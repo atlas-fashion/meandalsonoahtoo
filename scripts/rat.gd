@@ -116,12 +116,17 @@ func _ready() -> void:
 	rotation.y = randf() * TAU
 
 
+## The player nearest it (co-op: either; coop.gd), and never a body it bumps.
 func _resolve_player() -> Node3D:
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player != null:
-			add_collision_exception_with(_player)
+	for p in Coop.all():
+		if not _excepted.has(p):
+			_excepted.append(p)
+			add_collision_exception_with(p)
+	_player = Coop.nearest(global_position, false) as Node3D
 	return _player
+
+
+var _excepted: Array[Node] = []
 
 
 # --- Being thrown (rat_control.gd) ----------------------------------------------------
@@ -353,7 +358,7 @@ static func scare_around(from_node: Node3D, at: Vector3, radius: float, time: fl
 ## away from them; the furthest found if none is hidden.
 func _plan_escape(player: Node3D) -> void:
 	var eye := _eye(player)
-	var cam := get_viewport().get_camera_3d()
+	var cam := Coop.view_camera(player)
 	var space := get_world_3d().direct_space_state
 	var away := Vector3(global_position.x - eye.x, 0.0, global_position.z - eye.z)
 	var base := atan2(away.z, away.x) if away.length_squared() > 0.01 else randf() * TAU
@@ -405,9 +410,15 @@ func _eye(player: Node3D) -> Vector3:
 	return player.global_position + Vector3(0.0, 1.6, 0.0)
 
 
-## On screen and not behind stone, from whatever camera is drawing.
+## On screen and not behind stone, from any player's camera (co-op: either half).
 func _in_view(player: Node3D) -> bool:
-	var cam := get_viewport().get_camera_3d()
+	for p in Coop.all():
+		if _seen_by(Coop.view_camera(p), p):
+			return true
+	return false
+
+
+func _seen_by(cam: Camera3D, player: Node3D) -> bool:
 	if cam == null:
 		return false
 	var at := global_position + Vector3(0.0, 0.1, 0.0)
@@ -426,6 +437,7 @@ func _process(delta: float) -> void:
 	if _prompt == null or player == null or not is_instance_valid(player):
 		return
 	_prompt.visible = mode == Mode.WILD and not _asleep and _can_grab(player)
+	_prompt.player = player
 
 
 func _can_grab(player: Node3D) -> bool:
@@ -434,11 +446,11 @@ func _can_grab(player: Node3D) -> bool:
 		return false
 	if global_position.distance_to(_eye(player)) > GRAB_REACH + 0.3:
 		return false
-	return Interact.looked_at(self, GRAB_REACH, GRAB_MARGIN)
+	return Interact.looked_at(self, GRAB_REACH, GRAB_MARGIN, [], player)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _prompt.visible or not Interact.pressed(event):
+	if not _prompt.visible or not Interact.pressed(event, _player):
 		return
 	get_viewport().set_input_as_handled()
 	grab()
@@ -456,9 +468,7 @@ func grab() -> bool:
 			hands.call("hold_caught")
 		queue_free()
 		return true
-	var hud := get_tree().get_first_node_in_group("hud")
-	if hud != null and hud.has_method("announce"):
-		hud.call("announce", "NO ROOM", "The rat wriggles free")
+	Coop.announce(player, "NO ROOM", "The rat wriggles free")
 	_noticed_at = -1.0
 	_bolt_from(player.global_position)
 	return false

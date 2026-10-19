@@ -236,10 +236,13 @@ func _build_head() -> void:
 func _physics_process(delta: float) -> void:
 	if _dying:
 		return
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
-		if _player != null and _player.has_signal("guarded") and not _player.is_connected("guarded", _on_player_guarded):
-			_player.connect("guarded", _on_player_guarded)
+	# Co-op (coop.gd): after the nearest player -- but one stuck on a face stays
+	# on it -- and listening to every player's guard.
+	if _state != FACE or _player == null or not is_instance_valid(_player):
+		_player = Coop.nearest(global_position) as Node3D
+	for p in Coop.all():
+		if p.has_signal("guarded") and not p.is_connected("guarded", _on_player_guarded):
+			p.connect("guarded", _on_player_guarded)
 	var player := _player
 	if player == null:
 		return
@@ -516,7 +519,7 @@ static var _warmed := false
 func _warm_up() -> void:
 	if _warmed or mesh == null or mesh.mesh == null:
 		return
-	var player := get_tree().get_first_node_in_group("player")
+	var player := Coop.all()[0] if Coop.count() > 0 else get_tree().get_first_node_in_group("player")
 	var camera: Camera3D = player.get("camera") if player != null else null
 	if camera == null or not camera.is_inside_tree():
 		return

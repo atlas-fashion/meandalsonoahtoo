@@ -668,8 +668,8 @@ func _maintain() -> void:
 # --- Running ------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
+	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
+	_player = Coop.user_for(self, _player)
 	if broken:
 		return
 	# Out of anyone's sight it moves ten times a second in bigger steps rather
@@ -1099,15 +1099,16 @@ func _process(_delta: float) -> void:
 	if broken and not looted and _player != null and is_instance_valid(_player) \
 			and _player.get("_dead") != true and _player.get("in_cutscene") != true:
 		var to := _cart.global_position - _player.global_position
-		if Vector2(to.x, to.z).length() < 2.9 and Interact.looked_at(_cart, 3.4, 0.1):
+		if Vector2(to.x, to.z).length() < 2.9 and Interact.looked_at(_cart, 3.4, 0.1, [], _player):
 			_focus = true
 	_prompt.visible = _focus
+	_prompt.player = _player
 	if _focus:
 		_prompt.global_position = _cart.global_position + Vector3(0.0, 1.0, 0.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _focus or not Interact.pressed(event):
+	if not _focus or not Interact.pressed(event, _player):
 		return
 	get_viewport().set_input_as_handled()
 	looted = true

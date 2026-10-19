@@ -206,7 +206,14 @@ func _apply_window() -> void:
 
 
 func _apply_viewport() -> void:
-	var vp := get_viewport()
+	apply_to_viewport(get_viewport())
+	# Co-op: the two halves draw the world, not the root (split_screen.gd).
+	if Coop.split != null and is_instance_valid(Coop.split):
+		Coop.split.call("apply_graphics")
+
+
+## The viewport settings onto `vp` (the root, or a split-screen half).
+func apply_to_viewport(vp: Viewport) -> void:
 	if vp == null:
 		return
 	# Bilinear rather than FSR: FSR's own pass costs more than it gives back on
@@ -243,11 +250,17 @@ func _apply_viewport() -> void:
 
 
 func _apply_environment() -> void:
+	var envs: Array[Environment] = []
 	for node in get_tree().get_nodes_in_group("world_environment"):
 		var we := node as WorldEnvironment
-		if we == null or we.environment == null:
-			continue
-		var env := we.environment
+		if we != null and we.environment != null:
+			envs.append(we.environment)
+	# Co-op: each half's camera has its own copy (split_screen.gd).
+	if Coop.split != null and is_instance_valid(Coop.split):
+		for cam: Camera3D in Coop.split.call("cameras"):
+			if cam.environment != null:
+				envs.append(cam.environment)
+	for env in envs:
 		env.ssao_enabled = ssao
 		env.glow_enabled = glow
 		env.fog_enabled = fog
