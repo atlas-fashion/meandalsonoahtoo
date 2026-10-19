@@ -90,7 +90,7 @@ const BEAM_SET_EARLY := 0.04
 ## HIT WINDOWS: the swipe's blows, [start, end] clip seconds. While one is open
 ## its shield's hitbox (shield_hitbox.gd, ARM_L, 1.5x the shield) is live and
 ## lands the blow the first tick it overlaps the player, once per window.
-const SWIPE_HITS := [[0.3333, 0.5167]]
+const SWIPE_HITS := [[0.3833, 0.5167]]
 ## PARRY CUES (player.gd `parry_cue`): from each, a block press inside
 ## SWIPE_LISTEN parries the next blow (as the decrepit's; set so the window
 ## closes as the blow lands).
@@ -144,8 +144,8 @@ const LOOP_PAUSE := 0.5
 ## Swipe 2 (clip seconds, at 1x but for the slide): its blows, cues and end.
 ## Its first blow's start is where the slide arrives.
 const ANIM_SWIPE2_CLIP := &"SWIPE_2_BAKED"
-const SWIPE2_HITS := [[0.1667, 0.2333]]
-const SWIPE2_CUES := [0.1333]
+const SWIPE2_HITS := [[0.2, 0.2667]]
+const SWIPE2_CUES := [0.1]
 const SWIPE2_LISTEN := 0.25
 const SWIPE2_END := 0.6833
 ## THE DASH: at SWIPE2_LUNGE the body slides at the player -- fast at once,

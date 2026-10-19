@@ -191,9 +191,9 @@ const TURN_DASH := 14.0
 ## before the arrival. Every time is put on the move's own clock at its start
 ## (`_events`), never read off the clip's position -- far off, the animation
 ## LOD advances that in strides (a cue opened 0.15 s late from 12 m).
-const SWIPE_CUES := [0.4333]
-const JUMP_CUES := [0.4333]
-const DROPKICK_CUES := [0.4333, 0.8333, 1.1333]
+const SWIPE_CUES := [0.3333]
+const JUMP_CUES := [0.4167]
+const DROPKICK_CUES := [0.4333, 0.8167, 1.1333]
 const DASH_CUES := [0.2]
 const SWIPE_LISTEN := 0.25
 const JUMP_LISTEN := 0.3
