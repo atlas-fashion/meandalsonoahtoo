@@ -6,7 +6,8 @@ extends RefCounted
 ## (the workbench's, rat_control.gd) is the same rat in iron with darker trim,
 ## a ridge plate down its back, an antenna, and its eyes and back crystal in
 ## the enforcer's own crystal colour (`enforcer_eye_colour`, read off the
-## enforcer model, so the two always match).
+## enforcer model, so the two always match). Only the ROBOT is used now: the
+## live rat is the user's Tripo rat (rat_look.gd, note 78).
 ##
 ## Every part of a variant is merged into ONE shared ArrayMesh, built once and
 ## used by every rat: one vertex-coloured surface, plus the glow on the robot

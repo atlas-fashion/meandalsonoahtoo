@@ -1256,7 +1256,9 @@ func _update_sword(delta: float) -> void:
 		_held_potion.want = _consumable_for(held_item()) != null and not hands_busy \
 			and not forced
 	# The sword is put away while a flask is at the lips, whatever is in hand.
-	var away := held_item() != &"sword" or hands_busy or is_drinking()
+	# Also while a live rat hangs from the hand (rat_control.gd).
+	var away: bool = held_item() != &"sword" or hands_busy or is_drinking() \
+		or (rats != null and rats.get("holding") == true)
 	var goal := 1.0 if away and not forced else 0.0
 	var smooth := sword_duck_smooth_up if goal > _sword_duck else sword_duck_smooth_down
 	_sword_duck = clampf(_smooth_damp(_sword_duck, goal, delta, smooth), 0.0, 1.0)
@@ -3962,9 +3964,10 @@ func use_consumable(slot: int) -> bool:
 		return false
 	if _attacking and _pose_time < _bite_end():
 		return false
-	# A live rat (a utility quick item) is thrown, not drunk (rat_control.gd).
+	# A live rat (a utility quick item) is taken in hand by the tail, not drunk
+	# (rat_control.gd `take_rat`; LMB then throws it).
 	if inventory.id_at(slot) == &"live_rat":
-		return rats.throw_rat(slot)
+		return rats.take_rat(slot)
 	var type := _consumable_for(inventory.id_at(slot))
 	if type == null or health >= max_health:
 		return false

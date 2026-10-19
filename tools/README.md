@@ -453,3 +453,40 @@ CLAUDE.md docs/notes/59).
 
 After an import, set `models/decrepit_decrepit_atlas.jpg.import` to
 `compress/mode=2` with mipmaps and re-import.
+
+---
+
+# The live rat (2026-10-18)
+
+**In use: `models/rat.glb`**, the user's Tripo rat ("mouse with bones.blend",
+kept as `models/source/rat/mouse_with_bones.blend`), rebuilt by
+`build_rat.py`:
+
+```
+blender -b --factory-startup -P tools/build_rat.py -- models/rat.glb
+blender -b --factory-startup -P tools/build_rat.py -- --preview <dir> [Run Idle Rear Dangle]
+godot --headless --import --path .
+```
+
+The Tripo rig in the file is NOT used (the head and forelegs hang off the root,
+not the spine; the tail hangs off a "limb"; three tail bones). The script keeps
+the 566-vertex mesh and its texture, builds a clean 29-bone skeleton through
+the mesh's parts (placed from the Tripo weights' clusters), skins it with
+automatic weights (islands -- ears, eyes, whiskers -- to the head; smoothed,
+4 bones a vertex), and authors four looped clips at 30 fps by posing in code
+(`turn` about a world axis relative to the parent; analytical two-bone IK for
+the legs, `two_bone`), baked to plain keys on NLA tracks:
+
+- **Run** (10 f): a half-bound gallop, RUN_STRIDE 0.8 source m a cycle.
+- **Idle** (150 f), **Rear** (150 f, the model's own standing pose).
+- **Dangle** (120 f): hung by the tail, head down, writhing. `TailTip` is a
+  bone at the very end of the tail to hang it by.
+
+`--preview` writes contact sheets (side and three-quarter) of each clip.
+Traps: opening the source resets the scene, so the fps is set after the load
+(it came out 24); `export_def_bones` must be off or the non-deforming
+`TailTip` is dropped; the texture is named after the packed image's PATH, so
+the script sets it; swinging the hind TOES through the air put the ankle above
+the hip and the thigh up through the rump (tearing) -- the swing drives the
+ANKLE on a low arc instead. In the game: `scripts/rat_look.gd` (scale 0.5,
+nose to -Z). Note 78.

@@ -3,10 +3,16 @@ extends Node3D
 ## Rats in the player's hands (2026-10-18): a child of the player's head, set up
 ## by player.gd `_ready` as `player.rats`.
 ##
-## LIVE RATS (a utility quick item, inventory.gd): used from the quick wheel
-## (`throw_rat`, through player.gd `use_consumable`), one is thrown from the eye
-## along the view, tumbling; rat.gd takes it from there -- it scares what is
-## near where it lands and runs off out of sight.
+## LIVE RATS (a utility quick item, inventory.gd): chosen on the quick wheel
+## (player.gd `use_consumable` -> `take_rat`), or just caught with E (rat.gd
+## `grab` -> `hold_caught`), one is HELD: the user's rat (rat_look.gd) hung by
+## the tip of its tail from a pinch lower right of the view, writhing (its
+## Dangle clip) and twisting, swinging and shaking on its tail -- hardest just
+## after it is caught. The weapon goes down meanwhile. LMB throws it
+## (`throw_held` -> `throw_rat`, from where it hangs, along the view,
+## tumbling; rat.gd takes it from there -- it scares what is near where it
+## lands and runs off out of sight); RMB, choosing a weapon, drinking or
+## anything that takes the hands puts it away (still carried).
 ##
 ## THE ROBOT RAT (a utility item on the weapon wheel, built at the workbench
 ## from a live rat and CRAFT_COST gold crystals): in hand it sits in the palm,
@@ -26,6 +32,7 @@ extends Node3D
 ## off at once.
 
 const RAT_MODEL := preload("res://scripts/rat_model.gd")
+const RAT_LOOK := preload("res://scripts/rat_look.gd")
 const RAT_SCRIPT := preload("res://scripts/rat.gd")
 const ROBOT_SCRIPT := preload("res://scripts/robot_rat.gd")
 
@@ -34,6 +41,20 @@ const ROBOT_SCRIPT := preload("res://scripts/robot_rat.gd")
 const THROW_SPEED := 11.0
 const THROW_LIFT := 3.0
 const THROW_EVERY := 0.6
+
+## A live rat held: the pinch its tail tip hangs from (head space; it hangs
+## down from there into the lower right of the view), how fast it comes up
+## into view, and how it moves on its tail -- twisting (yaw, radians), swinging
+## (pitch / roll), shaking (fast jitter) -- all doubled while CAUGHT_FIT s of
+## just-caught fury wear off.
+const PINCH := Vector3(0.22, 0.02, -0.62)
+const HOLD_RAISE := 0.22
+const HOLD_TWIST := 1.0
+const HOLD_SWING := 0.2
+const HOLD_SHAKE := 0.06
+const CAUGHT_FIT := 1.6
+## Holding still, it faces partly toward the player (yaw of the dangling rat).
+const HOLD_FACING := 2.4
 
 ## The robot rat.
 const FUSE := 10.0
@@ -74,6 +95,13 @@ var _clock := 0.0
 var _hurt_flash := 0.0
 var _last_health := 0.0
 
+## A live rat in the hand (`take_rat` / `hold_caught`).
+var holding := false
+var _live: Node3D
+var _live_up := 0.0
+var _fit := 0.0
+var _hold_t := 0.0
+
 var _overlay: CanvasLayer
 var _frame: Control
 var _font: Font
@@ -100,6 +128,31 @@ func setup(p: CharacterBody3D) -> void:
 	if player.has_signal("health_changed"):
 		player.connect("health_changed", _on_health_changed)
 	_last_health = float(player.get("health"))
+	_build_live(depth)
+	# Choosing a weapon on the wheel puts a held rat away.
+	if player.has_signal("selection_changed"):
+		player.connect("selection_changed", func(_slot: int) -> void: put_away())
+
+
+## The held live rat: placed in world space every frame (top level), its clip
+## stepped by hand just before so the tail tip is where it hangs from this
+## frame, and drawn pulled toward the eye like the sword.
+func _build_live(depth: float) -> void:
+	_live = RAT_LOOK.new()
+	_live.top_level = true
+	_live.visible = false
+	add_child(_live)
+	var anim: AnimationPlayer = _live.get("anim")
+	if anim != null:
+		anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	_live.call("play", &"Dangle")
+	var mi: MeshInstance3D = _live.get("mesh")
+	if mi != null:
+		for i in mi.mesh.get_surface_count():
+			var copy := mi.get_active_material(i).duplicate() as BaseMaterial3D
+			copy.use_z_clip_scale = true
+			copy.z_clip_scale = depth
+			mi.set_surface_override_material(i, copy)
 
 
 func is_driving() -> bool:
@@ -124,6 +177,7 @@ func reset() -> void:
 		_rat.queue_free()
 		_end_view()
 	_rat = null
+	holding = false
 	_next_throw = 0.0
 
 
@@ -134,15 +188,62 @@ func _busy() -> bool:
 
 # --- Live rats -----------------------------------------------------------------------
 
-## Throws one live rat from quick slot `slot`. False (and the rat kept) when the
-## hands are not free.
-func throw_rat(slot: int) -> bool:
+## The quick wheel's live rat: up into the hand, by the tail. Already holding
+## one, the wheel throws it. False when the hands are not free.
+func take_rat(slot: int) -> bool:
+	if player.inventory.id_at(slot) != &"live_rat":
+		return false
+	if holding:
+		return throw_held()
+	if _busy() or player.call("is_drinking"):
+		return false
+	holding = true
+	_live_up = 0.0
+	_hold_t = 0.0
+	return true
+
+
+## Just caught with E (rat.gd `grab`, already in the inventory): in the hand at
+## once, kicking.
+func hold_caught() -> void:
+	if _busy():
+		return
+	holding = true
+	_live_up = 0.4
+	_fit = CAUGHT_FIT
+
+
+## Down out of the hand; still carried.
+func put_away() -> void:
+	holding = false
+
+
+## LMB with a rat held: thrown from where it hangs.
+func throw_held() -> bool:
+	var slot: int = player.inventory.find(&"live_rat")
+	if slot < 0:
+		holding = false
+		return false
+	var at: Vector3 = _live.global_position if _live.visible else Vector3.INF
+	if throw_rat(slot, at):
+		holding = false
+		# Gone from the hand at once: it is the one flying now.
+		_live_up = 0.0
+		return true
+	return false
+
+
+## Throws one live rat from slot `slot`, from `from` (where a held one hangs;
+## INF: in front of the eye). False (and the rat kept) when the hands are not
+## free.
+func throw_rat(slot: int, from := Vector3.INF) -> bool:
 	if _busy() or _clock < _next_throw or player.inventory.id_at(slot) != &"live_rat":
 		return false
 	var cam: Camera3D = player.camera
 	var fwd := -cam.global_basis.z
 	var eye := cam.global_position
-	var from := eye + fwd * 0.35 + Vector3(0.0, -0.12, 0.0)
+	if from == Vector3.INF:
+		from = eye + fwd * 0.35 + Vector3(0.0, -0.12, 0.0)
 	# Never out through stone right in front of the face.
 	var q := PhysicsRayQueryParameters3D.create(eye, from, 2 | 256)
 	if not get_world_3d().direct_space_state.intersect_ray(q).is_empty():
@@ -334,6 +435,20 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# A live rat held: the attack key throws it, block puts it away, the other
+	# attacks do nothing (the weapon is down). This node is under the player's
+	# head, so it hears the keys before player.gd does.
+	if holding and not is_driving() and not player.ui_open \
+			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if event.is_action_pressed("attack") and not event.is_echo():
+			throw_held()
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("block") and not event.is_echo():
+			put_away()
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("thrust") or event.is_action_pressed("slam"):
+			get_viewport().set_input_as_handled()
+		return
 	if not is_driving() or player.ui_open:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -359,9 +474,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if player == null:
 		return
+	_update_live(delta)
 	# The robot rat in the palm while it is the weapon in hand.
 	var held: bool = player.held_item() == &"robot_rat" and not player.hands_busy and not is_driving() \
-		and not player.is_hidden() and player.get("_dead") != true
+		and not player.is_hidden() and player.get("_dead") != true and not holding
 	_raise = move_toward(_raise, 1.0 if held else 0.0, delta / 0.2)
 	_held.visible = _raise > 0.01
 	if _held.visible:
@@ -374,6 +490,42 @@ func _process(delta: float) -> void:
 	_hurt_flash = maxf(_hurt_flash - delta / 1.2, 0.0)
 	if _frame != null and _overlay.visible:
 		_frame.queue_redraw()
+
+
+## The held rat: let go if the hands are wanted or it is no longer carried;
+## otherwise hung by its tail tip from PINCH -- twisting round on the tail,
+## swinging, shaking, writhing (Dangle, faster in a fit) -- and eased up into
+## view as it is taken out, down as it is put away.
+func _update_live(delta: float) -> void:
+	if holding and (_busy() or player.call("is_drinking") or player.hands_busy \
+			or player.inventory.count(&"live_rat") <= 0):
+		holding = false
+	_live_up = move_toward(_live_up, 1.0 if holding else 0.0, delta / HOLD_RAISE)
+	_live.visible = _live_up > 0.01
+	if not _live.visible:
+		return
+	_hold_t += delta
+	_fit = maxf(_fit - delta, 0.0)
+	var fury := 1.0 + clampf(_fit / CAUGHT_FIT, 0.0, 1.0)
+	var t := _hold_t
+	var anim: AnimationPlayer = _live.get("anim")
+	if anim != null:
+		anim.speed_scale = 1.0 + 0.8 * (fury - 1.0)
+		anim.advance(delta)
+	var yaw := HOLD_FACING + HOLD_TWIST * fury * (0.7 * sin(t * 2.3) + 0.3 * sin(t * 5.7 + 1.1))
+	var shake := HOLD_SHAKE * fury
+	var pitch := HOLD_SWING * sin(t * 3.1) + shake * (sin(t * 31.0) + 0.6 * sin(t * 47.0))
+	var roll := HOLD_SWING * 0.8 * sin(t * 2.6 + 1.0) + shake * sin(t * 37.0 + 2.0)
+	var head := get_parent() as Node3D
+	var up := _live_up * _live_up * (3.0 - 2.0 * _live_up)
+	var pinch: Vector3 = head.global_transform * (PINCH + Vector3(0.0, -0.6 * (1.0 - up), 0.0))
+	# Turned with the body (not the view's pitch: it hangs plumb), then about
+	# the tail, and hung so its tip is at the pinch: the swing pivots about the
+	# fingers.
+	var basis := Basis(Vector3.UP, (player as Node3D).global_rotation.y) * Basis.from_euler(Vector3(pitch, yaw, roll))
+	_live.global_transform = Transform3D(basis, pinch)
+	var tip: Vector3 = _live.call("tail_tip")
+	_live.global_position += pinch - tip
 
 
 func _on_health_changed(current: float, _maximum: float) -> void:

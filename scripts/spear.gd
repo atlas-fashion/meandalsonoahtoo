@@ -245,8 +245,10 @@ func _process(delta: float) -> void:
 		return
 	# A scene driving it (the cage stab, a haft strike: `player.spear_scene_pose`).
 	var scene = player.spear_scene_pose()
+	# Down too while a live rat hangs from the hand (rat_control.gd).
+	var hands = player.get("rats")
 	var held: bool = scene != null or (player.held_item() == &"spear" and not player.hands_busy \
-		and not player.is_hidden())
+		and not player.is_hidden() and not (hands != null and hands.get("holding") == true))
 	# Raised into view when it is the slot in hand, lowered away otherwise.
 	_raise = move_toward(_raise, 1.0 if held else 0.0, delta / 0.2)
 	if scene != null:

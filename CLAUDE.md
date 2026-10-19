@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 77), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 78), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -326,10 +326,12 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   `pad_keyboard_input.gd` (controller, on-screen keyboard).
 - Sandbox (test mode, never saves): `sandbox.gd` (autoload `Sandbox`),
   `sandbox_world.gd` (test plane, spawning, teleports), `sandbox_menu.gd` (` key).
-- Rats (note 77): `rat.gd` (the harmless rat; grabbed with E, thrown it
-  scares -- enemy.gd / crier.gd `scare`), `rat_model.gd` (both looks; the
-  robot's glow is the enforcer's crystal colour), `rat_control.gd`
-  (`player.rats`: throwing live rats, the robot rat in hand, set down, driven
+- Rats (notes 77, 78): `rat.gd` (the harmless rat -- the user's Tripo rat,
+  `rat_look.gd` + models/rat.glb from tools/build_rat.py; grabbed with E into
+  the hand by its tail, thrown it scares -- enemy.gd / crier.gd `scare`),
+  `rat_model.gd` (the robot rat's procedural look; its glow is the enforcer's
+  crystal colour), `rat_control.gd` (`player.rats`: a live rat held by the
+  tail and thrown, the robot rat in hand, set down, driven
   through its eyes with `player.remote_view`, detonated), `robot_rat.gd` (its
   body and camera). Items of kind "Utility" ride the wheel their ITEMS
   "wheel" names (inventory.gd `wheel_of`).
@@ -446,6 +448,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 75 | 2026-10-17 | The enforcer's swipe loop: swipe 2 dashes; beams broken off | [docs/notes/75-the-enforcer-s-swipe-loop.md](docs/notes/75-the-enforcer-s-swipe-loop.md) |
 | 76 | 2026-10-17 | The title theme | [docs/notes/76-the-title-theme.md](docs/notes/76-the-title-theme.md) |
 | 77 | 2026-10-18 | Rats: utility items, live rats thrown, the robot rat | [docs/notes/77-rats-utility-items-and-the-robot-rat.md](docs/notes/77-rats-utility-items-and-the-robot-rat.md) |
+| 78 | 2026-10-18 | The Tripo rat, animated, and held by the tail | [docs/notes/78-the-tripo-rat-animated-and-held-by-the-tail.md](docs/notes/78-the-tripo-rat-animated-and-held-by-the-tail.md) |
 
 ## Notes by source file
 
@@ -487,7 +490,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hud.gd`: 6.19, 24
 - `scripts/interact.gd`: 6.18
 - `scripts/inventory.gd`: 6.19, 25, 77
-- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78
 - `scripts/item_drop.gd`: 6.19, 16, 51
 - `scripts/item_icon.gd`: 6.19, 77
 - `scripts/item_slot.gd`: 6.19, 30
@@ -503,12 +506,13 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78
 - `scripts/portcullis.gd`: 6.18
 - `scripts/puzzle_room.gd`: 18, 22
 - `scripts/radial_menu.gd`: 25, 30, 44, 77
-- `scripts/rat.gd`: 77
-- `scripts/rat_control.gd`: 77
+- `scripts/rat.gd`: 77, 78
+- `scripts/rat_control.gd`: 77, 78
+- `scripts/rat_look.gd`: 78
 - `scripts/rat_model.gd`: 77
 - `scripts/respawn_anchor.gd`: 8b, 32
 - `scripts/robot_rat.gd`: 77
@@ -524,7 +528,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_eyes.gd`: 13
 - `scripts/skeleton_sword.gd`: 24
 - `scripts/sky_setup.gd`: 6.18
-- `scripts/spear.gd`: 14
+- `scripts/spear.gd`: 14, 78
 - `scripts/stalker.gd`: 11, 16, 22, 60
 - `scripts/title_screen.gd`: 19, 60, 76
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50
@@ -551,6 +555,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18
 - `tools/build_potion.py`: 6.19
+- `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18
 - `tools/build_sewer_kit.py`: 54, 55
 - `tools/build_vines.py`: 6.18

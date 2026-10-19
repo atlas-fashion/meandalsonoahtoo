@@ -485,7 +485,8 @@ func _stats_for(id: StringName) -> Array:
 					["For", "%d s" % roundi(rat.SCARE_TIME)],
 					["Carried", str(player.inventory.count(id))],
 				],
-				"Use", [["Quick wheel", "hold X"], ["Pad", "D-pad"], ["Caught", "E, quickly"]],
+				"Use", [["In hand", "quick wheel / D-pad"], ["Throw", "LMB / RB"], ["Put away", "RMB / LB"],
+					["Caught", "E, quickly"]],
 			]
 		&"robot_rat":
 			var rc := preload("res://scripts/rat_control.gd")

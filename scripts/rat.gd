@@ -5,7 +5,9 @@ extends CharacterBody3D
 ## somewhere close by, and does it again. Coming near it is noticed: the rat
 ## FREEZES for REACT seconds, then bolts well away. That freeze is the chance to
 ## grab it: aim at it and press E ("interact") within reach and it goes into the
-## inventory as a Live Rat (inventory.gd, a utility quick item).
+## inventory as a Live Rat (inventory.gd, a utility quick item) and up into the
+## hand, held by its tail (rat_control.gd). It looks like the user's Tripo rat,
+## galloping, sniffing, rearing, writhing (rat_look.gd, models/rat.glb).
 ##
 ## Thrown (the quick wheel: rat_control.gd `throw_rat` -> `throw`), it flies
 ## tumbling, and where it lands it squeals: everything within SCARE_RADIUS that
@@ -18,20 +20,23 @@ extends CharacterBody3D
 ## beyond DRAW_RANGE. Collides with the player's own walls and floors (1 | 9)
 ## but never with the player.
 
-const RAT_MODEL := preload("res://scripts/rat_model.gd")
+const RAT_LOOK := preload("res://scripts/rat_look.gd")
 
 enum Mode { WILD, THROWN, FLEE }
 
 ## Darting about: speed, how far each dart goes, how long it sits between.
-## (The player walks at 4.25 m/s.)
-const RUN_SPEED := 7.0
+## (The player walks at 4.25 m/s. 7 and 9.5 m/s at first; slowed so the
+## gallop -- rat_look.gd, at most RUN_MAX_RATE x its own pace -- does not strobe.)
+const RUN_SPEED := 5.5
 const DART_MIN := 2.5
 const DART_MAX := 9.0
 const PAUSE_MIN := 0.5
 const PAUSE_MAX := 2.6
+## Of its pauses, the share spent up on its haunches (the Rear clip).
+const REAR_SHARE := 0.3
 const ACCEL := 60.0
 ## Bolting from the player.
-const BOLT_SPEED := 9.5
+const BOLT_SPEED := 7.5
 const BOLT_MIN := 7.0
 const BOLT_MAX := 13.0
 ## Noticing the player (flat distance): further off while they move than while
@@ -58,12 +63,13 @@ const FALL_GUARD := 2.5
 
 var mode := Mode.WILD
 
-var _model: Node3D
-var _tail: Node3D
+## The look (rat_look.gd), on a pivot it tumbles about when thrown.
+var _look: Node3D
+var _pivot: Node3D
+var _rear := false
 var _prompt: Interact.Prompt
 var _player: Node3D
 var _clock := 0.0
-var _phase := 0.0
 var _path := PackedVector3Array()
 var _path_i := 0
 var _speed := RUN_SPEED
@@ -97,12 +103,13 @@ func _ready() -> void:
 	shape.shape = box
 	shape.position = Vector3(0.0, 0.06, 0.0)
 	add_child(shape)
-	_model = RAT_MODEL.build(false)
-	add_child(_model)
-	_tail = _model.get_node("Tail")
-	for g in RAT_MODEL.parts(_model):
-		g.visibility_range_end = DRAW_RANGE
-		g.visibility_range_end_margin = 2.0
+	_pivot = Node3D.new()
+	_pivot.name = "Pivot"
+	add_child(_pivot)
+	_look = RAT_LOOK.new()
+	_pivot.add_child(_look)
+	_look.call("set_draw_range", DRAW_RANGE)
+	_look.call("play", &"Idle")
 	_prompt = Interact.prompt("E   Grab", Vector3(0.0, 0.15, 0.0))
 	add_child(_prompt)
 	_pause_until = randf_range(0.0, PAUSE_MAX)
@@ -296,6 +303,8 @@ func _arrive() -> void:
 	_path = PackedVector3Array()
 	_bolting = false
 	_pause_until = _clock + randf_range(PAUSE_MIN, PAUSE_MAX)
+	# Some pauses up on its haunches, looking about.
+	_rear = randf() < REAR_SHARE
 
 
 func _halt(delta: float) -> void:
@@ -311,7 +320,7 @@ func _halt(delta: float) -> void:
 func _land(player: Node3D) -> void:
 	mode = Mode.FLEE
 	_fled_at = _clock
-	_model.rotation = Vector3.ZERO
+	_pivot.rotation = Vector3.ZERO
 	scare_around(self, global_position, SCARE_RADIUS, SCARE_TIME)
 	_plan_escape(player)
 
@@ -435,12 +444,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	grab()
 
 
-## Into the player's bag (or onto the quick wheel). Full up: it gets away.
+## Into the player's bag (or onto the quick wheel), and up into their hand,
+## dangling by the tail (rat_control.gd `hold_caught`). Full up: it gets away.
 func grab() -> bool:
 	var player := _resolve_player()
 	if player == null or mode != Mode.WILD:
 		return false
 	if int(player.call("add_item", &"live_rat", 1)) > 0:
+		var hands = player.get("rats")
+		if hands != null and hands.has_method("hold_caught"):
+			hands.call("hold_caught")
 		queue_free()
 		return true
 	var hud := get_tree().get_first_node_in_group("hud")
@@ -453,32 +466,26 @@ func grab() -> bool:
 
 # --- Looks -------------------------------------------------------------------------
 
+## Which clip (rat_look.gd): the gallop while it runs, at the pace of its feet;
+## up on its haunches, nose working, when it has caught sight of the player and
+## frozen, and in some of its pauses; sniffing on all fours in the rest;
+## writhing as if still held by the tail while it flies, tumbling.
 func _animate(delta: float) -> void:
-	if _model == null:
+	if _look == null:
+		return
+	if mode == Mode.WILD and _asleep:
+		_look.call("set_running", false)
+		return
+	_look.call("set_running", true)
+	if mode == Mode.THROWN:
+		_look.call("play", &"Dangle", 1.6, 0.05)
+		_pivot.rotation.x += delta * 12.0
+		_pivot.rotation.z += delta * 5.0
 		return
 	var speed := Vector2(velocity.x, velocity.z).length()
-	match mode:
-		Mode.THROWN:
-			# Tumbling end over end, legs going.
-			_model.rotation.x += delta * 14.0
-			_tail.rotation.y = sin(_clock * 30.0) * 0.6
-			return
-	if speed > 0.5:
-		# The scurry: a quick bounce, the body pitching, the tail whipping.
-		_phase += delta * (16.0 + speed * 2.5)
-		_model.position.y = absf(sin(_phase)) * 0.014
-		_model.rotation.x = sin(_phase * 2.0) * 0.05
-		_tail.rotation.y = sin(_phase * 0.5) * 0.35
-		_tail.rotation.x = -0.05
-	elif _noticed_at >= 0.0:
-		# Frozen, nose up.
-		_model.position.y = 0.0
-		_model.rotation.x = lerpf(_model.rotation.x, -0.16, 1.0 - exp(-20.0 * delta))
-		_tail.rotation.y = 0.0
+	if speed > 0.6:
+		_look.call("run", speed)
+	elif _noticed_at >= 0.0 or _rear:
+		_look.call("play", &"Rear", 1.0, 0.18)
 	else:
-		# Sniffing about: twitches of the head end, a slow tail.
-		_model.position.y = 0.0
-		var sniff := maxf(sin(_clock * 2.1), 0.0)
-		_model.rotation.x = sin(_clock * 26.0) * 0.025 * sniff
-		_tail.rotation.y = sin(_clock * 1.3) * 0.3
-		_tail.rotation.x = 0.12
+		_look.call("play", &"Idle", 1.0, 0.25)
