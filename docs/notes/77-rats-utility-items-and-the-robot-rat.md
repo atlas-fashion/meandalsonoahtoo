@@ -141,4 +141,5 @@ player too.)
   failed.
 - **Amended again (2026-10-18, the user): a robot rat costs 1 gold crystal
   (CRAFT_COST, was 3) and its blast does 200 (BLAST_DAMAGE, was 100)** -- to
-  the player too, so standing in it is death at any armor short of level 26.
+  the player too, so standing in it is death at any armor (level 10, the
+  most, takes 36% off: 128).
