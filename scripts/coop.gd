@@ -32,6 +32,11 @@ var active := false
 var players: Array[Node] = []
 ## split_screen.gd, while one is up.
 var split: Node = null
+## TWO MONITORS (the title's Co-op page): player 2 in a window of their own
+## on monitor `second_screen` instead of the right half of the game's window.
+## Kept for the session; ignored with only one monitor.
+var two_screens := false
+var second_screen := 1
 
 ## An InputEventAction a test builds for player 2 carries this device.
 const ACTION_DEVICE_P2 := 99

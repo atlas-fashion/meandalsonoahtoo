@@ -41,6 +41,7 @@ var _title: Label
 var _music: AudioStreamPlayer
 var _coop: Control
 var _coop_status: Label
+var _screen_button: Button
 var _slots_head: Label
 
 
@@ -50,6 +51,13 @@ func _ready() -> void:
 	# `--sandbox` or `--skip-title`, straight in.
 	if args.has("--coop"):
 		Coop.start()
+	# `--coop-monitors`: player 2 on another monitor (the first that is not
+	# this window's).
+	if args.has("--coop-monitors"):
+		var others := _other_screens()
+		if not others.is_empty():
+			Coop.two_screens = true
+			Coop.second_screen = others[0]
 	# `-- --sandbox`: straight into the sandbox (sandbox.gd).
 	if args.has("--sandbox"):
 		Sandbox.start.call_deferred()
@@ -259,6 +267,10 @@ func _build() -> void:
 	cbox.add_child(SettingsPanel.spacer(6))
 	_coop_status = SettingsPanel.dim_label("")
 	cbox.add_child(_coop_status)
+	# Where player 2 plays: the right half, or a monitor of their own.
+	_screen_button = SettingsPanel.menu_button("", _cycle_screen)
+	cbox.add_child(_screen_button)
+	_label_screen()
 	cbox.add_child(SettingsPanel.spacer(6))
 	cbox.add_child(SettingsPanel.menu_button("Play together", func() -> void:
 		if _pad_ready():
@@ -445,3 +457,42 @@ func _descend() -> void:
 	# One frame drawn fully black before the level's build stalls the window.
 	await get_tree().process_frame
 	await get_tree().process_frame
+
+
+## Every monitor but the one this window is on.
+func _other_screens() -> Array[int]:
+	var out: Array[int] = []
+	var here := DisplayServer.window_get_current_screen()
+	for s in DisplayServer.get_screen_count():
+		if s != here:
+			out.append(s)
+	return out
+
+
+## Split screen -> player 2 on each other monitor in turn -> split screen.
+func _cycle_screen() -> void:
+	var others := _other_screens()
+	if others.is_empty():
+		return
+	var choices: Array[int] = [-1]
+	choices.append_array(others)
+	var now := Coop.second_screen if Coop.two_screens else -1
+	var next: int = choices[(choices.find(now) + 1) % choices.size()]
+	Coop.two_screens = next >= 0
+	if next >= 0:
+		Coop.second_screen = next
+	_label_screen()
+
+
+func _label_screen() -> void:
+	if _screen_button == null:
+		return
+	var others := _other_screens()
+	if others.is_empty():
+		_screen_button.text = "Screen: split (one monitor found)"
+		_screen_button.disabled = true
+	elif Coop.two_screens and others.has(Coop.second_screen):
+		_screen_button.text = "Screen: player 2 on monitor %d" % (Coop.second_screen + 1)
+	else:
+		Coop.two_screens = false
+		_screen_button.text = "Screen: split screen"

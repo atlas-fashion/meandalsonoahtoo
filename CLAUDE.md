@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 79), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 80), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -258,8 +258,8 @@ rebuild and re-run `tools/verify_modules.py`.
 `scripts/maze.gd`), Player (`player.gd`), Player2, HUD (`hud.gd`), HUD2, Benchmark
 (`tools/benchmark.gd`, idle without `--bench`), PauseMenu, SplitScreen
 (`split_screen.gd`). Player2, HUD2 and SplitScreen take themselves away
-outside CO-OP (note 79; `-- --coop`). `--bench` or `--skip-title` skips the
-title. Autoloads: `Coop` (`coop.gd`: the players, whose input an event is,
+outside CO-OP (note 79; `-- --coop`; with `--coop-monitors` player 2 plays
+on another monitor, note 80). `--bench` or `--skip-title` skips the title. Autoloads: `Coop` (`coop.gd`: the players, whose input an event is,
 polled input per player), `Graphics` (`graphics_settings.gd`), `Saves`
 (`save_system.gd`), `Pad` (`pad.gd`), `Sandbox` (`sandbox.gd`).
 
@@ -461,6 +461,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 77 | 2026-10-18 | Rats: utility items, live rats thrown, the robot rat | [docs/notes/77-rats-utility-items-and-the-robot-rat.md](docs/notes/77-rats-utility-items-and-the-robot-rat.md) |
 | 78 | 2026-10-18 | The Tripo rat, animated, and held by the tail | [docs/notes/78-the-tripo-rat-animated-and-held-by-the-tail.md](docs/notes/78-the-tripo-rat-animated-and-held-by-the-tail.md) |
 | 79 | 2026-10-18 | Local co-op split-screen | [docs/notes/79-local-co-op-split-screen.md](docs/notes/79-local-co-op-split-screen.md) |
+| 80 | 2026-10-18 | Co-op: what its frame time costs, the torch share, two monitors | [docs/notes/80-co-op-cost-cuts-and-two-monitors.md](docs/notes/80-co-op-cost-cuts-and-two-monitors.md) |
 
 ## Notes by source file
 
@@ -482,7 +483,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27
 - `scripts/chest.gd`: 18, 79
-- `scripts/coop.gd`: 79
+- `scripts/coop.gd`: 79, 80
 - `scripts/coop_avatar.gd`: 79
 - `scripts/convoy.gd`: 23, 28, 79
 - `scripts/crier.gd`: 43, 48, 60, 77, 79
@@ -498,7 +499,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
-- `scripts/graphics_settings.gd`: 79
+- `scripts/graphics_settings.gd`: 79, 80
 - `scripts/hand_torch.gd`: 24, 29
 - `scripts/held_potion.gd`: 6.19
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
@@ -517,7 +518,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79
-- `scripts/pad.gd`: 26, 30, 44, 79
+- `scripts/pad.gd`: 26, 30, 44, 79, 80
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
@@ -535,9 +536,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77
 - `scripts/sandbox_world.gd`: 60, 77, 79
-- `scripts/settings_panel.gd`: 19, 46
+- `scripts/settings_panel.gd`: 19, 46, 80
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79
-- `scripts/split_screen.gd`: 79
+- `scripts/split_screen.gd`: 79, 80
 - `scripts/sewer_lizard.gd`: 58, 60
 - `scripts/shard_door.gd`: 18, 79
 - `scripts/shield_hitbox.gd`: 68, 69
@@ -546,8 +547,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
-- `scripts/title_screen.gd`: 19, 60, 76, 79
-- `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79
+- `scripts/title_screen.gd`: 19, 60, 76, 79, 80
+- `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
 - `scripts/wood_door.gd`: 6.18, 79
 - `scripts/workbench.gd`: 32, 77, 79
 - `shaders/blood_screen.gdshader`: 15

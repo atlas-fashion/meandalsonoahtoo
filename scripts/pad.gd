@@ -84,6 +84,23 @@ func _input(event: InputEvent) -> void:
 
 # --- The cursor --------------------------------------------------------------------
 
+## Two-monitor co-op (split_screen.gd): the cursor lives in player 2's own
+## window -- drawn there, kept to it, and its clicks and moves handed straight
+## to it (it never has the focus to get them otherwise). null: this window.
+var _target: Viewport = null
+
+
+func use_viewport(vp: Viewport) -> void:
+	_target = vp
+	var home: Node = vp if vp != null else self
+	if _cursor_layer.get_parent() != home:
+		_cursor_layer.reparent(home, false)
+
+
+func _vp() -> Viewport:
+	return _target if _target != null and is_instance_valid(_target) else get_viewport()
+
+
 ## A screen that wants the pad cursor while it is open. `click`: whether A is
 ## the left mouse button for it (the inventory works A itself, on the slot the
 ## cursor highlights, so it asks for no clicks).
@@ -97,9 +114,13 @@ func want_cursor(owner: Object, on: bool, click := true) -> void:
 		if _cursor_owners.is_empty():
 			# Start where the real pointer is, so nothing jumps -- co-op, in the
 			# middle of player 2's half.
-			var r := get_viewport().get_visible_rect()
-			cursor_pos = Vector2(r.position.x + r.size.x * 0.75, r.position.y + r.size.y * 0.5) if Coop.active \
-				else get_viewport().get_mouse_position()
+			var r := _vp().get_visible_rect()
+			if _vp() != get_viewport():
+				cursor_pos = r.get_center()
+			elif Coop.active:
+				cursor_pos = Vector2(r.position.x + r.size.x * 0.75, r.position.y + r.size.y * 0.5)
+			else:
+				cursor_pos = get_viewport().get_mouse_position()
 		_cursor_owners[owner] = click
 	else:
 		_cursor_owners.erase(owner)
@@ -144,9 +165,9 @@ func _process(delta: float) -> void:
 	else:
 		v = v.limit_length(1.0)
 	if v != Vector2.ZERO:
-		var rect := get_viewport().get_visible_rect()
-		# Co-op: kept on the right half, player 2's.
-		if Coop.active:
+		var rect := _vp().get_visible_rect()
+		# Co-op: kept on the right half, player 2's (or in their own window).
+		if Coop.active and _vp() == get_viewport():
 			rect = Rect2(rect.position + Vector2(rect.size.x * 0.5, 0.0), Vector2(rect.size.x * 0.5, rect.size.y))
 		cursor_pos = (cursor_pos + v * v.length() * CURSOR_SPEED * delta).clamp(rect.position, rect.end - Vector2(2, 2))
 		_send_motion(v * v.length() * CURSOR_SPEED * delta)
@@ -168,7 +189,7 @@ func _release_a() -> void:
 ## Canvas (viewport) coordinates to the window's, which is what a mouse event
 ## carries in (the stretch is undone on the way in).
 func _window_pos(p: Vector2) -> Vector2:
-	return get_viewport().get_final_transform() * p
+	return _vp().get_final_transform() * p
 
 
 func _send_motion(rel: Vector2) -> void:
@@ -178,7 +199,7 @@ func _send_motion(rel: Vector2) -> void:
 	ev.global_position = ev.position
 	ev.relative = rel
 	ev.button_mask = MOUSE_BUTTON_MASK_LEFT if _a_down else 0
-	Input.parse_input_event(ev)
+	_deliver(ev)
 
 
 func _send_button(down: bool) -> void:
@@ -189,7 +210,14 @@ func _send_button(down: bool) -> void:
 	ev.position = _window_pos(cursor_pos)
 	ev.global_position = ev.position
 	ev.button_mask = MOUSE_BUTTON_MASK_LEFT if down else 0
-	Input.parse_input_event(ev)
+	_deliver(ev)
+
+
+func _deliver(ev: InputEvent) -> void:
+	if _vp() != get_viewport():
+		_vp().push_input(ev)
+	else:
+		Input.parse_input_event(ev)
 
 
 func _draw_arrow() -> void:

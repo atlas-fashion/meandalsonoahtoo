@@ -268,7 +268,11 @@ func _process(delta: float) -> void:
 		var points := _camera_points()
 		var gfx := get_node_or_null("/root/Graphics")
 		if not points.is_empty():
-			_rank(points, int(gfx.get("torch_lights")) if gfx != null else 12)
+			var budget := float(gfx.get("torch_lights")) if gfx != null else 12.0
+			# Co-op: its own share (graphics_settings.gd `coop_torch_share`).
+			if Coop.active and gfx != null:
+				budget = maxf(4.0, roundf(budget * float(gfx.get("coop_torch_share"))))
+			_rank(points, int(budget))
 	if (Engine.get_process_frames() + _cull_phase) % CULL_PERIOD == 0:
 		var points := _camera_points()
 		if points.is_empty():

@@ -38,7 +38,7 @@ const CANVAS_WIDTH := 1280
 const ROBOT_SELF := 1 << 19
 
 var _layer: CanvasLayer
-var _views: Array[SubViewport] = []
+var _views: Array[Viewport] = []
 var _containers: Array[HalfContainer] = []
 var _cameras: Array[Camera3D] = []
 var _envs: Array[Environment] = []
@@ -79,6 +79,10 @@ func _exit_tree() -> void:
 		root.disable_3d = false
 	if RenderingServer.frame_pre_draw.is_connected(_follow):
 		RenderingServer.frame_pre_draw.disconnect(_follow)
+	if _window != null:
+		Pad.call("use_viewport", null)
+		if root != null:
+			root.gui_embed_subwindows = true
 
 
 func _build() -> void:
@@ -93,27 +97,37 @@ func _build() -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_layer.add_child(row)
 	var world_env := get_tree().get_first_node_in_group(&"world_environment") as WorldEnvironment
+	# TWO MONITORS (Coop.two_screens, and another monitor there): player 1's
+	# view fills the game's window, player 2's is a window of its own on
+	# `Coop.second_screen`.
+	var two := Coop.two_screens and DisplayServer.get_screen_count() > 1
 	for i in 2:
-		if i == 1:
-			var line := ColorRect.new()
-			line.color = Color(0.0, 0.0, 0.0)
-			line.custom_minimum_size = Vector2(DIVIDER, 0)
-			line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			row.add_child(line)
-		var box := HalfContainer.new()
-		box.index = i
-		box.name = "Half%d" % (i + 1)
-		box.stretch = true
-		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		box.mouse_filter = Control.MOUSE_FILTER_PASS
-		row.add_child(box)
-		var vp := SubViewport.new()
-		vp.name = "View%d" % (i + 1)
-		vp.world_3d = root.world_3d
-		vp.handle_input_locally = true
-		vp.audio_listener_enable_3d = i == 0
-		box.add_child(vp)
+		var vp: Viewport
+		if i == 1 and two:
+			vp = _second_window(root)
+		else:
+			if i == 1:
+				var line := ColorRect.new()
+				line.color = Color(0.0, 0.0, 0.0)
+				line.custom_minimum_size = Vector2(DIVIDER, 0)
+				line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				row.add_child(line)
+			var box := HalfContainer.new()
+			box.index = i
+			box.name = "Half%d" % (i + 1)
+			box.stretch = true
+			box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			box.mouse_filter = Control.MOUSE_FILTER_PASS
+			row.add_child(box)
+			var sub := SubViewport.new()
+			sub.name = "View%d" % (i + 1)
+			sub.world_3d = root.world_3d
+			sub.handle_input_locally = true
+			sub.audio_listener_enable_3d = i == 0
+			box.add_child(sub)
+			_containers.append(box)
+			vp = sub
 		var cam := Camera3D.new()
 		cam.name = "Eyes%d" % (i + 1)
 		vp.add_child(cam)
@@ -122,7 +136,6 @@ func _build() -> void:
 		if world_env != null and world_env.environment != null:
 			env = world_env.environment.duplicate() as Environment
 			cam.environment = env
-		_containers.append(box)
 		_views.append(vp)
 		_cameras.append(cam)
 		_envs.append(env)
@@ -135,7 +148,48 @@ func _build() -> void:
 	RenderingServer.frame_pre_draw.connect(_follow)
 	for p in Coop.all():
 		p.call("use_view_environment", _envs[Coop.index_of(p)])
+	if _window != null:
+		# The pad cursor (player 2's) works in their window.
+		Pad.call("use_viewport", _window)
 	Graphics.apply_all.call_deferred()
+
+
+## Player 2's own window, borderless and covering `Coop.second_screen`: a
+## real window of the OS (the root stops embedding its subwindows), on the
+## level's World3D, its 2D canvas stretched from 1280 x 720 as the game's
+## window is. It never takes focus -- the keyboard and the mouse stay with
+## player 1 in the game's window. Player 2's controller still reaches it:
+## Godot hands events that belong to no window (joypad buttons and sticks,
+## actions) to every window -- passing them in by hand as well delivered each
+## twice (an inventory opened and shut). The pad cursor's made-up mouse is
+## pushed in by pad.gd.
+var _window: Window = null
+
+
+func _second_window(root: Window) -> Window:
+	root.gui_embed_subwindows = false
+	var screen := clampi(Coop.second_screen, 0, DisplayServer.get_screen_count() - 1)
+	var w := Window.new()
+	w.name = "Player2Window"
+	w.title = "Player 2"
+	w.borderless = true
+	w.unfocusable = true
+	w.transient = false
+	w.world_3d = root.world_3d
+	w.audio_listener_enable_3d = false
+	w.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	w.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	w.content_scale_size = Vector2i(1280, 720)
+	w.position = DisplayServer.screen_get_position(screen)
+	w.size = DisplayServer.screen_get_size(screen)
+	add_child(w)
+	w.show()
+	_window = w
+	return w
+
+
+func two_windows() -> bool:
+	return _window != null
 
 
 ## Each HUD, and each explore map (maze.gd makes one a player), into its
@@ -171,7 +225,11 @@ func _apply_layers() -> void:
 
 
 func resized() -> void:
-	for vp in _views:
+	for v in _views:
+		# Only the halves: a window of its own stretches its canvas itself.
+		var vp := v as SubViewport
+		if vp == null:
+			continue
 		var s := vp.size
 		if s.x <= 0 or s.y <= 0:
 			continue
@@ -219,7 +277,7 @@ func _follow() -> void:
 			cam.attributes = src.attributes
 
 
-func view_of(p: Node) -> SubViewport:
+func view_of(p: Node) -> Viewport:
 	var i := Coop.index_of(p)
 	return _views[i] if i < _views.size() else null
 
