@@ -37,7 +37,7 @@ const THROW_EVERY := 0.6
 
 ## The robot rat.
 const FUSE := 10.0
-const BLAST_DAMAGE := 100.0
+const BLAST_DAMAGE := 200.0
 const BLAST_RADIUS := 4.0
 const BLAST_PUSH := 12.0
 const BLAST_STAGGER := 1.0
@@ -45,7 +45,7 @@ const BLAST_STAGGER := 1.0
 const PLAYER_RADIUS := 0.4
 const PLAYER_HEIGHT := 1.8
 ## Gold crystals, with one live rat, at the workbench (workbench.gd).
-const CRAFT_COST := 3
+const CRAFT_COST := 1
 ## Set down this far ahead of the feet (less if stone is nearer).
 const PLACE_AHEAD := 1.1
 ## Fallen this far below where it was set down: lost, so it goes off.

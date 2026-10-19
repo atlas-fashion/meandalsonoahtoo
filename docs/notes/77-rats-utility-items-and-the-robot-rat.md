@@ -139,3 +139,6 @@ player too.)
   god mode, nothing; three set down back to back; driven 7.2 m off, untouched;
   armor 6, took 80. Re-broken (the player's blast off): both damage checks
   failed.
+- **Amended again (2026-10-18, the user): a robot rat costs 1 gold crystal
+  (CRAFT_COST, was 3) and its blast does 200 (BLAST_DAMAGE, was 100)** -- to
+  the player too, so standing in it is death at any armor short of level 26.

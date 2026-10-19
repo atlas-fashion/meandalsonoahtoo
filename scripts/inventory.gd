@@ -106,7 +106,7 @@ const ITEMS := {
 		"quote": "Even the dead do not like rats."},
 	&"robot_rat": {"name": "Robot Rat", "stack": 3, "color": Color(0.0, 0.91, 1.0),
 		"kind": "Utility", "wheel": "weapon",
-		"desc": "A rat worked over at the workbench: iron ribs, a gold crystal for a heart, an enforcer's eyes. Set it down and see through those eyes; it goes off for 100 when told to, or on its own after ten seconds.",
+		"desc": "A rat worked over at the workbench: iron ribs, a gold crystal for a heart, an enforcer's eyes. Set it down and see through those eyes; it goes off for 200 when told to, or on its own after ten seconds.",
 		"quote": "It still twitches its whiskers. Nobody knows why."},
 }
 
