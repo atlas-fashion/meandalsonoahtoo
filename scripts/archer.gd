@@ -250,13 +250,13 @@ func _move_to_goal(delta: float, now: float, flat: Vector3) -> void:
 	var speed := move_speed * (0.85 if _goal_kind == &"retreat" else 1.0)
 	velocity.x = move_toward(velocity.x, dir.x * speed, acceleration * delta)
 	velocity.z = move_toward(velocity.z, dir.z * speed, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 func _stop(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 	velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 ## A clear line from its eyes to the player's chest through stone. Its fellows

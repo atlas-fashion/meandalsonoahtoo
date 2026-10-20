@@ -313,7 +313,7 @@ func _walk_to(delta: float, now: float, goal: Vector3, speed: float) -> void:
 				dir = step.normalized()
 	velocity.x = move_toward(velocity.x, dir.x * speed, acceleration * delta)
 	velocity.z = move_toward(velocity.z, dir.z * speed, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 func _face_velocity(fallback: Vector3) -> void:
@@ -324,7 +324,7 @@ func _face_velocity(fallback: Vector3) -> void:
 func _hold(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 	velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 func _clear_to(player: Node3D) -> bool:

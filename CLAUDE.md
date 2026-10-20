@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 91), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 92), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -474,6 +474,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 89 | 2026-10-20 | Berserk heals 7 a second | [docs/notes/89-berserk-heals.md](docs/notes/89-berserk-heals.md) |
 | 90 | 2026-10-20 | A little slower carrying the axe | [docs/notes/90-axe-carry-slower.md](docs/notes/90-axe-carry-slower.md) |
 | 91 | 2026-10-20 | Berserk as fast as ghost mode | [docs/notes/91-berserk-at-ghost-speed.md](docs/notes/91-berserk-at-ghost-speed.md) |
+| 92 | 2026-10-20 | No sticking to corners: move_and_slide plus a slip round arch legs and pillars | [docs/notes/92-no-sticking-to-corners.md](docs/notes/92-no-sticking-to-corners.md) |
 
 ## Notes by source file
 
@@ -488,7 +489,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scenes/player.tscn`: 9
 - `scenes/title.tscn`: 19
 - `scenes/torch.tscn`: 6.15, 6.18, 7, 19, 24, 27, 46
-- `scripts/archer.gd`: 20, 77
+- `scripts/archer.gd`: 20, 77, 92
 - `scripts/arrow.gd`: 20, 79
 - `scripts/attack_icons.gd`: 24, 77, 79, 84
 - `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91
@@ -497,17 +498,18 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/brick_level.gd`: 27
 - `scripts/chest.gd`: 18, 79
 - `scripts/coop.gd`: 79, 80
+- `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79
 - `scripts/convoy.gd`: 23, 28, 79
 - `scripts/crier.gd`: 43, 48, 60, 77, 79
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24, 79
-- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79
+- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92
 - `scripts/enemy_health_bar.gd`: 6.19
-- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75
+- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82
 - `scripts/gate.gd`: 6.18
@@ -535,7 +537,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92
 - `scripts/portcullis.gd`: 6.18
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
@@ -552,7 +554,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/settings_panel.gd`: 19, 46, 80
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79
 - `scripts/split_screen.gd`: 79, 80, 82
-- `scripts/sewer_lizard.gd`: 58, 60
+- `scripts/sewer_lizard.gd`: 58, 60, 92
 - `scripts/shard_door.gd`: 18, 79
 - `scripts/shield_hitbox.gd`: 68, 69
 - `scripts/skeleton_eyes.gd`: 13

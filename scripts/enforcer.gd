@@ -658,7 +658,7 @@ func _run_swipe(delta: float, player: Node3D, flat: Vector3) -> void:
 		var step := -global_basis.z * fwd
 		velocity.x = step.x / delta
 		velocity.z = step.z / delta
-		move_and_slide()
+		_slide()
 		velocity.x = 0.0
 		velocity.z = 0.0
 	else:
@@ -1082,7 +1082,7 @@ func _walk_to(delta: float, now: float, goal: Vector3, speed: float) -> void:
 	var dir := _path_dir(now, goal)
 	velocity.x = move_toward(velocity.x, dir.x * speed, acceleration * delta)
 	velocity.z = move_toward(velocity.z, dir.z * speed, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 ## The way to go for `goal`: the next corner of the navmesh path, or straight.
@@ -1143,7 +1143,7 @@ static func _turn_toward(from: Vector3, to: Vector3, max_angle: float) -> Vector
 func _hold(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 	velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 ## A clear line from the muzzle to the player's chest through stone. Its

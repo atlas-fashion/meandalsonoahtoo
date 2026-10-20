@@ -826,7 +826,7 @@ func _walk_to(delta: float, now: float, goal: Vector3, speed: float) -> void:
 	var dir := _path_dir(now, goal)
 	velocity.x = move_toward(velocity.x, dir.x * speed, acceleration * delta)
 	velocity.z = move_toward(velocity.z, dir.z * speed, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 func _path_dir(now: float, goal: Vector3) -> Vector3:
@@ -853,7 +853,7 @@ func _face_velocity(fallback: Vector3) -> void:
 func _hold(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 	velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 ## A clear line through stone from its body to the player's, at `height`.
@@ -1071,7 +1071,7 @@ func _run_move(delta: float, _now_t: float) -> void:
 	_carry = _carry.move_toward(Vector3.ZERO, CARRY_DECEL * delta)
 	velocity.x = step.x / delta
 	velocity.z = step.z / delta
-	move_and_slide()
+	_slide()
 	var rv := get_real_velocity()
 	_move_vel = Vector3(rv.x, 0.0, rv.z)
 	velocity.x = 0.0

@@ -664,6 +664,7 @@ func knock(body: Node, impulse: Vector3, stun: float, chance: float) -> bool:
 ## the court's ledges are reached. Shallower, they wade at `wade_speed_scale`.
 
 const SWIM_FLOAT := 0.95
+const CornerSlip := preload("res://scripts/corner_slip.gd")
 @export var swim_speed_scale := 0.55
 @export var wade_speed_scale := 0.7
 ## Set by whatever the player is carrying (a body to the weighing room's
@@ -1933,7 +1934,9 @@ func _physics_process(delta: float) -> void:
 	# zero it against the floor.
 	var pre_move_fall_speed := -velocity.y
 
-	move_and_slide()
+	# move_and_slide, and a slip round any corner or arch leg it would stick
+	# on (corner_slip.gd, note 92).
+	CornerSlip.slide(self)
 	_update_locomotion()
 
 	if is_on_floor() and not was_grounded:

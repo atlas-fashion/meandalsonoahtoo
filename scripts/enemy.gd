@@ -434,7 +434,7 @@ func _physics_process(delta: float) -> void:
 	if _dying:
 		velocity.x = 0.0
 		velocity.z = 0.0
-		move_and_slide()
+		_slide()
 		return
 
 	# Hauling a convoy's cart (convoy.gd): no AI and no physics of its own -- the
@@ -495,7 +495,7 @@ func _physics_process(delta: float) -> void:
 
 	var player := _resolve_player()
 	if player == null:
-		move_and_slide()
+		_slide()
 		return
 	if _target_radius < 0.0:
 		_target_radius = _radius_of(player)
@@ -556,7 +556,7 @@ func _physics_process(delta: float) -> void:
 			_face(flat)
 			velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 			velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-			move_and_slide()
+			_slide()
 			if now >= _state_until:
 				_enter_attack(flat)
 			return
@@ -571,7 +571,7 @@ func _physics_process(delta: float) -> void:
 			_face(flat)
 			velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 			velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-			move_and_slide()
+			_slide()
 			if now >= _state_until:
 				_enter_chase()
 			return
@@ -590,13 +590,13 @@ func _physics_process(delta: float) -> void:
 		var stroll := _wander(delta, now)
 		velocity.x = move_toward(velocity.x, stroll.x, acceleration * delta)
 		velocity.z = move_toward(velocity.z, stroll.z, acceleration * delta)
-		move_and_slide()
+		_slide()
 		return
 
 	if returning and distance < 0.8:
 		velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 		velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-		move_and_slide()
+		_slide()
 		return
 
 	if _retreating and not returning and out_of_reach:
@@ -609,7 +609,7 @@ func _physics_process(delta: float) -> void:
 		var amble := _wander(delta, now)
 		velocity.x = move_toward(velocity.x, amble.x, acceleration * delta)
 		velocity.z = move_toward(velocity.z, amble.z, acceleration * delta)
-		move_and_slide()
+		_slide()
 		return
 
 	# Losing the target mid-amble: drop the stroll and hunt.
@@ -643,7 +643,7 @@ func _physics_process(delta: float) -> void:
 		desired = pursue * move_speed
 	velocity.x = move_toward(velocity.x, desired.x, acceleration * delta)
 	velocity.z = move_toward(velocity.z, desired.z, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 	if not returning and gap <= attack_trigger_range and now >= _next_attack_allowed:
 		var choice := _pick_attack(gap, now)
@@ -793,7 +793,7 @@ func _run_retreat(delta: float, now: float) -> void:
 		_retreating = false
 		velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 		velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-		move_and_slide()
+		_slide()
 		return
 	var heading := to.normalized()
 	if agent != null:
@@ -809,7 +809,16 @@ func _run_retreat(delta: float, now: float) -> void:
 	var speed := move_speed * retreat_speed_scale
 	velocity.x = move_toward(velocity.x, heading.x * speed, acceleration * delta)
 	velocity.z = move_toward(velocity.z, heading.z * speed, acceleration * delta)
-	move_and_slide()
+	_slide()
+
+
+## Every move goes through here: move_and_slide, then a slip round any corner
+## or arch leg it would otherwise stick on (corner_slip.gd, note 92).
+const CornerSlip := preload("res://scripts/corner_slip.gd")
+
+
+func _slide() -> void:
+	CornerSlip.slide(self)
 
 
 static func _flat_gap(a: Vector3, b: Vector3) -> float:
@@ -867,7 +876,7 @@ func _run_scared(delta: float, now: float) -> void:
 	if to.length() < 1.0:
 		velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 		velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-		move_and_slide()
+		_slide()
 		return
 	var heading := to.normalized()
 	if agent != null:
@@ -882,7 +891,7 @@ func _run_scared(delta: float, now: float) -> void:
 	_face(heading)
 	velocity.x = move_toward(velocity.x, heading.x * move_speed, acceleration * delta)
 	velocity.z = move_toward(velocity.z, heading.z * move_speed, acceleration * delta)
-	move_and_slide()
+	_slide()
 
 
 ## Can it see the player right now? Range, then the cone, then the wall check --
@@ -1096,7 +1105,7 @@ func _run_attack(delta: float, player: Node3D, gap: float) -> void:
 			_:
 				velocity.x = _attack_direction.x * slam_speed
 				velocity.z = _attack_direction.z * slam_speed
-		move_and_slide()
+		_slide()
 		_sword_connect(player)
 		return
 	match attack_kind:
@@ -1106,7 +1115,7 @@ func _run_attack(delta: float, player: Node3D, gap: float) -> void:
 			# land while the enemy is already pressed up against you.
 			velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 			velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
-			move_and_slide()
+			_slide()
 			_try_connect(player, gap, normal_range)
 
 		Attack.SPIN:
@@ -1115,19 +1124,19 @@ func _run_attack(delta: float, player: Node3D, gap: float) -> void:
 			velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
 			if spin_duration > 0.0:
 				rotation.y += TAU * spin_turns * delta / spin_duration
-			move_and_slide()
+			_slide()
 			_try_connect(player, gap, spin_range)
 
 		Attack.LUNGE:
 			velocity.x = _attack_direction.x * lunge_speed
 			velocity.z = _attack_direction.z * lunge_speed
-			move_and_slide()
+			_slide()
 			_try_connect(player, gap, lunge_range, lunge_speed)
 
 		_:
 			velocity.x = _attack_direction.x * slam_speed
 			velocity.z = _attack_direction.z * slam_speed
-			move_and_slide()
+			_slide()
 			_try_connect(player, gap, slam_range, slam_speed)
 
 
@@ -1546,7 +1555,7 @@ const THROWN_MASK := 256
 func _thrown_move() -> void:
 	var mask := collision_mask
 	collision_mask = mask | THROWN_MASK
-	move_and_slide()
+	_slide()
 	collision_mask = mask
 
 
@@ -1694,7 +1703,7 @@ func _run_summon(delta: float, now: float) -> void:
 			_face(heading)
 			velocity.x = move_toward(velocity.x, heading.x * move_speed, acceleration * delta)
 			velocity.z = move_toward(velocity.z, heading.z * move_speed, acceleration * delta)
-			move_and_slide()
+			_slide()
 			return
 
 		# Arrived: plant and lift it.
@@ -1711,7 +1720,7 @@ func _run_summon(delta: float, now: float) -> void:
 		var at := player.global_position - global_position
 		at.y = 0.0
 		_face(at)
-	move_and_slide()
+	_slide()
 
 	if now >= _state_until:
 		summoned.emit(_summon_index)
