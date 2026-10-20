@@ -353,6 +353,23 @@ const DIRECTIONS := {
 ## Of those packs of four or more that brought one, how many bring a second.
 @export_range(0.0, 1.0) var second_archer_share := 0.45
 const ARCHER_SCRIPT := preload("res://scripts/archer.gd")
+## The skeleton types (prosthetic.gd, note 93; the "archer" above is the
+## crossbow hand). Of the packs that have someone to guard -- three or more, or
+## two with a crossbowman -- how many are led by a SHIELD skeleton; and of the
+## rest of every pack (and the jail cells' stock), how many carry the HAMMER
+## rather than the SWORD hand. Drill hands are the mine's (dungeon_room.gd).
+@export_range(0.0, 1.0) var shield_share := 0.6
+@export_range(0.0, 1.0) var hammer_share := 0.35
+const PROSTHETIC := preload("res://scripts/prosthetic.gd")
+## Its own stream, so the types' rolls leave every other spawn where it was.
+var _hand_rng := RandomNumberGenerator.new()
+
+
+## A sword or a hammer hand, by `hammer_share`.
+func _melee_hand() -> StringName:
+	return &"hammer" if _hand_rng.randf() < hammer_share else &"blade"
+
+
 ## Skeleton packs in the corridors are always on the move (patrol.gd): the
 ## column walks routes between corridor points, the enforcer at its back.
 @export var patrols := true
@@ -3736,7 +3753,7 @@ func _stock_jail_cells() -> void:
 	if enemy_scene == null:
 		return
 	for index in cell_spots.size():
-		var skeleton := enemy_scene.instantiate() as Node3D
+		var skeleton := PROSTHETIC.make(enemy_scene, _melee_hand()) as Node3D
 		skeleton.position = cell_spots[index]
 		skeleton.rotation.y = cell_facing[index]
 		add_child(skeleton)
@@ -4236,6 +4253,7 @@ func _populate() -> void:
 	_note_spawn_eye()
 	# Reseed so a reset reproduces the same population rather than drifting.
 	_rng.seed = _active_seed
+	_hand_rng.seed = hash(_active_seed + 4111)
 	_spawn_boss()
 	_stock_jail_cells()
 	_spawn_enemies()
@@ -4448,6 +4466,9 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 		archers.append(count - 1)
 		if count >= 4 and _rng.randf() < second_archer_share:
 			archers.append(count - 2)
+	# A shield at the head of a pack with someone to guard.
+	var shield := not flying and (count >= 3 or (count >= 2 and not archers.is_empty())) \
+		and _hand_rng.randf() < shield_share
 	var leader: Node3D = null
 	var members: Array[Node3D] = []
 	for i in count:
@@ -4458,6 +4479,10 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 		if i in archers:
 			# Before it enters the tree: its numbers are set in its _init.
 			enemy.set_script(ARCHER_SCRIPT)
+		elif not flying:
+			# Every other skeleton wears a hand of its own (prosthetic.gd).
+			enemy.set_script(PROSTHETIC)
+			enemy.set("hand", &"shield" if shield and i == 0 else _melee_hand())
 		# Spread inside the tile rather than stacking on its centre: bodies
 		# that spawn exactly overlapping shove each other apart hard enough to
 		# launch the pile.

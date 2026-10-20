@@ -18,11 +18,22 @@ extends "res://scripts/enemy.gd"
 ##   * cornered and touched, it falls back on the ordinary swing (a feeble 8).
 ##
 ## The arms are posed in code while aiming -- the rig has no bow clips: the left
-## arm points along the shot, the right hand draws back to the jaw.
+## arm points along the shot, the right hand steadies the stock.
+##
+## THE CROSSBOW HAND (the user, 2026-10-20; note 93): the bow is gone. The left
+## hand is a crossbow -- the hand bone shrunk into the wrist and the stock strapped
+## to the forearm in an iron cuff, so it points wherever the forearm does: down
+## at its side at rest, along the shot when the arm comes up. It looses a bolt
+## (arrow.gd `bolt`, 18), and after every shot the right hand hauls the string
+## back to the nut over RELOAD s (it cannot aim again until it is cocked). The
+## glow of the bolt's head brightens through the aim, as the arrowhead did.
 
 const ARROW := preload("res://scripts/arrow.gd")
 
-const ARROW_DAMAGE := 15.0
+const ARROW_DAMAGE := 18.0
+## Hauling the string back after a shot: starts this long after, takes this long.
+const RELOAD_DELAY := 0.35
+const RELOAD := 1.3
 const SHOT_MIN := 3.0
 const SHOT_MAX_GAP := 4.5
 const DRAW_TIME := 0.85
@@ -58,8 +69,21 @@ var _string_top: MeshInstance3D
 var _string_bottom: MeshInstance3D
 var _nocked: Node3D
 var _nock_mat: StandardMaterial3D
-const BOW_HALF := 0.52
-const BOW_BEND := 0.17
+## The crossbow, in its own frame: -Z along the shot from the wrist (its
+## origin). The prod (the bow across the front) sits PROD_AT out, its tips
+## PROD_HALF to either side and bent back PROD_BEND; cocked, the string is
+## held at the nut, NUT_AT out.
+const STOCK_TO := 0.56
+const PROD_AT := 0.5
+const PROD_HALF := 0.3
+const PROD_BEND := 0.07
+const NUT_AT := 0.16
+const BOLT_LENGTH := 0.36
+## 0 the string loose at the prod .. 1 held at the nut (a bolt on it).
+var _cock := 1.0
+var _reload_at := -1.0
+## How far the right hand is in its haul on the string.
+var _haul := 0.0
 
 
 func _init() -> void:
@@ -82,7 +106,7 @@ func _init() -> void:
 	walk_anim_speed = 1.45
 	run_anim_speed = 3.56
 	run_anim_threshold = 2.4
-	display_name = "SKELETON ARCHER"
+	display_name = "CROSSBOW SKELETON"
 
 
 func is_archer() -> bool:
@@ -98,6 +122,10 @@ func _ready() -> void:
 		for b in [&"upper_arm.L", &"forearm.L", &"hand.L", &"upper_arm.R", &"forearm.R", &"hand.R",
 				&"head", &"chest", &"spine.02"]:
 			_bones[b] = _sk.find_bone(b)
+		# The left hand is the crossbow: the hand shrinks into the cuff.
+		if int(_bones[&"hand.L"]) >= 0:
+			_sk.set_bone_pose_scale(_bones[&"hand.L"], Vector3.ONE * 0.02)
+	name = "Crossbowman"
 	_build_bow()
 
 
@@ -132,7 +160,7 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 	# overdue: stopping to draw half way there left it standing in the open.
 	var settled := _goal_kind == &"hold" or _goal_kind == &"approach" \
 		or Vector2(_goal.x - global_position.x, _goal.z - global_position.z).length() < 1.0
-	if _clear and distance <= SHOT_RANGE and now >= _next_shot - DRAW_TIME \
+	if _clear and distance <= SHOT_RANGE and now >= _next_shot - DRAW_TIME and _cock >= 1.0 \
 			and (settled or now >= _next_shot + 1.5):
 		_drawing = true
 		_release_at = now + DRAW_TIME
@@ -153,7 +181,10 @@ func _release(now: float) -> void:
 	_draw = 0.0
 	_next_shot = now + randf_range(SHOT_MIN, SHOT_MAX_GAP)
 	var from := _nocked.global_position if _nocked != null else global_position + Vector3(0.0, 1.4, 0.0)
-	ARROW.fire(get_parent(), from, _aim_point, self, ARROW_DAMAGE)
+	ARROW.fire(get_parent(), from, _aim_point, self, ARROW_DAMAGE, true)
+	# The string snaps forward; it is hauled back again in a moment.
+	_cock = 0.0
+	_reload_at = now + RELOAD_DELAY
 
 
 ## Where to be: behind a fellow if there is one to hand, otherwise further off
@@ -267,148 +298,170 @@ func _line_to(player: Node3D) -> bool:
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
 
 
-# --- The bow and the aiming pose -------------------------------------------------------
+# --- The crossbow and the aiming pose -------------------------------------------------
 
 func _physics_process(delta: float) -> void:
 	super(delta)
 	if _dying:
 		return
+	var now := _now()
 	var aiming := _drawing or (state == State.CHASE and engaged and _clear and _next_shot >= 0.0 \
-		and _now() >= _next_shot - DRAW_TIME - 0.6)
+		and now >= _next_shot - DRAW_TIME - 0.6 and _cock >= 1.0)
 	_aim = move_toward(_aim, 1.0 if aiming else 0.0, delta * (5.0 if aiming else 2.5))
 	if not _drawing:
 		_draw = move_toward(_draw, 0.0, delta * 8.0)
+	# Reloading: the right hand goes to the string and hauls it back to the nut.
+	var hauling := _cock < 1.0 and _reload_at >= 0.0 and now >= _reload_at
+	if hauling:
+		_cock = minf(_cock + delta / RELOAD, 1.0)
+		if _cock >= 1.0:
+			_reload_at = -1.0
+	_haul = move_toward(_haul, 1.0 if hauling else 0.0, delta * 5.0)
 	_pose_arms()
 	_place_bow()
 
 
+## The left arm along the shot while aiming, the right hand on the stock behind
+## the crossbow -- or, reloading, on the string, hauling it back to the nut.
 func _pose_arms() -> void:
-	if _sk == null or _aim <= 0.001 or int(_bones.get(&"upper_arm.L", -1)) < 0:
+	if _sk == null or int(_bones.get(&"upper_arm.L", -1)) < 0:
+		return
+	var w := maxf(_aim, _haul)
+	if w <= 0.001:
 		return
 	var to_skel := _sk.global_transform.affine_inverse()
 	var aim_dir := _aim_point - (global_position + Vector3(0.0, 1.4, 0.0))
 	if aim_dir.length_squared() < 0.01:
 		aim_dir = -global_basis.z
 	aim_dir = aim_dir.normalized()
-	var side := aim_dir.cross(Vector3.UP).normalized()
-	# The bow arm, straight out along the shot.
-	_point_bone(_bones[&"upper_arm.L"], to_skel.basis * aim_dir)
-	_point_bone(_bones[&"forearm.L"], to_skel.basis * aim_dir)
-	# The draw arm: the elbow out and back at shoulder height, the hand drawn to
-	# the jaw.
+	# Reloading out of the aim, the crossbow is held level in front.
+	var bow_dir := aim_dir
+	if _haul > 0.0:
+		var level := -global_basis.z
+		level.y = -0.25
+		bow_dir = bow_dir.slerp(level.normalized(), _haul * (1.0 - _aim)).normalized()
+	_point_bone(_bones[&"upper_arm.L"], to_skel.basis * bow_dir, w)
+	_point_bone(_bones[&"forearm.L"], to_skel.basis * bow_dir, w)
+	# The right hand: on the stock behind the prod while aiming; on the string
+	# (wherever it is) while hauling.
+	var wrist := _sk.global_transform * _sk.get_bone_global_pose(_bones[&"hand.L"]).origin
+	var side := bow_dir.cross(Vector3.UP).normalized()
+	var on_stock := wrist + bow_dir * 0.22 - Vector3.UP * 0.05
+	var on_string := wrist + bow_dir * lerpf(PROD_AT - 0.04, NUT_AT, _cock) + Vector3.UP * 0.03
+	var target := on_stock.lerp(on_string, _haul)
 	var shoulder_r := _sk.global_transform * _sk.get_bone_global_pose(_bones[&"upper_arm.R"]).origin
-	var head := _sk.global_transform * _sk.get_bone_global_pose(_bones[&"head"]).origin
-	var jaw := head + aim_dir * 0.12 - Vector3(0.0, 0.1, 0.0) + side * 0.04
-	var elbow_dir := (-aim_dir * 0.7 + side * 0.7).normalized()
-	_point_bone(_bones[&"upper_arm.R"], to_skel.basis * elbow_dir)
+	var elbow_dir := ((target - shoulder_r).normalized() + side * 0.25 + Vector3.DOWN * 0.6).normalized()
+	_point_bone(_bones[&"upper_arm.R"], to_skel.basis * elbow_dir, w)
 	var elbow := _sk.global_transform * _sk.get_bone_global_pose(_bones[&"forearm.R"]).origin
-	_point_bone(_bones[&"forearm.R"], to_skel.basis * (jaw - elbow))
+	_point_bone(_bones[&"forearm.R"], to_skel.basis * (target - elbow), w)
 
 
 ## Turns a bone, in place, so its length (+Y) runs along `dir` (skeleton space),
-## blended by how far the archer is into its aim.
-func _point_bone(bone: int, dir: Vector3) -> void:
+## blended by `w`.
+func _point_bone(bone: int, dir: Vector3, w: float) -> void:
 	if bone < 0 or dir.length_squared() < 1e-6:
 		return
 	var pose := _sk.get_bone_global_pose(bone)
 	var basis := pose.basis.orthonormalized()
 	var turned := Basis(Quaternion(basis.y.normalized(), dir.normalized())) * basis
-	pose.basis = basis.slerp(turned.orthonormalized(), _aim)
+	pose.basis = basis.slerp(turned.orthonormalized(), w)
 	_sk.set_bone_global_pose(bone, pose)
 
 
+## The crossbow, -Z out along the shot from the wrist: the cuff, the stock, the
+## prod across its end and the string (two spans, prod tips to wherever it is
+## held), and the bolt lying on top while it is cocked.
 func _build_bow() -> void:
 	_bow = Node3D.new()
-	_bow.name = "Bow"
+	_bow.name = "Crossbow"
 	add_child(_bow)
 	var wood := StandardMaterial3D.new()
 	wood.albedo_color = Color(0.28, 0.19, 0.12)
 	wood.roughness = 0.85
-	var horn := StandardMaterial3D.new()
-	horn.albedo_color = Color(0.62, 0.58, 0.5)
-	horn.roughness = 0.8
-	# The limbs: an arc from tip to tip, the grip furthest forward (-Z) and the
-	# tips bending back toward the archer.
-	var steps := 10
+	var iron := StandardMaterial3D.new()
+	iron.albedo_color = Color(0.22, 0.2, 0.18)
+	iron.metallic = 0.4
+	iron.roughness = 0.55
+	var leather := StandardMaterial3D.new()
+	leather.albedo_color = Color(0.16, 0.1, 0.06)
+	leather.roughness = 0.9
+	# The cuff round the wrist and its straps.
+	var cuff := _cyl(0.05, 0.045, 0.15, iron)
+	cuff.rotation.x = -PI * 0.5
+	cuff.position.z = -0.03
+	_bow.add_child(cuff)
+	for z: float in [0.02, -0.07]:
+		var strap := _cyl(0.054, 0.054, 0.022, leather)
+		strap.rotation.x = -PI * 0.5
+		strap.position.z = z
+		_bow.add_child(strap)
+	# The stock.
+	var stock := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.05, 0.06, STOCK_TO - 0.08)
+	stock.mesh = box
+	stock.material_override = wood
+	stock.position = Vector3(0.0, 0.0, -(0.08 + STOCK_TO) * 0.5)
+	_bow.add_child(stock)
+	var nut := MeshInstance3D.new()
+	var nb := BoxMesh.new()
+	nb.size = Vector3(0.06, 0.03, 0.04)
+	nut.mesh = nb
+	nut.material_override = iron
+	nut.position = Vector3(0.0, 0.04, -NUT_AT)
+	_bow.add_child(nut)
+	# The prod: an arc of short boxes across the front, the tips bent back.
+	var steps := 8
 	for k in steps:
-		var a := lerpf(-1.0, 1.0, (float(k) + 0.5) / float(steps))
 		var a0 := lerpf(-1.0, 1.0, float(k) / float(steps))
 		var a1 := lerpf(-1.0, 1.0, float(k + 1) / float(steps))
-		var p0 := Vector3(0.0, a0 * BOW_HALF, BOW_BEND * a0 * a0)
-		var p1 := Vector3(0.0, a1 * BOW_HALF, BOW_BEND * a1 * a1)
+		var p0 := Vector3(a0 * PROD_HALF, 0.02, -PROD_AT + PROD_BEND * a0 * a0)
+		var p1 := Vector3(a1 * PROD_HALF, 0.02, -PROD_AT + PROD_BEND * a1 * a1)
 		var seg := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		var thick := 0.035 - 0.015 * absf(a)
-		box.size = Vector3(thick, p0.distance_to(p1) + 0.01, thick * 1.3)
-		seg.mesh = box
-		seg.material_override = wood
+		var limb := BoxMesh.new()
+		var thick := 0.03 - 0.012 * absf((a0 + a1) * 0.5)
+		limb.size = Vector3(p0.distance_to(p1) + 0.008, thick, thick * 1.2)
+		seg.mesh = limb
+		seg.material_override = iron if k == 0 or k == steps - 1 else wood
 		seg.position = (p0 + p1) * 0.5
-		# A turn of a about X takes +Y to (0, cos a, sin a): along the arc.
-		seg.rotation.x = atan2(p1.z - p0.z, p1.y - p0.y)
+		seg.rotation.y = -atan2(p1.z - p0.z, p1.x - p0.x)
 		_bow.add_child(seg)
-	for s: float in [-1.0, 1.0]:
-		var tip := MeshInstance3D.new()
-		var cap := BoxMesh.new()
-		cap.size = Vector3(0.03, 0.06, 0.03)
-		tip.mesh = cap
-		tip.material_override = horn
-		tip.position = Vector3(0.0, s * BOW_HALF, BOW_BEND)
-		_bow.add_child(tip)
 	var string_mat := StandardMaterial3D.new()
 	string_mat.albedo_color = Color(0.75, 0.72, 0.65)
 	_string_top = _thin(string_mat)
 	_string_bottom = _thin(string_mat)
 	_bow.add_child(_string_top)
 	_bow.add_child(_string_bottom)
-	# The arrow on the string, shown while drawing.
+	# The bolt on the stock while it is cocked; its origin is the head.
 	_nocked = Node3D.new()
 	_bow.add_child(_nocked)
-	var shaft := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.008
-	cyl.bottom_radius = 0.008
-	cyl.height = 0.78
-	cyl.radial_segments = 5
-	shaft.mesh = cyl
-	shaft.material_override = wood
+	var shaft := _cyl(0.01, 0.01, BOLT_LENGTH, wood)
 	shaft.rotation.x = PI * 0.5
-	shaft.position.z = 0.39
+	shaft.position.z = BOLT_LENGTH * 0.5
 	_nocked.add_child(shaft)
 	_nock_mat = StandardMaterial3D.new()
 	_nock_mat.albedo_color = Color(0.3, 0.12, 0.05)
 	_nock_mat.emission_enabled = true
 	_nock_mat.emission = Color(1.0, 0.45, 0.15)
-	var head := MeshInstance3D.new()
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0.0
-	cone.bottom_radius = 0.025
-	cone.height = 0.09
-	cone.radial_segments = 6
-	head.mesh = cone
-	head.material_override = _nock_mat
+	var head := _cyl(0.0, 0.022, 0.07, _nock_mat)
 	head.rotation.x = -PI * 0.5
-	head.position.z = -0.03
+	head.position.z = -0.02
 	_nocked.add_child(head)
-	# A quiver on its back, so it is known for an archer before it draws.
-	var quiver := MeshInstance3D.new()
-	var tube := CylinderMesh.new()
-	tube.top_radius = 0.07
-	tube.bottom_radius = 0.06
-	tube.height = 0.55
-	quiver.mesh = tube
-	quiver.material_override = wood
-	quiver.position = Vector3(0.12, 1.3, 0.18)
-	quiver.rotation = Vector3(0.25, 0.0, 0.35)
-	add_child(quiver)
-	for k in 4:
-		var fletch := _thin(horn)
-		fletch.scale = Vector3(1.6, 0.16, 1.6)
-		fletch.position = quiver.position + Vector3(0.07 + 0.012 * float(k), 0.3, 0.1 + 0.015 * float(k - 2))
-		fletch.rotation = quiver.rotation
-		add_child(fletch)
-	for mi in find_children("*", "MeshInstance3D", true, false):
-		if mi.get_parent() == _bow or mi.get_parent() == _nocked or mi.get_parent() == self:
-			(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for mi in _bow.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func _cyl(top: float, bottom: float, height: float, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var c := CylinderMesh.new()
+	c.top_radius = top
+	c.bottom_radius = bottom
+	c.height = height
+	c.radial_segments = 6
+	c.rings = 1
+	mi.mesh = c
+	mi.material_override = mat
+	return mi
 
 
 func _thin(mat: Material) -> MeshInstance3D:
@@ -424,28 +477,30 @@ func _thin(mat: Material) -> MeshInstance3D:
 	return mi
 
 
-## The bow in the left hand: pointing along the shot while aiming, held low and
-## forward otherwise; the string pulled back by `_draw`.
+## Strapped to the left forearm: from the wrist along the forearm, the prod
+## level; the string where `_cock` holds it, the bolt on it once cocked.
 func _place_bow() -> void:
 	if _bow == null:
 		return
-	var grip := global_position + Vector3(0.0, 1.0, 0.0) - global_basis.z * 0.3
-	var hand := int(_bones.get(&"hand.L", -1))
-	if _sk != null and hand >= 0:
-		grip = _sk.global_transform * _sk.get_bone_global_pose(hand).origin
 	var forward := -global_basis.z
-	var aim_dir := (_aim_point - grip).normalized() if _aim_point != Vector3.ZERO else forward
-	var rest_dir := (forward + Vector3(0.0, -1.2, 0.0)).normalized()
-	var dir := rest_dir.slerp(aim_dir, _aim).normalized()
+	var wrist := global_position + Vector3(0.0, 1.0, 0.0) + forward * 0.3
+	var dir := (forward + Vector3(0.0, -1.2, 0.0)).normalized()
+	var hand := int(_bones.get(&"hand.L", -1))
+	var fore := int(_bones.get(&"forearm.L", -1))
+	if _sk != null and hand >= 0 and fore >= 0:
+		wrist = _sk.global_transform * _sk.get_bone_global_pose(hand).origin
+		var elbow := _sk.global_transform * _sk.get_bone_global_pose(fore).origin
+		if wrist.distance_squared_to(elbow) > 1e-6:
+			dir = (wrist - elbow).normalized()
+	# Held level about the shot: the prod across, not up and down.
 	var up := Vector3.UP if absf(dir.y) < 0.95 else forward
-	_bow.global_transform = Transform3D(Basis.looking_at(dir, up), grip)
-	# The string: from each tip to the nock, which the draw pulls back.
-	var nock := Vector3(0.0, 0.0, BOW_BEND + _draw * 0.42)
-	_span(_string_top, Vector3(0.0, BOW_HALF, BOW_BEND), nock)
-	_span(_string_bottom, Vector3(0.0, -BOW_HALF, BOW_BEND), nock)
-	_nocked.visible = _drawing or _draw > 0.05
-	# Its origin is the arrowhead: the shaft runs 0.78 m back to the nock.
-	_nocked.position = nock - Vector3(0.0, 0.0, 0.78)
+	_bow.global_transform = Transform3D(Basis.looking_at(dir, up), wrist)
+	var nock := Vector3(0.0, 0.03, -lerpf(PROD_AT - PROD_BEND * 0.2, NUT_AT, _cock))
+	_span(_string_top, Vector3(PROD_HALF, 0.02, -PROD_AT + PROD_BEND), nock)
+	_span(_string_bottom, Vector3(-PROD_HALF, 0.02, -PROD_AT + PROD_BEND), nock)
+	_nocked.visible = _cock >= 1.0
+	# Its head out past the prod, its butt on the string at the nut.
+	_nocked.position = Vector3(0.0, 0.045, -NUT_AT - BOLT_LENGTH)
 	_nock_mat.emission_energy_multiplier = 0.8 + 4.0 * _draw
 
 

@@ -31,6 +31,9 @@ var damage := 15.0
 var shooter: Node3D
 var velocity := Vector3.ZERO
 var reflected := false
+## A crossbow bolt (archer.gd, the crossbow hand; note 93): short and thick, with
+## stubby vanes. Set before it enters the tree.
+var bolt := false
 
 var _age := 0.0
 var _stuck := -1.0
@@ -53,10 +56,11 @@ class Proxy extends Node3D:
 		pass
 
 
-static func fire(parent: Node, from: Vector3, toward: Vector3, by: Node3D, dmg: float) -> Node3D:
+static func fire(parent: Node, from: Vector3, toward: Vector3, by: Node3D, dmg: float, as_bolt := false) -> Node3D:
 	var a := Node3D.new()
 	a.set_script(load("res://scripts/arrow.gd"))
 	a.name = "Arrow"
+	a.set("bolt", as_bolt)
 	parent.add_child(a)
 	a.global_position = from
 	a.set("shooter", by)
@@ -75,13 +79,16 @@ func _ready() -> void:
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.008
 	cyl.bottom_radius = 0.008
-	cyl.height = 0.78
+	cyl.height = 0.4 if bolt else 0.78
+	if bolt:
+		cyl.top_radius = 0.011
+		cyl.bottom_radius = 0.011
 	cyl.radial_segments = 5
 	cyl.rings = 1
 	shaft.mesh = cyl
 	shaft.material_override = wood
 	shaft.rotation.x = PI * 0.5
-	shaft.position.z = 0.39
+	shaft.position.z = cyl.height * 0.5
 	add_child(shaft)
 	# The head, glowing a little so a shot can be seen coming in the dark.
 	_tip_mat = StandardMaterial3D.new()
@@ -92,7 +99,7 @@ func _ready() -> void:
 	var head := MeshInstance3D.new()
 	var cone := CylinderMesh.new()
 	cone.top_radius = 0.0
-	cone.bottom_radius = 0.025
+	cone.bottom_radius = 0.028 if bolt else 0.025
 	cone.height = 0.09
 	cone.radial_segments = 6
 	cone.rings = 1
@@ -107,11 +114,11 @@ func _ready() -> void:
 	for k in 2:
 		var vane := MeshInstance3D.new()
 		var q := QuadMesh.new()
-		q.size = Vector2(0.05, 0.14)
+		q.size = Vector2(0.045, 0.07) if bolt else Vector2(0.05, 0.14)
 		vane.mesh = q
 		vane.material_override = feather
 		vane.rotation = Vector3(PI * 0.5, 0.0, PI * 0.5 * float(k))
-		vane.position.z = 0.7
+		vane.position.z = 0.35 if bolt else 0.7
 		add_child(vane)
 	# A faint streak behind it.
 	_trail = MeshInstance3D.new()

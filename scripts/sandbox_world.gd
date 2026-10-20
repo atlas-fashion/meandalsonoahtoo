@@ -27,6 +27,7 @@ const SPAWN_AHEAD := 7.0
 const SPAWN_SPREAD := 2.6
 
 const ARCHER_SCRIPT := preload("res://scripts/archer.gd")
+const PROSTHETIC := preload("res://scripts/prosthetic.gd")
 const ENFORCER_SCRIPT := preload("res://scripts/enforcer.gd")
 const DECREPIT_SCRIPT := preload("res://scripts/decrepit.gd")
 const LIZARD_SCRIPT := preload("res://scripts/sewer_lizard.gd")
@@ -35,9 +36,11 @@ const RAT_SCRIPT := preload("res://scripts/rat.gd")
 
 ## What the menu offers: id -> label. Kept in this order.
 const KINDS := [
-	[&"skeleton_sword", "Skeleton (sword)"],
-	[&"skeleton_pick", "Skeleton (pick)"],
-	[&"archer", "Skeleton archer"],
+	[&"skeleton_blade", "Sword skeleton"],
+	[&"skeleton_drill", "Drill skeleton"],
+	[&"skeleton_hammer", "Hammer skeleton"],
+	[&"skeleton_shield", "Shield skeleton"],
+	[&"archer", "Crossbow skeleton"],
 	[&"enforcer", "Enforcer"],
 	[&"crier", "Crier"],
 	[&"decrepit", "Decrepit enforcer"],
@@ -205,12 +208,11 @@ func _make(kind: StringName, at: Vector3) -> Node:
 	var enemy_scene: PackedScene = maze.get("enemy_scene")
 	var aggro: float = maze.get("enemy_aggro_range")
 	match kind:
-		&"skeleton_sword", &"skeleton_pick":
-			var e: CharacterBody3D = enemy_scene.instantiate()
-			# Armed and placed before it enters the tree (its home is taken
-			# in _ready; the weapon is built then).
-			e.set("armed", true)
-			e.set("weapon", &"pick" if kind == &"skeleton_pick" else &"sword")
+		&"skeleton_blade", &"skeleton_drill", &"skeleton_hammer", &"skeleton_shield":
+			# The skeleton types (prosthetic.gd, note 93), handed and placed
+			# before it enters the tree (its home is taken in _ready; the hand
+			# is built then).
+			var e: CharacterBody3D = PROSTHETIC.make(enemy_scene, StringName(String(kind).trim_prefix("skeleton_")))
 			e.position = at + Vector3(0.0, 0.1, 0.0)
 			add_child(e)
 			e.set("aggro_range", aggro)

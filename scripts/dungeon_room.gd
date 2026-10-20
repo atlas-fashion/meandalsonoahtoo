@@ -15,10 +15,10 @@ extends Node3D
 ##            confiscated goods -- and opens only once the power is cut.
 ##   mine     THE CRYSTAL MINE (2026-10-10) -- a face of raw rock across the
 ##            back of the court, seamed with gold and red crystal, worked by
-##            shackled prisoners with picks and by three electric drills
+##            shackled prisoners with drills for hands (note 93) and by three electric drills
 ##            grinding into it, powered down brass cables from a generator that
 ##            runs on the room's SHARD. Two enforcers oversee the work. Step
-##            in and the enforcers turn on you and drive the miners at you, picks
+##            in and the enforcers turn on you and drive the miners at you, drills
 ##            and all. With every one of them down, E takes the shard out of the
 ##            generator: the drills spin down and the shard is the player's.
 ##   vacant   A placeholder until the other rooms are designed: the court with
@@ -1196,14 +1196,27 @@ func _make_miner(cell: Dictionary) -> void:
 	var sk_list := model.find_children("*", "Skeleton3D", true, false)
 	if not sk_list.is_empty():
 		var sk := sk_list[0] as Skeleton3D
-		if sk.find_bone("hand.R") >= 0:
+		var hand := sk.find_bone("hand.R")
+		var fore := sk.find_bone("forearm.R")
+		if hand >= 0 and fore >= 0:
+			# A drill for a hand (note 93): the hand shrunk into the wrist (no
+			# clip scales it back) and the drill on the forearm, out from the
+			# wrist, its bit turning (`_run_mine`).
+			sk.set_bone_pose_scale(hand, Vector3.ONE * 0.02)
 			var hold := BoneAttachment3D.new()
-			hold.bone_name = "hand.R"
+			hold.bone_name = "forearm.R"
 			sk.add_child(hold)
-			var pick := MeshInstance3D.new()
-			pick.mesh = preload("res://scripts/skeleton_sword.gd")._mesh(&"pick")
-			pick.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-			hold.add_child(pick)
+			var weapons := preload("res://scripts/skeleton_sword.gd")
+			var drill := MeshInstance3D.new()
+			drill.mesh = weapons._mesh(&"drill")
+			drill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			drill.position = Vector3(0.0, sk.get_bone_rest(hand).origin.length(), 0.0)
+			hold.add_child(drill)
+			var bit := MeshInstance3D.new()
+			bit.mesh = weapons.drill_bit_mesh()
+			bit.position = Vector3(0.0, weapons.DRILL_BIT_AT, 0.0)
+			drill.add_child(bit)
+			cell["bit"] = bit
 	var ap := model.find_children("*", "AnimationPlayer", true, false)
 	if not ap.is_empty():
 		var anim := ap[0] as AnimationPlayer
@@ -1259,6 +1272,9 @@ func _run_mine(delta: float) -> void:
 	for cell in _cells:
 		if cell["prisoner"] == null or not cell.has("anim"):
 			continue
+		var bit = cell.get("bit")
+		if bit != null and is_instance_valid(bit):
+			(bit as Node3D).rotation.y += delta * 30.0
 		if _time < float(cell["next_swing"]):
 			continue
 		var anim: AnimationPlayer = cell["anim"]
@@ -1280,8 +1296,9 @@ func _release_miner(cell: Dictionary) -> Node3D:
 		decor.queue_free()
 	cell["prisoner"] = null
 	cell.erase("anim")
+	cell.erase("bit")
 	cell["alive"] = true
-	return _spawn_prisoner(cell, Transform3D(xf.basis.orthonormalized(), xf.origin), true, &"pick")
+	return _spawn_prisoner(cell, Transform3D(xf.basis.orthonormalized(), xf.origin), true, &"drill")
 
 
 ## --- Who turns on the player, and when (2026-10-10) ------------------------------
@@ -1607,18 +1624,22 @@ func to_global_xf(cell: Dictionary) -> Transform3D:
 
 
 ## A real enemy in a decor prisoner's place. Prisoners fight bare-handed
-## (`weapon` empty); a miner keeps hold of its pick.
+## (`weapon` empty); a miner is a drill skeleton (prosthetic.gd, note 93).
 func _spawn_prisoner(cell: Dictionary, xf: Transform3D, alerted: bool, weapon := &"") -> Node3D:
 	var scene: PackedScene = maze.get("enemy_scene") if maze != null else null
 	if scene == null:
 		return null
-	var e: Node3D = scene.instantiate()
+	var e: Node3D
+	if weapon == &"drill":
+		e = preload("res://scripts/prosthetic.gd").make(scene, &"drill")
+	else:
+		e = scene.instantiate()
+		e.set("armed", weapon != &"")
+		if weapon != &"":
+			e.set("weapon", weapon)
 	# The decor stands -Z out; an enemy faces -Z too.
 	e.transform = maze.global_transform.affine_inverse() * Transform3D(xf.basis.orthonormalized(), xf.origin + Vector3(0.0, 0.3, 0.0))
 	e.set("wanders", false)
-	e.set("armed", weapon != &"")
-	if weapon != &"":
-		e.set("weapon", weapon)
 	maze.call("adopt_enemy", e)
 	_freed.append(e)
 	e.connect("died", _on_prisoner_died.bind(cell))
@@ -1653,7 +1674,7 @@ func _on_enforcer_died() -> void:
 	if hud != null and hud.has_method("announce"):
 		if kind == &"mine":
 			hud.announce("THE ENFORCERS ARE DOWN", "Take the shard from the generator." if prisoners_down
-				else "The miners drop their picks...")
+				else "The miners turn their drills on you...")
 		else:
 			hud.announce("THE ENFORCERS ARE DOWN", "The generator still holds the cells.")
 	if kind == &"mine":

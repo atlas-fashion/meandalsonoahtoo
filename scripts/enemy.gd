@@ -678,23 +678,57 @@ func _update_sword() -> void:
 	match state:
 		State.WINDUP:
 			phase = 1
-			p = 1.0 - (_state_until - now) / maxf(windup_time, 0.01)
+			p = 1.0 - (_state_until - now) / maxf(_windup_len, 0.01)
 		State.ATTACK:
 			phase = 2
 			p = 1.0 - (_state_until - now) / maxf(_attack_duration(), 0.01)
 		State.RECOVER:
 			phase = 3
-			p = 1.0 - (_state_until - now) / maxf(recover_time, 0.01)
-	var move := 0
-	match attack_kind:
-		Attack.SLAM:
-			move = 1
-		Attack.LUNGE:
-			move = 2
-		Attack.SPIN:
-			move = 3
-	_sword.update(_anim_stepped, phase, move, clampf(p, 0.0, 1.0))
+			p = 1.0 - (_state_until - now) / maxf(_recover_len, 0.01)
+	_sword.update(_anim_stepped, phase, _sword_move(attack_kind), clampf(p, 0.0, 1.0))
 	_anim_stepped = false
+
+
+## How the weapon arm swings for a move (skeleton_sword.gd `Move`): the cut, the
+## charge's overhead chop, the lunge's thrust, the spin's arm held out. A kind
+## with a hand of its own (prosthetic.gd) swings its own way.
+func _sword_move(kind: int) -> int:
+	match kind:
+		Attack.SLAM:
+			return 1
+		Attack.LUNGE:
+			return 2
+		Attack.SPIN:
+			return 3
+	return 0
+
+
+## --- Per-move timing and weight (2026-10-20, prosthetic.gd) ------------------------
+##
+## The wind-up and the recovery are the same for every move by default (the tell
+## reads the same whatever is coming). A kind whose heavy blow should LOOK heavy
+## -- the sword hand's heavy slice, the hammer -- gives that move its own.
+var _windup_len := 0.45
+var _recover_len := 0.7
+
+
+func _windup_for(_kind: int) -> float:
+	return windup_time
+
+
+func _recover_for(_kind: int) -> float:
+	return recover_time
+
+
+## What a landed blow of this move takes off the player.
+func _damage_for(_kind: int) -> float:
+	return attack_damage
+
+
+## A blow of this move has just hurt the player (or been guarded): for a kind
+## whose blow does more than damage (the hammer knocks them down).
+func _on_blow_landed(_player_node: Node3D, _kind: int) -> void:
+	pass
 
 
 ## The blade's swept test for this tick of an attack; lands once per attack.
@@ -703,7 +737,8 @@ func _sword_connect(player: Node3D) -> void:
 	if not hit or _attack_connected or not player.has_method("take_damage"):
 		return
 	_attack_connected = true
-	player.take_damage(attack_damage, _attack_direction, self)
+	player.take_damage(_damage_for(attack_kind), _attack_direction, self)
+	_on_blow_landed(player, attack_kind)
 
 
 ## The patrol (patrol.gd) this one walks with, when its pack is on the move.
@@ -1161,7 +1196,8 @@ func _try_connect(player: Node3D, gap: float, reach: float, charge_speed := 0.0)
 		return
 	_attack_connected = true
 	# Itself as the attacker, so a parry can throw it back.
-	player.take_damage(attack_damage, _attack_direction, self)
+	player.take_damage(_damage_for(attack_kind), _attack_direction, self)
+	_on_blow_landed(player, attack_kind)
 
 
 ## Picks a move for the range it is at, or -1 when nothing is off cooldown.
@@ -1262,9 +1298,10 @@ func _enter_windup(kind: int) -> void:
 	# Decided before the telegraph starts, so the whole wind-up belongs to one
 	# move rather than being chosen at the moment it lands.
 	attack_kind = kind
-	_state_until = _now() + windup_time
+	_windup_len = _windup_for(kind)
+	_state_until = _now() + _windup_len
 	_apply_state_color(windup_color, windup_glow)
-	_play_state_anim(ANIM_WINDUP, windup_time)
+	_play_state_anim(ANIM_WINDUP, _windup_len)
 
 
 func _enter_attack(toward: Vector3) -> void:
@@ -1287,13 +1324,14 @@ func _enter_attack(toward: Vector3) -> void:
 
 func _enter_recover() -> void:
 	state = State.RECOVER
-	_state_until = _now() + recover_time
+	_recover_len = _recover_for(attack_kind)
+	_state_until = _now() + _recover_len
 	_next_attack_allowed = _now() + attack_cooldown
 	# Per move, timed from when it finished. A long charge cooldown then does
 	# not stop it swinging at you in the meantime.
 	_cooldowns[attack_kind] = _now() + _cooldown_of(attack_kind)
 	_apply_state_color(_base_color, base_glow)
-	_play_state_anim(ANIM_RECOVER, recover_time)
+	_play_state_anim(ANIM_RECOVER, _recover_len)
 
 
 ## Direct children win over deeper ones, so a scene that places its own node
@@ -1475,6 +1513,10 @@ func _apply_state_color(colour: Color, glow: float) -> void:
 func apply_knockback(impulse: Vector3, stun_time := 0.25) -> void:
 	if _dying:
 		return
+	# A shield skeleton braced between it and the blow (prosthetic.gd) takes
+	# the shove as well as the hit.
+	if _covering_shield(impulse) != null:
+		return
 	# Resistance reduces how far something is thrown but not how long it is
 	# interrupted: a boss should stagger without being punted across the room.
 	var scale := 1.0 - knockback_resistance
@@ -1580,6 +1622,13 @@ func alert() -> void:
 func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void:
 	if _dying:
 		return
+	# Guarded: a shield skeleton (prosthetic.gd) stands braced between this one
+	# and whoever struck, and its shield takes the blow instead.
+	var guard := _covering_shield(_from_direction)
+	if guard != null:
+		guard.call("block_for", amount, _from_direction)
+		alert()
+		return
 
 	# Untouchable while calling for help, and it has to look it: a boss that
 	# silently eats damage reads as a bug, not as a rule. The blow gets its own
@@ -1615,6 +1664,17 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void
 		poise = maxf(poise - amount * poise_damage_ratio, 0.0)
 		if poise <= 0.0:
 			_enter_stagger()
+
+
+## The shield skeleton (group "shield_guards", prosthetic.gd) whose raised
+## shield stands between this one and a blow travelling along `blow`, or null.
+func _covering_shield(blow: Vector3) -> Node:
+	if Vector2(blow.x, blow.z).length_squared() < 0.01:
+		return null
+	for g in get_tree().get_nodes_in_group(&"shield_guards"):
+		if g != self and is_instance_valid(g) and g.call("covers", self, blow):
+			return g
+	return null
 
 
 ## The stance breaks: the boss buckles, stops dead, and the spot on its front

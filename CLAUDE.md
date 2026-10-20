@@ -314,8 +314,9 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`), `spear.gd`, `hand_torch.gd`, `held_potion.gd`,
   `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt).
-- Enemies: `enemy.gd` (skeleton; base class; also the boss via
-  `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` + `arrow.gd`, `crier.gd`
+- Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
+  hands; `skeleton_shield.gd`; note 93), `enemy.gd` (skeleton; base class; also the boss via
+  `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` (the crossbow hand) + `arrow.gd`, `crier.gd`
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
   "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65-71), `sewer_lizard.gd` +
   `goo.gd`, `stalker.gd` ("the Remnant" / "the Shade"), `mimic.gd`,
@@ -475,6 +476,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 90 | 2026-10-20 | A little slower carrying the axe | [docs/notes/90-axe-carry-slower.md](docs/notes/90-axe-carry-slower.md) |
 | 91 | 2026-10-20 | Berserk as fast as ghost mode | [docs/notes/91-berserk-at-ghost-speed.md](docs/notes/91-berserk-at-ghost-speed.md) |
 | 92 | 2026-10-20 | No sticking to corners: move_and_slide plus a slip round arch legs and pillars | [docs/notes/92-no-sticking-to-corners.md](docs/notes/92-no-sticking-to-corners.md) |
+| 93 | 2026-10-20 | Skeleton types: drill, sword, hammer, shield and crossbow hands | [docs/notes/93-skeleton-prosthesis-types.md](docs/notes/93-skeleton-prosthesis-types.md) |
 
 ## Notes by source file
 
@@ -489,8 +491,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scenes/player.tscn`: 9
 - `scenes/title.tscn`: 19
 - `scenes/torch.tscn`: 6.15, 6.18, 7, 19, 24, 27, 46
-- `scripts/archer.gd`: 20, 77, 92
-- `scripts/arrow.gd`: 20, 79
+- `scripts/archer.gd`: 20, 77, 92, 93
+- `scripts/arrow.gd`: 20, 79, 93
 - `scripts/attack_icons.gd`: 24, 77, 79, 84
 - `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
@@ -500,14 +502,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79
-- `scripts/convoy.gd`: 23, 28, 79
+- `scripts/convoy.gd`: 23, 28, 79, 93
 - `scripts/crier.gd`: 43, 48, 60, 77, 79
 - `scripts/damp.gd`: 39, 40, 41
 - `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
-- `scripts/dungeon_room.gd`: 22, 24, 79
-- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92
+- `scripts/dungeon_room.gd`: 22, 24, 79, 93
+- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
@@ -527,7 +529,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b
@@ -539,6 +541,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pause_menu.gd`: 19
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92
 - `scripts/portcullis.gd`: 6.18
+- `scripts/prosthetic.gd`: 93
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79
@@ -550,7 +553,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/save_system.gd`: 19, 60, 79
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84
-- `scripts/sandbox_world.gd`: 60, 77, 79
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93
 - `scripts/settings_panel.gd`: 19, 46, 80
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79
 - `scripts/split_screen.gd`: 79, 80, 82
@@ -558,7 +561,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/shard_door.gd`: 18, 79
 - `scripts/shield_hitbox.gd`: 68, 69
 - `scripts/skeleton_eyes.gd`: 13
-- `scripts/skeleton_sword.gd`: 24
+- `scripts/skeleton_sword.gd`: 24, 93
+- `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79

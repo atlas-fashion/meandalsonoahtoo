@@ -296,7 +296,9 @@ func _spawn_crew() -> void:
 	var scene: PackedScene = maze.get("enemy_scene")
 	var members: Array[Node3D] = []
 	for role: StringName in [&"push", &"pull", &"steady"]:
-		var e: Node3D = scene.instantiate()
+		# Sword-handed (prosthetic.gd, note 93): the blade is carried up out of
+		# the cart's way while it hauls.
+		var e: Node3D = preload("res://scripts/prosthetic.gd").make(scene, &"blade")
 		e.set("wanders", false)
 		maze.call("adopt_enemy", e)
 		e.set("hauled_by", self)
