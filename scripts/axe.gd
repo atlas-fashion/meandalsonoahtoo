@@ -422,6 +422,9 @@ func _slash_strike() -> void:
 		if player._is_blocked(eye, body):
 			continue
 		body.take_damage(SLASH_DAMAGE * _scale(), fwd)
+		struck = true
+		if not is_instance_valid(body):
+			continue
 		player.knock(body, (flat - player.global_basis.x * 0.5 * slash_side).normalized() * 4.0, 0.2, SLASH_STAGGER)
 		player.hit_landed.emit(body)
 		struck = true
@@ -535,6 +538,11 @@ func _strike(hit: Dictionary) -> void:
 		_come_back()
 		return
 	body.take_damage(THROW_DAMAGE * _scale(), dir)
+	if not is_instance_valid(body):
+		# Freed by the blow itself: nothing to knock or stay in.
+		_flying.global_position = at - dir * 0.3
+		_come_back()
+		return
 	player.knock(body, Vector3(dir.x, 0.0, dir.z).normalized() * 3.0, 0.3, THROW_STAGGER)
 	if body.has_method("alert"):
 		body.alert()
@@ -607,10 +615,14 @@ static func _damageable(collider: Object) -> Node3D:
 	return null
 
 
-## Dead, dying or gone: nothing for the axe to stay in.
-static func _is_down(body: Node) -> bool:
-	if body == null or not is_instance_valid(body) or body.is_queued_for_deletion() \
-			or not body.is_inside_tree():
+## Dead, dying or gone: nothing for the axe to stay in. Untyped on purpose: the
+## body the axe is stuck in can be freed under it (a kill by someone else), and
+## a freed object passed to a typed parameter is an error before the check runs.
+static func _is_down(target) -> bool:
+	if not is_instance_valid(target):
+		return true
+	var body := target as Node
+	if body == null or body.is_queued_for_deletion() or not body.is_inside_tree():
 		return true
 	if body.get("_dying") == true or body.get("_dead") == true:
 		return true
