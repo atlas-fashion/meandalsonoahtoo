@@ -6,12 +6,13 @@ extends Node3D
 ## keys to it (`slash`, `throw`, `berserk`), stops the body for the berserk roar
 ## and speeds it up while berserk (`player._berserk_speed`).
 ##
-## - SLASH (LMB, "attack"): a diagonal cut from up right to down left, 30 to
-##   everything in the arc in front, one every `SLASH_EVERY` 0.75 s. A click
+## - SLASH (LMB, "attack"): a diagonal cut, alternately up right to down left
+##   and its mirror (`slash_side`, 2026-10-20), 30 to everything in the arc in
+##   front, one every `SLASH_EVERY` 0.5 s (0.75 at first). A click
 ##   that comes too soon is held and fired on the beat, as the spear's stab.
 ## - THROW (Q, "thrust"): drawn back over the shoulder and hurled down the
 ##   crosshair, end over end. What it strikes takes 30 and the axe STAYS IN IT
-##   for `STICK_TIME` 2 s, riding along as it moves, then flies back to the
+##   for `STICK_TIME` 1 s (2 at first), riding along as it moves, then flies back to the
 ##   hand. If the blow kills it, or it dies while the axe is in it, there is
 ##   nothing to stay in: straight back. Stone, or nothing within `THROW_RANGE`,
 ##   sends it straight back too. Until it is caught the player has NO WEAPON:
@@ -28,11 +29,11 @@ extends Node3D
 ## pulled toward the camera like the sword (`use_z_clip_scale`).
 
 const SLASH_DAMAGE := 30.0
-const SLASH_EVERY := 0.75
+const SLASH_EVERY := 0.5
 ## The cut's timeline (before `time_scale`): drawn back, through, home.
 const SLASH_WIND := 0.12
 const SLASH_CUT := 0.14
-const SLASH_BACK := 0.3
+const SLASH_BACK := 0.22
 ## Eye to the furthest the cut reaches, and half the arc it covers.
 const SLASH_REACH := 2.6
 const SLASH_ARC := deg_to_rad(65.0)
@@ -43,7 +44,7 @@ const THROW_WINDUP := 0.22
 const THROW_SPEED := 30.0
 const THROW_RANGE := 30.0
 ## How long it stays in what it struck before it comes back.
-const STICK_TIME := 2.0
+const STICK_TIME := 1.0
 const RETURN_SPEED := 30.0
 ## How near the flight a body has to pass to be struck: the head's reach.
 const FLY_RADIUS := 0.35
@@ -88,6 +89,9 @@ var _clock := 0.0
 var _next_slash := 0.0
 var _slash_queued := false
 var _slash_hit := false
+## Which way the cut in progress goes: 1 up right to down left (forehand), -1
+## its mirror (backhand). Flipped every slash.
+var slash_side := -1.0
 var _released := false
 ## The thrown axe: null while in the hand.
 var _flying: Node3D = null
@@ -229,6 +233,7 @@ func _fire_slash() -> void:
 	_slash_queued = false
 	_next_slash = _clock + SLASH_EVERY * time_scale()
 	_slash_hit = false
+	slash_side = -slash_side
 	_begin(Pose.WIND)
 
 
@@ -331,13 +336,15 @@ func _rest() -> Transform3D:
 
 ## The cut, `a` along its arc: the hand swung round SWING_PIVOT in a plane
 ## through the up-right diagonal and straight ahead, the haft pointing out from
-## the pivot, the edge leading.
+## the pivot, the edge leading. `slash_side` -1 mirrors it left for right: up
+## left to down right, the backhand that follows each forehand.
 func _swing(a: float) -> Transform3D:
-	var e1 := Vector3(1.0, 0.85, 0.0).normalized()
+	var mirror := Vector3(slash_side, 1.0, 1.0)
+	var e1 := Vector3(1.0, 0.85, 0.0).normalized() * mirror
 	var e2 := Vector3(0.0, -0.15, -1.0).normalized()
 	var radial := e1 * cos(a) + e2 * sin(a)
 	var tangent := -e1 * sin(a) + e2 * cos(a)
-	return _held(SWING_PIVOT + radial * SWING_HAND, radial, tangent)
+	return _held(SWING_PIVOT * mirror + radial * SWING_HAND, radial, tangent)
 
 
 ## The guard: the haft level across the face, the head off to the left.
@@ -415,7 +422,7 @@ func _slash_strike() -> void:
 		if player._is_blocked(eye, body):
 			continue
 		body.take_damage(SLASH_DAMAGE * _scale(), fwd)
-		player.knock(body, (flat - player.global_basis.x * 0.5).normalized() * 4.0, 0.2, SLASH_STAGGER)
+		player.knock(body, (flat - player.global_basis.x * 0.5 * slash_side).normalized() * 4.0, 0.2, SLASH_STAGGER)
 		player.hit_landed.emit(body)
 		struck = true
 	player.set("_swing_kick", maxf(float(player.get("_swing_kick")), 0.8 if struck else 0.4))

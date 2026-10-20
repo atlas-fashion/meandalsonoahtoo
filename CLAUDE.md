@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 84), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 85), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -467,6 +467,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 82 | 2026-10-19 | Co-op: each player on the other's map; player 1's HUD no longer squashed | [docs/notes/82-co-op-partner-on-the-map-and-player-1-s-canvas.md](docs/notes/82-co-op-partner-on-the-map-and-player-1-s-canvas.md) |
 | 83 | 2026-10-20 | Robot rats stack to 10 | [docs/notes/83-robot-rats-stack-to-10.md](docs/notes/83-robot-rats-stack-to-10.md) |
 | 84 | 2026-10-20 | The axe: slash, a throw that stays in its mark, berserk | [docs/notes/84-the-axe.md](docs/notes/84-the-axe.md) |
+| 85 | 2026-10-20 | The axe: alternating slashes every 0.5 s, 1 s in its mark | [docs/notes/85-axe-alternating-faster-slash.md](docs/notes/85-axe-alternating-faster-slash.md) |
 
 ## Notes by source file
 
@@ -484,7 +485,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/archer.gd`: 20, 77
 - `scripts/arrow.gd`: 20, 79
 - `scripts/attack_icons.gd`: 24, 77, 79, 84
-- `scripts/axe.gd`: 84
+- `scripts/axe.gd`: 84, 85
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27
