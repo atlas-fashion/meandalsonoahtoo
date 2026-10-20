@@ -541,21 +541,25 @@ func is_spear_dashing() -> bool:
 ##
 ## scripts/axe.gd does its own fighting, as the spear does; the player routes
 ## the keys to it (free when `_spear_free` is), holds the body still for the
-## berserk roar and speeds it up while berserk.
+## berserk roar and the throw's wind-up, slows it while the axe is in hand and
+## speeds it up while berserk.
 
 var axe: Node3D
 
 
-## The berserk roar: planted where it stands (axe.gd `ROAR_TIME`).
-func _berserk_roaring() -> bool:
-	return axe != null and axe.is_roaring()
+## The berserk roar and the throw's wind-up: planted where it stands (axe.gd
+## `ROAR_TIME`, `THROW_WINDUP`).
+func _axe_planted() -> bool:
+	return axe != null and (axe.is_roaring() or axe.is_winding_up())
 
 
-## Walking pace multiplier: up to axe.gd `BERSERK_SPEED` while berserk.
-func _berserk_speed() -> float:
+## Walking pace multiplier: axe.gd `CARRY_SPEED` with the axe in hand, times up
+## to `BERSERK_SPEED` while berserk.
+func _axe_speed() -> float:
 	if axe == null:
 		return 1.0
-	return lerpf(1.0, axe.BERSERK_SPEED, axe.berserk_amount())
+	var carry: float = axe.CARRY_SPEED if held_item() == &"axe" and not axe.is_away() else 1.0
+	return carry * lerpf(1.0, axe.BERSERK_SPEED, axe.berserk_amount())
 
 
 ## Thrown and not yet caught: the player has no weapon at all.
@@ -1760,8 +1764,8 @@ func _physics_process(delta: float) -> void:
 			velocity += get_gravity() * delta
 		move_and_slide()
 		return
-	# The berserk roar: stopped dead where it stands (axe.gd).
-	if _berserk_roaring():
+	# The berserk roar and the throw's wind-up: stopped dead (axe.gd).
+	if _axe_planted():
 		velocity.x = 0.0
 		velocity.z = 0.0
 		if not is_on_floor():
@@ -1878,7 +1882,7 @@ func _physics_process(delta: float) -> void:
 			* (block_move_scale if _blocking else 1.0) \
 			* (drink_move_scale if is_drinking() else 1.0) \
 			* (wade_speed_scale if depth > 0.3 else 1.0) * carry_speed_scale * _beam_speed_scale() \
-			* (spear_stab_move_scale if _spear_stabbing() else 1.0) * _berserk_speed()
+			* (spear_stab_move_scale if _spear_stabbing() else 1.0) * _axe_speed()
 		var target_velocity := direction * walk
 		# Damping is raised during a swing so the lunge surge is gone well before
 		# the stroke ends, leaving the back half of it visibly slower.
@@ -1911,7 +1915,7 @@ func _physics_process(delta: float) -> void:
 		if air_input != Vector2.ZERO:
 			var wish := (global_basis * Vector3(air_input.x, 0.0, air_input.y)).normalized()
 			var air_walk := move_speed * (attack_move_scale if _attack_slows() else 1.0) \
-				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() * _berserk_speed()
+				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() * _axe_speed()
 			var target_velocity := wish * air_walk
 			var air_damp := acceleration * air_damp_scale \
 				* (attack_damp_scale if _attack_slows() else 1.0)
