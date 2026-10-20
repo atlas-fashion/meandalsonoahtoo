@@ -104,7 +104,7 @@ const ITEMS := {
 		"kind": "Utility", "wheel": "quick",
 		"desc": "A dungeon rat, caught by the scruff and very unhappy about it. Thrown, it lands squealing, and whatever was close enough to hear it wants to be somewhere else.",
 		"quote": "Even the dead do not like rats."},
-	&"robot_rat": {"name": "Robot Rat", "stack": 3, "color": Color(0.0, 0.91, 1.0),
+	&"robot_rat": {"name": "Robot Rat", "stack": 10, "color": Color(0.0, 0.91, 1.0),
 		"kind": "Utility", "wheel": "weapon",
 		"desc": "A rat worked over at the workbench: iron ribs, a gold crystal for a heart, an enforcer's eyes. Set it down and see through those eyes; it goes off for 200 when told to, or on its own after ten seconds.",
 		"quote": "It still twitches its whiskers. Nobody knows why."},

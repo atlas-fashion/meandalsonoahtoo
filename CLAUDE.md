@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 82), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 83), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -464,6 +464,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 80 | 2026-10-18 | Co-op: what its frame time costs, the torch share, two monitors | [docs/notes/80-co-op-cost-cuts-and-two-monitors.md](docs/notes/80-co-op-cost-cuts-and-two-monitors.md) |
 | 81 | 2026-10-20 | The decrepit: more time between attacks | [docs/notes/81-decrepit-more-time-between-attacks.md](docs/notes/81-decrepit-more-time-between-attacks.md) |
 | 82 | 2026-10-19 | Co-op: each player on the other's map; player 1's HUD no longer squashed | [docs/notes/82-co-op-partner-on-the-map-and-player-1-s-canvas.md](docs/notes/82-co-op-partner-on-the-map-and-player-1-s-canvas.md) |
+| 83 | 2026-10-20 | Robot rats stack to 10 | [docs/notes/83-robot-rats-stack-to-10.md](docs/notes/83-robot-rats-stack-to-10.md) |
 
 ## Notes by source file
 
@@ -507,7 +508,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/hud.gd`: 6.19, 24, 79
 - `scripts/interact.gd`: 6.18, 79
-- `scripts/inventory.gd`: 6.19, 25, 77
+- `scripts/inventory.gd`: 6.19, 25, 77, 83
 - `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79
 - `scripts/item_icon.gd`: 6.19, 77
