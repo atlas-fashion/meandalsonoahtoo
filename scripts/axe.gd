@@ -5,7 +5,7 @@ extends Node3D
 ## and does its own fighting, as the spear does; `player.gd` only routes the
 ## keys to it (`slash`, `throw`, `berserk`), stops the body for the berserk roar
 ## and the throw's wind-up, and sets its pace (`player._axe_speed`): 35% slower
-## with the axe in hand (`CARRY_SPEED`), faster while berserk.
+## with the axe in hand (`CARRY_SPEED`), ghost mode's pace while berserk.
 ##
 ## HEAVY (the user, 2026-10-20, note 87): "very heavy and cumbersome, but very
 ## strong".
@@ -25,8 +25,8 @@ extends Node3D
 ##   no slash, no throw, no berserk, no guard, and the weapon wheel will not
 ##   change hands (`player.select_slot`).
 ## - BERSERK (F, "slam"): the player stops dead for `ROAR_TIME` (a shockwave
-##   across the floor), then for `BERSERK_TIME` 7 s moves `BERSERK_SPEED`
-##   faster, every axe attack takes half the time (`time_scale`), and health
+##   across the floor), then for `BERSERK_TIME` 7 s moves as fast as ghost
+##   mode (player.gd `ghost_speed_scale`, note 91), every axe attack takes half the time (`time_scale`), and health
 ##   comes back `BERSERK_HEAL` 7 a second (`_berserk_heal`). A red ring
 ##   burns on the floor round the feet, and the edges of the view glow red
 ##   (hud.gd `_update_berserk_glow`). `BERSERK_COOLDOWN` after it wears off.
@@ -80,7 +80,6 @@ const STICK_PROUD := 0.3
 
 const ROAR_TIME := 0.6
 const BERSERK_TIME := 7.0
-const BERSERK_SPEED := 1.5
 ## Health a second restored through the seven seconds (note 89), not the roar.
 const BERSERK_HEAL := 7.0
 ## Every axe attack's time is multiplied by this while berserk: halved.

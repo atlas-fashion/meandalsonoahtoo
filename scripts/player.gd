@@ -553,13 +553,14 @@ func _axe_planted() -> bool:
 	return axe != null and (axe.is_roaring() or axe.is_winding_up())
 
 
-## Walking pace multiplier: axe.gd `CARRY_SPEED` with the axe in hand, times up
-## to `BERSERK_SPEED` while berserk.
+## Walking pace multiplier: axe.gd `CARRY_SPEED` with the axe in hand; while
+## berserk, ghost mode's pace (`ghost_speed_scale`) instead, the axe's weight
+## and all (note 91).
 func _axe_speed() -> float:
 	if axe == null:
 		return 1.0
 	var carry: float = axe.CARRY_SPEED if held_item() == &"axe" and not axe.is_away() else 1.0
-	return carry * lerpf(1.0, axe.BERSERK_SPEED, axe.berserk_amount())
+	return lerpf(carry, ghost_speed_scale, axe.berserk_amount())
 
 
 ## Thrown and not yet caught: the player has no weapon at all.
@@ -1887,6 +1888,9 @@ func _physics_process(delta: float) -> void:
 		# Damping is raised during a swing so the lunge surge is gone well before
 		# the stroke ends, leaving the back half of it visibly slower.
 		var damp := acceleration * (attack_damp_scale if _attack_slows() else 1.0)
+		# Berserk picks up speed as ghost mode does, not at walking's rate.
+		if axe != null:
+			damp *= lerpf(1.0, ghost_acceleration_scale, axe.berserk_amount())
 		velocity.x = move_toward(velocity.x, target_velocity.x, damp * delta)
 		velocity.z = move_toward(velocity.z, target_velocity.z, damp * delta)
 	else:
