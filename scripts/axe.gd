@@ -37,9 +37,24 @@ extends Node3D
 const SLASH_DAMAGE := 60.0
 const SLASH_EVERY := 0.75
 ## The cut's timeline (before `time_scale`): drawn back, through, home.
-const SLASH_WIND := 0.32
+const SLASH_WIND := 0.36
 const SLASH_CUT := 0.1
 const SLASH_BACK := 0.3
+## Heavier (note 88). The last part of the wind-up is spent hanging at the top
+## before the drop; a chop that lands bites, the swing held there for HIT_STOP;
+## and the blow drags the view down after it (the landing dip, player.gd
+## `_land_kick` / `_land_strength`), deeper on a hit.
+const WIND_HANG := 0.22
+const HIT_STOP := 0.07
+const CHOP_DIP_HIT := 0.5
+const CHOP_DIP_MISS := 0.28
+## The chop's white streak, as the sword's (player.gd `_update_sweep_trail`):
+## through the middle of the edge, sampled every TRAIL_STEP of the cut's
+## progress, TRAIL_WIDTH times the sword's width. Its life, width and switch are
+## the player's `sweep_trail_*`.
+const TRAIL_AT := Vector3(0.0, 0.6, -0.205)
+const TRAIL_STEP := 0.04
+const TRAIL_WIDTH := 1.6
 ## Eye to the furthest the chop reaches, and half the width of the strip down
 ## the crosshair a body's centre must be in to be struck.
 const SLASH_REACH := 2.6
@@ -116,6 +131,15 @@ var _berserk_until := 0.0
 var _berserk_ready_at := 0.0
 var _ground: MeshInstance3D
 var _ground_light: OmniLight3D
+## The swing is held (no `_pose_t`) until this, after a chop bites.
+var _hold_until := 0.0
+var _trail: MeshInstance3D
+var _trail_mesh: ImmediateMesh
+## [head-space point, time] newest first.
+var _trail_pts: Array = []
+var _trail_clock := 0.0
+## How far through the cut the last sample was; -1 between cuts.
+var _trail_k := -1.0
 
 static var _mats := {}
 
@@ -146,6 +170,20 @@ func setup(p: CharacterBody3D) -> void:
 	_ground.top_level = true
 	_ground.visible = false
 	add_child(_ground)
+	_trail_mesh = ImmediateMesh.new()
+	_trail = MeshInstance3D.new()
+	_trail.name = "AxeTrail"
+	_trail.mesh = _trail_mesh
+	# Top level: laid in world space each frame from the head-space samples.
+	_trail.top_level = true
+	_trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var sweep = player.get("sweep_trail")
+	if sweep is GeometryInstance3D and sweep.material_override != null:
+		_trail.material_override = sweep.material_override
+	else:
+		_trail.material_override = _mat(&"trail")
+	_trail.visible = false
+	add_child(_trail)
 	get_tree().create_timer(0.5).timeout.connect(_warm_up)
 
 
@@ -227,6 +265,10 @@ func reset() -> void:
 	if _ground_light != null:
 		_ground_light.queue_free()
 		_ground_light = null
+	_hold_until = 0.0
+	_trail_pts.clear()
+	_trail_k = -1.0
+	_trail.visible = false
 
 
 # --- Keys -------------------------------------------------------------------------
@@ -290,8 +332,10 @@ func _process(delta: float) -> void:
 		and not player.is_hidden() and not (hands != null and hands.get("holding") == true)
 	_raise = move_toward(_raise, 1.0 if held else 0.0, delta / 0.2)
 	_model.visible = _raise > 0.01 and _pose != Pose.AWAY
-	_pose_t += delta / time_scale()
+	if _now() >= _hold_until:
+		_pose_t += delta / time_scale()
 	var pose := _pose_transform()
+	_update_trail(delta)
 	var g: float = player.guard_amount()
 	if g > 0.0 and _pose in [Pose.REST, Pose.CATCH]:
 		pose = pose.interpolate_with(_guard_pose(), g)
@@ -376,14 +420,16 @@ func _pose_transform() -> Transform3D:
 			if k >= 1.0:
 				_pose = Pose.CUT
 				_pose_t = 0.0
-			return _from.interpolate_with(_swing(SWING_FROM), 1.0 - (1.0 - k) * (1.0 - k))
+			# Hauled up, then hung at the top for the last WIND_HANG of it.
+			var up := minf(k / (1.0 - WIND_HANG), 1.0)
+			return _from.interpolate_with(_swing(SWING_FROM), 1.0 - (1.0 - up) * (1.0 - up))
 		Pose.CUT:
 			var k := minf(t / SLASH_CUT, 1.0)
 			if k >= 1.0:
 				_from = _swing(SWING_TO)
 				_pose = Pose.BACK
 				_pose_t = 0.0
-			return _swing(lerpf(SWING_FROM, SWING_TO, k * k * (3.0 - 2.0 * k)))
+			return _swing(_cut_angle(k))
 		Pose.BACK:
 			var k := minf(t / SLASH_BACK, 1.0)
 			if k >= 1.0:
@@ -399,6 +445,11 @@ func _pose_transform() -> Transform3D:
 				_pose = Pose.REST
 			return _from.interpolate_with(_rest(), 1.0 - (1.0 - k) * (1.0 - k))
 	return _rest()
+
+
+## The chop's angle `k` (0..1) of the way through the cut.
+static func _cut_angle(k: float) -> float:
+	return lerpf(SWING_FROM, SWING_TO, k * k * (3.0 - 2.0 * k))
 
 
 # --- The cut ----------------------------------------------------------------------
@@ -443,6 +494,15 @@ func _slash_strike() -> void:
 	# Heavy: the whole view jolts as it lands, more on a hit.
 	player.set("_swing_kick", maxf(float(player.get("_swing_kick")), 1.0 if struck else 0.6))
 	player.set("_shake", maxf(float(player.get("_shake")), 0.3 if struck else 0.15))
+	# ...and is dragged down after the blow, as by a landing.
+	var dip := CHOP_DIP_HIT if struck else CHOP_DIP_MISS
+	if float(player.get("_land_kick")) > 0.0:
+		dip = maxf(dip, float(player.get("_land_strength")))
+	player.set("_land_kick", 1.0)
+	player.set("_land_strength", dip)
+	if struck:
+		# The edge bites: the swing held where it met the body.
+		_hold_until = _now() + HIT_STOP * time_scale()
 
 
 # --- The throw --------------------------------------------------------------------
@@ -642,6 +702,78 @@ static func _is_down(target) -> bool:
 	return h != null and float(h) <= 0.0
 
 
+# --- The chop's streak ------------------------------------------------------------
+
+## The white line the chop leaves, as the sword's slash does: a camera-facing
+## ribbon through where the middle of the edge has been, thinning and fading
+## with age. Sampled from the swing itself between frames (`_cut_angle`), as
+## the sword's is -- the cut covers 185 degrees in 0.1 s, a third of it a frame,
+## and chords between frame positions would cut inside the arc. Kept in the
+## HEAD's frame, so the view's kick and dip do not leave it behind.
+func _update_trail(delta: float) -> void:
+	if not Graphics.effects or player.get("sweep_trail_enabled") == false:
+		if _trail.visible:
+			_trail.visible = false
+		_trail_pts.clear()
+		_trail_k = -1.0
+		return
+	var before := _trail_clock
+	_trail_clock += delta
+	var now := _trail_clock
+	# How far through the cut the swing is: the cut itself, or its end if the
+	# pose went past it this frame.
+	var k := -1.0
+	if _pose == Pose.CUT:
+		k = minf(_pose_t / SLASH_CUT, 1.0)
+	elif _pose == Pose.BACK and _trail_k >= 0.0 and _trail_k < 1.0:
+		k = 1.0
+	if k >= 0.0 and _model.visible:
+		var from_k := _trail_k if _trail_k >= 0.0 and _trail_k <= k else 0.0
+		var steps := maxi(1, ceili((k - from_k) / TRAIL_STEP))
+		for i in range(1 if _trail_k >= 0.0 else 0, steps + 1):
+			var f := float(i) / float(steps)
+			_trail_pts.push_front([_swing(_cut_angle(lerpf(from_k, k, f))) * TRAIL_AT, lerpf(before, now, f)])
+		_trail_k = k
+	else:
+		_trail_k = -1.0
+	var life: float = player.get("sweep_trail_life")
+	while not _trail_pts.is_empty() and now - float(_trail_pts.back()[1]) > life:
+		_trail_pts.pop_back()
+	_trail_mesh.clear_surfaces()
+	if _trail_pts.size() < 2:
+		_trail.visible = false
+		return
+	_trail.global_transform = Transform3D.IDENTITY
+	var to_world := _head().global_transform
+	var eye: Vector3 = player.camera.global_position
+	var width: float = float(player.get("sweep_trail_width")) * TRAIL_WIDTH
+	var alpha: float = player.get("sweep_trail_alpha")
+	# Gathered first: a surface begun with no vertices errors (player.gd).
+	var verts: Array = []
+	for i in _trail_pts.size() - 1:
+		var p0: Vector3 = to_world * (_trail_pts[i][0] as Vector3)
+		var p1: Vector3 = to_world * (_trail_pts[i + 1][0] as Vector3)
+		var along := p1 - p0
+		if along.length_squared() < 1e-8:
+			continue
+		var side := along.cross(eye - p0).normalized()
+		var f0 := 1.0 - clampf((now - float(_trail_pts[i][1])) / life, 0.0, 1.0)
+		var f1 := 1.0 - clampf((now - float(_trail_pts[i + 1][1])) / life, 0.0, 1.0)
+		var w0 := side * width * f0
+		var w1 := side * width * f1
+		var c0 := Color(1.0, 1.0, 1.0, f0 * alpha)
+		var c1 := Color(1.0, 1.0, 1.0, f1 * alpha)
+		verts.append_array([[p0 - w0, c0], [p0 + w0, c0], [p1 + w1, c1], [p0 - w0, c0], [p1 + w1, c1], [p1 - w1, c1]])
+	_trail.visible = not verts.is_empty()
+	if verts.is_empty():
+		return
+	_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for v in verts:
+		_trail_mesh.surface_set_color(v[1])
+		_trail_mesh.surface_add_vertex(v[0])
+	_trail_mesh.surface_end()
+
+
 # --- Berserk's look ---------------------------------------------------------------
 
 ## The ring burning on the floor round the feet while berserk.
@@ -723,6 +855,14 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 			m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 			m.cull_mode = BaseMaterial3D.CULL_DISABLED
 			m.albedo_color = Color(1.0, 0.15, 0.05, 0.85)
+		&"trail":
+			# Only if the player has no SweepTrail to borrow from: its settings.
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
+			m.vertex_color_use_as_albedo = true
+			m.disable_receive_shadows = true
 		&"wood":
 			m.albedo_texture = load("res://textures/wood_door_albedo.png")
 			m.albedo_color = Color(0.82, 0.66, 0.5)

@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 87), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 88), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -470,6 +470,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 85 | 2026-10-20 | The axe: alternating slashes every 0.5 s, 1 s in its mark | [docs/notes/85-axe-alternating-faster-slash.md](docs/notes/85-axe-alternating-faster-slash.md) |
 | 86 | 2026-10-20 | The axe: no crash when what it is stuck in is freed | [docs/notes/86-axe-freed-target-crash.md](docs/notes/86-axe-freed-target-crash.md) |
 | 87 | 2026-10-20 | The heavy axe: a delayed vertical chop for 60, a planted throw, 25% slower carrying it | [docs/notes/87-heavy-axe.md](docs/notes/87-heavy-axe.md) |
+| 88 | 2026-10-20 | The axe a little heavier; the chop's white streak | [docs/notes/88-axe-heavier-and-its-streak.md](docs/notes/88-axe-heavier-and-its-streak.md) |
 
 ## Notes by source file
 
@@ -487,7 +488,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/archer.gd`: 20, 77
 - `scripts/arrow.gd`: 20, 79
 - `scripts/attack_icons.gd`: 24, 77, 79, 84
-- `scripts/axe.gd`: 84, 85, 86, 87
+- `scripts/axe.gd`: 84, 85, 86, 87, 88
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27
