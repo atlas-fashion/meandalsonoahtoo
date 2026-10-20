@@ -26,7 +26,8 @@ extends Node3D
 ##   change hands (`player.select_slot`).
 ## - BERSERK (F, "slam"): the player stops dead for `ROAR_TIME` (a shockwave
 ##   across the floor), then for `BERSERK_TIME` 7 s moves `BERSERK_SPEED`
-##   faster and every axe attack takes half the time (`time_scale`). A red ring
+##   faster, every axe attack takes half the time (`time_scale`), and health
+##   comes back `BERSERK_HEAL` 7 a second (`_berserk_heal`). A red ring
 ##   burns on the floor round the feet, and the edges of the view glow red
 ##   (hud.gd `_update_berserk_glow`). `BERSERK_COOLDOWN` after it wears off.
 ##
@@ -80,6 +81,8 @@ const STICK_PROUD := 0.3
 const ROAR_TIME := 0.6
 const BERSERK_TIME := 7.0
 const BERSERK_SPEED := 1.5
+## Health a second restored through the seven seconds (note 89), not the roar.
+const BERSERK_HEAL := 7.0
 ## Every axe attack's time is multiplied by this while berserk: halved.
 const BERSERK_ATTACK_SCALE := 0.5
 ## Seconds from the end of one berserk to the next being ready.
@@ -365,6 +368,21 @@ func _physics_process(delta: float) -> void:
 		_slash_strike()
 	if _flying != null:
 		_update_flight(delta)
+	_berserk_heal(delta)
+
+
+## Berserk heals BERSERK_HEAL a second, evenly, straight into health as a
+## potion's drink does (player.gd `_update_drink`) -- no "healed" toast a frame.
+func _berserk_heal(delta: float) -> void:
+	if not is_berserk() or is_roaring() or player.get("_dead") == true:
+		return
+	var health: float = player.get("health")
+	var top: float = player.get("max_health")
+	if health >= top:
+		return
+	health = minf(health + BERSERK_HEAL * delta, top)
+	player.set("health", health)
+	player.health_changed.emit(health, top)
 
 
 func _begin(pose: Pose) -> void:
