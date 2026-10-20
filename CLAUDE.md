@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 83), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 84), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -309,7 +309,8 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 `mimic`, `wood_door`) are empty stubs; the real scripts are in `scripts/`.
 
 **Systems** (all `scripts/`):
-- Player & combat: `player.gd` (movement, sword, block/parry `_start_block`
+- Player & combat: `axe.gd` (the third weapon: slash, a throw that stays in
+  its mark, berserk; note 84), `player.gd` (movement, sword, block/parry `_start_block`
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`), `spear.gd`, `hand_torch.gd`, `held_potion.gd`,
   `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt).
@@ -465,6 +466,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 81 | 2026-10-20 | The decrepit: more time between attacks | [docs/notes/81-decrepit-more-time-between-attacks.md](docs/notes/81-decrepit-more-time-between-attacks.md) |
 | 82 | 2026-10-19 | Co-op: each player on the other's map; player 1's HUD no longer squashed | [docs/notes/82-co-op-partner-on-the-map-and-player-1-s-canvas.md](docs/notes/82-co-op-partner-on-the-map-and-player-1-s-canvas.md) |
 | 83 | 2026-10-20 | Robot rats stack to 10 | [docs/notes/83-robot-rats-stack-to-10.md](docs/notes/83-robot-rats-stack-to-10.md) |
+| 84 | 2026-10-20 | The axe: slash, a throw that stays in its mark, berserk | [docs/notes/84-the-axe.md](docs/notes/84-the-axe.md) |
 
 ## Notes by source file
 
@@ -481,7 +483,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scenes/torch.tscn`: 6.15, 6.18, 7, 19, 24, 27, 46
 - `scripts/archer.gd`: 20, 77
 - `scripts/arrow.gd`: 20, 79
-- `scripts/attack_icons.gd`: 24, 77, 79
+- `scripts/attack_icons.gd`: 24, 77, 79, 84
+- `scripts/axe.gd`: 84
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27
@@ -506,12 +509,12 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hand_torch.gd`: 24, 29
 - `scripts/held_potion.gd`: 6.19
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
-- `scripts/hud.gd`: 6.19, 24, 79
+- `scripts/hud.gd`: 6.19, 24, 79, 84
 - `scripts/interact.gd`: 6.18, 79
-- `scripts/inventory.gd`: 6.19, 25, 77, 83
-- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79
+- `scripts/inventory.gd`: 6.19, 25, 77, 83, 84
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79
-- `scripts/item_icon.gd`: 6.19, 77
+- `scripts/item_icon.gd`: 6.19, 77, 84
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79
@@ -525,7 +528,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84
 - `scripts/portcullis.gd`: 6.18
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
@@ -537,7 +540,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/robot_rat.gd`: 77
 - `scripts/save_system.gd`: 19, 60, 79
 - `scripts/sandbox.gd`: 60, 68
-- `scripts/sandbox_menu.gd`: 60, 68, 77
+- `scripts/sandbox_menu.gd`: 60, 68, 77, 84
 - `scripts/sandbox_world.gd`: 60, 77, 79
 - `scripts/settings_panel.gd`: 19, 46, 80
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79
@@ -554,6 +557,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
 - `scripts/wood_door.gd`: 6.18, 79
 - `scripts/workbench.gd`: 32, 77, 79
+- `shaders/berserk_ground.gdshader`: 84
 - `shaders/blood_screen.gdshader`: 15
 - `shaders/debris_dissolve.gdshader`: 6.19
 - `shaders/dread.gdshader`: 11, 16

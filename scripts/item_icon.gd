@@ -39,6 +39,8 @@ static func paint(c: CanvasItem, id: StringName, rect: Rect2, tint := Color.WHIT
 			_sword(c, o, s, tint)
 		&"spear":
 			_spear(c, o, s, tint)
+		&"axe":
+			_axe(c, o, s, tint)
 		&"health_potion":
 			_potion(c, o, s, tint)
 		&"coins":
@@ -106,6 +108,35 @@ static func _spear(c: CanvasItem, o: Vector2, s: float, tint: Color) -> void:
 	c.draw_polyline(outline, dark, maxf(1.0, s * 0.018))
 	# Butt spike.
 	c.draw_line(p.call(0.12, 0.88), p.call(0.07, 0.93), iron_dark, s * 0.045)
+
+
+## The haft corner to corner, the bearded head up at the top right, its edge
+## facing left.
+static func _axe(c: CanvasItem, o: Vector2, s: float, tint: Color) -> void:
+	var p := func(x: float, y: float) -> Vector2: return o + Vector2(x, y) * s
+	var wood := Color(0.62, 0.46, 0.28) * tint
+	var wood_dark := Color(0.38, 0.27, 0.15) * tint
+	var iron := Color(0.62, 0.64, 0.68) * tint
+	var iron_dark := Color(0.36, 0.38, 0.42) * tint
+	var dark := Color(0.12, 0.11, 0.12) * tint
+	# The haft, with a darker underside, and the leather grip at the end.
+	c.draw_line(p.call(0.22, 0.9), p.call(0.72, 0.16), wood_dark, s * 0.075)
+	c.draw_line(p.call(0.21, 0.89), p.call(0.71, 0.15), wood, s * 0.045)
+	c.draw_line(p.call(0.22, 0.9), p.call(0.3, 0.78), Color(0.22, 0.13, 0.07) * tint, s * 0.08)
+	c.draw_circle(p.call(0.2, 0.92), s * 0.04, iron_dark)
+	# The head: a horn up top, the curved edge on the left, a long beard swept
+	# back down to the haft.
+	var head := PackedVector2Array([p.call(0.7, 0.14), p.call(0.56, 0.1), p.call(0.4, 0.04),
+		p.call(0.34, 0.16), p.call(0.32, 0.3), p.call(0.36, 0.44), p.call(0.44, 0.4),
+		p.call(0.54, 0.3), p.call(0.66, 0.28), p.call(0.76, 0.24)])
+	c.draw_colored_polygon(head, iron)
+	c.draw_colored_polygon(PackedVector2Array([p.call(0.56, 0.3), p.call(0.66, 0.28), p.call(0.76, 0.24),
+		p.call(0.7, 0.14), p.call(0.56, 0.2)]), iron_dark)
+	c.draw_polyline(PackedVector2Array([p.call(0.4, 0.04), p.call(0.34, 0.16), p.call(0.32, 0.3),
+		p.call(0.36, 0.44)]), Color(0.95, 0.96, 0.98) * tint, maxf(1.0, s * 0.025))
+	var outline := head.duplicate()
+	outline.append(head[0])
+	c.draw_polyline(outline, dark, maxf(1.0, s * 0.018))
 
 
 ## Points corner to corner, blade up and to the right.

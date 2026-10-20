@@ -475,6 +475,28 @@ func _stats_for(id: StringName) -> Array:
 					["Ghost", "hold Shift / L3"],
 				],
 			]
+		&"axe":
+			var a = player.axe
+			var k: float = player.weapon_damage_scale(&"axe")
+			return [
+				"Attack", [
+					["Level", str(player.weapon_level(&"axe"))],
+					["Slash", str(roundi(a.SLASH_DAMAGE * k))],
+					["Slash rate", "%.2f s" % a.SLASH_EVERY],
+					["Throw", str(roundi(a.THROW_DAMAGE * k))],
+					["Stays in its mark", "%d s" % roundi(a.STICK_TIME)],
+					["Berserk", "%d s" % roundi(a.BERSERK_TIME)],
+					["Berserk cooldown", "%d s" % roundi(a.BERSERK_COOLDOWN)],
+					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],
+				],
+				"Controls", [
+					["Slash", "LMB / RB"],
+					["Throw", "Q / RT"],
+					["Berserk", "F / LT"],
+					["Block", "hold RMB / LB"],
+					["Ghost", "hold Shift / L3"],
+				],
+			]
 		&"coins":
 			return [
 				"Treasure", [["Carried", _thousands(player.currency)]],

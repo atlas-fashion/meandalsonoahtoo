@@ -218,6 +218,26 @@ func _draw_glyph(t: Dictionary) -> void:
 			for k in 3:
 				var y := (float(k) - 1.0) * s * 0.45
 				g.draw_line(c + Vector2(-s * 1.2, y + 1), c + Vector2(-s * 0.7, y + 1), INK_DIM, 2.0, true)
+		&"axe_slash":
+			_axe(g, c + Vector2(s * 0.75, s * 0.75), c + Vector2(-s * 0.35, -s * 0.6))
+			g.draw_arc(c + Vector2(s * 0.2, s * 0.2), s * 1.05, PI * 0.95, PI * 1.6, 18, INK_DIM, 2.0, true)
+		&"axe_throw":
+			_axe(g, c + Vector2(-s * 0.2, s * 0.6), c + Vector2(s * 0.5, -s * 0.5))
+			g.draw_arc(c + Vector2(s * 0.15, 0.0), s * 0.95, -PI * 0.9, -PI * 0.2, 16, INK_DIM, 2.0, true)
+			for k in 2:
+				var y := (float(k) - 0.5) * s * 0.6
+				g.draw_line(c + Vector2(-s * 1.2, y + s * 0.3), c + Vector2(-s * 0.6, y + s * 0.3), INK_DIM, 2.0, true)
+		&"berserk":
+			# A red ring on the ground with flames rising off it.
+			var red := Color(1.0, 0.3, 0.2)
+			var base := c + Vector2(0.0, s * 0.55)
+			g.draw_arc(base, s * 0.95, 0.0, TAU, 28, red, 2.5, true)
+			for k in 5:
+				var x := (float(k) - 2.0) * s * 0.4
+				var h := s * (1.15 if k == 2 else (0.85 if k % 2 == 1 else 0.6))
+				var foot := base + Vector2(x, 0.0)
+				g.draw_colored_polygon(PackedVector2Array([foot + Vector2(-s * 0.16, 0.0),
+					foot + Vector2(0.0, -h), foot + Vector2(s * 0.16, 0.0)]), red if k % 2 == 0 else INK)
 		&"rat_bomb":
 			# The robot rat (rat_control.gd): its icon, and a burst over it.
 			ItemIcon.paint(g, &"robot_rat", Rect2(c - Vector2(s, s * 1.05), Vector2(s, s) * 2.0))
@@ -238,6 +258,17 @@ func _draw_glyph(t: Dictionary) -> void:
 				var r1 := s * (0.42 if k % 2 == 0 else 0.3)
 				g.draw_line(burst + Vector2(cos(ang), sin(ang)) * r0, burst + Vector2(cos(ang), sin(ang)) * r1,
 					Color(1.0, 0.7, 0.35), 2.0, true)
+
+
+## An axe with its haft from `butt` to `top`, the head on the left of it.
+func _axe(g: Control, butt: Vector2, top: Vector2) -> void:
+	var dir := (top - butt).normalized()
+	var side := Vector2(-dir.y, dir.x)
+	g.draw_line(butt, top, Color(0.7, 0.55, 0.36), 2.5, true)
+	var a := top - dir * 2.0
+	var b := top - dir * 13.0
+	g.draw_colored_polygon(PackedVector2Array([a, a + side * 9.0 + dir * 3.0, b + side * 10.0 - dir * 3.0,
+		b]), INK)
 
 
 ## A sword from `hilt` to `tip`: blade, crossguard, grip.

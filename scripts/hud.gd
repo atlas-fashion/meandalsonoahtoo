@@ -493,6 +493,56 @@ func _update_beam_glow(delta: float) -> void:
 	_beam_glow.modulate.a = _beam_shown * (0.8 + 0.2 * sin(Time.get_ticks_msec() * 0.03))
 
 
+## --- Berserk (the axe's heavy attack, axe.gd) ---------------------------------------
+##
+## Red burning in round the edges of the view while berserk, throbbing like a
+## pulse, with a harder flare over the roar. Gameplay information (how long the
+## speed lasts): not gated on `Graphics.effects`. A plain radial gradient, as the
+## beam's glow, so no shader and no extra pass beyond the one blended rect.
+
+var _berserk_glow: TextureRect
+var _berserk_shown := 0.0
+
+
+func _update_berserk_glow(delta: float) -> void:
+	if _player == null or _player.get("axe") == null:
+		return
+	if _berserk_glow == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(0.9, 0.05, 0.02, 0.0))
+		g.set_color(1, Color(0.75, 0.02, 0.0, 0.6))
+		g.add_point(0.5, Color(0.9, 0.05, 0.02, 0.0))
+		g.add_point(0.8, Color(0.85, 0.06, 0.02, 0.35))
+		var tex := GradientTexture2D.new()
+		tex.gradient = g
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(1.05, 0.5)
+		tex.width = 256
+		tex.height = 256
+		_berserk_glow = TextureRect.new()
+		_berserk_glow.name = "BerserkGlow"
+		_berserk_glow.texture = tex
+		_berserk_glow.stretch_mode = TextureRect.STRETCH_SCALE
+		_berserk_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_berserk_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_berserk_glow.modulate.a = 0.0
+		_berserk_glow.visible = false
+		add_child(_berserk_glow)
+		move_child(_berserk_glow, 0)
+	var axe: Node = _player.get("axe")
+	var want: float = axe.berserk_amount()
+	_berserk_shown = move_toward(_berserk_shown, want, delta * (6.0 if want > _berserk_shown else 2.0))
+	_berserk_glow.visible = _berserk_shown > 0.01
+	if not _berserk_glow.visible:
+		return
+	var t := Time.get_ticks_msec() / 1000.0
+	var beat := fmod(t * 2.2, 1.0)
+	var pulse := exp(-beat * beat / 0.01) + 0.6 * exp(-pow(beat - 0.3, 2.0) / 0.01)
+	var roar := 0.35 if axe.is_roaring() else 0.0
+	_berserk_glow.modulate.a = clampf(_berserk_shown * (0.7 + 0.25 * pulse) + roar, 0.0, 1.0)
+
+
 func _build_dread() -> void:
 	_blood = _full_screen_rect("Blood", "res://shaders/blood_screen.gdshader")
 	(_blood.material as ShaderMaterial).set_shader_parameter("seed", randf() * 50.0)
@@ -703,6 +753,7 @@ func _process(delta: float) -> void:
 	_update_dread(delta)
 	_update_blood(delta)
 	_update_beam_glow(delta)
+	_update_berserk_glow(delta)
 	_update_damage_mark()
 
 	_update_health_bars(delta)

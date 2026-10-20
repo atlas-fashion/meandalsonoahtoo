@@ -537,6 +537,32 @@ func is_spear_dashing() -> bool:
 	return _now() < _spear_dash_until
 
 
+## --- The axe (2026-10-20) ---------------------------------------------------------
+##
+## scripts/axe.gd does its own fighting, as the spear does; the player routes
+## the keys to it (free when `_spear_free` is), holds the body still for the
+## berserk roar and speeds it up while berserk.
+
+var axe: Node3D
+
+
+## The berserk roar: planted where it stands (axe.gd `ROAR_TIME`).
+func _berserk_roaring() -> bool:
+	return axe != null and axe.is_roaring()
+
+
+## Walking pace multiplier: up to axe.gd `BERSERK_SPEED` while berserk.
+func _berserk_speed() -> float:
+	if axe == null:
+		return 1.0
+	return lerpf(1.0, axe.BERSERK_SPEED, axe.berserk_amount())
+
+
+## Thrown and not yet caught: the player has no weapon at all.
+func axe_away() -> bool:
+	return axe != null and axe.is_away()
+
+
 ## The spear's ordinary stab is put behind the shoulder: the player walks at
 ## `spear_stab_move_scale` while one is out, and the view drives into it -- a
 ## push forward, a dip, a nod, the shoulders rolling to alternate sides, the view
@@ -1064,6 +1090,11 @@ func _ready() -> void:
 	spear.set_script(load("res://scripts/spear.gd"))
 	head.add_child(spear)
 	spear.setup(self)
+	# The third (scripts/axe.gd): slash, throw, berserk.
+	axe = Node3D.new()
+	axe.set_script(load("res://scripts/axe.gd"))
+	head.add_child(axe)
+	axe.setup(self)
 	# Rats: the live ones thrown, the robot one set down and driven.
 	rats = Node3D.new()
 	rats.set_script(load("res://scripts/rat_control.gd"))
@@ -1442,6 +1473,10 @@ func select_slot(slot: int) -> void:
 	slot = clampi(slot, 0, Inventory.WEAPONS - 1)
 	if slot == selected_slot:
 		return
+	# A thrown axe leaves the hands empty until it is caught: nothing else is
+	# taken up meanwhile (axe.gd).
+	if axe_away() and selected_slot >= 0:
+		return
 	selected_slot = slot
 	selection_changed.emit(slot)
 
@@ -1459,6 +1494,7 @@ func save_state() -> Dictionary:
 		"weapon_levels": weapon_levels.duplicate(),
 		"armor_level": armor_level,
 		"selected": selected_slot,
+		"axe_given": true,
 	}
 
 
@@ -1481,6 +1517,9 @@ func restore_state(data: Dictionary) -> void:
 		# is put back where it now belongs.
 		inventory.migrate(slots)
 		currency_changed.emit(currency, 0)
+	# Saves from before the axe (2026-10-20) are handed one, once.
+	if not slots.is_empty() and not bool(data.get("axe_given", false)) and inventory.find(&"axe") < 0:
+		inventory.add(&"axe", 1)
 	var want := int(data.get("selected", 0)) if same_layout else maxi(inventory.find(&"sword"), 0)
 	selected_slot = -1
 	select_slot(want)
@@ -1650,6 +1689,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif held_item() == &"spear":
 				if _spear_free():
 					spear.stab()
+			elif held_item() == &"axe":
+				if _spear_free():
+					axe.slash()
 			elif held_item() == &"robot_rat":
 				# Set down, and the view goes to its eyes (rat_control.gd).
 				if not _ghosting and not is_drinking():
@@ -1658,13 +1700,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 	elif event.is_action_pressed("thrust"):
 		_attack_key_spills_drink()
-		# Q: the spin with the sword; the dash with the spear.
+		# Q: the spin with the sword; the dash with the spear; the axe thrown.
 		if Coop.aim_ready(self) and held_item() == &"sword" \
 				and not _ghosting:
 			_start_spin()
 		elif Coop.aim_ready(self) and held_item() == &"spear" \
 				and _spear_free():
 			spear.dash()
+		elif Coop.aim_ready(self) and held_item() == &"axe" \
+				and _spear_free():
+			axe.throw()
 	elif event.is_action_pressed("slam"):
 		_attack_key_spills_drink()
 		# F: the heavy attack. With the sword, a dive in the air or the blade
@@ -1677,6 +1722,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif Coop.aim_ready(self) and held_item() == &"spear" \
 				and _spear_free():
 			spear.throw()
+		elif Coop.aim_ready(self) and held_item() == &"axe" \
+				and _spear_free():
+			axe.berserk()
 	elif event.is_action_pressed("block"):
 		# Right click, held: the block. With the mouse free, a click takes it
 		# back instead.
@@ -1711,6 +1759,15 @@ func _physics_process(delta: float) -> void:
 		if not is_on_floor():
 			velocity += get_gravity() * delta
 		move_and_slide()
+		return
+	# The berserk roar: stopped dead where it stands (axe.gd).
+	if _berserk_roaring():
+		velocity.x = 0.0
+		velocity.z = 0.0
+		if not is_on_floor():
+			velocity += get_gravity() * delta
+		move_and_slide()
+		_update_locomotion()
 		return
 	# The spear's dash: carried straight on at its speed, no steering, until it
 	# runs out (stone stops it, as anything does).
@@ -1821,7 +1878,7 @@ func _physics_process(delta: float) -> void:
 			* (block_move_scale if _blocking else 1.0) \
 			* (drink_move_scale if is_drinking() else 1.0) \
 			* (wade_speed_scale if depth > 0.3 else 1.0) * carry_speed_scale * _beam_speed_scale() \
-			* (spear_stab_move_scale if _spear_stabbing() else 1.0)
+			* (spear_stab_move_scale if _spear_stabbing() else 1.0) * _berserk_speed()
 		var target_velocity := direction * walk
 		# Damping is raised during a swing so the lunge surge is gone well before
 		# the stroke ends, leaving the back half of it visibly slower.
@@ -1854,7 +1911,7 @@ func _physics_process(delta: float) -> void:
 		if air_input != Vector2.ZERO:
 			var wish := (global_basis * Vector3(air_input.x, 0.0, air_input.y)).normalized()
 			var air_walk := move_speed * (attack_move_scale if _attack_slows() else 1.0) \
-				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale()
+				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() * _berserk_speed()
 			var target_velocity := wish * air_walk
 			var air_damp := acceleration * air_damp_scale \
 				* (attack_damp_scale if _attack_slows() else 1.0)
@@ -2127,6 +2184,9 @@ func _start_block() -> void:
 	# The spear's own attacks wait the same way, and a thrown spear takes its
 	# haft -- and the shield in it -- with it until it is caught.
 	if held_item() == &"spear" and (spear.busy() or is_spear_dashing()):
+		return
+	# The axe likewise; thrown, there is nothing in the hands to guard with.
+	if held_item() == &"axe" and axe.busy():
 		return
 	_attacking = false
 	_hit_window_open = false
@@ -3328,6 +3388,12 @@ func attack_cooldowns() -> Array:
 			if float(entry[1]) >= 0.0:
 				entry[1] = maxf(float(entry[1]), recover)
 		return list
+	if held == &"axe" and axe != null:
+		var list: Array = axe.call("attack_cooldowns")
+		for entry: Array in list:
+			if float(entry[1]) >= 0.0:
+				entry[1] = maxf(float(entry[1]), recover)
+		return list
 	if held == &"robot_rat" and rats != null:
 		return rats.call("attack_cooldowns")
 	return []
@@ -3867,7 +3933,7 @@ func dodge_charge() -> float:
 ## --- Upgrades (the crystal mine's workbench, workbench.gd, 2026-10-11) -----------
 ##
 ## Gold crystals buy levels. A weapon's level scales everything it deals by
-## `UPGRADE_DAMAGE` a level (sword: cut, spin, slam; spear: stab, dash, blast);
+## `UPGRADE_DAMAGE` a level (sword: cut, spin, slam; spear: stab, dash, blast; axe: slash, throw);
 ## armor takes `ARMOR_STEP` a level off every hit and beam (`damage_negation`).
 ## Small steps on purpose. Levels start at 1 and are saved with the game.
 
@@ -3875,7 +3941,7 @@ const UPGRADE_DAMAGE := 0.08
 const ARMOR_STEP := 0.04
 const UPGRADE_MAX := 10
 ## The weapons the workbench can work on.
-const UPGRADABLE: Array[StringName] = [&"sword", &"spear"]
+const UPGRADABLE: Array[StringName] = [&"sword", &"spear", &"axe"]
 
 var weapon_levels := {}
 var armor_level := 1
@@ -4407,6 +4473,8 @@ func _respawn() -> void:
 	_spear_dash_until = 0.0
 	if spear != null:
 		spear.reset()
+	if axe != null:
+		axe.reset()
 	if rats != null:
 		rats.call("reset")
 	if _hidden_in != null:
@@ -4439,7 +4507,7 @@ func _respawn() -> void:
 
 
 ## A new game: the sword (weapon wheel, up), the starting consumables (quick
-## wheel, up), the spear (weapon wheel, right). Not run on respawn any more --
+## wheel, up), the spear (weapon wheel, right), the axe (weapon wheel, down). Not run on respawn any more --
 ## the player rises with what they died with (2026-10-11).
 func _reset_inventory(first_time := false) -> void:
 	if first_time:
@@ -4460,9 +4528,10 @@ func _reset_inventory(first_time := false) -> void:
 		inventory.add(id, want)
 	if inventory.find(&"sword") < 0:
 		inventory.add(&"sword", 1)
-	# The spear: the weapon wheel's second slot (right).
+	# The spear: the weapon wheel's second slot (right); the axe the third (down).
 	if first_time:
 		inventory.add(&"spear", 1)
+		inventory.add(&"axe", 1)
 	inventory_changed.emit()
 
 
