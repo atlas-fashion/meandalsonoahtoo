@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 80), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 81), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -462,6 +462,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 78 | 2026-10-18 | The Tripo rat, animated, and held by the tail | [docs/notes/78-the-tripo-rat-animated-and-held-by-the-tail.md](docs/notes/78-the-tripo-rat-animated-and-held-by-the-tail.md) |
 | 79 | 2026-10-18 | Local co-op split-screen | [docs/notes/79-local-co-op-split-screen.md](docs/notes/79-local-co-op-split-screen.md) |
 | 80 | 2026-10-18 | Co-op: what its frame time costs, the torch share, two monitors | [docs/notes/80-co-op-cost-cuts-and-two-monitors.md](docs/notes/80-co-op-cost-cuts-and-two-monitors.md) |
+| 81 | 2026-10-20 | The decrepit: more time between attacks | [docs/notes/81-decrepit-more-time-between-attacks.md](docs/notes/81-decrepit-more-time-between-attacks.md) |
 
 ## Notes by source file
 
@@ -488,7 +489,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/convoy.gd`: 23, 28, 79
 - `scripts/crier.gd`: 43, 48, 60, 77, 79
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24, 79

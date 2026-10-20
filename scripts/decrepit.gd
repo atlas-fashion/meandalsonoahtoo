@@ -92,7 +92,7 @@ const SWIPE_DAMAGE := 25.0
 const SWIPE_HITS := [[0.4833, 0.6667]]
 const SWIPE_TIP := 2.74 * MODEL_SCALE
 const SWIPE_END := 0.733
-const SWIPE_COOLDOWN := 1.3
+const SWIPE_COOLDOWN := 1.55
 ## The lunge before the blow is stretched (on what is left of it, every frame)
 ## so the point arrives on them, within these multiples of the clip's own.
 const SWIPE_STRETCH := Vector2(0.0, 1.6)
@@ -125,8 +125,8 @@ const DROPKICK_THROW := 10.0
 ## shrunk to nothing close in), each on its own cooldown.
 const LEAP_MIN := 4.0
 const LEAP_MAX := 9.0
-const JUMP_COOLDOWN := 3.0
-const DROPKICK_COOLDOWN := 3.5
+const JUMP_COOLDOWN := 3.6
+const DROPKICK_COOLDOWN := 4.2
 const LEAP_STRETCH := Vector2(0.0, 9.0)
 ## After the blow lands the travel left in the clip is cut to this share.
 const AFTER_CONTACT := 0.3
@@ -135,10 +135,12 @@ const AFTER_CONTACT := 0.3
 ## 2026-10-17): within CLOSE_RANGE it picks among those off cooldown by these
 ## weights (the move it used last at CLOSE_REPEAT of its
 ## weight), after a breath of CLOSE_PAUSE seconds from its last move's end.
+## The breath and every cooldown were made ~20% longer (the user, 2026-10-20:
+## "a little more time between attacks"; note 81).
 const CLOSE_RANGE := 3.8
 const CLOSE_WEIGHTS := {Move.SWIPE: 0.5, Move.JUMP: 0.25, Move.DROPKICK: 0.25}
 const CLOSE_REPEAT := 0.3
-const CLOSE_PAUSE := Vector2(0.25, 0.7)
+const CLOSE_PAUSE := Vector2(0.3, 0.85)
 ## DASH, the gap closer (2026-10-17, the user: "he should slide to you"): the
 ## clip crouches and is thrown into a wide lunge, the shield out furthest at
 ## clip DASH_LUNGE 0.233 s (f15), DASH_TIP ahead. Then the body SLIDES at them
@@ -171,7 +173,7 @@ const DASH_TRAVEL := 13.0
 ## (now and then, 4-9 m) leaps.
 const DASH_MIN := 7.0
 const DASH_MAX := 14.0
-const DASH_COOLDOWN := 2.2
+const DASH_COOLDOWN := 2.65
 ## Sparks off the plating scraping the floor while it slides, this often.
 const SCRAPE_EVERY := 0.05
 const TURN_SWIPE := 12.0
