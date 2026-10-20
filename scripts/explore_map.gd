@@ -423,11 +423,76 @@ func _draw_mini_marks() -> void:
 		var at := c + ((_pin_px(pin) - me) * k).rotated(-_mini_spin)
 		if Rect2(Vector2.ZERO, Vector2(MINIMAP_SIZE, MINIMAP_SIZE)).grow(-4.0).has_point(at):
 			_draw_mark(_mini_marks, at, pin["color"], int(pin.get("shape", 0)), 0.7)
+	# The other player (co-op): their arrow where they are, turned with the
+	# map; beyond its edge, a smaller one held on the rim pointing their way.
+	for p in _partners():
+		var colour := _partner_colour(p)
+		var d := ((_continuous_px(p.global_position) - me) * k).rotated(-_mini_spin)
+		var lim := MINIMAP_SIZE * 0.5 - PARTNER_RIM
+		var far := maxf(absf(d.x), absf(d.y))
+		if far > lim:
+			_draw_arrow(_mini_marks, c + d * (lim / far), d.angle() + PI * 0.5, 5.0, colour)
+		else:
+			_draw_arrow(_mini_marks, c + d, _facing_of(p) - _mini_spin, 7.0, colour)
 	# North, on the rim: where the map's top has turned to.
 	var north := c + Vector2(0.0, -(MINIMAP_SIZE * 0.5 - 13.0)).rotated(-_mini_spin)
 	var font := ThemeDB.fallback_font
 	_mini_marks.draw_circle(north, 9.0, Color(0.03, 0.025, 0.02, 0.85))
 	_mini_marks.draw_string(font, north + Vector2(-5.0, 5.0), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, COL_WALL)
+
+
+## --- The other player (co-op, 2026-10-19) ------------------------------------
+##
+## In co-op each player's map shows the other: an arrow in the colour of their
+## stand-in (coop_avatar.gd CLOTH, brightened -- this map's own arrow stays the
+## one bright red thing), pointing the way they face, on both the minimap and
+## the full map. Only on the same level (the dungeon or the sewer). Out of the
+## minimap's reach it waits on the rim, pointing toward them. Fallen, grey.
+
+const PARTNER_COLOURS := [Color(1.0, 0.52, 0.22), Color(0.38, 0.66, 1.0)]
+const PARTNER_DOWN := Color(0.55, 0.55, 0.55)
+## How far in from the minimap's edge a far partner's arrow is held.
+const PARTNER_RIM := 11.0
+
+
+## The other players on this map's level now (none outside co-op).
+func _partners() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	if not Coop.active or not is_instance_valid(_player):
+		return out
+	var split := _stored.has(&"sewer") or _level == &"sewer"
+	for p in Coop.all():
+		if p == _player or not (p is Node3D):
+			continue
+		var theirs := &"dungeon"
+		if split and (p as Node3D).global_position.y < LEVEL_SPLIT_Y:
+			theirs = &"sewer"
+		if theirs == _level:
+			out.append(p as Node3D)
+	return out
+
+
+func _partner_colour(p: Node3D) -> Color:
+	if p.get("_dead") == true:
+		return PARTNER_DOWN
+	return PARTNER_COLOURS[clampi(Coop.index_of(p), 0, PARTNER_COLOURS.size() - 1)]
+
+
+## As `_facing_angle`, for any player.
+func _facing_of(p: Node3D) -> float:
+	var forward := -p.global_basis.z
+	return atan2(forward.x, -forward.z)
+
+
+## The map's arrow (MarkerControl's shape), drawn at `at` turned by `angle`.
+static func _draw_arrow(c: CanvasItem, at: Vector2, angle: float, s: float, colour: Color) -> void:
+	for pass_ in 2:
+		var size := s + 2.0 + (1.6 if pass_ == 0 else 0.0)
+		var pts := PackedVector2Array([Vector2(0.0, -size), Vector2(size * 0.62, size * 0.8),
+			Vector2(-size * 0.62, size * 0.8)])
+		for i in pts.size():
+			pts[i] = at + pts[i].rotated(angle)
+		c.draw_colored_polygon(pts, COL_MARKER_OUTLINE if pass_ == 0 else colour)
 
 
 ## --- Currency ---------------------------------------------------------------
@@ -876,6 +941,11 @@ func _draw_full_marks() -> void:
 			_pin_layer.draw_rect(box, Color(pin["color"], 0.9), false, 1.5)
 			_pin_layer.draw_string(font, box.position + Vector2(7, 17), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 				Color(0.95, 0.92, 0.85))
+	# The other player (co-op), where they are and facing their way.
+	for p in _partners():
+		var at := _px_to_panel(_continuous_px(p.global_position))
+		if Rect2(Vector2.ZERO, _pin_layer.size).has_point(at):
+			_draw_arrow(_pin_layer, at, _facing_of(p), 8.0, _partner_colour(p))
 	# The cursor: the game's crosshair (a ring and a dot, hud.gd), fixed in the
 	# middle; the map moves under it. Corner brackets close in over a mark.
 	var c := _pin_layer.size * 0.5
@@ -1285,6 +1355,9 @@ func _update_marker_transforms() -> void:
 		_mini_marks.queue_redraw()
 	if not _full_open:
 		return
+	# The other player moves: their arrow is redrawn every frame (co-op).
+	if Coop.active and _pin_layer != null:
+		_pin_layer.queue_redraw()
 	_full_marker.rotation = angle
 	if _img_w <= 0 or _img_h <= 0:
 		return

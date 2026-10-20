@@ -126,6 +126,12 @@ func _build() -> void:
 			sub.handle_input_locally = true
 			sub.audio_listener_enable_3d = i == 0
 			box.add_child(sub)
+			# Its canvas follows ITS size, not the window's: when the HUDs were
+			# placed the containers had not been laid out yet (the halves read
+			# 512 square), so player 1's canvas stayed 1280 x 1280 and was
+			# squashed into its half -- or across the whole window, with player
+			# 2 on another monitor.
+			sub.size_changed.connect(resized)
 			_containers.append(box)
 			vp = sub
 		var cam := Camera3D.new()
@@ -233,7 +239,10 @@ func resized() -> void:
 		var s := vp.size
 		if s.x <= 0 or s.y <= 0:
 			continue
-		vp.size_2d_override = Vector2i(CANVAS_WIDTH, roundi(CANVAS_WIDTH * float(s.y) / float(s.x)))
+		var want := Vector2i(CANVAS_WIDTH, roundi(CANVAS_WIDTH * float(s.y) / float(s.x)))
+		# Only when it differs: setting it can raise `size_changed` again.
+		if vp.size_2d_override != want:
+			vp.size_2d_override = want
 		vp.size_2d_override_stretch = true
 
 

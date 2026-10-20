@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 81), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 82), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -463,6 +463,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 79 | 2026-10-18 | Local co-op split-screen | [docs/notes/79-local-co-op-split-screen.md](docs/notes/79-local-co-op-split-screen.md) |
 | 80 | 2026-10-18 | Co-op: what its frame time costs, the torch share, two monitors | [docs/notes/80-co-op-cost-cuts-and-two-monitors.md](docs/notes/80-co-op-cost-cuts-and-two-monitors.md) |
 | 81 | 2026-10-20 | The decrepit: more time between attacks | [docs/notes/81-decrepit-more-time-between-attacks.md](docs/notes/81-decrepit-more-time-between-attacks.md) |
+| 82 | 2026-10-19 | Co-op: each player on the other's map; player 1's HUD no longer squashed | [docs/notes/82-co-op-partner-on-the-map-and-player-1-s-canvas.md](docs/notes/82-co-op-partner-on-the-map-and-player-1-s-canvas.md) |
 
 ## Notes by source file
 
@@ -497,7 +498,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
-- `scripts/explore_map.gd`: 6.18, 50, 60, 79
+- `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
 - `scripts/graphics_settings.gd`: 79, 80
@@ -539,7 +540,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox_world.gd`: 60, 77, 79
 - `scripts/settings_panel.gd`: 19, 46, 80
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79
-- `scripts/split_screen.gd`: 79, 80
+- `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60
 - `scripts/shard_door.gd`: 18, 79
 - `scripts/shield_hitbox.gd`: 68, 69
