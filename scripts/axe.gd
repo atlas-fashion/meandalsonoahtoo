@@ -4,7 +4,7 @@ extends Node3D
 ## hand holds `&"axe"`. Lives under the player's Head as the first-person model
 ## and does its own fighting, as the spear does; `player.gd` only routes the
 ## keys to it (`slash`, `throw`, `berserk`), stops the body for the berserk roar
-## and the throw's wind-up, and sets its pace (`player._axe_speed`): 25% slower
+## and the throw's wind-up, and sets its pace (`player._axe_speed`): 35% slower
 ## with the axe in hand (`CARRY_SPEED`), faster while berserk.
 ##
 ## HEAVY (the user, 2026-10-20, note 87): "very heavy and cumbersome, but very
@@ -61,8 +61,8 @@ const TRAIL_WIDTH := 1.6
 const SLASH_REACH := 2.6
 const SLASH_HALF_WIDTH := 0.5
 const SLASH_STAGGER := 0.6
-## Walking pace with the axe in hand.
-const CARRY_SPEED := 0.75
+## Walking pace with the axe in hand (0.75 in note 87, a little slower in 90).
+const CARRY_SPEED := 0.65
 
 const THROW_DAMAGE := 60.0
 const THROW_WINDUP := 0.5
