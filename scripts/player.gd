@@ -498,6 +498,42 @@ var currency: int:
 var in_cutscene := false
 
 
+## --- Held (note 96) ---------------------------------------------------------------
+## Something has hold of them -- the surgical table's claw, carrying them to the
+## table and strapping them down (surgical_table.gd). The holder places them
+## every frame; they can only look about and STRUGGLE (any fighting key), and
+## blows still land. A scripted moment underneath (`in_cutscene`), so nothing
+## else drives them meanwhile.
+var restrained_by: Node3D = null
+## Struggles since they were taken; the holder reads it.
+var struggles := 0
+## (drop m, pitch deg, roll deg) the holder sets, as `_knock_view`: strapped
+## to the table the view is down on its back, looking up.
+var restrain_view := Vector3.ZERO
+
+
+func restrain(by: Node3D) -> void:
+	if _dead:
+		return
+	begin_cutscene(true)
+	restrained_by = by
+	struggles = 0
+
+
+## Let go: thrown off with `push`.
+func release(push := Vector3.ZERO) -> void:
+	if restrained_by == null:
+		return
+	restrained_by = null
+	restrain_view = Vector3.ZERO
+	in_cutscene = false
+	velocity = push
+
+
+func is_restrained() -> bool:
+	return restrained_by != null and is_instance_valid(restrained_by)
+
+
 ## `hurts`: the scene happens in the world rather than outside it, and blows
 ## still land (the bone cages); otherwise the player cannot be hurt in it.
 func begin_cutscene(hurts := false) -> void:
@@ -1331,7 +1367,7 @@ func _update_head(delta: float) -> void:
 	shake_offset += Vector3(tremble.x, tremble.y, 0.0)
 	shake_roll += tremble.z
 	# Getting up after a death, and a scene's crush into the floor.
-	var wake := _wake_view() + _knock_view()
+	var wake := _wake_view() + _knock_view() + restrain_view
 	var crushed := _scene_crush * _scene_crush * (3.0 - 2.0 * _scene_crush)
 	effort.x += wake.z + 38.0 * crushed
 	effort.y += wake.y - 25.0 * crushed
@@ -1625,7 +1661,7 @@ var wheel_open := false
 
 
 func _pad_look(delta: float) -> void:
-	if ui_open or wheel_open or in_cutscene or _dead or remote_view:
+	if ui_open or wheel_open or (in_cutscene and restrained_by == null) or _dead or remote_view:
 		return
 	var v := Coop.vector(self, &"look_left", &"look_right", &"look_up", &"look_down")
 	if v == Vector2.ZERO:
@@ -1655,6 +1691,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			rotation.y = _hide_yaw + clampf(wrapf(yaw - _hide_yaw, -PI, PI), -HIDE_LOOK_YAW, HIDE_LOOK_YAW)
 			_look_pitch = clampf(_look_pitch - motion.relative.y * _look_scale(),
 				-HIDE_LOOK_PITCH, HIDE_LOOK_PITCH)
+		return
+	if restrained_by != null and not ui_open:
+		# Held (note 96): looking about, and struggling with any fighting key.
+		if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			var motion := event as InputEventMouseMotion
+			rotate_y(-motion.relative.x * _look_scale())
+			_look_pitch = clampf(_look_pitch - motion.relative.y * _look_scale(),
+				deg_to_rad(min_pitch), deg_to_rad(max_pitch))
+		elif event.is_action_pressed(&"attack") or event.is_action_pressed(&"jump") \
+				or event.is_action_pressed(&"interact") or event.is_action_pressed(&"block"):
+			struggles += 1
+			_shake = maxf(_shake, 0.12)
 		return
 	if in_cutscene or ui_open:
 		return
@@ -1750,7 +1798,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if is_hidden() or climbing:
+	if is_hidden() or climbing or restrained_by != null:
+		# Held: the holder places them every frame (note 96).
 		velocity = Vector3.ZERO
 		return
 	_check_block()
@@ -4293,6 +4342,9 @@ func heal(amount: float, source_name := "") -> float:
 
 func _die() -> void:
 	_dead = true
+	# Whatever held them lets go of a corpse (note 96).
+	restrained_by = null
+	restrain_view = Vector3.ZERO
 	# Autosaved on death (2026-10-10): written once it is safe again -- after the
 	# respawn and the getting-up (save_system.gd `_safe`), so the slot holds the
 	# world as the death left it (the map back at its checkpoint).

@@ -37,7 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, "models", "source", "surgery_hf")
 
-# name: (axis to size "x"/"y"/"z" after turning, metres, origin, yaw degrees
+# name: (axis to size "x"/"y"/"z" ("long": the longer of x and y) after turning, metres, origin, yaw degrees
 #        about Z applied first, triangle budget, texture px, metallic)
 # origin: "bottom" (floor centre), "top" (top centre), "centre",
 #         "top_axis" (the arm pieces: top centre, they hang from it).
@@ -51,6 +51,15 @@ PIECES = {
     "chandelier": ("z", 1.7, "top", 0.0, 6000, 512, 0.3),
     "jar": ("z", 2.1, "bottom", 0.0, 7000, 1024, 0.3),
     "chest": ("y", 1.15, "bottom", 0.0, 5000, 512, 0.1),
+    # The medieval set (note 96).
+    "maiden": ("z", 2.4, "bottom", 0.0, 9000, 1024, 0.4),
+    "rack": ("long", 3.0, "bottom", 0.0, 9000, 1024, 0.1),
+    "gibbet": ("z", 2.7, "top", 0.0, 8000, 1024, 0.45),
+    "brazier": ("z", 1.6, "bottom", 0.0, 6000, 512, 0.45),
+    "pillory": ("z", 2.2, "bottom", 90.0, 6000, 512, 0.1),
+    "toolrack": ("x", 2.2, "bottom", -90.0, 9000, 1024, 0.3),
+    "barrels": ("x", 2.0, "bottom", 0.0, 7000, 1024, 0.1),
+    "candelabra": ("z", 2.1, "bottom", 0.0, 6000, 512, 0.45),
 }
 
 
@@ -114,7 +123,9 @@ def build(name, out_dir):
             bpy.ops.object.mode_set(mode='OBJECT')
     o.data.calc_loop_triangles()
     lo, hi = bounds(o)
-    k = size / (hi - lo)["xyz".index(axis)]
+    ext = hi - lo
+    # "long": whichever horizontal extent is longer.
+    k = size / (max(ext.x, ext.y) if axis == "long" else ext["xyz".index(axis)])
     o.data.transform(Matrix.Scale(k, 4))
     lo, hi = bounds(o)
     mid = (lo + hi) * 0.5

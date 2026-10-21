@@ -279,6 +279,8 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 	# and physics measured 8-13 ms a frame against 4-7 with the old modules.
 	var bodies := {}
 
+	# Cells under a roof of their own (the surgery, note 96): no vault, no lid.
+	var open_roof: Dictionary = out.get_meta("open_roof", {})
 	var half: float = out.cell_size * 0.5
 	var rng := RandomNumberGenerator.new()
 	for key in out.cells:
@@ -321,6 +323,7 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 			continue
 
 		var basis: Basis = Basis(Vector3.UP, -float(cell.turn) * PI * 0.5)
+		var roofed := not open_roof.has(cell.pos)
 		# Vault.
 		var vault := "vault_straight"
 		match cell.kind:
@@ -329,10 +332,13 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 			"cross": vault = "vault_cross"
 		if cell.kind == "straight" and out.skylights.has(cell.pos):
 			vault = "vault_sky"
-		add.call(vault, Transform3D(basis, centre))
+		if roofed:
+			add.call(vault, Transform3D(basis, centre))
 		# A dark lid over the vault's back: anything that slips between two
 		# pieces shows rock, never sky, and from a court it is the arcade's roof.
-		if not out.skylights.has(cell.pos):
+		if not roofed:
+			pass
+		elif not out.skylights.has(cell.pos):
 			add.call("cap", Transform3D(Basis(), centre + Vector3(0.0, CAP_Y, 0.0)))
 		else:
 			# Over a skylight, a frame of lid round the shaft (2026-10-14): with

@@ -1,32 +1,33 @@
 extends CharacterBody3D
 
-## The surgical table (2026-10-21; made stationary with a ceiling claw on
-## 2026-10-21, note 95): the machine in the surgery (surgery.gd) that was to make
-## the dead prisoners bionic. It cannot be killed -- a blow on it only rings off
-## the iron -- only DEPOWERED.
+## The surgical table (2026-10-21; stationary under a ceiling claw, note 95; the
+## claw a hunter that carries its victims to the table, note 96): the machine in
+## the surgery (surgery.gd) that was to make the dead prisoners bionic. It cannot
+## be killed -- a blow on it only rings off the iron -- only DEPOWERED.
 ##
 ## The table itself never moves: a riveted iron slab on a base of gears and
 ## pistons (models/surgery/table.glb, Higgsfield), in the middle of the hall,
 ## a dead prisoner strapped to it with a drill half fitted to the forearm.
-## Above it hangs the CEILING RING (ring.glb) and from the ring the CLAW: a very
-## long jointed arm (segment.glb, as many as its length needs) ending in a
-## three-fingered claw (claw.glb) with one red lens at the wrist. A player
-## walking in wakes it: the restraints snap open and throw the body off, the
-## claw unfolds from the vault and hunts the hall.
+## Above it hangs the CEILING RING (ring.glb) from the roof beams and from the
+## ring the CLAW: a very long jointed arm (segment.glb, as many as its length
+## needs) ending in a three-fingered claw (claw.glb) with one red lens at the
+## wrist. A player walking in wakes it: the restraints snap open and throw the
+## body off, the claw unfolds from the ring and hunts the hall.
 ##
-## The arm leaves the centre bay through the gap between two piers -- the aisle
-## nearest its target (`_theta`, snapped to the room's axes) -- and to change
-## aisles it first draws the claw back into the bay, turns, and reaches out
-## again, so it never passes through the stone. Where its line to a player is
-## blocked by a pier it cannot strike them: the piers are cover.
+## The hall is open (no piers since note 96), so the claw goes anywhere in it:
+## it FOLLOWS a player, hanging over them, and SLAMS down trying to GRAB them.
+## Caught, they are CARRIED to the table and STRAPPED down, the cuffs shut, and
+## the claw sets to work on them -- unless they STRUGGLE free (player.gd
+## `restrain` / `struggles`), a partner cuts the arms, or they die there. A
+## slam that misses leaves the claw stuck in the floor, its cable in reach.
 ##
 ## Three SYSTEMS, each fed by its own thick cable to its own wall mechanism
 ## (surgery.gd draws the cables and works the mechanisms off what this exposes):
-## - ARMS: the claw's drive: the GRAB (a lunge along the aim that runs on past
-##   the player until stone stops it) and the SWEEP (a sideways rake). Their
-##   cable twitches whenever the claw strikes (`arm_motion`).
+## - ARMS: the claw's grip: the slam-and-grab and the work on the table. Their
+##   cable twitches whenever the claw strikes (`arm_motion`). Cut, the claw
+##   lets go of whoever it holds.
 ## - LEGS (kept as the key the saves, levers and cables use): the HOIST that
-##   holds the arm up -- the hovering, and the SLAM. Its cable shivers as the
+##   holds the arm up -- the following and the slam. Its cable shivers as the
 ##   claw travels (`leg_motion`).
 ## - CORE: the light in the table's base. Its cable pulses with it (`core_glow`).
 ## A lever cuts one for a while (`cut`): the claw goes limp; the hoist gives and
@@ -36,11 +37,11 @@ extends CharacterBody3D
 ##
 ## Its weakness is the POWER CABLE wound round the claw's wrist: three cuts
 ## sever it (`_cable_hit`). It is only in reach when the wrist is (`exposed`):
-## stuck in the floor after a slam, held by the wall clamp, or sagging with the
-## hoist dead. The ways to finish it:
-## - lure the claw into the wall clamp (opened by cutting the ARMS -- it sits on
-##   the arms' relay; it stands at the end of an aisle) and cut the cable while
-##   it is held;
+## stuck in the floor after a slam that missed (longer after a parried one),
+## held by the wall clamp, or sagging with the hoist dead. The ways to finish it:
+## - lure a slam into the wall clamp (opened by cutting the ARMS -- it sits on
+##   the arms' relay): stand by its jaws and step away as the claw comes down;
+##   cut the cable while it is held;
 ## - cut the cable while the claw is stuck after a slam;
 ## - jam the hoist's flywheel while the hoist is cut, so the claw sags for good;
 ## - the relay sequence: cut the CORE while the arms and hoist are both cut, so
@@ -58,14 +59,15 @@ const RING_MODEL := preload("res://models/surgery/ring.glb")
 const CLAW_MODEL := preload("res://models/surgery/claw.glb")
 const SEGMENT_MODEL := preload("res://models/surgery/segment.glb")
 
-enum State { DORMANT, WAKING, HUNT, GRAB, SWEEP, REAR, CLAMPED, STALL, DYING, DEAD }
+## GRAB and SWEEP (note 95's thrust and rake) are gone; the slam is REAR.
+## CARRY: a player in the claw, on the way to the table. STRAP: on it.
+enum State { DORMANT, WAKING, HUNT, GRAB, SWEEP, REAR, CLAMPED, STALL, DYING, DEAD, CARRY, STRAP }
 
 ## --- The table -------------------------------------------------------------------
 ## The slab's top off the floor (the model is 3.0 long along Z, 1.48 wide).
 const TOP := 1.2
 const TABLE_SIZE := Vector3(1.48, 1.2, 3.0)
-## Its collision: the slab and base. Kept for the old navmesh code and the
-## sandbox, which read it.
+## Kept for the sandbox, which reads it.
 const RADIUS := 1.6
 ## The core: two glass bulbs either side of the base, and the three plugs the
 ## cables come out of (arms, legs, core) at its foot end, table frame.
@@ -77,90 +79,76 @@ const EYE_COLOUR := Color(1.0, 0.32, 0.12)
 const FEED_COLOUR := Color(1.0, 0.72, 0.4)
 
 ## --- The ring and the arm (the room's frame: the hall's middle on the floor) -----
-## Measured off the hall (morgue.gd's vaults: the crown 5.1 m, the piers 6 m
-## apart, 2.2 m square): the centre bay is clear for 1.9 m each way, and the
-## arches over the gaps between its piers are over 4.4 m high.
-const RING_TOP := 4.8
-const RING_SCALE := 0.9
-## Where the arm leaves the ring's hub, where it passes over the edge of the
-## centre bay, and where it has cleared the piers' line (4.1 m) into the aisle.
-const ROOT := Vector3(0.0, 4.15, 0.0)
-const GAP_NEAR := 1.7
-const GAP_NEAR_Y := 3.95
-const GAP_FAR := 4.6
-const GAP_FAR_Y := 3.55
-## Inside this radius the claw can turn to another aisle without meeting stone.
-const BAY_SAFE := 2.3
+## The ring hangs from the roof's middle beams (surgery.gd CEIL 8.6, beams to
+## 7.85); the arm leaves its hub and runs out under the roof to the wrist.
+const RING_TOP := 7.5
+const RING_SCALE := 0.95
+const ROOT := Vector3(0.0, 6.75, 0.0)
+## The arm's first bend: out toward the wrist, this high, this share of the way.
+const BEND_Y := 6.3
+const BEND_SHARE := 0.45
 ## Arm segments: about this long each, this thick (the model is 0.13 m).
-const SEG_LEN := 1.05
-const SEG_MAX := 16
+const SEG_LEN := 1.1
+const SEG_MAX := 18
 const SEG_THICK := 2.7
 ## The claw: wrist to fingertips, and its scale.
 const CLAW_LEN := 1.55
 const CLAW_SCALE := 0.95
 ## Folded up under the ring, asleep.
-const FOLD := Vector3(0.0, 3.55, 0.0)
-## Hovering over the hall, this high (the wrist), this far short of its target.
-const HOVER_Y := 3.25
-const HOVER_SHORT := 3.4
-## As far as the wrist reaches from the middle, hovering and lunging.
-const HOVER_REACH := 9.5
-const LUNGE_REACH := 13.4
+const FOLD := Vector3(0.0, 5.0, 0.0)
+## Following: the wrist this high over a player, this far back toward the
+## table from them.
+const HOVER_Y := 4.1
+const HOVER_BACK := 1.2
+## As far as the wrist goes from the middle (the walls are 13.9 out).
+const REACH := 12.6
 
 ## --- Pace, by anger (`level` 0..4) ------------------------------------------------
-## The wrist's top speed while it hunts (m/s), and the arm's turn between aisles.
-const SPEED: Array[float] = [3.6, 4.3, 5.0, 5.8, 6.6]
-const TURN: Array[float] = [1.7, 2.0, 2.4, 2.8, 3.2]
+## The wrist's top speed following (m/s).
+const SPEED: Array[float] = [4.2, 4.9, 5.6, 6.3, 7.0]
 ## Sagging, the hoist dead: dragged along the floor this fast.
 const DRAG_SPEED := 1.1
 ## Lever cuts last this long.
 const CUT_TIME: Array[float] = [7.5, 6.5, 5.5, 5.0, 4.5]
 const LEVEL_MAX := 4
 
-## --- The grab ------------------------------------------------------------------
-## It strikes at anyone within GRAB_RANGE of the middle whose line from the
-## aisle is clear, and the claw runs on past the aim to GRAB_REACH unless stone
-## stops it -- so a player who stands before the clamp and steps aside sends it
-## on into the jaws.
-const GRAB_RANGE := 12.6
-const GRAB_MIN := 2.2
-const GRAB_REACH := 9.5
-const GRAB_WINDUP: Array[float] = [1.15, 1.0, 0.88, 0.78, 0.7]
-## The aim is fixed this long before the lunge: step aside then.
-const GRAB_LOCK := 0.28
-const GRAB_LUNGE := 0.22
-const GRAB_HOLD := 0.45
-const GRAB_RETRACT := 0.9
-const GRAB_DAMAGE := 20.0
-const GRAB_YANK := 6.0
-const GRAB_COOLDOWN: Array[float] = [3.6, 3.1, 2.7, 2.3, 2.0]
-## A body this close to the claw's line is caught by it.
-const GRAB_HIT := 0.75
-
-## --- The sweep -------------------------------------------------------------------
-## A rake sideways through anyone this close to the hovering claw.
-const SWEEP_RANGE := 2.8
-const SWEEP_SPAN := 2.8
-const SWEEP_WINDUP: Array[float] = [0.7, 0.62, 0.55, 0.5, 0.45]
-const SWEEP_SWING := 0.28
-const SWEEP_RECOVER := 0.55
-const SWEEP_DAMAGE := 12.0
-const SWEEP_HIT := 1.3
-const SWEEP_COOLDOWN: Array[float] = [2.4, 2.1, 1.8, 1.6, 1.4]
-
-## --- The slam (State.REAR) ---------------------------------------------------------
-## Up over the player, a hold, down into the floor -- and stuck there, the
-## wrist's cable in reach, until it tears itself free.
-const REAR_RANGE := 9.0
-const REAR_RISE := 0.8
-const REAR_HOLD := 0.45
-const REAR_SLAM := 0.14
-const REAR_STUCK := 1.9
+## --- The slam (State.REAR): down onto them, to grab ----------------------------
+## Over them within this (horizontally) and it may slam.
+const SLAM_OVER := 2.0
+const REAR_RISE := 0.55
+## The hold over the spot: the aim fixed at its start -- step aside then.
+const REAR_HOLD: Array[float] = [0.6, 0.55, 0.5, 0.45, 0.4]
+const REAR_SLAM := 0.13
+const REAR_HIGH := 4.6
+## Missed: stuck in the floor this long (parried: PARRY_STUCK), then torn free.
+const REAR_STUCK := 1.8
+const PARRY_STUCK := 3.2
 const REAR_SETTLE := 0.6
-const REAR_HIGH := 4.0
-const REAR_DAMAGE := 24.0
-const REAR_RADIUS := 2.4
-const REAR_COOLDOWN: Array[float] = [7.0, 6.2, 5.5, 5.0, 4.5]
+## A player this near where it lands is GRABBED; nearer than SHAKE_RADIUS is
+## thrown down by the blow.
+const GRAB_RADIUS := 1.3
+const SHAKE_RADIUS := 2.6
+const GRAB_DAMAGE := 12.0
+const REAR_COOLDOWN: Array[float] = [3.4, 3.0, 2.6, 2.3, 2.0]
+## Sagging, it lashes at anyone it is dragged into.
+const LASH_DAMAGE := 8.0
+const LASH_RANGE := 1.6
+const LASH_EVERY := 1.4
+
+## --- Carried and strapped down ----------------------------------------------------
+## Carried at this speed, this high, to over the table.
+const CARRY_SPEED := 5.5
+const CARRY_Y := 4.4
+## The struggles it takes to break free: carried, and strapped down (more as it
+## angers).
+const CARRY_BREAK := 8
+const STRAP_BREAK: Array[int] = [12, 14, 16, 18, 20]
+## Strapped: the claw works on them every OPERATE_EVERY s for OPERATE_DAMAGE.
+const OPERATE_EVERY := 0.9
+const OPERATE_DAMAGE: Array[float] = [6.0, 7.0, 8.0, 9.0, 10.0]
+## Let go: thrown off this hard, and the claw holds off this long.
+const THROW := 6.5
+const RELEASE_REST := 2.2
 
 ## --- The core stalled -----------------------------------------------------------
 const STALL_TIME := 1.9
@@ -203,33 +191,31 @@ var _was_arms := true
 var _was_legs := true
 var _cut_once := {}
 var _target: Node3D = null
-var _next_grab := 0.0
-var _next_sweep := 0.0
 var _next_rear := 0.0
+var _next_lash := 0.0
 var _hit_done := false
-var _aim := Vector3.FORWARD
 var _aim_locked := false
-var _reach := GRAB_REACH
+var _parried := false
 var _clamp_point := Vector3.ZERO
 var _strain := 0.0
 var _last_cable_hit := -INF
 var _stun_until := 0.0
+## The player in the claw or on the table, and when the claw next cuts.
+var _victim: Node3D = null
+var _next_cut := 0.0
+var _strap_prompt: Interact.Prompt
 
 ## The claw, in the room's frame: the wrist, the way the claw points from it,
-## the aisle the arm is in (an angle about Y from the room's +X).
+## the arm's heading (an angle about Y from the room's +X).
 var _w := FOLD
 var _axis := Vector3.DOWN
 var _theta := 0.0
-## The aisle it is turning to (a multiple of PI / 2); `_theta` eases to it.
-var _aisle := 0.0
 var _want_w := FOLD
 var _want_axis := Vector3.DOWN
 var _w_speed := 3.0
 var _w_vel := 0.0
-## Moves: where a lunge started and where a sweep or slam goes.
-var _from := Vector3.ZERO
+## Where the slam comes down.
 var _to := Vector3.ZERO
-var _side := Vector3.RIGHT
 var _blocked := false
 
 ## Pose, eased.
@@ -247,6 +233,7 @@ var _eye_light: OmniLight3D
 var _power_mats: Array = []
 var _ring: Node3D
 var _claw: Node3D
+var _claw_model: Node3D
 var _segs: Array[MeshInstance3D] = []
 var _seg_mesh: Mesh
 var _cuffs: Array[Node3D] = []
@@ -298,6 +285,8 @@ func _ready() -> void:
 	_build_body()
 	_build_arm()
 	_build_audio()
+	_strap_prompt = Interact.prompt("Struggle free", Vector3(0.0, TOP + 1.2, 0.0))
+	add_child(_strap_prompt)
 	_phase = Vector3(randf() * 10.0, randf() * 10.0, randf() * 10.0)
 	_sleep_pose()
 
@@ -571,7 +560,6 @@ func _sleep_pose() -> void:
 	_axis = Vector3.DOWN
 	_want_axis = Vector3.DOWN
 	_theta = 0.0
-	_aisle = 0.0
 	exposed = false
 	for c in _cuffs:
 		c.rotation = Vector3.ZERO
@@ -587,6 +575,8 @@ func _sleep_pose() -> void:
 func reset_to_sleep() -> void:
 	if state == State.DEAD or state == State.DYING:
 		return
+	if _victim != null:
+		_let_go(_now(), false)
 	level = 0
 	cuts = 0
 	legs_jammed = false
@@ -614,7 +604,6 @@ func set_dead_now(at: Vector3, yaw: float) -> void:
 	for c in _cuffs:
 		c.rotation.z = 1.9 * signf(c.position.x)
 	_theta = yaw if is_finite(yaw) else 0.0
-	_aisle = _theta
 	var local: Vector3 = room.to_local(at) if room != null else Vector3.ZERO
 	if Vector2(local.x, local.z).length() < 2.5:
 		local = _dir(_theta) * 4.2
@@ -661,8 +650,7 @@ func cut(system: StringName) -> void:
 	match system:
 		&"arms":
 			_arms_off_until = now + span
-			if state == State.GRAB or state == State.SWEEP:
-				_enter(State.HUNT)
+			# Whoever it holds is let go (`_carry` / `_strap` see it next tick).
 		&"legs":
 			_legs_off_until = now + span
 			if state == State.REAR:
@@ -672,6 +660,8 @@ func cut(system: StringName) -> void:
 				_shutdown(&"relay")
 				return
 			if state != State.CLAMPED:
+				if _victim != null:
+					_let_go(now, true)
 				_enter(State.STALL)
 	_update_systems()
 
@@ -710,6 +700,8 @@ func _wake() -> void:
 func _shutdown(cause: StringName) -> void:
 	if is_depowered():
 		return
+	if _victim != null:
+		_let_go(_now(), true)
 	if state == State.CLAMPED and room != null and room.has_method("clamp_release"):
 		room.call("clamp_release", false)
 	_enter(State.DYING)
@@ -745,26 +737,25 @@ func _physics_process(delta: float) -> void:
 			_w_speed = 2.0
 		State.WAKING:
 			# Unfolding out of the ring, the claw flexing.
-			_want_w = FOLD + Vector3(0.0, -0.35 * clampf((_t - 1.4) / 0.8, 0.0, 1.0), 0.0)
+			_want_w = FOLD + Vector3(0.0, -0.8 * clampf((_t - 1.4) / 0.8, 0.0, 1.0), 0.0)
 			_want_axis = (Vector3.DOWN + Vector3(sin(_t * 3.0), 0.0, cos(_t * 2.3)) * 0.25).normalized()
 			_w_speed = 2.0
 			if _t >= 3.0:
 				_enter(State.HUNT)
-				_next_grab = now + 1.5
-				_next_rear = now + 4.0
+				_next_rear = now + 1.2
 		State.HUNT:
 			_hunt(now, sagging)
-		State.GRAB:
-			_grab(now, delta)
-		State.SWEEP:
-			_sweep(now)
 		State.REAR:
 			_slam(now)
+		State.CARRY:
+			_carry(now)
+		State.STRAP:
+			_strap(now)
 		State.CLAMPED:
 			_clamped(now, delta)
 		State.STALL:
 			# The hoist slack for a moment: the claw sinks.
-			_want_w = Vector3(_w.x, lerpf(_w.y, 2.2, 0.5), _w.z)
+			_want_w = Vector3(_w.x, lerpf(_w.y, 2.4, 0.5), _w.z)
 			_want_axis = Vector3.DOWN
 			_w_speed = 2.5
 			if _t >= STALL_TIME:
@@ -789,7 +780,10 @@ func _physics_process(delta: float) -> void:
 				_die_done()
 		State.DEAD:
 			pass
+		_:
+			_enter(State.HUNT)
 	_move_claw(delta)
+	_hold_victim()
 
 
 ## The hoist dead: the claw on the floor, dragged.
@@ -797,50 +791,30 @@ func _sagging() -> bool:
 	return not legs_on() and state not in [State.DORMANT, State.WAKING, State.DYING, State.DEAD, State.CLAMPED]
 
 
-## The wrist toward `_want_w`, no faster than `_w_speed`, turning the arm into
-## the aisle it needs on the way -- in to the bay first if it is out in another.
+## The wrist toward `_want_w`, no faster than `_w_speed`, kept inside the hall
+## and under the roof; the arm's heading follows it.
 func _move_claw(delta: float) -> void:
 	if state == State.DEAD:
 		return
-	var want := _want_w
-	var flat := Vector2(want.x, want.z)
-	# The aisle is chosen from the target (`_hunt`), never from where the claw
-	# is told to wait: that is projected onto the aisle, and choosing from it
-	# had the arm stop half turned, picking a new aisle every frame.
-	if flat.length() > 1.2 and state in [State.HUNT, State.STALL, State.WAKING]:
-		var d := wrapf(_aisle - _theta, -PI, PI)
-		if absf(d) > 0.02:
-			var here := Vector2(_w.x, _w.z)
-			if here.length() > BAY_SAFE + 0.2:
-				# Back into the bay before turning.
-				var in_ := here.normalized() * BAY_SAFE if here.length() > 0.01 else Vector2.ZERO
-				want = Vector3(in_.x, maxf(want.y, GAP_NEAR_Y - 0.4), in_.y)
-			else:
-				var step := TURN[level] * delta
-				_theta = wrapf(_theta + clampf(d, -step, step), -PI, PI)
-				var lim := Vector2(want.x, want.z).limit_length(BAY_SAFE)
-				want = Vector3(lim.x, want.y, lim.y)
+	var flat := Vector2(_want_w.x, _want_w.z).limit_length(REACH)
+	var want := Vector3(flat.x, clampf(_want_w.y, CLAW_LEN * 0.5, ROOT.y - 1.2), flat.y)
 	var before := _w
 	_w = _w.move_toward(want, _w_speed * delta)
 	_w_vel = (_w - before).length() / maxf(delta, 0.0001)
 	# Lerped, not slerped: slerp between two nearly equal directions takes the
 	# axis of their tiny cross product and Godot rejects it as not normalised.
-	var turned := _axis.lerp(_want_axis.normalized(), clampf(delta * (14.0 if state in [State.GRAB, State.REAR] else 5.0), 0.0, 1.0))
+	var turned := _axis.lerp(_want_axis.normalized(), clampf(delta * (14.0 if state == State.REAR else 5.0), 0.0, 1.0))
 	if turned.length_squared() > 0.0001:
 		_axis = turned.normalized()
+	if Vector2(_w.x, _w.z).length() > 0.4:
+		_theta = lerp_angle(_theta, atan2(_w.z, _w.x), clampf(delta * 4.0, 0.0, 1.0))
 
 
-## The aisle for a point (room frame): the one the arm is in unless the point
-## is well round toward another -- a player on a diagonal does not make it
-## swing back and forth.
-func _aisle_for(p: Vector3) -> float:
-	var a := atan2(p.z, p.x)
-	if absf(wrapf(a - _aisle, -PI, PI)) < PI * 0.25 + 0.15:
-		return _aisle
-	return snappedf(a, PI * 0.5)
+static func _dir(theta: float) -> Vector3:
+	return Vector3(cos(theta), 0.0, sin(theta))
 
 
-## The nearest standing player inside the hall, or null.
+## The nearest standing player inside the hall, or null. Not one already held.
 func _intruder() -> Node3D:
 	if Sandbox.enemies_passive:
 		return null
@@ -848,7 +822,7 @@ func _intruder() -> Node3D:
 	var best_d := INF
 	for p in Coop.all():
 		var n := p as Node3D
-		if n == null or n.get("_dead") == true or (n.has_method("is_hidden") and n.is_hidden()):
+		if n == null or n.get("_dead") == true or (n.has_method("is_hidden") and n.is_hidden()) or n == _victim:
 			continue
 		var local: Vector3 = room.to_local(n.global_position)
 		if absf(local.x) > bound + 1.2 or absf(local.z) > bound + 1.2 or absf(local.y) > 3.0:
@@ -860,177 +834,47 @@ func _intruder() -> Node3D:
 	return best
 
 
+## Following: hanging over them, a little back toward the table, and slamming
+## down when it is over them. Sagging, dragged after them, lashing.
 func _hunt(now: float, sagging: bool) -> void:
 	_target = _intruder()
 	exposed = sagging
 	if _target == null or now < _stun_until:
 		if _target == null:
 			# Nobody in the hall: back up over the table, to wait.
-			_want_w = Vector3(0.0, HOVER_Y + 0.3, 0.0) if not sagging else Vector3(_w.x, CLAW_LEN * 0.6, _w.z)
+			_want_w = Vector3(0.0, HOVER_Y + 0.6, 0.0) if not sagging else Vector3(_w.x, CLAW_LEN * 0.6, _w.z)
 			_want_axis = Vector3.DOWN
 			_w_speed = 2.0
 		return
 	var p: Vector3 = room.to_local(_target.global_position)
 	var flat := Vector2(p.x, p.z)
-	var dist := flat.length()
-	# Hover: short of them, toward them along a line the stone allows.
-	var want := Vector3.ZERO
-	var r := clampf(dist - HOVER_SHORT, 0.0, HOVER_REACH)
-	var toward := flat.normalized() if dist > 0.01 else Vector2.RIGHT
-	want = Vector3(toward.x * r, HOVER_Y, toward.y * r)
-	_aisle = _aisle_for(Vector3(p.x, 0.0, p.z))
-	if r > BAY_SAFE and not _reachable(want):
-		# Blocked by a pier: up the aisle as far as they are along it.
-		var along := _dir(_aisle)
-		var a := clampf(Vector3(p.x, 0.0, p.z).dot(along) - HOVER_SHORT * 0.5, 0.0, HOVER_REACH)
-		want = along * a + Vector3(0.0, HOVER_Y, 0.0)
-	var sway := Vector3(sin(now * 1.3), sin(now * 0.9) * 0.4, cos(now * 1.1)) * 0.25
 	if sagging:
-		# Dragged along the floor, slowly, toward them.
-		want = Vector3(want.x, CLAW_LEN * 0.6, want.z)
-		_want_axis = (Vector3(toward.x, 0.0, toward.y) * 0.8 + Vector3.DOWN).normalized()
+		_want_w = Vector3(p.x, CLAW_LEN * 0.6, p.z)
+		var to := Vector3(p.x - _w.x, 0.0, p.z - _w.z)
+		_want_axis = (to.normalized() * 0.8 + Vector3.DOWN).normalized() if to.length() > 0.1 else Vector3.DOWN
 		_w_speed = DRAG_SPEED
-	else:
-		want += sway
-		var look := (Vector3(p.x, 1.0, p.z) - _w)
-		_want_axis = (Vector3.DOWN * 1.6 + look.normalized()).normalized()
-		_w_speed = SPEED[level]
-	_want_w = want
-	# Attacks, only with the arm settled in its aisle.
-	var settled := Vector2(_w.x, _w.z).length() < BAY_SAFE \
-		or (absf(wrapf(_aisle - _theta, -PI, PI)) < 0.05 and absf(wrapf(atan2(_w.z, _w.x) - _theta, -PI, PI)) < PI * 0.25 + 0.2)
-	if not settled:
+		var tip := room.to_global(_w + _axis * CLAW_LEN)
+		if arms_on() and now >= _next_lash \
+				and Vector2(tip.x - _target.global_position.x, tip.z - _target.global_position.z).length() < LASH_RANGE:
+			_next_lash = now + LASH_EVERY
+			_strike(_target, LASH_DAMAGE)
 		return
-	var chest := p + Vector3(0.0, 1.05, 0.0)
-	var claw_flat := Vector2(_w.x - p.x, _w.z - p.z).length()
-	if not sagging and arms_on() and claw_flat < SWEEP_RANGE and now >= _next_sweep:
-		_side = Vector3(-toward.y, 0.0, toward.x) * (1.0 if randf() < 0.5 else -1.0)
-		_enter(State.SWEEP)
-		_next_sweep = now + SWEEP_COOLDOWN[level]
-		return
-	if not sagging and legs_on() and dist < REAR_RANGE and now >= _next_rear \
-			and _reachable(Vector3(p.x, REAR_HIGH, p.z)):
+	var back := flat.normalized() * HOVER_BACK if flat.length() > HOVER_BACK + 0.5 else Vector2.ZERO
+	var sway := Vector3(sin(now * 1.3), sin(now * 0.9) * 0.4, cos(now * 1.1)) * 0.3
+	_want_w = Vector3(p.x - back.x, HOVER_Y, p.z - back.y) + sway
+	var look := Vector3(p.x, 1.0, p.z) - _w
+	_want_axis = (Vector3.DOWN * 1.8 + look.normalized()).normalized()
+	_w_speed = SPEED[level]
+	# Over them: down it comes.
+	var over := Vector2(_w.x - p.x, _w.z - p.z).length()
+	if arms_on() and legs_on() and over < SLAM_OVER and now >= _next_rear:
 		_to = Vector3(p.x, CLAW_LEN * 0.95, p.z)
+		_parried = false
 		_enter(State.REAR)
-		_next_rear = now + REAR_COOLDOWN[level]
-		return
-	if arms_on() and dist > GRAB_MIN and dist < GRAB_RANGE and now >= _next_grab and _reachable(chest):
-		_enter(State.GRAB)
-		# Down to their height first: the thrust runs level along the aisle --
-		# on past them into the clamp, if that is where they stood.
-		_from = Vector3(_w.x, chest.y + 0.7, _w.z)
-		_aim = (chest - _from).normalized()
-		return
-
-
-## Whether the arm can run from the aisle's end point to `local` (room frame)
-## without meeting stone (sight's layer: walls, piers, props).
-func _reachable(local: Vector3) -> bool:
-	var a := _gap_far(local)
-	var q := PhysicsRayQueryParameters3D.create(room.to_global(a), room.to_global(local), 2)
-	q.exclude = [get_rid()]
-	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
-
-
-## The arm's point past the piers' line in its aisle -- drawn in when the wrist
-## is nearer than that. In the aisle it is turning to (the same one once it
-## has).
-func _gap_far(wrist: Vector3) -> Vector3:
-	var along := _dir(_aisle)
-	var a := clampf(Vector3(wrist.x, 0.0, wrist.z).dot(along), 0.0, GAP_FAR)
-	return along * a + Vector3(0.0, GAP_FAR_Y, 0.0)
-
-
-static func _dir(theta: float) -> Vector3:
-	return Vector3(cos(theta), 0.0, sin(theta))
 
 
 func _chest(p: Node3D) -> Vector3:
 	return p.global_position + Vector3(0.0, 1.05, 0.0)
-
-
-# --- The grab --------------------------------------------------------------------
-
-func _grab(now: float, _delta: float) -> void:
-	var windup: float = GRAB_WINDUP[level]
-	if not arms_on():
-		_enter(State.HUNT)
-		return
-	var tip := room.to_global(_w + _axis * CLAW_LEN)
-	if _t < windup - GRAB_LOCK:
-		# Tracking: drawn back toward the aisle and trembling, its cable twitching.
-		if _target != null and is_instance_valid(_target):
-			_aim = (room.to_local(_chest(_target)) - _from).normalized()
-		_want_w = _from - _aim * 0.9
-		_want_axis = _aim
-		_w_speed = 2.5
-		return
-	if not _aim_locked:
-		_aim_locked = true
-		# Where it will go: along the aim until something stony stops it (sight's
-		# layer: the walls, piers, props -- not the players, it goes through
-		# where they stood).
-		var start := _from - _aim * 0.9
-		var from := room.to_global(start)
-		var q := PhysicsRayQueryParameters3D.create(from, from + room.global_basis * _aim * (GRAB_REACH + CLAW_LEN), 2)
-		q.exclude = [get_rid()]
-		var hit := get_world_3d().direct_space_state.intersect_ray(q)
-		_reach = GRAB_REACH
-		if not hit.is_empty():
-			_reach = maxf(from.distance_to(hit["position"]) - CLAW_LEN - 0.15, 0.5)
-		# Never past the walls' reach from the middle.
-		var end := start + _aim * _reach
-		var flat := Vector2(end.x, end.z)
-		if flat.length() > LUNGE_REACH:
-			_reach = maxf(_reach - (flat.length() - LUNGE_REACH), 0.5)
-		_to = start + _aim * _reach
-		for p in Coop.all():
-			if p.has_method("parry_cue"):
-				p.call("parry_cue", self, GRAB_LOCK + GRAB_LUNGE + 0.25)
-		return
-	if _t < windup:
-		return
-	if _t < windup + GRAB_LUNGE + GRAB_HOLD:
-		_want_w = _to
-		_want_axis = _aim
-		_w_speed = (_reach + 1.0) / GRAB_LUNGE
-		var shoulder := room.to_global(_gap_far(_w))
-		# The clamp: the claw driven on into its open jaws is caught there.
-		if room.has_method("clamp_try_catch") and room.call("clamp_try_catch", shoulder, tip):
-			_clamp_point = room.to_local(room.call("clamp_hold_point"))
-			_enter(State.CLAMPED)
-			_strain = 0.0
-			_anger()
-			return
-		if not _hit_done:
-			var wrist := room.to_global(_w)
-			for p in Coop.all():
-				var n := p as Node3D
-				if n == null or n.get("_dead") == true:
-					continue
-				if _segment_distance(_chest(n), wrist, tip) <= GRAB_HIT:
-					_hit_done = true
-					var parried := _strike(n, GRAB_DAMAGE)
-					if parried:
-						# Turned aside: the claw snaps back and the machine reels.
-						_stun_until = now + 0.9
-						_enter(State.HUNT)
-						_next_grab = now + GRAB_COOLDOWN[level] + 0.8
-						return
-					# Hauled in toward the table.
-					var pull := global_position - n.global_position
-					pull.y = 0.0
-					if n.has_method("apply_knockback") and pull.length_squared() > 0.01:
-						n.call("apply_knockback", pull.normalized() * GRAB_YANK)
-					break
-		return
-	# Back up the aisle.
-	_want_w = _from
-	_want_axis = Vector3.DOWN
-	_w_speed = (_reach + 1.0) / GRAB_RETRACT
-	if _t >= windup + GRAB_LUNGE + GRAB_HOLD + GRAB_RETRACT:
-		_next_grab = now + GRAB_COOLDOWN[level]
-		_enter(State.HUNT)
 
 
 ## A blow on player `p`; true if they parried it.
@@ -1057,83 +901,32 @@ static func _segment_distance(p: Vector3, a: Vector3, b: Vector3) -> float:
 	return p.distance_to(a + ab * t)
 
 
-# --- The sweep ----------------------------------------------------------------------
+# --- The slam ----------------------------------------------------------------------
 
-## Down beside the player, then a rake sideways through where they stand. Stone
-## in the way stops it dead.
-func _sweep(now: float) -> void:
-	var windup: float = SWEEP_WINDUP[level]
-	if not arms_on():
-		_enter(State.HUNT)
-		return
-	if _t < windup:
-		if _target != null and is_instance_valid(_target):
-			var p: Vector3 = room.to_local(_target.global_position)
-			_from = Vector3(p.x, 1.85, p.z) + _side * SWEEP_SPAN
-			_to = Vector3(p.x, 1.85, p.z) - _side * SWEEP_SPAN
-		_want_w = _from
-		_want_axis = (Vector3.DOWN + _side * 0.5).normalized()
-		_w_speed = 9.0
-		if not _aim_locked and _t >= windup - 0.25:
-			_aim_locked = true
-			for p in Coop.all():
-				if p.has_method("parry_cue"):
-					p.call("parry_cue", self, 0.5)
-		return
-	if not _blocked and _t < windup + SWEEP_SWING:
-		_want_w = _to
-		_want_axis = (Vector3.DOWN - _side * 0.7).normalized()
-		_w_speed = SWEEP_SPAN * 2.0 / SWEEP_SWING
-		# Stone across the rake stops it, sparking.
-		var tip := room.to_global(_w + _axis * CLAW_LEN)
-		var ahead := room.to_global(_w + _axis * CLAW_LEN - _side * 0.6)
-		var q := PhysicsRayQueryParameters3D.create(tip, ahead, 2)
-		q.exclude = [get_rid()]
-		var hit := get_world_3d().direct_space_state.intersect_ray(q)
-		if not hit.is_empty():
-			_blocked = true
-			_want_w = _w
-			_sparks(hit["position"], Color(1.0, 0.8, 0.5), 18)
-	if not _hit_done and _t >= windup + SWEEP_SWING * 0.3:
-		var wrist := room.to_global(_w)
-		var tip := room.to_global(_w + _axis * CLAW_LEN)
-		for p in Coop.all():
-			var n := p as Node3D
-			if n == null or n.get("_dead") == true:
-				continue
-			if _segment_distance(_chest(n) - Vector3(0.0, 0.3, 0.0), wrist, tip) > SWEEP_HIT:
-				continue
-			_hit_done = true
-			if _strike(n, SWEEP_DAMAGE):
-				_stun_until = now + 0.7
-			elif n.has_method("apply_knockback"):
-				n.call("apply_knockback", room.global_basis * (-_side) * 5.0)
-	if _t >= windup + SWEEP_SWING + SWEEP_RECOVER:
-		_enter(State.HUNT)
-
-
-# --- The slam -------------------------------------------------------------------------
-
+## Up over them, a hold with the aim fixed (step aside then), down into the
+## floor: whoever it lands on is grabbed. Missed, it is stuck there.
 func _slam(now: float) -> void:
-	var stuck_at := REAR_RISE + REAR_HOLD + REAR_SLAM
-	exposed = _t >= stuck_at and _t < stuck_at + REAR_STUCK
-	if not legs_on():
+	var hold: float = REAR_HOLD[level]
+	var stuck_at := REAR_RISE + hold + REAR_SLAM
+	var stuck_for := PARRY_STUCK if _parried else REAR_STUCK
+	exposed = _t >= stuck_at and _t < stuck_at + stuck_for
+	if not legs_on() or not arms_on():
 		exposed = false
 		_enter(State.HUNT)
 		return
-	if _t < REAR_RISE + REAR_HOLD:
-		# Up over them, following, the claw spread and trembling.
-		if _target != null and is_instance_valid(_target) and _t < REAR_RISE + REAR_HOLD * 0.5:
+	if _t < REAR_RISE + hold:
+		# Up over them, following until the hold, the claw spread and trembling.
+		if _target != null and is_instance_valid(_target) and _t < REAR_RISE:
 			var p: Vector3 = room.to_local(_target.global_position)
 			_to = Vector3(p.x, CLAW_LEN * 0.95, p.z)
 		_want_w = Vector3(_to.x, REAR_HIGH, _to.z)
 		_want_axis = Vector3.DOWN
-		_w_speed = SPEED[level] * 1.6
+		_w_speed = SPEED[level] * 1.8
 		if not _aim_locked and _t >= REAR_RISE:
 			_aim_locked = true
 			for p in Coop.all():
 				if p.has_method("parry_cue"):
-					p.call("parry_cue", self, REAR_HOLD + REAR_SLAM)
+					p.call("parry_cue", self, hold + REAR_SLAM)
 		return
 	if _t < stuck_at:
 		_want_w = _to
@@ -1142,22 +935,10 @@ func _slam(now: float) -> void:
 		return
 	if not _hit_done:
 		_hit_done = true
-		var at := room.to_global(Vector3(_to.x, 0.0, _to.z))
-		for p in Coop.all():
-			var n := p as Node3D
-			if n == null or n.get("_dead") == true:
-				continue
-			var d := Vector2(n.global_position.x - at.x, n.global_position.z - at.z).length()
-			if n.get("_shake") != null and d < 9.0:
-				n.set("_shake", maxf(float(n.get("_shake")), 0.45 * (1.0 - d / 9.0)))
-			if d > REAR_RADIUS:
-				continue
-			var guarded: bool = n.has_method("is_blocking") and n.call("is_blocking")
-			_strike(n, REAR_DAMAGE)
-			if not guarded and n.has_method("knock_down"):
-				n.call("knock_down", n.global_position - at, 6.5)
-		_sparks(at + Vector3(0.0, 0.1, 0.0), Color(1.0, 0.7, 0.4), 30)
-	if _t < stuck_at + REAR_STUCK:
+		_impact(now)
+		if state != State.REAR:
+			return
+	if _t < stuck_at + stuck_for:
 		# Stuck in the floor, wrenching at it.
 		var wr := 0.04 * sin(_t * 31.0)
 		_want_w = _to + Vector3(wr, 0.0, -wr)
@@ -1170,7 +951,152 @@ func _slam(now: float) -> void:
 		_sparks(room.to_global(Vector3(_to.x, 0.05, _to.z)), Color(1.0, 0.75, 0.45), 16)
 	_want_w = Vector3(_to.x, HOVER_Y, _to.z)
 	_w_speed = 5.0
-	if _t >= stuck_at + REAR_STUCK + REAR_SETTLE:
+	if _t >= stuck_at + stuck_for + REAR_SETTLE:
+		_next_rear = now + REAR_COOLDOWN[level]
+		_enter(State.HUNT)
+
+
+## Where it lands: the wall clamp's jaws if they are open and it came down by
+## them; else whoever is under it is grabbed, and everyone near thrown down.
+func _impact(now: float) -> void:
+	var at := room.to_global(Vector3(_to.x, 0.0, _to.z))
+	_sparks(at + Vector3(0.0, 0.1, 0.0), Color(1.0, 0.7, 0.4), 30)
+	if room.has_method("clamp_try_catch_at") and room.call("clamp_try_catch_at", at):
+		_clamp_point = room.to_local(room.call("clamp_hold_point"))
+		_enter(State.CLAMPED)
+		_strain = 0.0
+		_anger()
+		return
+	var caught: Node3D = null
+	for p in Coop.all():
+		var n := p as Node3D
+		if n == null or n.get("_dead") == true or (n.has_method("is_hidden") and n.is_hidden()) \
+				or (n.has_method("is_restrained") and n.is_restrained()):
+			continue
+		var d := Vector2(n.global_position.x - at.x, n.global_position.z - at.z).length()
+		if n.get("_shake") != null and d < 9.0:
+			n.set("_shake", maxf(float(n.get("_shake")), 0.45 * (1.0 - d / 9.0)))
+		if d > SHAKE_RADIUS:
+			continue
+		var guarded: bool = n.has_method("is_blocking") and n.call("is_blocking")
+		if d <= GRAB_RADIUS:
+			if _strike(n, GRAB_DAMAGE):
+				# Turned aside: it bites deep into the floor and is stuck there
+				# longer.
+				_parried = true
+				_sparks(at + Vector3(0.0, 0.4, 0.0), Color(1.0, 0.85, 0.55), 24)
+				continue
+			if not guarded and caught == null and n.has_method("restrain"):
+				caught = n
+				continue
+		if not guarded and n.has_method("knock_down"):
+			n.call("knock_down", n.global_position - at, 5.5)
+	if caught != null:
+		_take(caught, now)
+
+
+# --- Carried to the table and strapped down -----------------------------------------
+
+## `n` is in the claw.
+func _take(n: Node3D, _now_: float) -> void:
+	_victim = n
+	n.call("restrain", self)
+	# What to do about it: the brackets round the crosshair close in too
+	# (`_strap_prompt`), but a prompt's text is never shown.
+	var hud: Node = Coop.hud(n)
+	if hud != null and hud.has_method("announce"):
+		hud.call("announce", "Struggle!", "Mash attack / jump to break free")
+	exposed = false
+	_enter(State.CARRY)
+	_sparks(_chest(n), Color(1.0, 0.8, 0.5), 12)
+
+
+func _victim_ok() -> bool:
+	return _victim != null and is_instance_valid(_victim) and _victim.get("_dead") != true \
+		and _victim.get("restrained_by") == self
+
+
+## Up, then across the hall to over the table, the claw shut on them.
+func _carry(now: float) -> void:
+	if not _victim_ok() or not arms_on() or not legs_on():
+		_let_go(now, false)
+		return
+	if int(_victim.get("struggles")) >= CARRY_BREAK:
+		_let_go(now, false)
+		return
+	if _t < 0.6:
+		_want_w = Vector3(_w.x, CARRY_Y, _w.z)
+		_w_speed = 4.0
+	else:
+		_want_w = Vector3(0.0, CARRY_Y, 0.0)
+		_w_speed = CARRY_SPEED
+	_want_axis = Vector3.DOWN
+	if _t >= 0.6 and Vector2(_w.x, _w.z).length() < 0.25:
+		# Laid down on it, the cuffs shut.
+		_victim.set("struggles", 0)
+		_next_cut = now + 1.2
+		_enter(State.STRAP)
+
+
+## On the table: the claw over them works at them until they struggle free, a
+## partner cuts the arms, or they die.
+func _strap(now: float) -> void:
+	if not _victim_ok() or not arms_on():
+		_let_go(now, true)
+		return
+	if int(_victim.get("struggles")) >= STRAP_BREAK[level]:
+		# The cuffs burst.
+		for c in _cuffs:
+			_sparks(c.global_position, Color(1.0, 0.8, 0.5), 6)
+		_let_go(now, true)
+		return
+	var work := 0.35 * sin(_t * 9.0)
+	_want_w = Vector3(0.0, TOP + 2.4 + work, 0.0)
+	_want_axis = Vector3.DOWN
+	_w_speed = 3.0
+	if now >= _next_cut:
+		_next_cut = now + OPERATE_EVERY
+		_victim.call("take_damage", OPERATE_DAMAGE[level], Vector3.DOWN, self)
+		_sparks(_chest(_victim) + Vector3(0.0, 0.3, 0.0), Color(1.0, 0.85, 0.6), 14)
+
+
+## Places whoever it holds: in the claw, or flat on the table.
+func _hold_victim() -> void:
+	if _victim == null:
+		_strap_prompt.visible = false
+		return
+	if not _victim_ok():
+		_let_go(_now(), false)
+		return
+	match state:
+		State.CARRY:
+			var grip := room.to_global(_w + _axis * CLAW_LEN * 0.75)
+			_victim.global_position = grip - Vector3(0.0, 1.05, 0.0)
+			_victim.set("restrain_view", Vector3(0.0, -18.0, 12.0 * sin(_t * 5.0)))
+		State.STRAP:
+			# On their back along the slab: the view put down on it, looking up.
+			_victim.global_position = global_transform * Vector3(0.0, TOP + 0.02, 0.25)
+			_victim.set("restrain_view", Vector3(1.25, 72.0, 4.0 * sin(_t * 13.0)))
+	_strap_prompt.player = _victim
+	_strap_prompt.visible = true
+
+
+## Lets go of whoever it holds -- off the table's side if they were on it
+## (`thrown`) -- and holds off a moment.
+func _let_go(now: float, thrown: bool) -> void:
+	var v := _victim
+	_victim = null
+	_strap_prompt.visible = false
+	if v != null and is_instance_valid(v) and v.get("restrained_by") == self and v.has_method("release"):
+		var side := global_basis.x * (1.0 if randf() < 0.5 else -1.0)
+		var push := Vector3.ZERO
+		if thrown or state == State.STRAP:
+			v.global_position = global_position + side * 1.2 + Vector3(0.0, TOP + 0.1, 0.0)
+			push = side * THROW + Vector3(0.0, 3.0, 0.0)
+		v.call("release", push)
+	_stun_until = now + 1.0
+	_next_rear = now + RELEASE_REST
+	if state in [State.CARRY, State.STRAP]:
 		_enter(State.HUNT)
 
 
@@ -1178,11 +1104,11 @@ func _slam(now: float) -> void:
 
 func _clamped(now: float, delta: float) -> void:
 	exposed = true
-	# The claw held in the jaws, the wrist before them.
-	var aim := (_clamp_point - _gap_far(_clamp_point)).normalized()
+	# The claw held in the jaws, the wrist out before them.
+	var out := Vector3(-_clamp_point.x, 0.0, -_clamp_point.z).normalized()
 	var shake := Vector3(sin(now * 37.0), sin(now * 29.0), cos(now * 33.0)) * 0.04 * (1.0 if legs_on() else 0.3)
-	_want_w = _clamp_point - aim * (CLAW_LEN * 0.6) + shake
-	_want_axis = aim
+	_want_w = _clamp_point + out * (CLAW_LEN * 0.5) + Vector3(0.0, 0.5, 0.0) + shake
+	_want_axis = (-out * 0.8 + Vector3.DOWN * 0.4).normalized()
 	_w_speed = 12.0
 	# The hoist pulls it free in time; with it cut it cannot pull at all.
 	if legs_on():
@@ -1192,7 +1118,7 @@ func _clamped(now: float, delta: float) -> void:
 		if room.has_method("clamp_release"):
 			room.call("clamp_release", true)
 		_stun_until = now + 0.6
-		_next_grab = now + GRAB_COOLDOWN[level] + 1.5
+		_next_rear = now + REAR_COOLDOWN[level] + 1.5
 		_anger()
 		_enter(State.HUNT)
 
@@ -1328,6 +1254,13 @@ func _apply_pose(delta: float) -> void:
 		roll += 0.006 * sin(now * 40.0)
 	if state in [State.DORMANT, State.STALL, State.DYING, State.DEAD]:
 		exposed = exposed and state == State.STALL and _sagging()
+	# The cuffs: shut on whoever it straps down, thrown open again after.
+	if state == State.STRAP:
+		for c in _cuffs:
+			c.rotation.z = lerp_angle(c.rotation.z, 0.0, fast)
+	elif state not in [State.DORMANT, State.WAKING, State.DEAD, State.DYING]:
+		for c in _cuffs:
+			c.rotation.z = lerp_angle(c.rotation.z, 2.05 * signf(c.position.x), k)
 	_roll = lerpf(_roll, roll, k) if delta > 0.0 else roll
 	_power = lerpf(_power, power, fast) if delta > 0.0 else power
 	_body.transform = Transform3D(Basis(Vector3.FORWARD, _roll), Vector3.ZERO)
@@ -1362,7 +1295,7 @@ func _apply_pose(delta: float) -> void:
 	var arms_moving := 0.0
 	if arms_live and _power > 0.3:
 		arms_moving = 0.2
-		if state in [State.GRAB, State.SWEEP, State.CLAMPED] or _sagging():
+		if state in [State.REAR, State.CARRY, State.STRAP, State.CLAMPED] or _sagging():
 			arms_moving = 1.0
 	arm_motion = lerpf(arm_motion, arms_moving, fast)
 	leg_motion = lerpf(leg_motion, clampf(_w_vel / 4.0, 0.0, 1.0) if legs_live and _power > 0.3 else 0.0, fast)
@@ -1378,24 +1311,21 @@ func _pose_arm(delta: float) -> void:
 	# The claw: its -Y along the axis, turning slowly at the wrist (fast while
 	# it strikes).
 	if delta > 0.0 and _power > 0.05:
-		_spin += delta * (0.4 + (3.0 if state in [State.GRAB, State.SWEEP] else 0.0)) * _power
+		_spin += delta * (0.4 + (4.0 if state == State.STRAP else 0.0)) * _power
 	var y := -_axis.normalized()
 	var ref := Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT
 	var x := ref.cross(y).normalized()
 	var z := x.cross(y).normalized()
 	var claw_basis := Basis(x, y, z) * Basis(Vector3.UP, _spin)
 	_claw.global_transform = rt * Transform3D(claw_basis, _w)
-	# The arm: from the hub, over the edge of the bay, out along the aisle past
-	# the piers, and down into the wrist along the claw's line.
-	var along := _dir(_theta)
-	var reach := Vector3(_w.x, 0.0, _w.z).dot(along)
-	var far := clampf(reach - 0.6, 0.0, GAP_FAR)
-	var near := minf(GAP_NEAR, far * 0.5)
+	# The arm: from the hub out under the roof toward the wrist, bending down,
+	# and into the wrist along the claw's line -- a crane's reach.
+	var flat := Vector3(_w.x, 0.0, _w.z)
+	var bend := flat * BEND_SHARE + Vector3(0.0, BEND_Y, 0.0)
 	var pts: Array[Vector3] = [ROOT + Vector3(0.0, 0.4, 0.0), ROOT]
 	# Each further point only if it brings the arm nearer the wrist: folded up,
 	# or hovering close in, the bends would double back on themselves.
-	for c: Vector3 in [along * near + Vector3(0.0, lerpf(ROOT.y - 0.3, GAP_NEAR_Y, clampf(near / GAP_NEAR, 0.0, 1.0)), 0.0),
-			along * far + Vector3(0.0, GAP_FAR_Y, 0.0), _w - _axis * 0.9]:
+	for c: Vector3 in [bend, _w - _axis * 1.0]:
 		if c.distance_to(_w) < pts[pts.size() - 1].distance_to(_w) - 0.3:
 			pts.append(c)
 	pts.append(_w)
@@ -1653,6 +1583,40 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 			m.emission = EYE_COLOUR
 			m.emission_energy_multiplier = 0.0
 			m.roughness = 0.1
+		&"oak", &"planks":
+			# The surgery's roof timbers (note 96): the doors' wood, darkened,
+			# mapped in world space so the long beams do not stretch it.
+			m.albedo_texture = load("res://textures/wood_door_albedo.png")
+			m.albedo_color = Color(0.62, 0.5, 0.4) if key == &"oak" else Color(0.45, 0.37, 0.3)
+			m.normal_enabled = true
+			m.normal_texture = load("res://textures/wood_door_normal.png")
+			m.normal_scale = 1.2
+			m.roughness = 0.88
+			m.uv1_triplanar = true
+			m.uv1_world_triplanar = true
+			m.uv1_scale = Vector3(0.6, 0.6, 0.6) if key == &"oak" else Vector3(0.35, 0.35, 0.35)
+		&"soot":
+			m.albedo_color = Color(0.025, 0.022, 0.02)
+			m.roughness = 1.0
+		&"char":
+			m.albedo_color = Color(0.06, 0.035, 0.02)
+			m.roughness = 0.95
+			m.emission_enabled = true
+			m.emission = Color(1.0, 0.35, 0.08)
+			m.emission_energy_multiplier = 0.6
+		&"ember":
+			m.albedo_color = Color(0.2, 0.05, 0.01)
+			m.emission_enabled = true
+			m.emission = Color(1.0, 0.4, 0.1)
+			m.emission_energy_multiplier = 3.0
+		&"corbel":
+			m.albedo_texture = load("res://textures/stone_plain_albedo.png")
+			m.albedo_color = Color(0.4, 0.37, 0.36)
+			m.normal_enabled = true
+			m.normal_texture = load("res://textures/stone_plain_normal.png")
+			m.roughness = 0.92
+			m.uv1_triplanar = true
+			m.uv1_scale = Vector3(0.8, 0.8, 0.8)
 		&"amber":
 			m.albedo_color = Color(0.3, 0.16, 0.04)
 			m.emission_enabled = true

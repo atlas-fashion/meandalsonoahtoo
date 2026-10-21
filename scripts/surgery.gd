@@ -1,17 +1,21 @@
 extends "res://scripts/morgue.gd"
 
 ## The surgery (2026-10-21; refurnished after the user's reference picture,
-## note 95): the hall where the dead prisoners were to be made bionic. An
-## enclosed vaulted hall like the morgue's (module_level `_make_surgery_hall`;
-## this extends morgue.gd for its piers, torches and bodies), round the machine
-## that did the work: the surgical table (scripts/surgical_table.gd), fixed in
-## the middle of the hall inside an iron floor rail, its long claw folded up
-## into the ring in the vault over it until a player walks in.
+## note 95; an open medieval hall, note 96): the hall where the dead prisoners
+## were to be made bionic. An enclosed hall (module_level `_make_surgery_hall`;
+## this extends morgue.gd for its torches and bodies) with no piers and no
+## vaults: its walls carried up to a timber roof on oak beams (`_raise_walls`,
+## `_build_roof`). In the middle the machine that did the work: the surgical
+## table (scripts/surgical_table.gd), fixed inside an iron floor rail, its long
+## claw folded up under the ring hung from the beams until a player walks in --
+## then it follows them, slams down to grab them, and straps them to the table.
 ##
 ## Dressed from the reference with the Higgsfield kit (models/surgery/,
-## tools/build_surgery_kit.py): apothecary shelves of bottles and candles,
-## glowing specimen jars, a worktable with a skull and an open book under an
-## anatomy chart, iron-bound chests, candle chandeliers in the bays.
+## tools/build_surgery_kit.py): apothecary shelves, specimen jars, a worktable
+## under an anatomy chart, chests, iron maidens, a tool rack of saws and hooks,
+## barrels, a torture rack and a pillory, braziers and candelabras round the
+## table, gibbet cages hung from the beams, candle chandeliers, and a great
+## hearth with its fire alive.
 ##
 ## What is in here to beat it with -- nothing marked, all of it to be watched:
 ## - THREE WALL MECHANISMS, one per system, each joined to the table by its own
@@ -19,18 +23,16 @@ extends "res://scripts/morgue.gd"
 ##   twitches whenever the claw strikes), the HOIST's flywheel (the "legs"
 ##   system; its cable shivers as the claw travels), the CORE's glass column
 ##   (its cable carries the core's pulse).
-## - THREE LEVERS on the piers, which system each cuts shuffled per seed. A
+## - THREE LEVERS on oak stands, which system each cuts shuffled per seed. A
 ##   pull cuts it for a while (surgical_table.gd `cut`) and shows something:
-##   cutting the arms springs the wall CLAMP open (it sits on the arms' relay);
-##   cutting the hoist drops the claw and stops the flywheel, which can then be
-##   JAMMED with the iron bar hanging beside it; cutting the core stalls the
-##   table until the other two cables flare and feed it back.
-## - THE CLAMP, at the end of an aisle so the claw can be lured straight down
-##   it: once open, the claw driven into its jaws is caught, the power cable at
-##   its wrist in reach -- until the hoist tears it free.
-## - Cover: the piers (the claw cannot reach round them), the slabs the last
-##   prisoners lie strapped to, a broken table on its side, a toppled rack of
-##   prosthetic limbs, the furniture.
+##   cutting the arms springs the wall CLAMP open (it sits on the arms' relay)
+##   and makes the claw let go of whoever it holds; cutting the hoist drops the
+##   claw and stops the flywheel, which can then be JAMMED with the iron bar
+##   hanging beside it; cutting the core stalls the table until the other two
+##   cables flare and feed it back.
+## - THE CLAMP in the middle of a wall: once open, a slam brought down by its
+##   jaws is caught there, the power cable at the claw's wrist in reach --
+##   until the hoist tears it free.
 ## Depowered the claw crashes to the floor, its light goes out, the lamp in the
 ## ring dies with it and its hum -- the only machine sound in the dungeon --
 ## stops.
@@ -46,27 +48,47 @@ const SYSTEMS: Array[StringName] = [&"arms", &"legs", &"core"]
 const CABLE_SECTIONS := 30
 const CABLE_RADIUS := 0.075
 const CABLE_REPATH := 0.25
-## The clamp catches the shackle this close to the middle of its jaws.
-const CATCH := 1.15
+## The clamp catches the claw slammed down this close to its mouth (along
+## the floor).
+const CATCH := 1.8
 ## Its jaws' mouth, from the wall face.
 const CLAMP_MOUTH := Vector3(0.0, 1.35, 0.95)
-## The levers: on the face of these inner piers (room frame), at this height.
+## The levers: each on a heavy timber post standing here (room frame), on the
+## face toward the given side, at this height.
 const LEVER_PIERS := [[Vector3(-9.0, 0.0, 3.0), Vector3.RIGHT], [Vector3(9.0, 0.0, -3.0), Vector3.LEFT],
 	[Vector3(3.0, 0.0, -9.0), Vector3.BACK]]
 const LEVER_HEIGHT := 1.25
 const LEVER_REACH := 2.4
+const POST_HALF := 0.3
+const POST_HEIGHT := 2.2
 ## The lamp: in the hub of the ceiling ring.
-const LAMP_HEIGHT := 4.05
-## The Higgsfield kit (note 95).
+const LAMP_HEIGHT := 6.55
+## The Higgsfield kit (notes 95, 96).
 const SHELF := preload("res://models/surgery/shelf.glb")
 const JAR := preload("res://models/surgery/jar.glb")
 const WORKTABLE := preload("res://models/surgery/worktable.glb")
 const CHEST := preload("res://models/surgery/chest.glb")
 const CHANDELIER := preload("res://models/surgery/chandelier.glb")
+const MAIDEN := preload("res://models/surgery/maiden.glb")
+const RACK := preload("res://models/surgery/rack.glb")
+const GIBBET := preload("res://models/surgery/gibbet.glb")
+const BRAZIER := preload("res://models/surgery/brazier.glb")
+const PILLORY := preload("res://models/surgery/pillory.glb")
+const TOOLRACK := preload("res://models/surgery/toolrack.glb")
+const BARRELS := preload("res://models/surgery/barrels.glb")
+const CANDELABRA := preload("res://models/surgery/candelabra.glb")
 const CHART := preload("res://textures/surgery_chart.png")
-## The chandeliers: in the four corner bays, hanging from the crown (5.1 m).
-const CHANDELIER_TOP := 5.0
+## The roof (note 96): a plank ceiling at CEIL on heavy beams across the hall,
+## their ends on stone corbels, braced from the walls. The walls are carried up
+## to it in courses of the corridor's own brick wall piece.
+const CEIL := 8.6
+const BEAM_Z: Array[float] = [-10.5, -6.0, -2.0, 2.0, 6.0, 10.5]
+const BEAM := Vector2(0.55, 0.75)
+const WALL_COURSES: Array[float] = [3.5, 7.0]
+## The chandeliers hang from the beams to this height (their tops).
+const CHANDELIER_TOP := 6.2
 const CANDLE_COLOUR := Color(1.0, 0.68, 0.38)
+const FIRE_COLOUR := Color(1.0, 0.55, 0.22)
 ## The iron rail let into the floor round the table.
 const RAIL_RADIUS := 2.05
 
@@ -86,6 +108,9 @@ var _lamp: SpotLight3D
 var _lamp_mat: StandardMaterial3D
 var _lamp_energy := 2.4
 var _wall := 13.9
+## The ways in: [point on the wall face, the way out], room frame.
+var _doorways: Array = []
+var _fires: Array = []
 var _cable_t := 0.0
 var _spin := {"arms": 0.0, "legs": 0.0}
 
@@ -116,13 +141,16 @@ func _dress() -> void:
 	var cell: float = built.cell_size
 	var h: int = room["half"]
 	_wall = float(h) * cell + BrickLevel.WALL_FACE
-	var pilaster_in := _wall - PILASTER_PROUD
+	_doorways = _find_doorways(h, cell)
 
-	_build_piers(h, cell, pilaster_in)
-	_hang_wall_torches(h, cell, pilaster_in)
+	# One open hall (note 96): no piers or pilasters, the walls carried on up
+	# past where the vaults sprang, a timber roof over the whole of it.
+	_raise_walls(h, cell)
+	_build_roof()
+	_hang_wall_torches(h, cell)
 	_hang_chandeliers()
 
-	# The wall slots between the pilasters, the doorways' left out.
+	# The wall slots, the doorways' left out.
 	var slots := _wall_slots(h, cell)
 	var take := func(prefs: Array) -> Dictionary:
 		for want in prefs:
@@ -135,9 +163,8 @@ func _dress() -> void:
 				s["used"] = true
 				return s
 		return {}
-	# The clamp at the end of an aisle (k 0: on a line through the middle,
-	# clear of the piers), so the claw can be lured straight down it into the
-	# jaws; the arms' mechanism, whose relay it sits on, beside it.
+	# The clamp in the middle of a wall; the arms' mechanism, whose relay it
+	# sits on, beside it.
 	var clamp_slot: Dictionary = take.call([[&"left", 0], [&"right", 0], [&"back", 0], [&"front", 0]])
 	var clamp_wall: StringName = clamp_slot.get("wall", &"left")
 	var arms_slot: Dictionary = take.call([[clamp_wall, -1], [clamp_wall, 1], [&"back", -1]])
@@ -145,20 +172,23 @@ func _dress() -> void:
 	var opposite := {&"left": &"right", &"right": &"left", &"back": &"front", &"front": &"back"}
 	var legs_slot: Dictionary = take.call([[opposite.get(clamp_wall, &"right"), 0], [opposite.get(clamp_wall, &"right"), 1],
 		[opposite.get(clamp_wall, &"right"), -1]])
+	var hearth_slot: Dictionary = take.call([[&"front", -1], [&"front", 1], [&"back", 1], [&"back", -1]])
 	_build_arms_mechanism(arms_slot)
 	_build_legs_mechanism(legs_slot)
 	_build_core_mechanism(core_slot)
 	_build_clamp(clamp_slot)
+	_build_hearth(hearth_slot)
 	_build_rail()
 	_build_lamp()
 	_build_levers()
 	_build_story(h, cell)
 	_furnish(slots)
+	_furnish_floor()
 
-	_spawn_table(pilaster_in)
+	_spawn_table(_wall - 0.4)
 	_build_cables()
 	_limit_view(_wall)
-	print("[surgery] the surgical table asleep, its claw folded in the vault; levers %s; %d bodies laid out (%d broken)"
+	print("[surgery] the surgical table asleep, its claw folded under the ring; levers %s; %d bodies laid out (%d broken)"
 		% [", ".join(_levers.map(func(l): return String(l["system"]))), _corpse_count, _missing_count])
 
 
@@ -431,10 +461,23 @@ func _build_lamp() -> void:
 	_lamp.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
 	_lamp.position = Vector3(0.0, -0.05, 0.0)
 	l.add_child(_lamp)
+	# And a dim warm fill under the roof: the beams and the ring above the lamp
+	# would be black.
+	var fill := OmniLight3D.new()
+	fill.name = "RoofFill"
+	fill.light_color = Color(1.0, 0.7, 0.45)
+	fill.light_energy = 0.9
+	fill.omni_range = 13.0
+	fill.omni_attenuation = 0.7
+	fill.light_specular = 0.0
+	fill.shadow_enabled = false
+	fill.position = Vector3(-0.5, CEIL - BEAM.y - 1.4 - LAMP_HEIGHT, 0.0)
+	l.add_child(fill)
 
 
-## A lever on each chosen pier's face, its handle up, a conduit running up the
-## pier from its box into the vault. Which system each cuts is shuffled.
+## A lever on a squat oak stand (the piers it once hung on are gone, note 96),
+## its handle up, a conduit running up the stand from its box.
+## Which system each cuts is shuffled.
 func _build_levers() -> void:
 	var order := SYSTEMS.duplicate()
 	for i in range(order.size() - 1, 0, -1):
@@ -448,11 +491,17 @@ func _build_levers() -> void:
 		var n := Node3D.new()
 		n.name = "Lever"
 		add_child(n)
-		n.transform = Transform3D(Basis.looking_at(-face, Vector3.UP), pier + face * (PIER_HALF + 0.02))
+		# The post: a squat oak stand on a stone footing, its own collision.
+		var post := Table._merge([[Table._boxm(Vector3(POST_HALF * 2.0, POST_HEIGHT, POST_HALF * 2.0)), Transform3D(Basis(), pier + Vector3(0.0, POST_HEIGHT * 0.5, 0.0)), &"oak"],
+			[Table._boxm(Vector3(POST_HALF * 2.0 + 0.12, 0.12, POST_HALF * 2.0 + 0.12)), Transform3D(Basis(), pier + Vector3(0.0, POST_HEIGHT + 0.06, 0.0)), &"dark"],
+			[Table._boxm(Vector3(0.9, 0.3, 0.9)), Transform3D(Basis(), pier + Vector3(0.0, 0.15, 0.0)), &"corbel"]], "LeverPost")
+		add_child(post)
+		_solid(self, Vector3(POST_HALF * 2.0, POST_HEIGHT, POST_HALF * 2.0), pier + Vector3(0.0, POST_HEIGHT * 0.5, 0.0))
+		n.transform = Transform3D(Basis.looking_at(-face, Vector3.UP), pier + face * (POST_HALF + 0.02))
 		n.add_child(Table._merge([
 			[Table._boxm(Vector3(0.42, 0.62, 0.2)), Transform3D(Basis(), Vector3(0.0, LEVER_HEIGHT, 0.1)), &"rust"],
 			[Table._boxm(Vector3(0.08, 0.5, 0.12)), Transform3D(Basis(), Vector3(0.0, LEVER_HEIGHT, 0.24)), &"dark"],
-			[Table._cylm(0.05, 0.05, 5.0 - LEVER_HEIGHT, 8), Transform3D(Basis(), Vector3(0.12, LEVER_HEIGHT + (5.0 - LEVER_HEIGHT) * 0.5 + 0.3, 0.06)), &"dark"],
+			[Table._cylm(0.05, 0.05, POST_HEIGHT - LEVER_HEIGHT, 8), Transform3D(Basis(), Vector3(0.12, LEVER_HEIGHT + (POST_HEIGHT - LEVER_HEIGHT) * 0.5, 0.06)), &"dark"],
 		], "Box"))
 		var handle := Node3D.new()
 		handle.name = "Handle"
@@ -661,10 +710,82 @@ func _torn_restraint(at: Vector3) -> void:
 
 # --- The furnishing (note 95) ----------------------------------------------------
 
-## Only the wall pilasters keep torches here: the middle of the hall is lit by
-## the chandeliers in its bays and the lamp in the ring, as in the reference
-## (morgue.gd hangs one on every pier as well -- sixteen more lights).
-func _hang_wall_torches(h: int, cell: float, pilaster_in: float) -> void:
+## --- The hall (note 96) -------------------------------------------------------------
+
+## The ways in: [the middle of the gap in the wall face, the way out], room frame.
+func _find_doorways(_h: int, _cell: float) -> Array:
+	var out: Array = []
+	for way in room["entrances"]:
+		var local := to_local(built.to_world(way["cell"]))
+		var step: Vector2i = ModuleMaze.DIRS[way["side"]]
+		var dir := (global_basis.inverse() * Vector3(float(step.x), 0.0, float(step.y))).round()
+		var at := Vector3(local.x, 0.0, local.z) * (Vector3.ONE - dir.abs()) + dir * _wall
+		out.append([at, dir])
+	return out
+
+
+## How near `p` (room frame, on the floor) is to the nearest way in.
+func _door_distance(p: Vector3) -> float:
+	var best := INF
+	for d in _doorways:
+		best = minf(best, Vector2(p.x - d[0].x, p.z - d[0].z).length())
+	return best
+
+
+## The walls carried up past where the vaults sprang, in courses of the
+## corridor's own brick wall piece (brick_level "wall", 3.5 m a course) on the
+## same face, to the roof; over each way in, the course rests on an oak lintel.
+## The walls' own collision stops at the old crown: nothing reaches higher.
+func _raise_walls(h: int, cell: float) -> void:
+	var piece: Mesh = BrickLevel.standalone("wall")
+	if piece == null:
+		return
+	var xfs: Array[Transform3D] = []
+	var lintels: Array = []
+	for d: Vector3 in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
+		var along := Vector3(-d.z, 0.0, d.x)
+		# As brick_level faces its walls: +Z into the room.
+		var face := Basis(Vector3.UP, atan2(-d.x, -d.z))
+		for k in range(-h, h + 1):
+			var at := d * _wall + along * float(k) * cell
+			for y in WALL_COURSES:
+				xfs.append(Transform3D(face, at + Vector3(0.0, y, 0.0)))
+			for door in _doorways:
+				if (door[1] as Vector3).dot(d) > 0.9 and (door[0] as Vector3).distance_to(at) < 1.0:
+					lintels.append([Table._boxm(Vector3(cell + 0.6, 0.45, 0.6)),
+						Transform3D(face, at + Vector3(0.0, WALL_COURSES[0] - 0.2, 0.0) - d * 0.05), &"oak"])
+	_multi(piece, xfs, "HallWalls")
+	if not lintels.is_empty():
+		add_child(Table._merge(lintels, "Lintels"))
+
+
+## The roof: a plank ceiling over the whole hall on heavy oak beams running
+## across it, each end on a stone corbel, braced up from the wall, a lighter
+## joist between each pair. It casts the moon's shadow like the corridors' lid.
+func _build_roof() -> void:
+	var span := _wall * 2.0 + 0.6
+	var parts: Array = [[Table._boxm(Vector3(span, 0.18, span)), Transform3D(Basis(), Vector3(0.0, CEIL + 0.09, 0.0)), &"planks"]]
+	var stone: Array = []
+	for z in BEAM_Z:
+		parts.append([Table._boxm(Vector3(span - 0.3, BEAM.y, BEAM.x)), Transform3D(Basis(), Vector3(0.0, CEIL - BEAM.y * 0.5, z)), &"oak"])
+		for s: float in [-1.0, 1.0]:
+			stone.append([Table._boxm(Vector3(0.8, 0.7, BEAM.x + 0.2)), Transform3D(Basis(), Vector3(s * (_wall - 0.35), CEIL - BEAM.y - 0.35, z)), &"corbel"])
+			# The brace: from the wall 1.9 m under the beam up to it 1.6 m in.
+			var a := Vector3(s * (_wall - 0.15), CEIL - BEAM.y - 1.9, z)
+			var b := Vector3(s * (_wall - 1.75), CEIL - BEAM.y - 0.05, z)
+			parts.append([Table._boxm(Vector3(0.32, (b - a).length() + 0.2, 0.32)), Table._along(a, b), &"oak"])
+	for i in BEAM_Z.size() - 1:
+		var z := (BEAM_Z[i] + BEAM_Z[i + 1]) * 0.5
+		parts.append([Table._boxm(Vector3(span - 0.3, 0.28, 0.24)), Transform3D(Basis(), Vector3(0.0, CEIL - 0.14, z)), &"oak"])
+	for x in range(-12, 13, 4):
+		parts.append([Table._boxm(Vector3(0.2, 0.2, span - 0.3)), Transform3D(Basis(), Vector3(float(x), CEIL - 0.1, 0.0)), &"oak"])
+	add_child(Table._merge(parts, "Roof"))
+	add_child(Table._merge(stone, "Corbels"))
+
+
+## A torch on the wall face every 6 m (where the pilasters stood), none in a
+## doorway.
+func _hang_wall_torches(h: int, cell: float) -> void:
 	var level = load("res://scripts/module_level.gd")
 	var scene: PackedScene = load(level.TORCH_SCENE)
 	var energy: float = TORCH_ENERGY
@@ -676,35 +797,251 @@ func _hang_wall_torches(h: int, cell: float, pilaster_in: float) -> void:
 	for k in range(-h, h):
 		var v := (float(k) + 0.5) * cell
 		for d: Vector3 in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
-			var along := Vector3(-d.z, 0.0, d.x) * v
-			level._hang_torch(self, scene, d * (pilaster_in - 0.02) + along + Vector3(0.0, TORCH_HEIGHT, 0.0), d, energy, 13.0)
+			var at := d * (_wall - 0.02) + Vector3(-d.z, 0.0, d.x) * v
+			if _door_distance(at) < cell * 0.5 + 0.6:
+				continue
+			level._hang_torch(self, scene, at + Vector3(0.0, TORCH_HEIGHT, 0.0), d, energy, 13.0)
 
 
-## A candle chandelier (models/surgery/chandelier.glb) from the crown of each
-## corner bay, its warm light under it. Plain lights without shadows: the
-## hall's walls close them in, and Graphics scales their reach (light_detail).
+## Candle chandeliers (models/surgery/chandelier.glb) on chains from the beams,
+## their warm light under them. Plain lights without shadows: the hall's walls
+## close them in, and Graphics scales their reach (light_detail).
 func _hang_chandeliers() -> void:
-	var cell: float = built.cell_size
-	for sx: float in [-1.0, 1.0]:
-		for sz: float in [-1.0, 1.0]:
-			var c := Node3D.new()
-			c.name = "Chandelier"
-			add_child(c)
-			c.position = Vector3(sx * cell, CHANDELIER_TOP, sz * cell)
-			c.rotation.y = _rng.randf_range(-PI, PI)
-			var model: Node3D = CHANDELIER.instantiate()
-			c.add_child(model)
-			_glow(model, 1.4)
-			var light := OmniLight3D.new()
-			light.name = "Candles"
-			light.light_color = CANDLE_COLOUR
-			light.light_energy = 2.8
-			light.omni_range = 10.5
-			light.omni_attenuation = 1.2
-			light.light_specular = 0.2
-			light.shadow_enabled = false
-			light.position = Vector3(0.0, -1.35, 0.0)
-			c.add_child(light)
+	for at: Vector2 in [Vector2(-6.5, -6.0), Vector2(6.5, -6.0), Vector2(-6.5, 6.0), Vector2(6.5, 6.0)]:
+		var c := Node3D.new()
+		c.name = "Chandelier"
+		add_child(c)
+		c.position = Vector3(at.x, CHANDELIER_TOP, at.y)
+		c.rotation.y = _rng.randf_range(-PI, PI)
+		var model: Node3D = CHANDELIER.instantiate()
+		c.add_child(model)
+		_glow(model, 1.4)
+		var drop := CEIL - BEAM.y - CHANDELIER_TOP
+		c.add_child(Table._merge([[Table._cylm(0.035, 0.035, drop, 6), Transform3D(Basis(), Vector3(0.0, drop * 0.5, 0.0)), &"dark"]], "Chain"))
+		var light := OmniLight3D.new()
+		light.name = "Candles"
+		light.light_color = CANDLE_COLOUR
+		light.light_energy = 3.0
+		light.omni_range = 12.0
+		# A gentle falloff: it has to reach the beams 3 m over it as well as the
+		# floor 5 m under.
+		light.omni_attenuation = 0.8
+		light.light_specular = 0.2
+		light.shadow_enabled = false
+		light.position = Vector3(0.0, -1.35, 0.0)
+		c.add_child(light)
+
+
+## The great hearth in a wall slot: stone jambs, a mantel, a stepped chimney
+## breast up the wall, a sooted firebox with logs on an iron grate, embers, and
+## its fire alive -- flames, a flickering light, sparks. Built, not generated:
+## Tripo filled the reference hearth's firebox in solid.
+func _build_hearth(s: Dictionary) -> void:
+	if s.is_empty():
+		return
+	var n := _on_wall(s, "Hearth")
+	var stone: Array = [
+		[Table._boxm(Vector3(4.0, 0.18, 1.6)), Transform3D(Basis(), Vector3(0.0, 0.09, 0.8)), &"corbel"],
+		[Table._boxm(Vector3(4.2, 0.45, 1.3)), Transform3D(Basis(), Vector3(0.0, 2.52, 0.65)), &"corbel"],
+		[Table._boxm(Vector3(4.5, 0.14, 1.45)), Transform3D(Basis(), Vector3(0.0, 2.81, 0.68)), &"corbel"],
+		[Table._boxm(Vector3(3.5, 1.5, 0.95)), Transform3D(Basis(), Vector3(0.0, 3.63, 0.47)), &"corbel"],
+		[Table._boxm(Vector3(2.6, 2.6, 0.7)), Transform3D(Basis(), Vector3(0.0, 5.65, 0.35)), &"corbel"],
+		[Table._boxm(Vector3(2.5, 2.3, 0.08)), Transform3D(Basis(), Vector3(0.0, 1.15, 0.06)), &"soot"],
+		[Table._boxm(Vector3(2.4, 0.06, 1.0)), Transform3D(Basis(), Vector3(0.0, 0.2, 0.55)), &"soot"],
+	]
+	for x: float in [-1.6, 1.6]:
+		stone.append([Table._boxm(Vector3(0.75, 2.3, 1.15)), Transform3D(Basis(), Vector3(x, 1.15, 0.58)), &"corbel"])
+		# The jambs' carved capitals.
+		stone.append([Table._boxm(Vector3(0.9, 0.22, 1.25)), Transform3D(Basis(), Vector3(x, 2.2, 0.6)), &"corbel"])
+	n.add_child(Table._merge(stone, "HearthStone"))
+	# The grate, the logs on it, the embers under.
+	var fire: Array = [[Table._boxm(Vector3(1.7, 0.05, 0.7)), Transform3D(Basis(), Vector3(0.0, 0.26, 0.6)), &"ember"]]
+	for i in 5:
+		fire.append([Table._cylm(0.025, 0.025, 1.6, 6), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.0, 0.34, 0.35 + float(i) * 0.12)), &"dark"])
+	for lg: Array in [[Vector3(0.0, 0.45, 0.5), 0.15], [Vector3(-0.15, 0.48, 0.68), -0.35], [Vector3(0.2, 0.6, 0.58), 0.5]]:
+		fire.append([Table._cylm(0.1, 0.11, 1.3, 8), Transform3D(Basis(Vector3.UP, float(lg[1])) * Basis(Vector3.FORWARD, PI * 0.5), lg[0]), &"char"])
+	var fire_mesh := Table._merge(fire, "Fire")
+	fire_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	n.add_child(fire_mesh)
+	n.add_child(_flames(Vector3(0.0, 0.5, 0.58), Vector3(0.6, 0.05, 0.22), 26))
+	_solid(n, Vector3(4.2, 2.8, 1.25), Vector3(0.0, 1.4, 0.62))
+	_add_fire(n, Vector3(0.0, 0.7, 0.85), 2.8, 9.5, 1.0)
+
+
+## Flames: billboard licks rising and shrinking, added light. Part of the
+## fire's look, not an effect -- a few dozen quads.
+func _flames(at: Vector3, extents: Vector3, amount: int) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.name = "Flames"
+	p.amount = amount
+	p.lifetime = 0.75
+	p.direction = Vector3.UP
+	p.spread = 8.0
+	p.gravity = Vector3(0.0, 1.2, 0.0)
+	p.initial_velocity_min = 0.35
+	p.initial_velocity_max = 0.9
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = extents
+	p.scale_amount_min = 0.7
+	p.scale_amount_max = 1.3
+	var curve := Curve.new()
+	curve.add_point(Vector2(0.0, 0.6))
+	curve.add_point(Vector2(0.25, 1.0))
+	curve.add_point(Vector2(1.0, 0.0))
+	p.scale_amount_curve = curve
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.32, 0.5)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = _flame_texture()
+	quad.material = m
+	p.mesh = quad
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1.0, 0.85, 0.5, 0.9))
+	ramp.add_point(0.4, Color(1.0, 0.5, 0.15, 0.7))
+	ramp.set_color(ramp.get_point_count() - 1, Color(0.6, 0.15, 0.05, 0.0))
+	p.color_ramp = ramp
+	p.position = at
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
+
+
+## A soft teardrop for the flame licks, made once.
+static var _flame_tex: Texture2D
+
+
+static func _flame_texture() -> Texture2D:
+	if _flame_tex != null:
+		return _flame_tex
+	var g := GradientTexture2D.new()
+	g.fill = GradientTexture2D.FILL_RADIAL
+	g.fill_from = Vector2(0.5, 0.75)
+	g.fill_to = Vector2(0.5, 0.0)
+	g.width = 32
+	g.height = 64
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1, 1, 1, 1))
+	grad.set_color(1, Color(1, 1, 1, 0))
+	g.gradient = grad
+	_flame_tex = g
+	return _flame_tex
+
+
+## A fire's light at `at` on `n`, flickering (`_work_fires`), and, with effects
+## on, its sparks going up.
+func _add_fire(n: Node3D, at: Vector3, energy: float, reach: float, size: float) -> void:
+	var light := OmniLight3D.new()
+	light.name = "Fire"
+	light.light_color = FIRE_COLOUR
+	light.light_energy = energy
+	light.omni_range = reach
+	light.omni_attenuation = 1.3
+	light.light_specular = 0.3
+	light.shadow_enabled = false
+	light.position = at + Vector3(0.0, 0.3, 0.0)
+	n.add_child(light)
+	_fires.append({"light": light, "energy": energy, "seed": _rng.randf() * 100.0})
+	if not Graphics.effects:
+		return
+	var p := CPUParticles3D.new()
+	p.name = "Sparks"
+	p.amount = int(10.0 * size)
+	p.lifetime = 1.6
+	p.direction = Vector3.UP
+	p.spread = 18.0
+	p.gravity = Vector3(0.0, 0.6, 0.0)
+	p.initial_velocity_min = 0.4
+	p.initial_velocity_max = 1.3
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(0.5, 0.05, 0.2) * size
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.03, 0.03)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.vertex_color_use_as_albedo = true
+	quad.material = m
+	p.mesh = quad
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1.0, 0.75, 0.35, 1.0))
+	ramp.set_color(1, Color(1.0, 0.3, 0.1, 0.0))
+	p.color_ramp = ramp
+	p.position = at
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	n.add_child(p)
+
+
+## The fires flicker: two noises, slow and quick.
+func _work_fires() -> void:
+	var t := Time.get_ticks_msec() / 1000.0
+	for f in _fires:
+		var light: OmniLight3D = f["light"]
+		var s: float = f["seed"]
+		var k := 0.82 + 0.12 * sin(t * 2.3 + s) + 0.07 * sin(t * 7.9 + s * 1.7) + 0.05 * sin(t * 17.0 + s * 3.1)
+		light.light_energy = float(f["energy"]) * k
+
+
+## Free-standing pieces on the floor, clear of the ways in and of the rail:
+## braziers and candelabras round the table, the rack and the pillory out in
+## the hall, gibbet cages hung from the beams with their dead in them.
+func _furnish_floor() -> void:
+	var spots := [
+		[BRAZIER, Vector3(3.6, 0.0, 3.4), Vector3(0.9, 1.6, 0.9), &"fire"],
+		[BRAZIER, Vector3(-3.6, 0.0, -3.4), Vector3(0.9, 1.6, 0.9), &"fire"],
+		[CANDELABRA, Vector3(-3.6, 0.0, 3.4), Vector3(0.6, 2.0, 0.6), &"candles"],
+		[CANDELABRA, Vector3(3.6, 0.0, -3.4), Vector3(0.6, 2.0, 0.6), &"candles"],
+		[RACK, Vector3(-8.6, 0.0, -9.6), Vector3(1.5, 1.2, 3.2), &""],
+		[PILLORY, Vector3(9.4, 0.0, 9.2), Vector3(2.0, 2.2, 1.1), &""],
+		[BARRELS, Vector3(-11.3, 0.0, 9.5), Vector3(1.9, 1.1, 2.0), &""],
+		[BARRELS, Vector3(11.3, 0.0, -8.0), Vector3(1.9, 1.1, 2.0), &""],
+	]
+	for s in spots:
+		var at: Vector3 = s[1]
+		if _door_distance(at) < 4.0:
+			continue
+		var n := Node3D.new()
+		n.name = "FloorPiece"
+		add_child(n)
+		n.position = at
+		_place(n, s[0], Vector3.ZERO, _rng.randf_range(-PI, PI) if s[3] != &"" else atan2(at.x, at.z) + PI + _rng.randf_range(-0.3, 0.3), s[2])
+		match s[3]:
+			&"fire":
+				_add_fire(n, Vector3(0.0, 1.45, 0.0), 1.6, 6.5, 0.5)
+				n.add_child(_flames(Vector3(0.0, 1.5, 0.0), Vector3(0.2, 0.03, 0.2), 12))
+			&"candles":
+				var light := OmniLight3D.new()
+				light.light_color = CANDLE_COLOUR
+				light.light_energy = 1.3
+				light.omni_range = 5.5
+				light.omni_attenuation = 1.3
+				light.shadow_enabled = false
+				light.position = Vector3(0.0, 2.1, 0.0)
+				n.add_child(light)
+	# Gibbet cages, the dead hung up in them, from the beams.
+	for at: Vector2 in [Vector2(-10.0, -6.0), Vector2(10.0, 2.0), Vector2(-4.0, 10.5), Vector2(4.5, -10.5)]:
+		var c := Node3D.new()
+		c.name = "Gibbet"
+		add_child(c)
+		var top := 5.6 + _rng.randf_range(-0.3, 0.3)
+		c.position = Vector3(at.x, top, _nearest_beam(at.y))
+		c.rotation.y = _rng.randf_range(-PI, PI)
+		var cage: Node3D = GIBBET.instantiate()
+		c.add_child(cage)
+		var drop := CEIL - BEAM.y - top
+		c.add_child(Table._merge([[Table._cylm(0.03, 0.03, drop, 6), Transform3D(Basis(), Vector3(0.0, drop * 0.5, 0.0)), &"dark"]], "Chain"))
+
+
+func _nearest_beam(z: float) -> float:
+	var best: float = BEAM_Z[0]
+	for b in BEAM_Z:
+		if absf(b - z) < absf(best - z):
+			best = b
+	return best
 
 
 ## The wall slots the mechanisms left, furnished as the reference's walls are:
@@ -717,7 +1054,7 @@ func _furnish(slots: Array) -> void:
 		var t = free[i]
 		free[i] = free[j]
 		free[j] = t
-	var kinds := [&"study", &"apothecary", &"specimens", &"apothecary", &"specimens", &"apothecary", &"study"]
+	var kinds := [&"study", &"apothecary", &"maiden", &"specimens", &"tools", &"apothecary", &"maiden", &"tools"]
 	for i in free.size():
 		var s: Dictionary = free[i]
 		s["used"] = true
@@ -743,6 +1080,14 @@ func _furnish(slots: Array) -> void:
 			&"apothecary":
 				for x: float in [-0.92, 0.92]:
 					_place(n, SHELF, Vector3(x, 0.0, 0.25), 0.0, Vector3(1.6, 3.0, 0.45))
+			&"maiden":
+				# An iron maiden, half open, and the other shut beside it.
+				_place(n, MAIDEN, Vector3(-0.8, 0.0, 0.55), _rng.randf_range(-0.2, 0.2), Vector3(1.1, 2.4, 0.9))
+				_place(n, CHEST, Vector3(1.0, 0.0, 0.55), PI * 0.5 + _rng.randf_range(-0.3, 0.3), Vector3(1.15, 0.62, 0.92))
+			&"tools":
+				# The torturer's rack of saws, cleavers and hooks, the barrels under it.
+				_place(n, TOOLRACK, Vector3(0.0, 1.1, 0.12), 0.0, Vector3(2.2, 1.5, 0.25))
+				_place(n, BARRELS, Vector3(0.6, 0.0, 0.9), _rng.randf_range(-0.4, 0.4), Vector3(2.0, 1.2, 1.5))
 			_:
 				for x: float in [-1.15, 1.15]:
 					_place(n, JAR, Vector3(x, 0.0, 0.55), _rng.randf_range(-PI, PI), Vector3(0.8, 2.1, 0.8))
@@ -823,18 +1168,18 @@ func _on_depowered(_cause: StringName) -> void:
 
 # --- The clamp ------------------------------------------------------------------------
 
-## The table's restraint arm, from its shoulder out to `tip`: caught if the
-## clamp is open and the arm runs through its jaws -- it need not end in them:
-## the jaws snap shut on whatever passes between them.
-func clamp_try_catch(shoulder: Vector3, tip: Vector3) -> bool:
+## The claw slammed down at `at` (world, on the floor): caught if the clamp is
+## open and it came down by its jaws -- they snap shut on its wrist (note 96).
+func clamp_try_catch_at(at: Vector3) -> bool:
 	if _clamp.is_empty() or _clamp_state != &"open":
 		return false
-	if Table._segment_distance(to_global(_clamp["mouth"]), shoulder, tip) > CATCH:
+	var mouth := to_global(_clamp["mouth"])
+	if Vector2(mouth.x - at.x, mouth.z - at.z).length() > CATCH:
 		return false
 	_clamp_state = &"held"
-	table.call("_sparks", tip, Color(1.0, 0.8, 0.5), 30)
+	table.call("_sparks", mouth, Color(1.0, 0.8, 0.5), 30)
 	for p in Coop.all():
-		if p.get("_shake") != null and (p as Node3D).global_position.distance_to(tip) < 14.0:
+		if p.get("_shake") != null and (p as Node3D).global_position.distance_to(mouth) < 14.0:
 			p.set("_shake", maxf(float(p.get("_shake")), 0.35))
 	return true
 
@@ -1020,6 +1365,7 @@ func _process(delta: float) -> void:
 	_update_cables(delta)
 	_work_mechanisms(delta)
 	_work_levers()
+	_work_fires()
 
 
 func _work_mechanisms(delta: float) -> void:

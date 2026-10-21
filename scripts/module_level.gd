@@ -476,6 +476,15 @@ static func _make_surgery_hall(out: Built, enclose: bool) -> void:
 		return
 	best["kind"] = "surgery"
 	_enclose_hall(out, best, enclose)
+	# No vaults over it (note 96): the surgery is one open hall under a timber
+	# roof of its own (surgery.gd `_build_roof`), no piers.
+	var open: Dictionary = out.get_meta("open_roof", {})
+	var c: Vector2i = best["centre"]
+	var h: int = best["half"]
+	for dx in range(-h, h + 1):
+		for dy in range(-h, h + 1):
+			open[c + Vector2i(dx, dy)] = true
+	out.set_meta("open_roof", open)
 
 
 ## Turns a room's whole block into `hall` cells: every cell an ordinary vaulted

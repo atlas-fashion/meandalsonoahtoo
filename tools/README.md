@@ -521,3 +521,9 @@ way it faces before exporting -- the shelf first came out back to front.
   `glow`, `EMISSION_OP_MULTIPLY`): the candle flames, amber lamps and specimen
   fluid are the bright parts of the pictures. With the default ADD operator the
   whole piece would glow white.
+
+The medieval set (note 96) is built the same way: `maiden`, `rack`, `gibbet`,
+`brazier`, `pillory`, `toolrack`, `barrels`, `candelabra`. A generated hearth
+was dropped: Tripo filled its firebox in solid (surgery.gd builds the hearth).
+Concave openings -- a firebox, an archway -- are what image-to-3D fills in;
+check the preview for them before paying for texture detail.
