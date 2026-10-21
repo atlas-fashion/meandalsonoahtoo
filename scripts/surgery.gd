@@ -1,31 +1,39 @@
 extends "res://scripts/morgue.gd"
 
-## The surgery (2026-10-21): the hall where the dead prisoners were to be made
-## bionic. An enclosed vaulted hall like the morgue's (module_level
-## `_make_surgery_hall`; this extends morgue.gd for its piers, torches and
-## bodies), round the machine that did the work: the surgical table
-## (scripts/surgical_table.gd), asleep on its pedestal under an old surgical
-## lamp until a player walks in.
+## The surgery (2026-10-21; refurnished after the user's reference picture,
+## note 95): the hall where the dead prisoners were to be made bionic. An
+## enclosed vaulted hall like the morgue's (module_level `_make_surgery_hall`;
+## this extends morgue.gd for its piers, torches and bodies), round the machine
+## that did the work: the surgical table (scripts/surgical_table.gd), fixed in
+## the middle of the hall inside an iron floor rail, its long claw folded up
+## into the ring in the vault over it until a player walks in.
+##
+## Dressed from the reference with the Higgsfield kit (models/surgery/,
+## tools/build_surgery_kit.py): apothecary shelves of bottles and candles,
+## glowing specimen jars, a worktable with a skull and an open book under an
+## anatomy chart, iron-bound chests, candle chandeliers in the bays.
 ##
 ## What is in here to beat it with -- nothing marked, all of it to be watched:
 ## - THREE WALL MECHANISMS, one per system, each joined to the table by its own
-##   thick cable dragged across the floor after it: the ARMS' pistons and gear
-##   (their cable twitches whenever the arms move), the LEGS' flywheel (its
-##   cable shivers as it crawls), the CORE's glass column (its cable carries the
-##   core's pulse).
+##   thick cable across the floor: the ARMS' pistons and gear (their cable
+##   twitches whenever the claw strikes), the HOIST's flywheel (the "legs"
+##   system; its cable shivers as the claw travels), the CORE's glass column
+##   (its cable carries the core's pulse).
 ## - THREE LEVERS on the piers, which system each cuts shuffled per seed. A
 ##   pull cuts it for a while (surgical_table.gd `cut`) and shows something:
 ##   cutting the arms springs the wall CLAMP open (it sits on the arms' relay);
-##   cutting the legs stops the flywheel, which can then be JAMMED with the iron
-##   bar hanging beside it; cutting the core stalls the table until the other
-##   two cables flare and feed it back.
-## - THE CLAMP: once open, the restraint arm driven into its jaws is caught,
-##   the table hauled up by it with its belly and the power cable under it in
-##   reach -- until its legs tear it free.
-## - Cover: the piers, the slabs the last prisoners lie strapped to, a broken
-##   table on its side, a toppled rack of prosthetic limbs.
-## Depowered it crashes down, its light goes out, the lamp dies with it and its
-## hum -- the only machine sound in the dungeon -- stops.
+##   cutting the hoist drops the claw and stops the flywheel, which can then be
+##   JAMMED with the iron bar hanging beside it; cutting the core stalls the
+##   table until the other two cables flare and feed it back.
+## - THE CLAMP, at the end of an aisle so the claw can be lured straight down
+##   it: once open, the claw driven into its jaws is caught, the power cable at
+##   its wrist in reach -- until the hoist tears it free.
+## - Cover: the piers (the claw cannot reach round them), the slabs the last
+##   prisoners lie strapped to, a broken table on its side, a toppled rack of
+##   prosthetic limbs, the furniture.
+## Depowered the claw crashes to the floor, its light goes out, the lamp in the
+## ring dies with it and its hum -- the only machine sound in the dungeon --
+## stops.
 
 const Table := preload("res://scripts/surgical_table.gd")
 const CABLE_SHADER := preload("res://shaders/surgery_cable.gdshader")
@@ -47,9 +55,20 @@ const LEVER_PIERS := [[Vector3(-9.0, 0.0, 3.0), Vector3.RIGHT], [Vector3(9.0, 0.
 	[Vector3(3.0, 0.0, -9.0), Vector3.BACK]]
 const LEVER_HEIGHT := 1.25
 const LEVER_REACH := 2.4
-## The pedestal the table sleeps on, and the lamp over it.
-const PEDESTAL_TOP := 0.46
-const LAMP_HEIGHT := 4.25
+## The lamp: in the hub of the ceiling ring.
+const LAMP_HEIGHT := 4.05
+## The Higgsfield kit (note 95).
+const SHELF := preload("res://models/surgery/shelf.glb")
+const JAR := preload("res://models/surgery/jar.glb")
+const WORKTABLE := preload("res://models/surgery/worktable.glb")
+const CHEST := preload("res://models/surgery/chest.glb")
+const CHANDELIER := preload("res://models/surgery/chandelier.glb")
+const CHART := preload("res://textures/surgery_chart.png")
+## The chandeliers: in the four corner bays, hanging from the crown (5.1 m).
+const CHANDELIER_TOP := 5.0
+const CANDLE_COLOUR := Color(1.0, 0.68, 0.38)
+## The iron rail let into the floor round the table.
+const RAIL_RADIUS := 2.05
 
 var table: CharacterBody3D
 
@@ -66,8 +85,6 @@ var _cables: Array = []
 var _lamp: SpotLight3D
 var _lamp_mat: StandardMaterial3D
 var _lamp_energy := 2.4
-var _nav_map := RID()
-var _nav_region := RID()
 var _wall := 13.9
 var _cable_t := 0.0
 var _spin := {"arms": 0.0, "legs": 0.0}
@@ -102,7 +119,8 @@ func _dress() -> void:
 	var pilaster_in := _wall - PILASTER_PROUD
 
 	_build_piers(h, cell, pilaster_in)
-	_hang_torches(h, cell, pilaster_in)
+	_hang_wall_torches(h, cell, pilaster_in)
+	_hang_chandeliers()
 
 	# The wall slots between the pilasters, the doorways' left out.
 	var slots := _wall_slots(h, cell)
@@ -117,25 +135,30 @@ func _dress() -> void:
 				s["used"] = true
 				return s
 		return {}
+	# The clamp at the end of an aisle (k 0: on a line through the middle,
+	# clear of the piers), so the claw can be lured straight down it into the
+	# jaws; the arms' mechanism, whose relay it sits on, beside it.
+	var clamp_slot: Dictionary = take.call([[&"left", 0], [&"right", 0], [&"back", 0], [&"front", 0]])
+	var clamp_wall: StringName = clamp_slot.get("wall", &"left")
+	var arms_slot: Dictionary = take.call([[clamp_wall, -1], [clamp_wall, 1], [&"back", -1]])
 	var core_slot: Dictionary = take.call([[&"back", 0], [&"back", -1], [&"back", 1]])
-	var arms_slot: Dictionary = take.call([[&"left", -1], [&"left", 0], [&"right", -1]])
-	var clamp_slot: Dictionary = take.call([[arms_slot.get("wall", &"left"), 1], [arms_slot.get("wall", &"left"), 0],
-		[&"front", -1], [&"front", 1]])
-	var legs_slot: Dictionary = take.call([[&"right", 0], [&"right", 1], [&"right", -1]])
+	var opposite := {&"left": &"right", &"right": &"left", &"back": &"front", &"front": &"back"}
+	var legs_slot: Dictionary = take.call([[opposite.get(clamp_wall, &"right"), 0], [opposite.get(clamp_wall, &"right"), 1],
+		[opposite.get(clamp_wall, &"right"), -1]])
 	_build_arms_mechanism(arms_slot)
 	_build_legs_mechanism(legs_slot)
 	_build_core_mechanism(core_slot)
 	_build_clamp(clamp_slot)
-	_build_pedestal()
+	_build_rail()
 	_build_lamp()
 	_build_levers()
-	var cover := _build_story(h, cell)
+	_build_story(h, cell)
+	_furnish(slots)
 
-	_bake_table_nav(pilaster_in, cover)
 	_spawn_table(pilaster_in)
 	_build_cables()
 	_limit_view(_wall)
-	print("[surgery] the surgical table asleep on its pedestal; levers %s; %d bodies laid out (%d broken)"
+	print("[surgery] the surgical table asleep, its claw folded in the vault; levers %s; %d bodies laid out (%d broken)"
 		% [", ".join(_levers.map(func(l): return String(l["system"]))), _corpse_count, _missing_count])
 
 
@@ -360,52 +383,39 @@ func _build_clamp(s: Dictionary) -> void:
 	_clamp = {"node": n, "jaws": jaws, "mouth": n.transform * CLAMP_MOUTH, "open": 0.0}
 
 
-## The pedestal the table sleeps on: a hydraulic column under a mount plate, its
-## clamps torn open. Solid to the players only; the table steps off it.
-func _build_pedestal() -> void:
-	var p := Node3D.new()
-	p.name = "Pedestal"
-	add_child(p)
-	p.add_child(Table._merge([
-		[Table._boxm(Vector3(1.3, 0.1, 1.9)), Transform3D(Basis(), Vector3(0.0, 0.05, 0.0)), &"dark"],
-		[Table._cylm(0.24, 0.3, PEDESTAL_TOP - 0.16, 14), Transform3D(Basis(), Vector3(0.0, 0.1 + (PEDESTAL_TOP - 0.16) * 0.5, 0.0)), &"steel"],
-		[Table._boxm(Vector3(0.6, 0.06, 1.3)), Transform3D(Basis(), Vector3(0.0, PEDESTAL_TOP - 0.03, 0.0)), &"rust"],
-		[Table._cylm(0.03, 0.03, 0.6, 6), Transform3D(Basis(Vector3.FORWARD, 0.6), Vector3(0.4, 0.3, 0.5)), &"steel"],
-		[Table._cylm(0.03, 0.03, 0.6, 6), Transform3D(Basis(Vector3.FORWARD, -0.6), Vector3(-0.4, 0.3, -0.5)), &"steel"],
-	], "PedestalMesh"))
-	var body := StaticBody3D.new()
-	# Sight and the players' exact walls only: not the table's (1 | 512), nor
-	# the navmesh's.
-	body.collision_layer = 2 | 256
-	body.collision_mask = 0
-	p.add_child(body)
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.0, PEDESTAL_TOP, 1.4)
-	var cs := CollisionShape3D.new()
-	cs.shape = shape
-	cs.position = Vector3(0.0, PEDESTAL_TOP * 0.5, 0.0)
-	body.add_child(cs)
+## The iron rail let into the floor round the table, as in the reference: a
+## riveted ring with amber lamps set in it. Flush with the floor -- nothing to
+## trip on.
+func _build_rail() -> void:
+	var parts: Array = [[Table._torusm(RAIL_RADIUS - 0.09, RAIL_RADIUS + 0.09), Transform3D(Basis().scaled(Vector3(1.0, 0.3, 1.0)), Vector3(0.0, 0.0, 0.0)), &"dark"],
+		[Table._torusm(RAIL_RADIUS - 0.03, RAIL_RADIUS + 0.03), Transform3D(Basis().scaled(Vector3(1.0, 0.4, 1.0)), Vector3(0.0, 0.025, 0.0)), &"brass"]]
+	for i in 12:
+		var a := TAU * float(i) / 12.0
+		var at := Vector3(cos(a), 0.0, sin(a))
+		if i % 3 == 0:
+			parts.append([Table._boxm(Vector3(0.22, 0.05, 0.32)), Transform3D(Basis(Vector3.UP, -a), at * RAIL_RADIUS + Vector3(0.0, 0.02, 0.0)), &"rust"])
+		else:
+			parts.append([Table._cylm(0.045, 0.055, 0.04, 8), Transform3D(Basis(), at * RAIL_RADIUS + Vector3(0.0, 0.035, 0.0)), &"amber"])
+	var rail := Table._merge(parts, "FloorRail")
+	rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(rail)
 
 
-## The old surgical lamp over the pedestal: a round hood on a rod from the
-## vault, a cold spot down onto the table. It is on the table's circuit.
+## The surgical lamp: the light in the hub of the ceiling ring, a cold spot down
+## onto the table. It is on the table's circuit.
 func _build_lamp() -> void:
 	var l := Node3D.new()
 	l.name = "SurgicalLamp"
-	l.position = Vector3(0.0, LAMP_HEIGHT, 0.0)
+	# Beside the arm, which hangs from the middle of the hub.
+	l.position = Vector3(0.5, LAMP_HEIGHT, 0.0)
 	add_child(l)
-	l.add_child(Table._merge([
-		[Table._cylm(0.3, 0.62, 0.3, 18), Transform3D(Basis(), Vector3(0.0, 0.15, 0.0)), &"steel"],
-		[Table._cylm(0.03, 0.03, 1.4, 6), Transform3D(Basis(), Vector3(0.0, 1.0, 0.0)), &"dark"],
-		[Table._torusm(0.5, 0.62), Transform3D(Basis(), Vector3(0.0, 0.0, 0.0)), &"dark"],
-	], "Hood"))
 	_lamp_mat = StandardMaterial3D.new()
 	_lamp_mat.albedo_color = Color(0.2, 0.22, 0.22)
 	_lamp_mat.emission_enabled = true
 	_lamp_mat.emission = Color(0.85, 0.95, 1.0)
 	_lamp_mat.emission_energy_multiplier = 1.5
 	var glow := MeshInstance3D.new()
-	glow.mesh = Table._cylm(0.5, 0.5, 0.02, 18)
+	glow.mesh = Table._cylm(0.16, 0.16, 0.02, 14)
 	glow.material_override = _lamp_mat
 	glow.position = Vector3(0.0, 0.0, 0.0)
 	l.add_child(glow)
@@ -463,7 +473,7 @@ func _build_levers() -> void:
 ## limbs half fitted, a table like the machine's own broken on its side, a rack
 ## of prosthetic limbs toppled, tools dropped where they were used, torn
 ## restraints, and the older dead on the floor. Returns the solid pieces
-## ([centre, size, yaw] in the room's frame) for the table's navmesh.
+## ([centre, size, yaw] in the room's frame).
 func _build_story(h: int, cell: float) -> Array:
 	var cover: Array = []
 	var bays := [Vector3(-6.0, 0.0, -6.0), Vector3(6.0, 0.0, -6.0), Vector3(-6.0, 0.0, 6.0), Vector3(6.0, 0.0, 6.0)]
@@ -649,87 +659,149 @@ func _torn_restraint(at: Vector3) -> void:
 	add_child(mi)
 
 
-# --- The table and its navmesh ---------------------------------------------------
+# --- The furnishing (note 95) ----------------------------------------------------
 
-## The table is far wider than the level's navmesh agent (0.5 m), so it gets a
-## navmesh of its own for this hall, baked for its own radius from what is
-## known to stand here: the floor inside the pilasters, the piers, the cover,
-## the mechanisms. Not the pedestal, which it steps off and never meets again.
-func _bake_table_nav(inner: float, cover: Array) -> void:
-	var src := NavigationMeshSourceGeometryData3D.new()
-	var floor := PackedVector3Array([
-		Vector3(-inner, 0.0, -inner), Vector3(inner, 0.0, -inner), Vector3(inner, 0.0, inner),
-		Vector3(-inner, 0.0, -inner), Vector3(inner, 0.0, inner), Vector3(-inner, 0.0, inner)])
-	src.add_faces(floor, Transform3D())
-	var reversed := PackedVector3Array()
-	for i in range(0, floor.size(), 3):
-		reversed.append_array([floor[i], floor[i + 2], floor[i + 1]])
-	src.add_faces(reversed, Transform3D())
-	var h: int = room["half"]
-	var cell: float = built.cell_size
+## Only the wall pilasters keep torches here: the middle of the hall is lit by
+## the chandeliers in its bays and the lamp in the ring, as in the reference
+## (morgue.gd hangs one on every pier as well -- sixteen more lights).
+func _hang_wall_torches(h: int, cell: float, pilaster_in: float) -> void:
+	var level = load("res://scripts/module_level.gd")
+	var scene: PackedScene = load(level.TORCH_SCENE)
+	var energy: float = TORCH_ENERGY
+	var n := get_parent()
+	while n != null and n.get("module_torch_energy") == null:
+		n = n.get_parent()
+	if n != null:
+		energy = float(n.get("module_torch_energy")) * TORCH_BOOST
 	for k in range(-h, h):
-		for j in range(-h, h):
-			_box_faces(src, Vector3((float(k) + 0.5) * cell, 1.5, (float(j) + 0.5) * cell), Vector3.ONE * PIER_HALF * 2.0 + Vector3(0.0, 0.8, 0.0), 0.0)
-	for c in cover:
-		_box_faces(src, c[0], c[1], c[2])
-	for key in _mech:
-		var n: Node3D = _mech[key]["node"]
-		_box_faces(src, n.transform * Vector3(0.0, 1.5, 0.45), Vector3(3.4, 3.0, 1.4), n.rotation.y)
-	if not _clamp.is_empty():
-		var n: Node3D = _clamp["node"]
-		_box_faces(src, n.transform * Vector3(0.0, 1.5, 0.35), Vector3(2.2, 3.0, 0.9), n.rotation.y)
-	var nm := NavigationMesh.new()
-	# Whole cells (0.25), or the bake rounds them up and says so.
-	nm.agent_radius = 1.0
-	nm.agent_height = 1.5
-	nm.agent_max_climb = 0.25
-	nm.cell_size = 0.25
-	nm.cell_height = 0.25
-	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
-	NavigationServer3D.bake_from_source_geometry_data(nm, src)
-	_nav_map = NavigationServer3D.map_create()
-	NavigationServer3D.map_set_cell_size(_nav_map, 0.25)
-	NavigationServer3D.map_set_cell_height(_nav_map, 0.25)
-	NavigationServer3D.map_set_active(_nav_map, true)
-	_nav_region = NavigationServer3D.region_create()
-	NavigationServer3D.region_set_map(_nav_region, _nav_map)
-	NavigationServer3D.region_set_navigation_mesh(_nav_region, nm)
-	NavigationServer3D.region_set_transform(_nav_region, global_transform)
-	print("[surgery] the table's own navmesh: %d polygons" % nm.get_polygon_count())
+		var v := (float(k) + 0.5) * cell
+		for d: Vector3 in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
+			var along := Vector3(-d.z, 0.0, d.x) * v
+			level._hang_torch(self, scene, d * (pilaster_in - 0.02) + along + Vector3(0.0, TORCH_HEIGHT, 0.0), d, energy, 13.0)
 
 
-static func _box_faces(src: NavigationMeshSourceGeometryData3D, centre: Vector3, size: Vector3, yaw: float) -> void:
-	var box := BoxMesh.new()
-	box.size = size
-	var arrays := box.get_mesh_arrays()
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	var faces := PackedVector3Array()
-	for i in idx:
-		faces.append(verts[i])
-	src.add_faces(faces, Transform3D(Basis(Vector3.UP, yaw), centre))
+## A candle chandelier (models/surgery/chandelier.glb) from the crown of each
+## corner bay, its warm light under it. Plain lights without shadows: the
+## hall's walls close them in, and Graphics scales their reach (light_detail).
+func _hang_chandeliers() -> void:
+	var cell: float = built.cell_size
+	for sx: float in [-1.0, 1.0]:
+		for sz: float in [-1.0, 1.0]:
+			var c := Node3D.new()
+			c.name = "Chandelier"
+			add_child(c)
+			c.position = Vector3(sx * cell, CHANDELIER_TOP, sz * cell)
+			c.rotation.y = _rng.randf_range(-PI, PI)
+			var model: Node3D = CHANDELIER.instantiate()
+			c.add_child(model)
+			_glow(model, 1.4)
+			var light := OmniLight3D.new()
+			light.name = "Candles"
+			light.light_color = CANDLE_COLOUR
+			light.light_energy = 2.8
+			light.omni_range = 10.5
+			light.omni_attenuation = 1.2
+			light.light_specular = 0.2
+			light.shadow_enabled = false
+			light.position = Vector3(0.0, -1.35, 0.0)
+			c.add_child(light)
 
 
-func _exit_tree() -> void:
-	if _nav_region.is_valid():
-		NavigationServer3D.free_rid(_nav_region)
-		_nav_region = RID()
-	if _nav_map.is_valid():
-		NavigationServer3D.free_rid(_nav_map)
-		_nav_map = RID()
+## The wall slots the mechanisms left, furnished as the reference's walls are:
+## a study (the worktable with its skull, book and tools, the anatomy chart over
+## it, a chest), apothecary shelves, specimen jars with a chest between them.
+func _furnish(slots: Array) -> void:
+	var free: Array = slots.filter(func(s): return not s["used"])
+	for i in range(free.size() - 1, 0, -1):
+		var j := _rng.randi_range(0, i)
+		var t = free[i]
+		free[i] = free[j]
+		free[j] = t
+	var kinds := [&"study", &"apothecary", &"specimens", &"apothecary", &"specimens", &"apothecary", &"study"]
+	for i in free.size():
+		var s: Dictionary = free[i]
+		s["used"] = true
+		var n := _on_wall(s, "Furniture")
+		match kinds[i % kinds.size()]:
+			&"study":
+				_place(n, WORKTABLE, Vector3(0.0, 0.0, 0.9), PI * 0.5, Vector3(2.0, 0.95, 1.55))
+				_place(n, CHEST, Vector3(1.75, 0.0, 0.6), PI * 0.5 + _rng.randf_range(-0.15, 0.15), Vector3(1.15, 0.62, 0.92))
+				var chart := MeshInstance3D.new()
+				chart.name = "AnatomyChart"
+				var quad := QuadMesh.new()
+				quad.size = Vector2(1.35, 1.8)
+				chart.mesh = quad
+				var m := StandardMaterial3D.new()
+				m.albedo_texture = CHART
+				m.albedo_color = Color(0.62, 0.58, 0.52)
+				m.roughness = 0.95
+				chart.material_override = m
+				chart.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				chart.position = Vector3(-0.2, 2.55, 0.03)
+				chart.rotation.z = _rng.randf_range(-0.04, 0.04)
+				n.add_child(chart)
+			&"apothecary":
+				for x: float in [-0.92, 0.92]:
+					_place(n, SHELF, Vector3(x, 0.0, 0.25), 0.0, Vector3(1.6, 3.0, 0.45))
+			_:
+				for x: float in [-1.15, 1.15]:
+					_place(n, JAR, Vector3(x, 0.0, 0.55), _rng.randf_range(-PI, PI), Vector3(0.8, 2.1, 0.8))
+				_place(n, CHEST, Vector3(0.0, 0.0, 0.55), PI * 0.5 + _rng.randf_range(-0.2, 0.2), Vector3(1.15, 0.62, 0.92))
+				# The jars' glow.
+				var glow := OmniLight3D.new()
+				glow.name = "SpecimenGlow"
+				glow.light_color = Color(0.55, 1.0, 0.3)
+				glow.light_energy = 0.7
+				glow.omni_range = 3.6
+				glow.omni_attenuation = 1.6
+				glow.shadow_enabled = false
+				glow.position = Vector3(0.0, 1.3, 1.1)
+				n.add_child(glow)
 
 
-## The table on its pedestal, lying across the hall: whoever walks in sees it
-## side on, and its sensor turn to them.
+## How much each kit piece glows with its own picture (`_glow`).
+const GLOWS := {"shelf": 0.35, "jar": 1.1, "worktable": 0.3, "chest": 0.0}
+
+
+## Lights a kit piece with its own picture (surgical_table.gd `glow`).
+func _glow(piece: Node, energy: float) -> void:
+	Table.glow(piece, energy)
+
+
+## A kit piece on wall node `n` at `at` (+Z out into the room), turned `yaw`,
+## solid as a box of `size` (its footprint, before the turn).
+func _place(n: Node3D, scene: PackedScene, at: Vector3, yaw: float, size: Vector3) -> void:
+	var piece: Node3D = scene.instantiate()
+	n.add_child(piece)
+	_glow(piece, float(GLOWS.get(scene.resource_path.get_file().get_basename(), 0.0)))
+	piece.position = at
+	piece.rotation.y = yaw
+	for node in piece.find_children("*", "GeometryInstance3D", true, false):
+		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var body := StaticBody3D.new()
+	body.collision_layer = 1 | 2
+	body.collision_mask = 0
+	piece.add_child(body)
+	var shape := BoxShape3D.new()
+	shape.size = size
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	cs.position = Vector3(0.0, size.y * 0.5, 0.0)
+	body.add_child(cs)
+
+
+# --- The table ------------------------------------------------------------------
+
+## The table in the middle of the hall, lying across it: whoever walks in sees
+## it side on, and the claw over it turn to them.
 func _spawn_table(inner: float) -> void:
 	table = CharacterBody3D.new()
 	table.set_script(Table)
 	table.name = "SurgicalTable"
 	table.set("room", self)
-	table.set("nav_map", _nav_map)
 	table.set("home", global_transform * Vector3.ZERO)
 	table.set("home_yaw", global_rotation.y + PI * 0.5)
-	table.set("bound", inner - Table.RADIUS - 0.1)
+	table.set("bound", inner - 0.5)
 	add_child(table)
 	table.connect("system_changed", _on_system_changed)
 	table.connect("depowered", _on_depowered)
@@ -1064,8 +1136,9 @@ func _jam() -> void:
 func save_state() -> Dictionary:
 	if table == null or not bool(table.call("is_depowered")):
 		return {"down": false}
-	var p := table.global_position
-	return {"down": true, "at": [p.x, p.y, p.z], "yaw": table.global_rotation.y,
+	# Where the claw fell, and the aisle its arm lay in (note 95).
+	var p: Vector3 = table.call("rest_point")
+	return {"down": true, "at": [p.x, p.y, p.z], "yaw": float(table.call("rest_yaw")),
 		"jammed": bool(table.get("legs_jammed"))}
 
 

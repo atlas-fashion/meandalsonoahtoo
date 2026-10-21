@@ -490,3 +490,34 @@ the script sets it; swinging the hind TOES through the air put the ankle above
 the hip and the thigh up through the rump (tearing) -- the swing drives the
 ANKLE on a low arc instead. In the game: `scripts/rat_look.gd` (scale 0.5,
 nose to -Z). Note 78.
+
+# The surgery's kit (2026-10-21, Higgsfield)
+
+```
+blender -b --factory-startup -P tools/build_surgery_kit.py -- models/surgery
+blender -b --factory-startup -P tools/build_surgery_kit.py -- --preview <dir> [names]
+godot --headless --import --path .
+```
+
+Sources are in `models/source/surgery_hf/` (a `.gdignore` folder): for each
+piece a `ref_*.png` (Higgsfield `gpt_image_2_5`, high, with the user's
+reference picture of the surgery as an `image_references` input) and the
+`raw_*.glb` Tripo H3.1 made from it -- the table, ring, claw, arm segment,
+shelf, worktable, chandelier, jar and chest. `chart.png` is the anatomy chart
+(copied to `textures/surgery_chart.png`). Prompt each piece ALONE on a plain
+grey background, "whole object visible", or Tripo reconstructs the scene.
+
+`build_surgery_kit.py` fits each to `models/surgery/<name>.glb`: welds, then
+decimates to its budget (never decimate unwelded Tripo output --
+`prep_kit_asset.py`), turns it so its front faces Blender -Y (Godot +Z), scales
+it along one named axis, re-origins it (floor centre, or the top for hanging
+pieces), sets its metallic factor (Tripo ships 1.0 on everything) and shrinks
+its maps. `--preview` renders each from the front with Workbench: check which
+way it faces before exporting -- the shelf first came out back to front.
+
+- The extracted `<name>_*.jpg` imports come in at `compress/mode=0`: set them
+  to 2 and re-import.
+- The game lights these with their own albedo as emission (surgical_table.gd
+  `glow`, `EMISSION_OP_MULTIPLY`): the candle flames, amber lamps and specimen
+  fluid are the bright parts of the pictures. With the default ADD operator the
+  whole piece would glow white.
