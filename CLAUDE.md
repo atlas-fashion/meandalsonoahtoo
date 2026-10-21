@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 92), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 94), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -291,7 +291,7 @@ decrepits, sewer lizards, rats (own `_rat_rng`), chests.
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
   (`zone_gate.gd`), anchors (`respawn_anchor.gd`), hiding spots
-  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, chest rooms
+  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd`, note 94), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
 
@@ -477,6 +477,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 91 | 2026-10-20 | Berserk as fast as ghost mode | [docs/notes/91-berserk-at-ghost-speed.md](docs/notes/91-berserk-at-ghost-speed.md) |
 | 92 | 2026-10-20 | No sticking to corners: move_and_slide plus a slip round arch legs and pillars | [docs/notes/92-no-sticking-to-corners.md](docs/notes/92-no-sticking-to-corners.md) |
 | 93 | 2026-10-20 | Skeleton types: drill, sword, hammer, shield and crossbow hands | [docs/notes/93-skeleton-prosthesis-types.md](docs/notes/93-skeleton-prosthesis-types.md) |
+| 94 | 2026-10-21 | The surgery: the surgical table, depowered not killed | [docs/notes/94-the-surgery-and-the-surgical-table.md](docs/notes/94-the-surgery-and-the-surgical-table.md) |
 
 ## Notes by source file
 
@@ -529,12 +530,12 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
-- `scripts/morgue.gd`: 17, 79
+- `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
@@ -553,7 +554,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/save_system.gd`: 19, 60, 79
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84
-- `scripts/sandbox_world.gd`: 60, 77, 79, 93
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94
 - `scripts/settings_panel.gd`: 19, 46, 80
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79
 - `scripts/split_screen.gd`: 79, 80, 82
@@ -565,6 +566,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
+- `scripts/surgery.gd`: 94
+- `scripts/surgical_table.gd`: 94
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
@@ -579,6 +582,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/lunge_lines.gdshader`: 10
 - `shaders/sewer_stone.gdshader`: 55
 - `shaders/sewer_water.gdshader`: 55
+- `shaders/surgery_cable.gdshader`: 94
 - `shaders/sky_clouds.gdshader`: 6.18, 38
 - `shaders/spear_blast.gdshader`: 14
 - `shaders/torch_flame.gdshader`: 6.18, 19

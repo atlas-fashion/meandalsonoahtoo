@@ -308,6 +308,11 @@ func destinations() -> Array:
 	var morgue = maze.call("morgue_centre")
 	if morgue != null:
 		out.append(["Morgue", Vector3(morgue) + Vector3(0.0, 0.3, 0.0), 0.0])
+	var surgery = maze.call("surgery")
+	if surgery != null and is_instance_valid(surgery) and surgery.has_method("entry_point"):
+		# Just inside its doorway, facing the table.
+		var entry: Array = surgery.call("entry_point")
+		out.append(["Surgery", entry[0], entry[1]])
 	var hall_info: Dictionary = maze.get("_boss_hall")
 	if hall_info.has("zone_centre"):
 		# On its floor (the zone's centre is in the air).

@@ -360,6 +360,10 @@ const DEFAULTS := {
 	## One chest room (the one furthest from the start) becomes the morgue: an
 	## enclosed vaulted hall rather than a cloister (`_make_morgue_hall`).
 	"morgue": false,
+	## And one more, far from both the start and the morgue, becomes the
+	## surgery: an enclosed hall too, where the surgical table waits
+	## (`_make_surgery_hall`, surgery.gd).
+	"surgery": false,
 	## Manholes down to the sewer (sewer.gd, manhole.gd); brick kit only.
 	"manholes": 0,
 }
@@ -406,6 +410,8 @@ static func build(parent: Node3D, seed_value: int, size: Vector2i, cell_size: fl
 	out.boss_hall = plan_boss_hall(out)
 	if bool(opt["morgue"]):
 		_make_morgue_hall(out, brick)
+	if bool(opt["surgery"]):
+		_make_surgery_hall(out, brick)
 	if brick:
 		# The kit always has its skylight vault and niche wall.
 		var have := {SKYLIGHT_KIND: true, NICHE_KIND: true}
@@ -445,11 +451,42 @@ static func _make_morgue_hall(out: Built, enclose: bool) -> void:
 	if best.is_empty():
 		return
 	best["kind"] = "morgue"
-	# The old Tripo modules (`-- --modules`) keep the cloister.
+	_enclose_hall(out, best, enclose)
+
+
+## The surgery (2026-10-21): of the chest rooms left once the morgue has its
+## pick, the one furthest from both the start and the morgue -- the smaller of
+## the two distances -- becomes kind "surgery", an enclosed hall like the
+## morgue's (surgery.gd dresses it and wakes the table in it).
+static func _make_surgery_hall(out: Built, enclose: bool) -> void:
+	var start := _pick_spawn(out)
+	var morgue := Vector3(INF, 0.0, INF)
+	for room in out.rooms:
+		if room["kind"] == "morgue":
+			morgue = out.room_world(room)
+	var best: Dictionary = {}
+	var best_d := -1.0
+	for room in out.chest_rooms():
+		var at: Vector3 = out.room_world(room)
+		var d := minf(at.distance_to(start), at.distance_to(morgue))
+		if d > best_d:
+			best_d = d
+			best = room
+	if best.is_empty():
+		return
+	best["kind"] = "surgery"
+	_enclose_hall(out, best, enclose)
+
+
+## Turns a room's whole block into `hall` cells: every cell an ordinary vaulted
+## cell (court off), classified from its openings -- crosses inside, tees and
+## corners round the ring. The old Tripo modules (`-- --modules`) keep the
+## cloister.
+static func _enclose_hall(out: Built, room: Dictionary, enclose: bool) -> void:
 	if not enclose:
 		return
-	var c: Vector2i = best["centre"]
-	var h: int = best["half"]
+	var c: Vector2i = room["centre"]
+	var h: int = room["half"]
 	for dx in range(-h, h + 1):
 		for dy in range(-h, h + 1):
 			var cell: ModuleMaze.Cell = out.cells[c + Vector2i(dx, dy)]
@@ -1795,7 +1832,8 @@ static func place_torches(parent: Node3D, out: Built, density: float = 1.0,
 
 	for key in out.cells:
 		var cell: ModuleMaze.Cell = out.cells[key]
-		# The morgue hall hangs its own, on its pilasters (morgue.gd).
+		# The morgue and surgery halls hang their own, on their pilasters
+		# (morgue.gd, surgery.gd).
 		if cell.court or cell.hall or door_cells.has(cell.pos):
 			continue
 		# Deterministic per cell, so torch positions do not shuffle when the

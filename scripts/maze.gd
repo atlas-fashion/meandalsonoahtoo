@@ -805,13 +805,16 @@ func _build_module_level() -> void:
 			"chest_half": module_chest_half,
 			# One more than the chest rooms: the one furthest from the start
 			# becomes the morgue (`_pick_morgue`).
-			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0),
+			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0)
+				+ (1 if surgery_enabled else 0),
 			"room_gap": module_room_gap,
 			"room_entrances": module_room_entrances,
 			"morgue": morgue_enabled,
+			"surgery": surgery_enabled,
 			"manholes": manhole_count,
 		})
 	_pick_morgue()
+	_pick_surgery()
 
 	# The authored floor plane and its collider are sized for the old level and
 	# would sit under solid rock anyway. Hidden and disabled, NOT freed:
@@ -864,6 +867,8 @@ func _build_module_level() -> void:
 	_place_damp(holder)
 	if not _morgue_room.is_empty():
 		_morgue = load("res://scripts/morgue.gd").build(holder, _module_level, _morgue_room)
+	if not _surgery_room.is_empty():
+		_surgery = load("res://scripts/surgery.gd").build_room(holder, _module_level, _surgery_room)
 	_build_puzzle_rooms(holder)
 	_build_shard_door(holder)
 	_build_sewer()
@@ -957,6 +962,50 @@ func is_in_morgue(tile: Vector2i) -> bool:
 
 func morgue_centre() -> Variant:
 	return null if _morgue_room.is_empty() else _module_level.room_world(_morgue_room)
+
+
+## --- The surgery (2026-10-21) --------------------------------------------------------
+##
+## One more enclosed hall (module_level `_make_surgery_hall`), where the dead
+## prisoners were to be made bionic: scripts/surgery.gd dresses it and wakes the
+## surgical table in it (scripts/surgical_table.gd) -- a machine that cannot be
+## killed, only depowered. No ordinary enemies spawn in it. Depowered, it stays
+## so (`save_state` "surgery"); a reset with it still running puts it back to
+## sleep on its pedestal.
+
+@export var surgery_enabled := true
+var _surgery_room: Dictionary = {}
+var _surgery: Node3D = null
+
+
+func _pick_surgery() -> void:
+	_surgery_room = {}
+	if not surgery_enabled or _module_level == null:
+		return
+	for room in _module_level.rooms:
+		if room["kind"] == "surgery":
+			_surgery_room = room
+	if not _surgery_room.is_empty():
+		print("[surgery] in the room at %s, %.0f m from the start"
+			% [_surgery_room["centre"],
+				(_module_level.room_world(_surgery_room) as Vector3).distance_to(_module_level.spawn)])
+
+
+## True for tiles in the surgery's whole block.
+func is_in_surgery(tile: Vector2i) -> bool:
+	if _surgery_room.is_empty():
+		return false
+	var mid := world_to_tile(_module_level.room_world(_surgery_room))
+	var half := int(floor((float(_surgery_room["half"]) + 0.5) * module_cell / tile_size))
+	return absi(tile.x - mid.x) <= half and absi(tile.y - mid.y) <= half
+
+
+func surgery_centre() -> Variant:
+	return null if _surgery_room.is_empty() else _module_level.room_world(_surgery_room)
+
+
+func surgery() -> Node3D:
+	return _surgery
 
 
 ## --- Puzzle rooms and the shard door (2026-10-08) -----------------------------------
@@ -1187,6 +1236,8 @@ func save_state() -> Dictionary:
 		if _manholes[i].call("is_open"):
 			open_holes.append(i)
 	data["manholes"] = open_holes
+	if _surgery != null:
+		data["surgery"] = _surgery.call("save_state")
 	return data
 
 
@@ -1210,6 +1261,8 @@ func restore_world(data: Dictionary) -> void:
 	for i in data.get("manholes", []):
 		if int(i) < _manholes.size():
 			_manholes[int(i)].call("set_open_now")
+	if _surgery != null and data.has("surgery"):
+		_surgery.call("restore_state", data["surgery"])
 	var a := int(data.get("anchor", -1))
 	if a >= 0 and a < _anchors.size():
 		for other in _anchors:
@@ -4270,6 +4323,8 @@ func _populate() -> void:
 	# repopulate (or the first build) has just cleared.
 	for p in _puzzles:
 		p.call("on_world_reset")
+	if _surgery != null:
+		_surgery.call("on_world_reset")
 
 
 ## Counts enemies that spawned inside a room, against how many should have.
@@ -4758,7 +4813,7 @@ func _spawn_candidates(in_sight_too := false) -> Array[Vector2i]:
 			# room. They hold their champion -- the boss, the mimic -- and the
 			# corridors hold everything else. (The tile maze's treasure rooms
 			# were small and deliberately guarded, so it keeps its old rule.)
-			if modules and (is_in_treasure_room(tile) or is_in_morgue(tile)):
+			if modules and (is_in_treasure_room(tile) or is_in_morgue(tile) or is_in_surgery(tile)):
 				continue
 			# Nor beside one: a pack is scattered up to 1.3 m (a tile) round its
 			# tile, and from a doorway that put members inside the room, where the
@@ -4795,7 +4850,7 @@ func _touches_room(tile: Vector2i) -> bool:
 	for dx in range(-1, 2):
 		for dy in range(-1, 2):
 			var t := tile + Vector2i(dx, dy)
-			if is_in_treasure_room(t) or is_in_morgue(t) or is_in_boss_room(t):
+			if is_in_treasure_room(t) or is_in_morgue(t) or is_in_surgery(t) or is_in_boss_room(t):
 				return true
 	return false
 
