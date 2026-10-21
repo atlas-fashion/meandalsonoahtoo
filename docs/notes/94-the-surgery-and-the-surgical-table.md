@@ -146,3 +146,10 @@ trusting it at 3440x1440.
   shadow mode not supported" flood the OpenGL/xvfb log: those are the torches'
   instance uniforms and the hand torch's shadow under the Compatibility
   renderer, not this room.
+
+**Benchmarked (2026-10-21, on the user's PC -- now an RTX 3060, not the P620;
+3440x1440, current settings):** `tools/benchmark.gd` has a `surgery` station
+(placed from the room's floor, half its court out from the table: a ray from
+above would land on the hall's roof). surgery 45.4 fps avg, 1% low 37.4,
+p99 26.73 ms, 3,220 draws -- in line with the chest room (25.84) and below the
+worst station (boss room edge 31.06). Overall 52.0 fps, 1205.6 MB.

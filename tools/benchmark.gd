@@ -162,6 +162,13 @@ func _run() -> void:
 			# Off to one side: the middle of a chest room is its pedestal.
 			stations["chest room"] = _floor_under(level.room_world(chests[0])
 				+ Vector3(level.court_half_span(chests[0]) * 0.55, 0, 0))
+		# The surgery (note 94): an enclosed hall, so placed from its floor
+		# rather than by a ray from above (which would land on its roof); off
+		# to one side of the table in the middle.
+		for room in level.rooms:
+			if room["kind"] == "surgery":
+				stations["surgery"] = (level.room_world(room) as Vector3) \
+					+ Vector3(level.court_half_span(room) * 0.5, 1.2, 0)
 
 	print("=== BENCHMARK [%s] ===" % _tag)
 	print("window %s   3D render target %s   scale %.2f   msaa %d" % [
