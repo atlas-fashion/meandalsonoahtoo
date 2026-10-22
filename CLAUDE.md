@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 96), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 97), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -291,7 +291,7 @@ decrepits, sewer lizards, rats (own `_rat_rng`), chests.
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
   (`zone_gate.gd`), anchors (`respawn_anchor.gd`), hiding spots
-  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd`, notes 94-96), chest rooms
+  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd`, notes 94-97; the chest room nearest the boss), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
 
@@ -480,6 +480,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 94 | 2026-10-21 | The surgery: the surgical table, depowered not killed | [docs/notes/94-the-surgery-and-the-surgical-table.md](docs/notes/94-the-surgery-and-the-surgical-table.md) |
 | 95 | 2026-10-21 | The surgery refurnished after a reference (Higgsfield); the table fixed, a ceiling claw | [docs/notes/95-the-surgery-refurnished-the-table-fixed-a-ceiling-claw.md](docs/notes/95-the-surgery-refurnished-the-table-fixed-a-ceiling-claw.md) |
 | 96 | 2026-10-21 | The surgery an open medieval hall (no pillars, a timber roof); the claw carries you to the table | [docs/notes/96-the-surgery-an-open-medieval-hall-the-claw-carries-you-to-the-table.md](docs/notes/96-the-surgery-an-open-medieval-hall-the-claw-carries-you-to-the-table.md) |
+| 97 | 2026-10-21 | The maze as it was before the surgery; the surgery in the chest room nearest the boss | [docs/notes/97-the-maze-as-it-was-the-surgery-in-the-room-nearest-the-boss.md](docs/notes/97-the-maze-as-it-was-the-surgery-in-the-room-nearest-the-boss.md) |
 
 ## Notes by source file
 
@@ -532,10 +533,10 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80

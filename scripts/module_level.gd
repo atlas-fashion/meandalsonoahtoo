@@ -454,22 +454,19 @@ static func _make_morgue_hall(out: Built, enclose: bool) -> void:
 	_enclose_hall(out, best, enclose)
 
 
-## The surgery (2026-10-21): of the chest rooms left once the morgue has its
-## pick, the one furthest from both the start and the morgue -- the smaller of
-## the two distances -- becomes kind "surgery", an enclosed hall like the
-## morgue's (surgery.gd dresses it and wakes the table in it).
+## The surgery (2026-10-21; note 97): of the chest rooms left once the morgue
+## has its pick, the one NEAREST THE BOSS ROOM (straight line, centre to centre)
+## becomes kind "surgery", an enclosed hall (surgery.gd dresses it and wakes the
+## table in it). It takes an existing room: maze.gd asks for no extra one, so
+## the seed lays out the same maze it did before the surgery (note 94 had added
+## a room, which reshuffled every layout).
 static func _make_surgery_hall(out: Built, enclose: bool) -> void:
-	var start := _pick_spawn(out)
-	var morgue := Vector3(INF, 0.0, INF)
-	for room in out.rooms:
-		if room["kind"] == "morgue":
-			morgue = out.room_world(room)
+	var boss: Vector3 = out.room_world(out.boss_room())
 	var best: Dictionary = {}
-	var best_d := -1.0
+	var best_d := INF
 	for room in out.chest_rooms():
-		var at: Vector3 = out.room_world(room)
-		var d := minf(at.distance_to(start), at.distance_to(morgue))
-		if d > best_d:
+		var d := (out.room_world(room) as Vector3).distance_to(boss)
+		if d < best_d:
 			best_d = d
 			best = room
 	if best.is_empty():

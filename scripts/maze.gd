@@ -805,8 +805,9 @@ func _build_module_level() -> void:
 			"chest_half": module_chest_half,
 			# One more than the chest rooms: the one furthest from the start
 			# becomes the morgue (`_pick_morgue`).
-			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0)
-				+ (1 if surgery_enabled else 0),
+			# The surgery takes one of the chest rooms (note 97): it adds none, so
+			# the layout is the one the seed gave before the surgery existed.
+			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0),
 			"room_gap": module_room_gap,
 			"room_entrances": module_room_entrances,
 			"morgue": morgue_enabled,
@@ -966,8 +967,9 @@ func morgue_centre() -> Variant:
 
 ## --- The surgery (2026-10-21) --------------------------------------------------------
 ##
-## One more enclosed hall (module_level `_make_surgery_hall`), where the dead
-## prisoners were to be made bionic: scripts/surgery.gd dresses it and wakes the
+## One of the chest rooms -- the one nearest the boss room (note 97) -- made an
+## enclosed hall (module_level `_make_surgery_hall`), where the dead prisoners
+## were to be made bionic: scripts/surgery.gd dresses it and wakes the
 ## surgical table in it (scripts/surgical_table.gd) -- a machine that cannot be
 ## killed, only depowered. No ordinary enemies spawn in it. Depowered, it stays
 ## so (`save_state` "surgery"); a reset with it still running puts it back to
