@@ -39,6 +39,7 @@ SRC = os.path.join(ROOT, "models", "source", "surgery_hf")
 
 # name: (axis to size "x"/"y"/"z" ("long": the longer of x and y) after turning, metres, origin, yaw degrees
 #        about Z applied first, triangle budget, texture px, metallic)
+# axis "fit": `metres` is (x, y, z) and each axis is scaled to it on its own.
 # origin: "bottom" (floor centre), "top" (top centre), "centre",
 #         "top_axis" (the arm pieces: top centre, they hang from it).
 PIECES = {
@@ -60,6 +61,52 @@ PIECES = {
     "toolrack": ("x", 2.2, "bottom", -90.0, 9000, 1024, 0.3),
     "barrels": ("x", 2.0, "bottom", 0.0, 7000, 1024, 0.1),
     "candelabra": ("z", 2.1, "bottom", 0.0, 6000, 512, 0.45),
+    # The rebuilt hall (note 98): its architecture, the study, the testing
+    # areas, the shipping line, and the machine's parts -- everything in the
+    # room that had been built from primitives. Most Tripo returns face +X
+    # (thin along X): -90 turns them to face -Y (Godot +Z).
+    "wallbay": ("fit", (5.0, 0.55, 8.6), "bottom", -90.0, 8000, 1024, 0.05),
+    "jamb": ("fit", (1.0, 0.8, 8.6), "bottom", -90.0, 6000, 1024, 0.05),
+    "lintel": ("fit", (5.0, 0.7, 1.1), "bottom", -90.0, 5000, 1024, 0.05),
+    "frieze": ("fit", (5.0, 0.55, 3.9), "bottom", -90.0, 6000, 1024, 0.05),
+    "beam": ("fit", (4.66, 0.55, 0.75), "centre", -90.0, 3000, 512, 0.1),
+    "brace": ("z", 1.9, "centre", -90.0, 3000, 512, 0.1),
+    "corbel": ("z", 0.9, "top", -90.0, 4000, 512, 0.05),
+    "bookcase": ("z", 3.0, "bottom", -90.0, 9000, 1024, 0.05),
+    "desk": ("long", 2.0, "bottom", -90.0, 9000, 1024, 0.1),
+    "lectern": ("z", 1.6, "bottom", -90.0, 7000, 1024, 0.1),
+    "globe": ("z", 1.9, "bottom", 0.0, 7000, 512, 0.5),
+    "rug": ("fit", (4.4, 2.5, 0.04), "bottom", 0.0, 2000, 1024, 0.0),
+    "books": ("long", 1.2, "bottom", 0.0, 6000, 512, 0.0),
+    "railring": ("fit", (4.3, 4.3, 0.07), "bottom", 0.0, 6000, 1024, 0.4),
+    "labbench": ("long", 3.0, "bottom", -90.0, 12000, 1024, 0.15),
+    "galvanic": ("z", 2.6, "bottom", -90.0, 12000, 1024, 0.45),
+    "testchair": ("z", 2.4, "bottom", -90.0, 9000, 1024, 0.4),
+    "still": ("z", 3.0, "bottom", -90.0, 10000, 1024, 0.5),
+    "slab": ("long", 2.3, "bottom", 0.0, 6000, 1024, 0.45),
+    "casket": ("z", 2.3, "bottom", -90.0, 5000, 512, 0.15),
+    "cagecart": ("long", 2.6, "bottom", 0.0, 9000, 1024, 0.35),
+    "crates": ("z", 1.7, "bottom", -90.0, 5000, 512, 0.05),
+    "handcart": ("long", 1.8, "bottom", 0.0, 5000, 512, 0.15),
+    "track": ("long", 4.0, "top", -90.0, 3000, 512, 0.45),
+    "hook": ("z", 1.6, "top", 0.0, 4000, 512, 0.45),
+    "bundle": ("z", 1.9, "top", 0.0, 4000, 512, 0.0),
+    "leverbox": ("z", 2.2, "bottom", -90.0, 4000, 512, 0.3),
+    "handle": ("z", 0.65, "bottom", 0.0, 2500, 512, 0.45),
+    "pistons": ("z", 3.4, "bottom", -90.0, 9000, 1024, 0.45),
+    "gear": ("z", 1.2, "centre", -90.0, 4000, 512, 0.55),
+    "flywheel": ("z", 2.1, "centre", -90.0, 4000, 512, 0.45),
+    "bar": ("z", 1.7, "centre", 0.0, 1500, 512, 0.4),
+    "column": ("z", 3.3, "bottom", 0.0, 7000, 1024, 0.4),
+    "clampmount": ("z", 2.7, "bottom", -90.0, 6000, 1024, 0.45),
+    "clampjaw": ("long", 1.6, "back", -90.0, 3000, 512, 0.45),
+    "cable": ("fit", (0.16, 0.16, 1.0), "centre", 0.0, 1500, 512, 0.1, (90.0, 0.0)),
+    "chain": ("z", 1.0, "top", 0.0, 3000, 512, 0.45),
+    "cuff": ("long", 0.3, "bottom", 0.0, 2000, 512, 0.45),
+    "prosthetic": ("z", 0.55, "top", 0.0, 4000, 512, 0.45),
+    "grate": ("long", 1.5, "bottom", -90.0, 6000, 512, 0.3),
+    "hearthjamb": ("z", 2.4, "bottom", -90.0, 4000, 1024, 0.05),
+    "mantel": ("long", 4.4, "bottom", -90.0, 6000, 1024, 0.05),
 }
 
 
@@ -95,8 +142,16 @@ def bounds(o):
 
 
 def build(name, out_dir):
-    axis, size, origin, yaw, budget, tex, metal = PIECES[name]
+    entry = PIECES[name]
+    axis, size, origin, yaw, budget, tex, metal = entry[:7]
+    # An optional 8th field: (rx, ry) degrees about Blender X and Y, applied
+    # before the yaw -- to stand a piece Tripo laid down (the cable).
+    rot = entry[7] if len(entry) > 7 else (0.0, 0.0)
     o = load(name)
+    if rot[0] != 0.0:
+        o.data.transform(Matrix.Rotation(math.radians(rot[0]), 4, 'X'))
+    if rot[1] != 0.0:
+        o.data.transform(Matrix.Rotation(math.radians(rot[1]), 4, 'Y'))
     if yaw != 0.0:
         o.data.transform(Matrix.Rotation(math.radians(yaw), 4, 'Z'))
     span = max(o.dimensions)
@@ -124,13 +179,21 @@ def build(name, out_dir):
     o.data.calc_loop_triangles()
     lo, hi = bounds(o)
     ext = hi - lo
-    # "long": whichever horizontal extent is longer.
-    k = size / (max(ext.x, ext.y) if axis == "long" else ext["xyz".index(axis)])
-    o.data.transform(Matrix.Scale(k, 4))
+    if axis == "fit":
+        # Stretched to exact dimensions, each axis on its own (`size` is the
+        # (x, y, z) wanted): the architecture, which has to meet its neighbours.
+        o.data.transform(Matrix.Diagonal((size[0] / ext.x, size[1] / ext.y, size[2] / ext.z, 1.0)))
+    else:
+        # "long": whichever horizontal extent is longer.
+        k = size / (max(ext.x, ext.y) if axis == "long" else ext["xyz".index(axis)])
+        o.data.transform(Matrix.Scale(k, 4))
     lo, hi = bounds(o)
     mid = (lo + hi) * 0.5
     if origin == "bottom":
         shift = Vector((-mid.x, -mid.y, -lo.z))
+    elif origin == "back":
+        # The back edge (+Y, Godot -Z): a hinge along it.
+        shift = Vector((-mid.x, -hi.y, -mid.z))
     elif origin == "top":
         shift = Vector((-mid.x, -mid.y, -hi.z))
     else:

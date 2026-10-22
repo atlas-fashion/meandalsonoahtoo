@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 97), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 98), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -291,7 +291,7 @@ decrepits, sewer lizards, rats (own `_rat_rng`), chests.
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
   (`zone_gate.gd`), anchors (`respawn_anchor.gd`), hiding spots
-  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd`, notes 94-97; the chest room nearest the boss), chest rooms
+  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd`, notes 94-98; the chest room nearest the boss; every piece a Higgsfield model), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
 
@@ -481,6 +481,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 95 | 2026-10-21 | The surgery refurnished after a reference (Higgsfield); the table fixed, a ceiling claw | [docs/notes/95-the-surgery-refurnished-the-table-fixed-a-ceiling-claw.md](docs/notes/95-the-surgery-refurnished-the-table-fixed-a-ceiling-claw.md) |
 | 96 | 2026-10-21 | The surgery an open medieval hall (no pillars, a timber roof); the claw carries you to the table | [docs/notes/96-the-surgery-an-open-medieval-hall-the-claw-carries-you-to-the-table.md](docs/notes/96-the-surgery-an-open-medieval-hall-the-claw-carries-you-to-the-table.md) |
 | 97 | 2026-10-21 | The maze as it was before the surgery; the surgery in the chest room nearest the boss | [docs/notes/97-the-maze-as-it-was-the-surgery-in-the-room-nearest-the-boss.md](docs/notes/97-the-maze-as-it-was-the-surgery-in-the-room-nearest-the-boss.md) |
+| 98 | 2026-10-22 | The surgery rebuilt: elaborate walls, a study, testing areas, a shipping line -- every piece from Higgsfield | [docs/notes/98-the-surgery-rebuilt-every-piece-from-higgsfield.md](docs/notes/98-the-surgery-rebuilt-every-piece-from-higgsfield.md) |
 
 ## Notes by source file
 
@@ -569,8 +570,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96
-- `scripts/surgical_table.gd`: 94, 95, 96
+- `scripts/surgery.gd`: 94, 95, 96, 98
+- `scripts/surgical_table.gd`: 94, 95, 96, 98
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
@@ -585,7 +586,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/lunge_lines.gdshader`: 10
 - `shaders/sewer_stone.gdshader`: 55
 - `shaders/sewer_water.gdshader`: 55
-- `shaders/surgery_cable.gdshader`: 94
+- `shaders/surgery_cable.gdshader`: 94, 98
 - `shaders/sky_clouds.gdshader`: 6.18, 38
 - `shaders/spear_blast.gdshader`: 14
 - `shaders/torch_flame.gdshader`: 6.18, 19
@@ -602,7 +603,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18
 - `tools/build_sewer_kit.py`: 54, 55
-- `tools/build_surgery_kit.py`: 95, 96
+- `tools/build_surgery_kit.py`: 95, 96, 98
 - `tools/build_vines.py`: 6.18
 - `tools/build_wood_texture.py`: 6.19
 - `tools/grade_texture.py`: 6.05

@@ -1,0 +1,44 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://j4egf3n0hidy"
+path.s3tc="res://.godot/imported/beam_NormalGL_fb5b8793-09c8-41fd-892c-59d8b0f11fa3.jpg-5b71cddf6c4cd8a999106d5f9c5f7d2a.s3tc.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "a3516401667f129cd41a875cd33489e6"
+}
+
+[deps]
+
+source_file="res://models/surgery/beam_NormalGL_fb5b8793-09c8-41fd-892c-59d8b0f11fa3.jpg"
+dest_files=["res://.godot/imported/beam_NormalGL_fb5b8793-09c8-41fd-892c-59d8b0f11fa3.jpg-5b71cddf6c4cd8a999106d5f9c5f7d2a.s3tc.ctex"]
+
+[params]
+
+compress/mode=2
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/uastc_level=0
+compress/rdo_quality_loss=0.0
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/channel_remap/red=0
+process/channel_remap/green=1
+process/channel_remap/blue=2
+process/channel_remap/alpha=3
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

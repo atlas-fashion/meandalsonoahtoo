@@ -527,3 +527,11 @@ The medieval set (note 96) is built the same way: `maiden`, `rack`, `gibbet`,
 was dropped: Tripo filled its firebox in solid (surgery.gd builds the hearth).
 Concave openings -- a firebox, an archway -- are what image-to-3D fills in;
 check the preview for them before paying for texture detail.
+
+The rebuilt hall (note 98) adds 42 more: the architecture (`wallbay`, `jamb`,
+`lintel`, `frieze`, `beam`, `brace`, `corbel`; the `fit` axis scales each to
+exact dimensions), the study, the testing area, the shipping line and the
+machine's parts. Most Tripo returns face +X; render each raw model from +X and
+from -Y before choosing its yaw (one front render cannot tell +X from -X).
+`textures/surgery_planks.png` and `surgery_flame.png` are generated pictures
+used as textures (the ceiling, the flame licks).

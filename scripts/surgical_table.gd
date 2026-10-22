@@ -7,7 +7,7 @@ extends CharacterBody3D
 ##
 ## The table itself never moves: a riveted iron slab on a base of gears and
 ## pistons (models/surgery/table.glb, Higgsfield), in the middle of the hall,
-## a dead prisoner strapped to it with a drill half fitted to the forearm.
+## a dead prisoner strapped to it with a mechanical arm half fitted.
 ## Above it hangs the CEILING RING (ring.glb) from the roof beams and from the
 ## ring the CLAW: a very long jointed arm (segment.glb, as many as its length
 ## needs) ending in a three-fingered claw (claw.glb) with one red lens at the
@@ -52,7 +52,7 @@ signal system_changed(system: StringName, on: bool)
 signal woke
 
 const SKELETON := preload("res://models/ossuary_skeleton_rigged.glb")
-const SkeletonSword := preload("res://scripts/skeleton_sword.gd")
+const CUFF_MODEL := preload("res://models/surgery/cuff.glb")
 const ITEM_DROP := preload("res://scripts/item_drop.gd")
 const TABLE_MODEL := preload("res://models/surgery/table.glb")
 const RING_MODEL := preload("res://models/surgery/ring.glb")
@@ -225,9 +225,7 @@ var _spin := 0.0
 
 ## Nodes.
 var _body: Node3D
-var _lens_mat: StandardMaterial3D
-var _core_mat: StandardMaterial3D
-var _belly_mat: StandardMaterial3D
+var _claw_mats: Array = []
 var _core_light: OmniLight3D
 var _eye_light: OmniLight3D
 var _power_mats: Array = []
@@ -301,18 +299,8 @@ func _build_body() -> void:
 	_shadows(model)
 	_power_glow(model, 0.55)
 
-	# The core: a glass bulb of light either side of the base.
-	_core_mat = _mat(&"core").duplicate()
-	for s: float in [-1.0, 1.0]:
-		var core := MeshInstance3D.new()
-		core.name = "Core"
-		core.mesh = _merge_mesh([[_sphm(0.15), Transform3D(), &"core"]])
-		core.material_override = _core_mat
-		core.position = CORE_AT * Vector3(s, 1.0, 1.0)
-		_body.add_child(core)
-		_body.add_child(_merge([[_torusm(0.13, 0.19), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), CORE_AT * Vector3(s, 1.0, 1.0)), &"brass"]], "Porthole"))
-	for p: Vector3 in PLUGS:
-		_body.add_child(_merge([[_cylm(0.085, 0.085, 0.16, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), p), &"brass"]], "Plug"))
+	# The core's light under the slab: the base's own amber lamps glow with it
+	# (`_power_glow`). The cables run into the base at PLUGS.
 	_core_light = OmniLight3D.new()
 	_core_light.name = "CoreLight"
 	_core_light.light_color = CORE_COLOUR
@@ -324,8 +312,9 @@ func _build_body() -> void:
 	_core_light.position = Vector3(0.0, 0.45, 0.0)
 	_body.add_child(_core_light)
 
-	# The restraints on the top: wrists by the head, ankles by the foot. Each a
-	# hinged steel cuff over a leather strap, shut over the prisoner.
+	# The restraints on the top: wrists by the head, ankles by the foot. Each
+	# the kit's hinged iron cuff, shut over the prisoner; it swings open about
+	# its hinge (`rotation.z`).
 	var cuff_at := [Vector3(-0.3, 0.0, -0.52), Vector3(0.3, 0.0, -0.52), Vector3(-0.13, 0.0, 0.92), Vector3(0.13, 0.0, 0.92)]
 	for c: Vector3 in cuff_at:
 		var hinge := Node3D.new()
@@ -333,13 +322,10 @@ func _build_body() -> void:
 		var side := signf(c.x)
 		hinge.position = Vector3(c.x + side * 0.12, TOP + 0.01, c.z)
 		_body.add_child(hinge)
-		var cuff_parts: Array = [
-			[_boxm(Vector3(0.26, 0.04, 0.1)), Transform3D(Basis(), Vector3(-side * 0.12, 0.09, 0.0)), &"steel"],
-			[_boxm(Vector3(0.04, 0.1, 0.1)), Transform3D(Basis(), Vector3(-side * 0.24, 0.05, 0.0)), &"steel"],
-			[_boxm(Vector3(0.04, 0.1, 0.1)), Transform3D(Basis(), Vector3(0.0, 0.05, 0.0)), &"steel"],
-			[_boxm(Vector3(0.24, 0.015, 0.08)), Transform3D(Basis(), Vector3(-side * 0.12, 0.115, 0.0)), &"leather"],
-		]
-		hinge.add_child(_merge(cuff_parts, "Cuff"))
+		var cuff: Node3D = CUFF_MODEL.instantiate()
+		cuff.position = Vector3(-side * 0.13, 0.0, 0.0)
+		hinge.add_child(cuff)
+		_shadows(cuff)
 		_cuffs.append(hinge)
 	_build_prisoner()
 
@@ -376,14 +362,7 @@ func _build_arm() -> void:
 	_claw.add_child(claw_model)
 	_shadows(claw_model)
 	_power_glow(claw_model, 0.3)
-	# The lens at the front of the wrist, where the old sensor head was.
-	_lens_mat = _mat(&"lens").duplicate()
-	var lens := MeshInstance3D.new()
-	lens.name = "Lens"
-	lens.mesh = _sphm(0.075)
-	lens.material_override = _lens_mat
-	lens.position = Vector3(0.0, -0.42, 0.24)
-	_claw.add_child(lens)
+	_claw_mats = glow(claw_model, 0.3)
 	# Its glow, the only light that travels with it: the claw is seen coming
 	# by its own red light on the stone.
 	_eye_light = OmniLight3D.new()
@@ -396,15 +375,9 @@ func _build_arm() -> void:
 	_eye_light.shadow_enabled = false
 	_eye_light.position = Vector3(0.0, -0.5, 0.55)
 	_claw.add_child(_eye_light)
-	# The power cable, wound round the wrist and up into the arm. Glows with
-	# the core; reddens as it is cut.
-	_belly_mat = _mat(&"belly").duplicate()
-	var cable := _merge([[_torusm(0.17, 0.23), Transform3D(Basis(), Vector3(0.0, -0.2, 0.0)), &"belly"],
-		[_torusm(0.17, 0.23), Transform3D(Basis(Vector3.RIGHT, 0.25), Vector3(0.0, -0.34, 0.0)), &"belly"],
-		[_cylm(0.045, 0.045, 0.6, 8), Transform3D(Basis(Vector3.FORWARD, 0.15), Vector3(0.16, 0.05, 0.1)), &"belly"],
-		[_cylm(0.045, 0.045, 0.6, 8), Transform3D(Basis(Vector3.FORWARD, -0.15), Vector3(-0.16, 0.05, -0.1)), &"belly"]], "PowerCable")
-	cable.material_override = _belly_mat
-	_claw.add_child(cable)
+	# The power cable runs into the wrist: there is nothing of it to see but the
+	# claw itself, which glows cold and reddens as it is cut once it is in reach
+	# (`_apply_pose`, `_claw_mats`).
 	_cable_box = CableHitbox.new()
 	_cable_box.name = "PowerCableHitbox"
 	_cable_box.set("table", self)
@@ -485,7 +458,7 @@ static func glow(piece: Node, energy: float) -> Array:
 
 
 ## The dead prisoner strapped to the top: the skeleton on its back, its right
-## forearm gone and a drill bit bolted to the stump -- the work left half done.
+## forearm gone and a mechanical arm bolted to the elbow -- the work left half done.
 func _build_prisoner() -> void:
 	_prisoner = Node3D.new()
 	_prisoner.name = "Prisoner"
@@ -517,16 +490,8 @@ func _build_prisoner() -> void:
 			var att := BoneAttachment3D.new()
 			att.bone_name = "upper_arm.R"
 			sk.add_child(att)
-			var bit := MeshInstance3D.new()
-			bit.mesh = SkeletonSword.drill_bit_mesh()
-			bit.scale = Vector3.ONE * 1.3
-			bit.position = Vector3(0.0, 0.27, 0.0)
-			att.add_child(bit)
-			var collar := MeshInstance3D.new()
-			collar.mesh = _cylm(0.045, 0.05, 0.08, 8)
-			collar.material_override = _mat(&"brass")
-			collar.position = Vector3(0.0, 0.25, 0.0)
-			att.add_child(collar)
+			# The kit's mechanical arm where the forearm was (surgery.gd).
+			load("res://scripts/surgery.gd").attach_prosthetic(att)
 	# On its back along the slab, head to the head end.
 	_prisoner.transform = Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0.0, TOP + 0.08, 0.88))
 	_prisoner_rest = _prisoner.transform
@@ -586,7 +551,6 @@ func reset_to_sleep() -> void:
 	_was_arms = true
 	_was_legs = true
 	_strain = 0.0
-	_belly_mat.emission_energy_multiplier = 0.0
 	_sleep_pose()
 
 
@@ -1271,17 +1235,20 @@ func _apply_pose(delta: float) -> void:
 	# The core and its glow: a heartbeat, quicker as it angers.
 	var beat := 0.75 + 0.25 * pow(absf(sin(now * (2.6 + 0.5 * float(level)))), 6.0)
 	core_glow = _power * beat
-	_core_mat.emission_energy_multiplier = 0.4 + 5.0 * core_glow
 	_core_light.light_energy = 1.6 * core_glow
 	_core_light.visible = core_glow > 0.02
-	var wound := float(cuts) / float(CABLE_CUTS)
-	_belly_mat.emission = CORE_COLOUR.lerp(Color(1.0, 0.3, 0.1), wound)
-	_belly_mat.emission_energy_multiplier = (0.04 + 1.6 * wound) * core_glow + (1.2 if exposed else 0.0) * core_glow
-	_lens_mat.emission_energy_multiplier = 0.0 if _power < 0.05 else (2.5 + 3.0 * float(level) / LEVEL_MAX) * _power
 	_eye_light.light_energy = (1.4 + 0.4 * float(level) / LEVEL_MAX) * _power
 	_eye_light.visible = _power > 0.03
 	for pair in _power_mats:
 		(pair[0] as StandardMaterial3D).emission_energy_multiplier = float(pair[1]) * (0.3 + 0.7 * _power)
+	# The claw while its cable is in reach: a cold pulse through it, redder with
+	# each cut -- the only sign, now the cable runs inside the wrist.
+	var wound := float(cuts) / float(CABLE_CUTS)
+	var hot := (0.5 + 0.5 * sin(now * 9.0)) if exposed and not is_depowered() else 0.0
+	for m in _claw_mats:
+		var mat: StandardMaterial3D = m
+		mat.emission = Color.WHITE.lerp(CORE_COLOUR.lerp(Color(1.0, 0.3, 0.1), wound), clampf(hot + wound * 0.5, 0.0, 1.0))
+		mat.emission_energy_multiplier = 0.3 * (0.3 + 0.7 * _power) + 1.4 * hot * _power
 	# The feed-back flare along the cables while the core stalls.
 	var feed := 0.0
 	if state == State.STALL and _t >= FEED_AT:
@@ -1448,185 +1415,6 @@ func _feed_audio() -> void:
 			+ (fmod(_phase.y, 1.0) * 2.0 - 1.0) * w_amp
 		buf[i] = Vector2(v, v)
 	_playback.push_buffer(buf)
-
-
-# --- Meshes ---------------------------------------------------------------------------
-
-## One MeshInstance3D from many primitives: [mesh, transform, material key],
-## merged into one surface per material.
-static func _merge(parts: Array, name_: String) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.name = name_
-	mi.mesh = _merge_mesh(parts)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	return mi
-
-
-static func _merge_mesh(parts: Array) -> ArrayMesh:
-	var by_mat := {}
-	for part in parts:
-		var key: StringName = part[2]
-		if not by_mat.has(key):
-			var st := SurfaceTool.new()
-			st.begin(Mesh.PRIMITIVE_TRIANGLES)
-			by_mat[key] = st
-		(by_mat[key] as SurfaceTool).append_from(part[0] as Mesh, 0, part[1] as Transform3D)
-	var am := ArrayMesh.new()
-	for key in by_mat:
-		var st: SurfaceTool = by_mat[key]
-		st.commit(am)
-		am.surface_set_material(am.get_surface_count() - 1, _mat(key))
-	return am
-
-
-static func _boxm(size: Vector3) -> BoxMesh:
-	var b := BoxMesh.new()
-	b.size = size
-	return b
-
-
-static func _cylm(top: float, bottom: float, height: float, segments := 10) -> CylinderMesh:
-	var c := CylinderMesh.new()
-	c.top_radius = top
-	c.bottom_radius = bottom
-	c.height = height
-	c.radial_segments = segments
-	c.rings = 1
-	return c
-
-
-static func _sphm(r: float) -> SphereMesh:
-	var s := SphereMesh.new()
-	s.radius = r
-	s.height = r * 2.0
-	s.radial_segments = 10
-	s.rings = 5
-	return s
-
-
-static func _torusm(inner: float, outer: float) -> TorusMesh:
-	var t := TorusMesh.new()
-	t.inner_radius = inner
-	t.outer_radius = outer
-	t.rings = 16
-	t.ring_segments = 6
-	return t
-
-
-## A frame at `a` whose +Y points at `b`.
-static func _segment(a: Vector3, b: Vector3) -> Transform3D:
-	var y := (b - a).normalized()
-	var ref := Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.95 else Vector3.RIGHT
-	var x := ref.cross(y).normalized()
-	var z := x.cross(y).normalized()
-	return Transform3D(Basis(x, y, z), a)
-
-
-## A frame along a -> b for a primitive whose length runs along Y.
-static func _along(a: Vector3, b: Vector3) -> Transform3D:
-	var seg := _segment(a, b)
-	seg.origin = (a + b) * 0.5
-	return seg
-
-
-static func _mat(key: StringName) -> StandardMaterial3D:
-	if _mats.has(key):
-		return _mats[key]
-	var m := StandardMaterial3D.new()
-	match key:
-		&"steel":
-			# Surgical steel gone dull: the plain stone's normal map, faint, for
-			# scratches and grime.
-			m.albedo_color = Color(0.36, 0.37, 0.38)
-			m.metallic = 0.7
-			m.roughness = 0.42
-			m.normal_enabled = true
-			m.normal_texture = load("res://textures/stone_plain_normal.png")
-			m.normal_scale = 0.35
-			m.uv1_triplanar = true
-			m.uv1_scale = Vector3(1.5, 1.5, 1.5)
-		&"rust":
-			m.albedo_color = Color(0.2, 0.12, 0.08)
-			m.metallic = 0.35
-			m.roughness = 0.82
-			m.normal_enabled = true
-			m.normal_texture = load("res://textures/stone_plain_normal.png")
-			m.normal_scale = 0.8
-			m.uv1_triplanar = true
-			m.uv1_scale = Vector3(2.0, 2.0, 2.0)
-		&"dark":
-			m.albedo_color = Color(0.06, 0.06, 0.065)
-			m.metallic = 0.5
-			m.roughness = 0.6
-		&"brass":
-			m.albedo_color = Color(0.42, 0.3, 0.13)
-			m.metallic = 0.65
-			m.roughness = 0.45
-		&"leather":
-			m.albedo_color = Color(0.16, 0.09, 0.05)
-			m.roughness = 0.88
-		&"core":
-			m.albedo_color = Color(0.1, 0.16, 0.18)
-			m.emission_enabled = true
-			m.emission = CORE_COLOUR
-			m.emission_energy_multiplier = 0.0
-			m.roughness = 0.2
-		&"belly":
-			m.albedo_color = Color(0.05, 0.05, 0.055)
-			m.roughness = 0.7
-			m.emission_enabled = true
-			m.emission = CORE_COLOUR
-			m.emission_energy_multiplier = 0.0
-		&"lens":
-			m.albedo_color = Color(0.08, 0.02, 0.01)
-			m.emission_enabled = true
-			m.emission = EYE_COLOUR
-			m.emission_energy_multiplier = 0.0
-			m.roughness = 0.1
-		&"oak", &"planks":
-			# The surgery's roof timbers (note 96): the doors' wood, darkened,
-			# mapped in world space so the long beams do not stretch it.
-			m.albedo_texture = load("res://textures/wood_door_albedo.png")
-			m.albedo_color = Color(0.62, 0.5, 0.4) if key == &"oak" else Color(0.45, 0.37, 0.3)
-			m.normal_enabled = true
-			m.normal_texture = load("res://textures/wood_door_normal.png")
-			m.normal_scale = 1.2
-			m.roughness = 0.88
-			m.uv1_triplanar = true
-			m.uv1_world_triplanar = true
-			m.uv1_scale = Vector3(0.6, 0.6, 0.6) if key == &"oak" else Vector3(0.35, 0.35, 0.35)
-		&"soot":
-			m.albedo_color = Color(0.025, 0.022, 0.02)
-			m.roughness = 1.0
-		&"char":
-			m.albedo_color = Color(0.06, 0.035, 0.02)
-			m.roughness = 0.95
-			m.emission_enabled = true
-			m.emission = Color(1.0, 0.35, 0.08)
-			m.emission_energy_multiplier = 0.6
-		&"ember":
-			m.albedo_color = Color(0.2, 0.05, 0.01)
-			m.emission_enabled = true
-			m.emission = Color(1.0, 0.4, 0.1)
-			m.emission_energy_multiplier = 3.0
-		&"corbel":
-			m.albedo_texture = load("res://textures/stone_plain_albedo.png")
-			m.albedo_color = Color(0.4, 0.37, 0.36)
-			m.normal_enabled = true
-			m.normal_texture = load("res://textures/stone_plain_normal.png")
-			m.roughness = 0.92
-			m.uv1_triplanar = true
-			m.uv1_scale = Vector3(0.8, 0.8, 0.8)
-		&"amber":
-			m.albedo_color = Color(0.3, 0.16, 0.04)
-			m.emission_enabled = true
-			m.emission = Color(1.0, 0.55, 0.15)
-			m.emission_energy_multiplier = 2.2
-			m.roughness = 0.3
-		_:
-			m.albedo_color = Color(0.3, 0.3, 0.3)
-	_mats[key] = m
-	return m
 
 
 func _now() -> float:

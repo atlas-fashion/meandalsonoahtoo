@@ -1,21 +1,39 @@
 extends "res://scripts/morgue.gd"
 
 ## The surgery (2026-10-21; refurnished after the user's reference picture,
-## note 95; an open medieval hall, note 96): the hall where the dead prisoners
-## were to be made bionic. An enclosed hall (module_level `_make_surgery_hall`;
-## this extends morgue.gd for its torches and bodies) with no piers and no
-## vaults: its walls carried up to a timber roof on oak beams (`_raise_walls`,
-## `_build_roof`). In the middle the machine that did the work: the surgical
-## table (scripts/surgical_table.gd), fixed inside an iron floor rail, its long
-## claw folded up under the ring hung from the beams until a player walks in --
-## then it follows them, slams down to grab them, and straps them to the table.
+## note 95; an open medieval hall, note 96; rebuilt, note 98): the hall where
+## the dead prisoners were made bionic and shipped out. An enclosed hall
+## (module_level `_make_surgery_hall`, the chest room nearest the boss, note 97;
+## this extends morgue.gd for its torches and bodies), no piers, no vaults.
 ##
-## Dressed from the reference with the Higgsfield kit (models/surgery/,
-## tools/build_surgery_kit.py): apothecary shelves, specimen jars, a worktable
-## under an anatomy chart, chests, iron maidens, a tool rack of saws and hooks,
-## barrels, a torture rack and a pillory, braziers and candelabras round the
-## table, gibbet cages hung from the beams, candle chandeliers, and a great
-## hearth with its fire alive.
+## EVERYTHING in it is a Higgsfield asset (note 98: "no original assets or
+## models that were made directly in claude"): gpt_image_2_5 pictures, Tripo
+## H3.1 models, fitted by tools/build_surgery_kit.py into models/surgery/. The
+## two flat things are flat by nature -- the plank ceiling and the anatomy
+## chart carry generated textures.
+##
+## The architecture (`_build_walls`, `_build_roof`): every wall a run of carved
+## gothic stone bays between engaged pilasters, a diagonal pilaster in each
+## corner, a skull lintel and a tracery frieze over each way in; a plank ceiling
+## on oak beams in sections, each end on a grotesque stone corbel with an oak
+## brace. Torches hang on the pilasters, chandeliers on chains from the beams.
+##
+## The hall in four corners (`_zones`), chosen from where the ways in are:
+## - the STUDY, the corner furthest from them: bookcases, a writing desk and
+##   chair, a lectern with its grimoire, an armillary sphere, a rug, piles of
+##   books, a candelabra;
+## - the SHIPPING corner, the one nearest a way in: upright shipping caskets,
+##   a cage cart, pallets of crates, a hand cart, barrels, and an overhead
+##   monorail of hooks with the finished subjects hanging wrapped from them;
+## - the LAB: laboratory benches of glassware, a copper still, specimen jars,
+##   the worktable, an apothecary shelf, the anatomy chart;
+## - the TRIALS: the testing chair, a galvanic machine, slabs with subjects
+##   fitted with their new arms, an iron maiden, the tool rack, the rack and
+##   the pillory, gibbet cages from the beams, the older dead.
+## In the middle the machine that did the work: the surgical table
+## (scripts/surgical_table.gd) inside its floor rail, the claw folded under the
+## ring until a player walks in -- then it follows them, slams down to grab
+## them, and straps them to the table.
 ##
 ## What is in here to beat it with -- nothing marked, all of it to be watched:
 ## - THREE WALL MECHANISMS, one per system, each joined to the table by its own
@@ -23,7 +41,7 @@ extends "res://scripts/morgue.gd"
 ##   twitches whenever the claw strikes), the HOIST's flywheel (the "legs"
 ##   system; its cable shivers as the claw travels), the CORE's glass column
 ##   (its cable carries the core's pulse).
-## - THREE LEVERS on oak stands, which system each cuts shuffled per seed. A
+## - THREE LEVERS on their posts, which system each cuts shuffled per seed. A
 ##   pull cuts it for a while (surgical_table.gd `cut`) and shows something:
 ##   cutting the arms springs the wall CLAMP open (it sits on the arms' relay)
 ##   and makes the claw let go of whoever it holds; cutting the hoist drops the
@@ -39,58 +57,111 @@ extends "res://scripts/morgue.gd"
 
 const Table := preload("res://scripts/surgical_table.gd")
 const CABLE_SHADER := preload("res://shaders/surgery_cable.gdshader")
-const SkeletonSword := preload("res://scripts/skeleton_sword.gd")
 const ModuleMaze := preload("res://scripts/module_maze.gd")
 
 ## The systems, in the order of the table's plugs.
 const SYSTEMS: Array[StringName] = [&"arms", &"legs", &"core"]
-## Sections in each cable, and their radius.
+## Sections in each cable.
 const CABLE_SECTIONS := 30
-const CABLE_RADIUS := 0.075
+const CABLE_RADIUS := 0.08
 const CABLE_REPATH := 0.25
 ## The clamp catches the claw slammed down this close to its mouth (along
 ## the floor).
 const CATCH := 1.8
-## Its jaws' mouth, from the wall face.
-const CLAMP_MOUTH := Vector3(0.0, 1.35, 0.95)
-## The levers: each on a heavy timber post standing here (room frame), on the
-## face toward the given side, at this height.
+## Its jaws' mouth, from the bay's face.
+const CLAMP_MOUTH := Vector3(0.0, 1.35, 1.6)
+## The levers: each on its post standing here (room frame), facing the given
+## side, its handle's pivot at this height.
 const LEVER_PIERS := [[Vector3(-9.0, 0.0, 3.0), Vector3.RIGHT], [Vector3(9.0, 0.0, -3.0), Vector3.LEFT],
 	[Vector3(3.0, 0.0, -9.0), Vector3.BACK]]
-const LEVER_HEIGHT := 1.25
+const LEVER_HEIGHT := 1.42
 const LEVER_REACH := 2.4
-const POST_HALF := 0.3
-const POST_HEIGHT := 2.2
 ## The lamp: in the hub of the ceiling ring.
 const LAMP_HEIGHT := 6.55
-## The Higgsfield kit (notes 95, 96).
-const SHELF := preload("res://models/surgery/shelf.glb")
-const JAR := preload("res://models/surgery/jar.glb")
-const WORKTABLE := preload("res://models/surgery/worktable.glb")
-const CHEST := preload("res://models/surgery/chest.glb")
-const CHANDELIER := preload("res://models/surgery/chandelier.glb")
-const MAIDEN := preload("res://models/surgery/maiden.glb")
-const RACK := preload("res://models/surgery/rack.glb")
-const GIBBET := preload("res://models/surgery/gibbet.glb")
-const BRAZIER := preload("res://models/surgery/brazier.glb")
-const PILLORY := preload("res://models/surgery/pillory.glb")
-const TOOLRACK := preload("res://models/surgery/toolrack.glb")
-const BARRELS := preload("res://models/surgery/barrels.glb")
-const CANDELABRA := preload("res://models/surgery/candelabra.glb")
+
+## The Higgsfield kit (notes 95, 96, 98).
+const K := {
+	"shelf": preload("res://models/surgery/shelf.glb"),
+	"jar": preload("res://models/surgery/jar.glb"),
+	"worktable": preload("res://models/surgery/worktable.glb"),
+	"chest": preload("res://models/surgery/chest.glb"),
+	"chandelier": preload("res://models/surgery/chandelier.glb"),
+	"maiden": preload("res://models/surgery/maiden.glb"),
+	"rack": preload("res://models/surgery/rack.glb"),
+	"gibbet": preload("res://models/surgery/gibbet.glb"),
+	"brazier": preload("res://models/surgery/brazier.glb"),
+	"pillory": preload("res://models/surgery/pillory.glb"),
+	"toolrack": preload("res://models/surgery/toolrack.glb"),
+	"barrels": preload("res://models/surgery/barrels.glb"),
+	"candelabra": preload("res://models/surgery/candelabra.glb"),
+	"wallbay": preload("res://models/surgery/wallbay.glb"),
+	"jamb": preload("res://models/surgery/jamb.glb"),
+	"lintel": preload("res://models/surgery/lintel.glb"),
+	"frieze": preload("res://models/surgery/frieze.glb"),
+	"beam": preload("res://models/surgery/beam.glb"),
+	"brace": preload("res://models/surgery/brace.glb"),
+	"corbel": preload("res://models/surgery/corbel.glb"),
+	"bookcase": preload("res://models/surgery/bookcase.glb"),
+	"desk": preload("res://models/surgery/desk.glb"),
+	"lectern": preload("res://models/surgery/lectern.glb"),
+	"globe": preload("res://models/surgery/globe.glb"),
+	"rug": preload("res://models/surgery/rug.glb"),
+	"books": preload("res://models/surgery/books.glb"),
+	"railring": preload("res://models/surgery/railring.glb"),
+	"labbench": preload("res://models/surgery/labbench.glb"),
+	"galvanic": preload("res://models/surgery/galvanic.glb"),
+	"testchair": preload("res://models/surgery/testchair.glb"),
+	"still": preload("res://models/surgery/still.glb"),
+	"slab": preload("res://models/surgery/slab.glb"),
+	"casket": preload("res://models/surgery/casket.glb"),
+	"cagecart": preload("res://models/surgery/cagecart.glb"),
+	"crates": preload("res://models/surgery/crates.glb"),
+	"handcart": preload("res://models/surgery/handcart.glb"),
+	"track": preload("res://models/surgery/track.glb"),
+	"hook": preload("res://models/surgery/hook.glb"),
+	"bundle": preload("res://models/surgery/bundle.glb"),
+	"leverbox": preload("res://models/surgery/leverbox.glb"),
+	"handle": preload("res://models/surgery/handle.glb"),
+	"pistons": preload("res://models/surgery/pistons.glb"),
+	"gear": preload("res://models/surgery/gear.glb"),
+	"flywheel": preload("res://models/surgery/flywheel.glb"),
+	"bar": preload("res://models/surgery/bar.glb"),
+	"column": preload("res://models/surgery/column.glb"),
+	"clampmount": preload("res://models/surgery/clampmount.glb"),
+	"clampjaw": preload("res://models/surgery/clampjaw.glb"),
+	"cable": preload("res://models/surgery/cable.glb"),
+	"chain": preload("res://models/surgery/chain.glb"),
+	"prosthetic": preload("res://models/surgery/prosthetic.glb"),
+	"grate": preload("res://models/surgery/grate.glb"),
+	"hearthjamb": preload("res://models/surgery/hearthjamb.glb"),
+	"mantel": preload("res://models/surgery/mantel.glb"),
+}
 const CHART := preload("res://textures/surgery_chart.png")
-## The roof (note 96): a plank ceiling at CEIL on heavy beams across the hall,
-## their ends on stone corbels, braced from the walls. The walls are carried up
-## to it in courses of the corridor's own brick wall piece.
+const PLANKS := preload("res://textures/surgery_planks.png")
+const FLAME := preload("res://textures/surgery_flame.png")
+## How much each kit piece glows with its own picture (surgical_table.gd `glow`).
+const GLOWS := {"shelf": 0.35, "jar": 1.1, "worktable": 0.3, "chandelier": 1.4, "candelabra": 1.2,
+	"labbench": 0.6, "galvanic": 0.5, "still": 0.5, "desk": 0.4, "books": 0.2, "railring": 0.6,
+	"grate": 1.4, "brazier": 0.9, "column": 0.0, "bookcase": 0.15}
+
+## The walls: carved bays 5 m wide and BAY_DEPTH deep in front of the wall
+## face, engaged pilasters (JAMB) between them every 6 m, all CEIL tall.
+const BAY_DEPTH := 0.55
+const JAMB_DEPTH := 0.8
+## Over a way in: the lintel's underside, and the frieze above it.
+const LINTEL_Y := 3.7
+const FRIEZE_Y := 4.8
+## The roof (note 96): a plank ceiling at CEIL on beams across the hall.
 const CEIL := 8.6
 const BEAM_Z: Array[float] = [-10.5, -6.0, -2.0, 2.0, 6.0, 10.5]
 const BEAM := Vector2(0.55, 0.75)
-const WALL_COURSES: Array[float] = [3.5, 7.0]
+const BEAM_LEN := 4.66
 ## The chandeliers hang from the beams to this height (their tops).
 const CHANDELIER_TOP := 6.2
+## Kept clear either side of the line from each way in to the table.
+const LANE := 1.4
 const CANDLE_COLOUR := Color(1.0, 0.68, 0.38)
 const FIRE_COLOUR := Color(1.0, 0.55, 0.22)
-## The iron rail let into the floor round the table.
-const RAIL_RADIUS := 2.05
 
 var table: CharacterBody3D
 
@@ -103,14 +174,15 @@ var _jam_prompt: Interact.Prompt
 var _jam_node: Node3D
 var _bar: Node3D
 var _bar_rest := Transform3D()
+var _bar_jammed := Transform3D()
 var _cables: Array = []
 var _lamp: SpotLight3D
-var _lamp_mat: StandardMaterial3D
 var _lamp_energy := 2.4
 var _wall := 13.9
 ## The ways in: [point on the wall face, the way out], room frame.
 var _doorways: Array = []
 var _fires: Array = []
+var _hanging: Array = []
 var _cable_t := 0.0
 var _spin := {"arms": 0.0, "legs": 0.0}
 
@@ -141,11 +213,9 @@ func _dress() -> void:
 	var cell: float = built.cell_size
 	var h: int = room["half"]
 	_wall = float(h) * cell + BrickLevel.WALL_FACE
-	_doorways = _find_doorways(h, cell)
+	_doorways = _find_doorways()
 
-	# One open hall (note 96): no piers or pilasters, the walls carried on up
-	# past where the vaults sprang, a timber roof over the whole of it.
-	_raise_walls(h, cell)
+	_build_walls(h, cell)
 	_build_roof()
 	_hang_wall_torches(h, cell)
 	_hang_chandeliers()
@@ -181,9 +251,7 @@ func _dress() -> void:
 	_build_rail()
 	_build_lamp()
 	_build_levers()
-	_build_story(h, cell)
-	_furnish(slots)
-	_furnish_floor()
+	_zones(slots)
 
 	_spawn_table(_wall - 0.4)
 	_build_cables()
@@ -195,48 +263,46 @@ func _dress() -> void:
 ## Every wall slot of a ring cell that is not a corner and not a doorway:
 ## {"wall", "k" (-1..1 along it), "at" (on the wall face), "into" (the wall)}.
 func _wall_slots(h: int, cell: float) -> Array:
-	var ways: Array = []
-	for way in room["entrances"]:
-		var local := to_local(built.to_world(way["cell"]))
-		var step: Vector2i = ModuleMaze.DIRS[way["side"]]
-		var dir := global_basis.inverse() * Vector3(float(step.x), 0.0, float(step.y))
-		ways.append([Vector3(local.x, 0.0, local.z), dir])
 	var walls := {&"back": Vector3.FORWARD, &"front": Vector3.BACK, &"left": Vector3.LEFT, &"right": Vector3.RIGHT}
 	var out: Array = []
 	for wall in walls:
 		var into: Vector3 = walls[wall]
 		var along := Vector3(-into.z, 0.0, into.x)
 		for k in range(-h + 1, h):
-			var ring := into * float(h) * cell + along * float(k) * cell
-			var blocked := false
-			for w in ways:
-				if (w[0] as Vector3).distance_to(ring) < 1.0 and (w[1] as Vector3).dot(into) > 0.9:
-					blocked = true
-			if blocked:
+			var at: Vector3 = into * _wall + along * float(k) * cell
+			if _is_door(into, at):
 				continue
 			# `k` runs the same way for every wall: toward -X / -Z first, so
 			# "left, -1" is the left wall's back half.
 			var kk := k if along.x + along.z > 0.0 else -k
-			out.append({"wall": wall, "k": kk, "at": into * _wall + along * float(k) * cell,
-				"into": into, "used": false})
+			out.append({"wall": wall, "k": kk, "at": at, "into": into, "used": false})
 	return out
 
 
-## A node on the wall face at slot `s`, its +Z out into the room.
+## A way in at the wall face point `at` on the wall `into` points at.
+func _is_door(into: Vector3, at: Vector3) -> bool:
+	for d in _doorways:
+		if (d[1] as Vector3).dot(into) > 0.9 and (d[0] as Vector3).distance_to(at) < 1.0:
+			return true
+	return false
+
+
+## A node on the face of the bay at slot `s`, its +Z out into the room.
 func _on_wall(s: Dictionary, name_: String) -> Node3D:
 	var n := Node3D.new()
 	n.name = name_
 	add_child(n)
-	n.transform = Transform3D(Basis.looking_at(s["into"], Vector3.UP), s["at"])
+	n.transform = Transform3D(Basis.looking_at(s["into"], Vector3.UP), (s["at"] as Vector3) - (s["into"] as Vector3) * BAY_DEPTH)
 	return n
 
 
-func _solid(parent: Node3D, size: Vector3, at: Vector3) -> void:
+func _solid(parent: Node3D, size: Vector3, at: Vector3, yaw := 0.0) -> void:
 	var body := StaticBody3D.new()
 	body.collision_layer = 1 | 2
 	body.collision_mask = 0
 	parent.add_child(body)
 	body.position = at
+	body.rotation.y = yaw
 	var shape := BoxShape3D.new()
 	shape.size = size
 	var cs := CollisionShape3D.new()
@@ -244,476 +310,55 @@ func _solid(parent: Node3D, size: Vector3, at: Vector3) -> void:
 	body.add_child(cs)
 
 
-## The arms' mechanism: two pistons pumping in their cylinders and a gear
-## between them, turning whenever the arms move.
-func _build_arms_mechanism(s: Dictionary) -> void:
-	if s.is_empty():
-		return
-	var n := _on_wall(s, "ArmsMechanism")
-	n.add_child(Table._merge([
-		[Table._boxm(Vector3(3.0, 2.9, 0.25)), Transform3D(Basis(), Vector3(0.0, 1.45, 0.12)), &"rust"],
-		[Table._boxm(Vector3(0.22, 3.1, 0.34)), Transform3D(Basis(), Vector3(-1.42, 1.55, 0.2)), &"dark"],
-		[Table._boxm(Vector3(0.22, 3.1, 0.34)), Transform3D(Basis(), Vector3(1.42, 1.55, 0.2)), &"dark"],
-		[Table._boxm(Vector3(3.0, 0.2, 0.4)), Transform3D(Basis(), Vector3(0.0, 2.95, 0.22)), &"dark"],
-		[Table._cylm(0.17, 0.17, 1.2, 12), Transform3D(Basis(), Vector3(-0.75, 2.15, 0.45)), &"steel"],
-		[Table._cylm(0.17, 0.17, 1.2, 12), Transform3D(Basis(), Vector3(0.75, 2.15, 0.45)), &"steel"],
-		[Table._cylm(0.2, 0.2, 0.08, 12), Transform3D(Basis(), Vector3(-0.75, 1.55, 0.45)), &"brass"],
-		[Table._cylm(0.2, 0.2, 0.08, 12), Transform3D(Basis(), Vector3(0.75, 1.55, 0.45)), &"brass"],
-		[Table._cylm(0.1, 0.1, 0.3, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, 0.45, 0.4)), &"brass"],
-	], "Frame"))
-	var rods: Array[Node3D] = []
-	for x: float in [-0.75, 0.75]:
-		var rod := Node3D.new()
-		rod.position = Vector3(x, 1.0, 0.45)
-		n.add_child(rod)
-		rod.add_child(Table._merge([[Table._cylm(0.07, 0.07, 1.1, 8), Transform3D(Basis(), Vector3(0.0, 0.0, 0.0)), &"steel"],
-			[Table._boxm(Vector3(0.3, 0.1, 0.2)), Transform3D(Basis(), Vector3(0.0, -0.55, 0.0)), &"dark"]], "Rod"))
-		rods.append(rod)
-	var gear := _gear(0.55, 14)
-	gear.position = Vector3(0.0, 1.05, 0.42)
-	n.add_child(gear)
-	_solid(n, Vector3(3.2, 3.0, 0.75), Vector3(0.0, 1.5, 0.35))
-	_mech[&"arms"] = {"node": n, "port": n.transform * Vector3(0.0, 0.45, 0.6), "rods": rods, "gear": gear}
+## A kit piece `name_` on `n` at `at`, turned `yaw`, glowing as GLOWS says,
+## solid as a box of `size` (its footprint before the turn; none if zero).
+func _kit(n: Node3D, name_: String, at: Vector3, yaw := 0.0, size := Vector3.ZERO, scale_ := Vector3.ONE) -> Node3D:
+	var piece: Node3D = (K[name_] as PackedScene).instantiate()
+	piece.name = name_.capitalize().replace(" ", "")
+	n.add_child(piece)
+	piece.position = at
+	piece.rotation.y = yaw
+	piece.scale = scale_
+	Table.glow(piece, float(GLOWS.get(name_, 0.0)))
+	for node in piece.find_children("*", "GeometryInstance3D", true, false):
+		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	if size != Vector3.ZERO:
+		var body := StaticBody3D.new()
+		body.collision_layer = 1 | 2
+		body.collision_mask = 0
+		piece.add_child(body)
+		var shape := BoxShape3D.new()
+		shape.size = size
+		var cs := CollisionShape3D.new()
+		cs.shape = shape
+		cs.position = Vector3(0.0, size.y * 0.5, 0.0)
+		body.add_child(cs)
+	return piece
 
 
-## The legs' mechanism: a great flywheel spinning with the crawl, and the iron
-## bar hanging beside it that can be driven through its spokes.
-func _build_legs_mechanism(s: Dictionary) -> void:
-	if s.is_empty():
-		return
-	var n := _on_wall(s, "LegsMechanism")
-	n.add_child(Table._merge([
-		[Table._boxm(Vector3(3.2, 3.2, 0.25)), Transform3D(Basis(), Vector3(0.0, 1.6, 0.12)), &"rust"],
-		[Table._boxm(Vector3(0.3, 1.6, 0.5)), Transform3D(Basis(), Vector3(0.0, 0.8, 0.3)), &"dark"],
-		[Table._cylm(0.14, 0.14, 0.7, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, 1.65, 0.45)), &"steel"],
-		[Table._cylm(0.1, 0.1, 0.3, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.6, 0.45, 0.4)), &"brass"],
-		# The hook the bar hangs from.
-		[Table._boxm(Vector3(0.08, 0.08, 0.35)), Transform3D(Basis(), Vector3(1.3, 2.25, 0.3)), &"dark"],
-	], "Frame"))
-	var wheel := Node3D.new()
-	wheel.name = "Flywheel"
-	wheel.position = Vector3(0.0, 1.65, 0.72)
-	n.add_child(wheel)
-	var wparts: Array = [[Table._torusm(0.92, 1.08), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), &"dark"],
-		[Table._cylm(0.2, 0.2, 0.22, 12), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), &"brass"]]
-	for i in 6:
-		var a := TAU * float(i) / 6.0
-		wparts.append([Table._boxm(Vector3(0.08, 0.95, 0.07)), Transform3D(Basis(Vector3.BACK, a), Vector3(-sin(a), cos(a), 0.0) * 0.5), &"rust"])
-	wheel.add_child(Table._merge(wparts, "Wheel"))
-	# The bar on its hook.
-	_bar = Node3D.new()
-	_bar.name = "IronBar"
-	n.add_child(_bar)
-	_bar.add_child(Table._merge([[Table._cylm(0.04, 0.04, 1.7, 8), Transform3D(), &"rust"],
-		[Table._boxm(Vector3(0.1, 0.12, 0.06)), Transform3D(Basis(), Vector3(0.0, 0.8, 0.0)), &"dark"]], "Bar"))
-	_bar_rest = Transform3D(Basis(Vector3.BACK, 0.06), Vector3(1.3, 1.35, 0.42))
-	_bar.transform = _bar_rest
-	_jam_node = wheel
-	_jam_prompt = Interact.prompt("E   Jam", Vector3.ZERO)
-	wheel.add_child(_jam_prompt)
-	_solid(n, Vector3(3.4, 3.2, 0.6), Vector3(0.0, 1.6, 0.3))
-	_mech[&"legs"] = {"node": n, "port": n.transform * Vector3(0.6, 0.45, 0.55), "wheel": wheel}
+## The first mesh in a kit piece, for MultiMeshes.
+static func _mesh_of(name_: String) -> Mesh:
+	var scene: Node = (K[name_] as PackedScene).instantiate()
+	var mesh: Mesh = null
+	for node in scene.find_children("*", "MeshInstance3D", true, false):
+		mesh = (node as MeshInstance3D).mesh
+		break
+	scene.free()
+	return mesh
 
 
-## The core's mechanism: a tall column of dark glass in an iron cage with a
-## rod of light in it that beats with the core.
-func _build_core_mechanism(s: Dictionary) -> void:
-	if s.is_empty():
-		return
-	var n := _on_wall(s, "CoreMechanism")
-	var parts: Array = [
-		[Table._boxm(Vector3(2.6, 3.5, 0.25)), Transform3D(Basis(), Vector3(0.0, 1.75, 0.12)), &"rust"],
-		[Table._cylm(0.62, 0.62, 0.22, 16), Transform3D(Basis(), Vector3(0.0, 0.11, 0.65)), &"dark"],
-		[Table._cylm(0.62, 0.62, 0.22, 16), Transform3D(Basis(), Vector3(0.0, 3.0, 0.65)), &"dark"],
-		[Table._cylm(0.1, 0.1, 0.3, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, 0.45, 0.25)), &"brass"],
-	]
-	for i in 6:
-		var a := TAU * float(i) / 6.0
-		parts.append([Table._cylm(0.035, 0.035, 2.8, 6), Transform3D(Basis(), Vector3(cos(a) * 0.55, 1.55, 0.65 + sin(a) * 0.55)), &"steel"])
-	n.add_child(Table._merge(parts, "Frame"))
-	var glass := MeshInstance3D.new()
-	glass.name = "Glass"
-	glass.mesh = Table._cylm(0.46, 0.46, 2.6, 18)
-	glass.material_override = _glass_mat()
-	glass.position = Vector3(0.0, 1.55, 0.65)
-	n.add_child(glass)
-	var rod_mat: StandardMaterial3D = Table._mat(&"core").duplicate()
-	var rod := MeshInstance3D.new()
-	rod.name = "Rod"
-	rod.mesh = Table._cylm(0.13, 0.13, 2.65, 10)
-	rod.material_override = rod_mat
-	rod.position = Vector3(0.0, 1.55, 0.65)
-	n.add_child(rod)
-	var light := OmniLight3D.new()
-	light.name = "ColumnLight"
-	light.light_color = Table.CORE_COLOUR
-	light.omni_range = 4.5
-	light.omni_attenuation = 1.5
-	light.light_specular = 0.2
-	light.shadow_enabled = false
-	light.position = Vector3(0.0, 1.6, 1.4)
-	n.add_child(light)
-	_solid(n, Vector3(1.4, 3.2, 1.35), Vector3(0.0, 1.6, 0.65))
-	_mech[&"core"] = {"node": n, "port": n.transform * Vector3(0.0, 0.45, 0.45), "rod": rod_mat, "light": light}
+## A hanging chain of the kit's chain link-run from `top` down `length`.
+func _chain(n: Node3D, top: Vector3, length: float) -> void:
+	var runs := maxi(ceili(length), 1)
+	var each := length / float(runs)
+	for i in runs:
+		_kit(n, "chain", top - Vector3(0.0, each * float(i), 0.0), 0.0, Vector3.ZERO, Vector3(1.0, each, 1.0))
 
 
-func _glass_mat() -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	# Opaque, so it costs nothing to draw: dark glass with a sharp highlight, the
-	# rod inside it seen at its ends.
-	m.albedo_color = Color(0.03, 0.05, 0.055)
-	m.metallic = 0.2
-	m.roughness = 0.06
-	m.rim_enabled = true
-	m.rim = 0.4
-	m.rim_tint = 0.2
-	return m
-
-
-## A gear: a disc with teeth round it, turning about its local Z.
-func _gear(r: float, teeth: int) -> Node3D:
-	var g := Node3D.new()
-	g.name = "Gear"
-	var parts: Array = [[Table._cylm(r, r, 0.1, 18), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), &"brass"],
-		[Table._cylm(r * 0.25, r * 0.25, 0.16, 10), Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), &"dark"]]
-	for i in teeth:
-		var a := TAU * float(i) / float(teeth)
-		parts.append([Table._boxm(Vector3(0.09, 0.12, 0.1)), Transform3D(Basis(Vector3.BACK, a), Vector3(-sin(a), cos(a), 0.0) * (r + 0.04)), &"brass"])
-	g.add_child(Table._merge(parts, "GearMesh"))
-	return g
-
-
-## The wall clamp: a heavy mount and two toothed jaws hinged at the back, shut
-## until the arms' relay springs them open.
-func _build_clamp(s: Dictionary) -> void:
-	if s.is_empty():
-		return
-	var n := _on_wall(s, "WallClamp")
-	n.add_child(Table._merge([
-		[Table._boxm(Vector3(2.0, 2.7, 0.3)), Transform3D(Basis(), Vector3(0.0, 1.35, 0.15)), &"rust"],
-		[Table._boxm(Vector3(0.3, 1.4, 0.5)), Transform3D(Basis(), Vector3(-0.8, 1.35, 0.45)), &"dark"],
-		[Table._boxm(Vector3(0.3, 1.4, 0.5)), Transform3D(Basis(), Vector3(0.8, 1.35, 0.45)), &"dark"],
-		[Table._cylm(0.09, 0.09, 1.9, 10), Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3(0.0, 1.35, 0.55)), &"steel"],
-		# Its springs, either side.
-		[Table._cylm(0.1, 0.1, 0.9, 10), Transform3D(Basis(), Vector3(-0.8, 2.4, 0.45)), &"steel"],
-		[Table._cylm(0.1, 0.1, 0.9, 10), Transform3D(Basis(), Vector3(0.8, 2.4, 0.45)), &"steel"],
-	], "Mount"))
-	var jaws: Array[Node3D] = []
-	for up: float in [1.0, -1.0]:
-		var jaw := Node3D.new()
-		jaw.position = Vector3(0.0, 1.35 + up * 0.06, 0.55)
-		n.add_child(jaw)
-		var parts: Array = [[Table._boxm(Vector3(1.3, 0.16, 0.75)), Transform3D(Basis(), Vector3(0.0, up * 0.08, 0.38)), &"dark"]]
-		for t in 6:
-			parts.append([Table._cylm(0.0, 0.05, 0.14, 4), Transform3D(Basis(Vector3.RIGHT, PI if up > 0.0 else 0.0),
-				Vector3(-0.5 + float(t) * 0.2, -up * 0.06, 0.66)), &"steel"])
-		jaw.add_child(Table._merge(parts, "Jaw"))
-		jaws.append(jaw)
-	_solid(n, Vector3(2.0, 2.7, 0.6), Vector3(0.0, 1.35, 0.3))
-	_clamp = {"node": n, "jaws": jaws, "mouth": n.transform * CLAMP_MOUTH, "open": 0.0}
-
-
-## The iron rail let into the floor round the table, as in the reference: a
-## riveted ring with amber lamps set in it. Flush with the floor -- nothing to
-## trip on.
-func _build_rail() -> void:
-	var parts: Array = [[Table._torusm(RAIL_RADIUS - 0.09, RAIL_RADIUS + 0.09), Transform3D(Basis().scaled(Vector3(1.0, 0.3, 1.0)), Vector3(0.0, 0.0, 0.0)), &"dark"],
-		[Table._torusm(RAIL_RADIUS - 0.03, RAIL_RADIUS + 0.03), Transform3D(Basis().scaled(Vector3(1.0, 0.4, 1.0)), Vector3(0.0, 0.025, 0.0)), &"brass"]]
-	for i in 12:
-		var a := TAU * float(i) / 12.0
-		var at := Vector3(cos(a), 0.0, sin(a))
-		if i % 3 == 0:
-			parts.append([Table._boxm(Vector3(0.22, 0.05, 0.32)), Transform3D(Basis(Vector3.UP, -a), at * RAIL_RADIUS + Vector3(0.0, 0.02, 0.0)), &"rust"])
-		else:
-			parts.append([Table._cylm(0.045, 0.055, 0.04, 8), Transform3D(Basis(), at * RAIL_RADIUS + Vector3(0.0, 0.035, 0.0)), &"amber"])
-	var rail := Table._merge(parts, "FloorRail")
-	rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(rail)
-
-
-## The surgical lamp: the light in the hub of the ceiling ring, a cold spot down
-## onto the table. It is on the table's circuit.
-func _build_lamp() -> void:
-	var l := Node3D.new()
-	l.name = "SurgicalLamp"
-	# Beside the arm, which hangs from the middle of the hub.
-	l.position = Vector3(0.5, LAMP_HEIGHT, 0.0)
-	add_child(l)
-	_lamp_mat = StandardMaterial3D.new()
-	_lamp_mat.albedo_color = Color(0.2, 0.22, 0.22)
-	_lamp_mat.emission_enabled = true
-	_lamp_mat.emission = Color(0.85, 0.95, 1.0)
-	_lamp_mat.emission_energy_multiplier = 1.5
-	var glow := MeshInstance3D.new()
-	glow.mesh = Table._cylm(0.16, 0.16, 0.02, 14)
-	glow.material_override = _lamp_mat
-	glow.position = Vector3(0.0, 0.0, 0.0)
-	l.add_child(glow)
-	_lamp = SpotLight3D.new()
-	_lamp.name = "LampLight"
-	_lamp.light_color = Color(0.8, 0.92, 1.0)
-	_lamp.light_energy = _lamp_energy
-	_lamp.spot_range = 8.0
-	_lamp.spot_angle = 42.0
-	_lamp.spot_attenuation = 1.0
-	_lamp.light_specular = 0.4
-	_lamp.shadow_enabled = false
-	_lamp.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
-	_lamp.position = Vector3(0.0, -0.05, 0.0)
-	l.add_child(_lamp)
-	# And a dim warm fill under the roof: the beams and the ring above the lamp
-	# would be black.
-	var fill := OmniLight3D.new()
-	fill.name = "RoofFill"
-	fill.light_color = Color(1.0, 0.7, 0.45)
-	fill.light_energy = 0.9
-	fill.omni_range = 13.0
-	fill.omni_attenuation = 0.7
-	fill.light_specular = 0.0
-	fill.shadow_enabled = false
-	fill.position = Vector3(-0.5, CEIL - BEAM.y - 1.4 - LAMP_HEIGHT, 0.0)
-	l.add_child(fill)
-
-
-## A lever on a squat oak stand (the piers it once hung on are gone, note 96),
-## its handle up, a conduit running up the stand from its box.
-## Which system each cuts is shuffled.
-func _build_levers() -> void:
-	var order := SYSTEMS.duplicate()
-	for i in range(order.size() - 1, 0, -1):
-		var j := _rng.randi_range(0, i)
-		var t: StringName = order[i]
-		order[i] = order[j]
-		order[j] = t
-	for i in LEVER_PIERS.size():
-		var pier: Vector3 = LEVER_PIERS[i][0]
-		var face: Vector3 = LEVER_PIERS[i][1]
-		var n := Node3D.new()
-		n.name = "Lever"
-		add_child(n)
-		# The post: a squat oak stand on a stone footing, its own collision.
-		var post := Table._merge([[Table._boxm(Vector3(POST_HALF * 2.0, POST_HEIGHT, POST_HALF * 2.0)), Transform3D(Basis(), pier + Vector3(0.0, POST_HEIGHT * 0.5, 0.0)), &"oak"],
-			[Table._boxm(Vector3(POST_HALF * 2.0 + 0.12, 0.12, POST_HALF * 2.0 + 0.12)), Transform3D(Basis(), pier + Vector3(0.0, POST_HEIGHT + 0.06, 0.0)), &"dark"],
-			[Table._boxm(Vector3(0.9, 0.3, 0.9)), Transform3D(Basis(), pier + Vector3(0.0, 0.15, 0.0)), &"corbel"]], "LeverPost")
-		add_child(post)
-		_solid(self, Vector3(POST_HALF * 2.0, POST_HEIGHT, POST_HALF * 2.0), pier + Vector3(0.0, POST_HEIGHT * 0.5, 0.0))
-		n.transform = Transform3D(Basis.looking_at(-face, Vector3.UP), pier + face * (POST_HALF + 0.02))
-		n.add_child(Table._merge([
-			[Table._boxm(Vector3(0.42, 0.62, 0.2)), Transform3D(Basis(), Vector3(0.0, LEVER_HEIGHT, 0.1)), &"rust"],
-			[Table._boxm(Vector3(0.08, 0.5, 0.12)), Transform3D(Basis(), Vector3(0.0, LEVER_HEIGHT, 0.24)), &"dark"],
-			[Table._cylm(0.05, 0.05, POST_HEIGHT - LEVER_HEIGHT, 8), Transform3D(Basis(), Vector3(0.12, LEVER_HEIGHT + (POST_HEIGHT - LEVER_HEIGHT) * 0.5, 0.06)), &"dark"],
-		], "Box"))
-		var handle := Node3D.new()
-		handle.name = "Handle"
-		handle.position = Vector3(0.0, LEVER_HEIGHT, 0.3)
-		n.add_child(handle)
-		handle.add_child(Table._merge([
-			[Table._cylm(0.03, 0.03, 0.55, 8), Transform3D(Basis(), Vector3(0.0, 0.27, 0.0)), &"steel"],
-			[Table._sphm(0.07), Transform3D(Basis(), Vector3(0.0, 0.56, 0.0)), &"dark"],
-			[Table._cylm(0.06, 0.06, 0.1, 10), Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3.ZERO), &"brass"],
-		], "HandleMesh"))
-		handle.rotation.x = -0.35
-		var prompt := Interact.prompt("E   Pull", Vector3(0.0, LEVER_HEIGHT, 0.3))
-		n.add_child(prompt)
-		_levers.append({"node": n, "handle": handle, "system": order[i], "prompt": prompt, "back_at": 0.0})
-
-
-## The story of the room: the last prisoners strapped to slabs with their new
-## limbs half fitted, a table like the machine's own broken on its side, a rack
-## of prosthetic limbs toppled, tools dropped where they were used, torn
-## restraints, and the older dead on the floor. Returns the solid pieces
-## ([centre, size, yaw] in the room's frame).
-func _build_story(h: int, cell: float) -> Array:
-	var cover: Array = []
-	var bays := [Vector3(-6.0, 0.0, -6.0), Vector3(6.0, 0.0, -6.0), Vector3(-6.0, 0.0, 6.0), Vector3(6.0, 0.0, 6.0)]
-	# Shuffled so the room is not the same in every seed.
-	for i in range(bays.size() - 1, 0, -1):
-		var j := _rng.randi_range(0, i)
-		var t: Vector3 = bays[i]
-		bays[i] = bays[j]
-		bays[j] = t
-	# Two bays: a pair of slabs, a prisoner strapped to each.
-	for b in 2:
-		var bay: Vector3 = bays[b]
-		var yaw := PI * 0.5 if _rng.randf() < 0.5 else 0.0
-		for s: float in [-1.0, 1.0]:
-			var along := Basis(Vector3.UP, yaw) * Vector3(s * 0.9, 0.0, 0.0)
-			var at := bay + along
-			_steel_slab(at, yaw, b * 2 + (0 if s < 0.0 else 1))
-			cover.append([at + Vector3(0.0, 0.45, 0.0), Vector3(0.9, 0.9, 2.2), yaw])
-	# A table like the machine's, broken and on its side.
-	var wreck: Vector3 = bays[2]
-	var wy := _rng.randf_range(-0.4, 0.4)
-	_broken_table(wreck, wy)
-	cover.append([wreck + Vector3(0.0, 0.5, 0.0), Vector3(2.5, 1.0, 1.0), wy])
-	# The rack of limbs, toppled, and the crates they came in.
-	var rack: Vector3 = bays[3]
-	var ry := _rng.randf_range(-0.3, 0.3) + PI * 0.5
-	_limb_rack(rack, ry)
-	cover.append([rack + Vector3(0.0, 0.55, 0.0), Vector3(2.6, 1.1, 1.1), ry])
-	# Tools on the floor round the pedestal, and a tray stand knocked over.
-	for i in 9:
-		var a := _rng.randf_range(-PI, PI)
-		var r := _rng.randf_range(1.6, 2.6)
-		_tool(Vector3(cos(a) * r, 0.0, sin(a) * r), _rng.randi_range(0, 3))
-	# Torn restraints by the slabs and along the walls.
-	for i in 8:
-		var bay: Vector3 = bays[i % 2]
-		_torn_restraint(bay + Vector3(_rng.randf_range(-2.0, 2.0), 0.0, _rng.randf_range(-2.0, 2.0)))
-	# The older dead: in the ring's corners and against the walls, clear of the
-	# lanes the table hunts down.
-	var corners := [Vector3(-11.6, 0.0, -11.6), Vector3(11.6, 0.0, -11.6), Vector3(-11.6, 0.0, 11.6), Vector3(11.6, 0.0, 11.6)]
-	for c: Vector3 in corners:
-		if _rng.randf() < 0.85:
-			_corpse(c + Vector3(_rng.randf_range(-0.5, 0.5), 0.0, _rng.randf_range(-0.5, 0.5)),
-				_rng.randf_range(-PI, PI), _missing(_rng.randf() < 0.7))
-	return cover
-
-
-## A steel slab on two trestles, a prisoner strapped down on it: on its back,
-## one forearm gone and a new limb bolted in its place (`kind` picks which).
-func _steel_slab(at: Vector3, yaw: float, kind: int) -> void:
-	var n := Node3D.new()
-	n.name = "OperatingSlab"
-	add_child(n)
-	n.transform = Transform3D(Basis(Vector3.UP, yaw), at)
-	n.add_child(Table._merge([
-		[Table._boxm(Vector3(0.85, 0.08, 2.1)), Transform3D(Basis(), Vector3(0.0, 0.86, 0.0)), &"steel"],
-		[Table._boxm(Vector3(0.75, 0.82, 0.08)), Transform3D(Basis(), Vector3(0.0, 0.41, -0.85)), &"dark"],
-		[Table._boxm(Vector3(0.75, 0.82, 0.08)), Transform3D(Basis(), Vector3(0.0, 0.41, 0.85)), &"dark"],
-		[Table._boxm(Vector3(0.9, 0.03, 0.09)), Transform3D(Basis(), Vector3(0.0, 0.98, -0.45)), &"leather"],
-		[Table._boxm(Vector3(0.9, 0.03, 0.09)), Transform3D(Basis(), Vector3(0.0, 0.98, 0.5)), &"leather"],
-	], "SlabMesh"))
-	_solid(n, Vector3(0.85, 0.9, 2.1), Vector3(0.0, 0.45, 0.0))
-	var body := _corpse(Vector3.ZERO, 0.0, [])
-	# Onto the slab, along it.
-	remove_child(body)
-	n.add_child(body)
-	var low := body.position.y
-	body.transform = Transform3D(Basis(Vector3.UP, PI * float(kind % 2)) * body.transform.basis, Vector3(0.0, 0.9 + low, 0.0))
-	var sk: Skeleton3D = null
-	var found := body.find_children("*", "Skeleton3D", true, false)
-	if not found.is_empty():
-		sk = found[0] as Skeleton3D
-	if sk == null:
-		return
-	var limb: StringName = [&"forearm.R", &"forearm.L", &"shin.R", &"forearm.R"][kind % 4]
-	var parent_bone: String = {&"forearm.R": "upper_arm.R", &"forearm.L": "upper_arm.L", &"shin.R": "thigh.R"}[limb]
-	var b := sk.find_bone(limb)
-	if b < 0:
-		return
-	sk.set_bone_pose_scale(b, Vector3.ONE * 0.001)
-	var att := BoneAttachment3D.new()
-	att.bone_name = parent_bone
-	sk.add_child(att)
-	var piece := MeshInstance3D.new()
-	match kind % 3:
-		0:
-			piece.mesh = SkeletonSword.drill_bit_mesh()
-			piece.scale = Vector3.ONE * 1.3
-		1:
-			piece.mesh = Table._merge_mesh([[Table._boxm(Vector3(0.02, 0.42, 0.07)), Transform3D(Basis(), Vector3(0.0, 0.21, 0.0)), &"steel"]])
-		_:
-			piece.mesh = Table._merge_mesh([[Table._cylm(0.03, 0.03, 0.3, 8), Transform3D(Basis(), Vector3(0.0, 0.15, 0.0)), &"steel"],
-				[Table._boxm(Vector3(0.12, 0.14, 0.12)), Transform3D(Basis(), Vector3(0.0, 0.34, 0.0)), &"dark"]])
-	piece.position = Vector3(0.0, 0.27, 0.0)
-	att.add_child(piece)
-	var collar := MeshInstance3D.new()
-	collar.mesh = Table._cylm(0.045, 0.05, 0.08, 8)
-	collar.material_override = Table._mat(&"brass")
-	collar.position = Vector3(0.0, 0.25, 0.0)
-	att.add_child(collar)
-
-
-## A surgical table like the machine, but dead: on its side, two legs in the air.
-func _broken_table(at: Vector3, yaw: float) -> void:
-	var n := Node3D.new()
-	n.name = "BrokenTable"
-	add_child(n)
-	n.transform = Transform3D(Basis(Vector3.UP, yaw), at)
-	var side := Basis(Vector3.BACK, PI * 0.5 - 0.08)
-	n.add_child(Table._merge([
-		[Table._boxm(Vector3(0.9, 0.12, 2.3)), Transform3D(side, Vector3(0.0, 0.48, 0.0)), &"steel"],
-		[Table._boxm(Vector3(0.6, 0.34, 1.8)), Transform3D(side, Vector3(-0.27, 0.45, 0.0)), &"dark"],
-		[Table._boxm(Vector3(0.05, 0.4, 2.0)), Transform3D(side * Basis(Vector3.FORWARD, 0.4), Vector3(-0.4, 0.15, 0.0)), &"rust"],
-		[Table._cylm(0.05, 0.035, 1.2, 8), Transform3D(Basis(Vector3.FORWARD, 0.5) * Basis(Vector3.RIGHT, 0.3), Vector3(-0.7, 1.0, -0.6)), &"dark"],
-		[Table._cylm(0.05, 0.035, 1.1, 8), Transform3D(Basis(Vector3.FORWARD, 0.8) * Basis(Vector3.RIGHT, -0.4), Vector3(-0.75, 0.9, 0.7)), &"dark"],
-		[Table._cylm(0.05, 0.035, 0.9, 8), Transform3D(Basis(Vector3.FORWARD, 1.4), Vector3(-0.9, 0.35, 0.1)), &"rust"],
-	], "WreckMesh"))
-	_solid(n, Vector3(1.0, 1.0, 2.4), Vector3(-0.1, 0.5, 0.0))
-
-
-## A rack of prosthetic limbs, toppled over: its frame on the floor, drills,
-## blades and hammer hands spilled from it, the crates they came in.
-func _limb_rack(at: Vector3, yaw: float) -> void:
-	var n := Node3D.new()
-	n.name = "LimbRack"
-	add_child(n)
-	n.transform = Transform3D(Basis(Vector3.UP, yaw), at)
-	var parts: Array = [
-		[Table._boxm(Vector3(2.4, 0.08, 0.08)), Transform3D(Basis(Vector3.RIGHT, 1.2), Vector3(0.0, 0.85, 0.0)), &"rust"],
-		[Table._boxm(Vector3(2.4, 0.08, 0.08)), Transform3D(Basis(Vector3.RIGHT, 1.2), Vector3(0.0, 0.25, 0.3)), &"rust"],
-		[Table._boxm(Vector3(0.08, 1.1, 0.08)), Transform3D(Basis(Vector3.RIGHT, -0.35), Vector3(-1.15, 0.55, 0.15)), &"rust"],
-		[Table._boxm(Vector3(0.08, 1.1, 0.08)), Transform3D(Basis(Vector3.RIGHT, -0.35), Vector3(1.15, 0.55, 0.15)), &"rust"],
-		[Table._boxm(Vector3(0.8, 0.6, 0.6)), Transform3D(Basis(Vector3.UP, 0.3), Vector3(-0.7, 0.3, -0.7)), &"rust"],
-		[Table._boxm(Vector3(0.7, 0.5, 0.55)), Transform3D(Basis(Vector3.UP, -0.2), Vector3(0.6, 0.25, -0.75)), &"rust"],
-	]
-	for i in 5:
-		var x := -0.9 + float(i) * 0.45
-		parts.append([Table._boxm(Vector3(0.02, 0.36, 0.06)), Transform3D(Basis(Vector3.FORWARD, _rng.randf_range(-0.5, 0.5)) * Basis(Vector3.RIGHT, 1.3),
-			Vector3(x, 0.06, 0.55 + _rng.randf_range(0.0, 0.4)) ), &"steel"])
-	n.add_child(Table._merge(parts, "RackMesh"))
-	for i in 3:
-		var bit := MeshInstance3D.new()
-		bit.mesh = SkeletonSword.drill_bit_mesh()
-		bit.transform = Transform3D(Basis(Vector3.UP, _rng.randf_range(-PI, PI)) * Basis(Vector3.FORWARD, PI * 0.5) * Basis().scaled(Vector3.ONE * 1.3),
-			Vector3(_rng.randf_range(-1.0, 1.0), 0.05, _rng.randf_range(0.4, 1.0)))
-		n.add_child(bit)
-	for i in 3:
-		_loose_bone(at + Basis(Vector3.UP, yaw) * Vector3(_rng.randf_range(-1.2, 1.2), 0.0, _rng.randf_range(0.6, 1.3)))
-	_solid(n, Vector3(2.6, 1.1, 1.1), Vector3(0.0, 0.55, 0.0))
-
-
-## A tool dropped on the floor: a bone saw, forceps, a hand drill or a bucket.
-func _tool(at: Vector3, kind: int) -> void:
-	var parts: Array = []
-	match kind:
-		0:
-			parts = [[Table._boxm(Vector3(0.36, 0.01, 0.1)), Transform3D(Basis(), Vector3(0.0, 0.01, 0.0)), &"steel"],
-				[Table._boxm(Vector3(0.12, 0.04, 0.05)), Transform3D(Basis(), Vector3(-0.23, 0.02, 0.0)), &"leather"]]
-		1:
-			parts = [[Table._boxm(Vector3(0.22, 0.012, 0.015)), Transform3D(Basis(Vector3.UP, 0.12), Vector3(0.0, 0.01, 0.01)), &"steel"],
-				[Table._boxm(Vector3(0.22, 0.012, 0.015)), Transform3D(Basis(Vector3.UP, -0.12), Vector3(0.0, 0.01, -0.01)), &"steel"]]
-		2:
-			parts = [[Table._cylm(0.03, 0.03, 0.25, 8), Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3(0.0, 0.03, 0.0)), &"brass"],
-				[Table._boxm(Vector3(0.04, 0.03, 0.14)), Transform3D(Basis(), Vector3(0.05, 0.02, 0.08)), &"dark"]]
-		_:
-			parts = [[Table._cylm(0.15, 0.12, 0.28, 12), Transform3D(Basis(Vector3.BACK, 1.45), Vector3(0.0, 0.14, 0.0)), &"rust"]]
-	var mi := Table._merge(parts, "Tool")
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.transform = Transform3D(Basis(Vector3.UP, _rng.randf_range(-PI, PI)), at)
-	add_child(mi)
-
-
-## A restraint torn off its slab: the cuff, a twisted strap, a few chain links.
-func _torn_restraint(at: Vector3) -> void:
-	var parts: Array = [[Table._boxm(Vector3(0.26, 0.04, 0.1)), Transform3D(Basis(Vector3.FORWARD, 0.2), Vector3(0.0, 0.04, 0.0)), &"steel"],
-		[Table._boxm(Vector3(0.3, 0.012, 0.08)), Transform3D(Basis(Vector3.UP, 0.7), Vector3(0.22, 0.008, 0.12)), &"leather"]]
-	for k in 4:
-		parts.append([Table._torusm(0.025, 0.045), Transform3D(Basis(Vector3.RIGHT, PI * 0.5 * float(k % 2)) * Basis(Vector3.UP, float(k)),
-			Vector3(-0.18 - float(k) * 0.07, 0.03, -0.05 + float(k) * 0.02)), &"dark"])
-	var mi := Table._merge(parts, "TornRestraint")
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.transform = Transform3D(Basis(Vector3.UP, _rng.randf_range(-PI, PI)), at)
-	add_child(mi)
-
-
-# --- The furnishing (note 95) ----------------------------------------------------
-
-## --- The hall (note 96) -------------------------------------------------------------
+# --- The hall (notes 96, 98) ---------------------------------------------------------
 
 ## The ways in: [the middle of the gap in the wall face, the way out], room frame.
-func _find_doorways(_h: int, _cell: float) -> Array:
+func _find_doorways() -> Array:
 	var out: Array = []
 	for way in room["entrances"]:
 		var local := to_local(built.to_world(way["cell"]))
@@ -732,59 +377,106 @@ func _door_distance(p: Vector3) -> float:
 	return best
 
 
-## The walls carried up past where the vaults sprang, in courses of the
-## corridor's own brick wall piece (brick_level "wall", 3.5 m a course) on the
-## same face, to the roof; over each way in, the course rests on an oak lintel.
-## The walls' own collision stops at the old crown: nothing reaches higher.
-func _raise_walls(h: int, cell: float) -> void:
-	var piece: Mesh = BrickLevel.standalone("wall")
-	if piece == null:
-		return
-	var xfs: Array[Transform3D] = []
-	var lintels: Array = []
+## The walls: on every ring cell's outer side a carved gothic bay (or, over a
+## way in, the skull lintel with the tracery frieze above it), engaged
+## pilasters between the bays every 6 m, and one set diagonally in each corner
+## that has no way in beside it. They stand in front of the brick, whose
+## collision stops at the old crown; theirs takes the first 3 m.
+func _build_walls(h: int, cell: float) -> void:
+	var holder := Node3D.new()
+	holder.name = "Walls"
+	add_child(holder)
+	var corner_doors := {}
 	for d: Vector3 in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
 		var along := Vector3(-d.z, 0.0, d.x)
-		# As brick_level faces its walls: +Z into the room.
 		var face := Basis(Vector3.UP, atan2(-d.x, -d.z))
 		for k in range(-h, h + 1):
-			var at := d * _wall + along * float(k) * cell
-			for y in WALL_COURSES:
-				xfs.append(Transform3D(face, at + Vector3(0.0, y, 0.0)))
-			for door in _doorways:
-				if (door[1] as Vector3).dot(d) > 0.9 and (door[0] as Vector3).distance_to(at) < 1.0:
-					lintels.append([Table._boxm(Vector3(cell + 0.6, 0.45, 0.6)),
-						Transform3D(face, at + Vector3(0.0, WALL_COURSES[0] - 0.2, 0.0) - d * 0.05), &"oak"])
-	_multi(piece, xfs, "HallWalls")
-	if not lintels.is_empty():
-		add_child(Table._merge(lintels, "Lintels"))
+			var cell_at: Vector3 = d * _wall + along * float(k) * cell
+			var door := _is_door(d, cell_at)
+			# The bay's span along the wall: between the pilasters, or for a
+			# corner cell from its pilaster to the corner.
+			var lo := float(k) * cell - cell * 0.5 + 0.5
+			var hi := float(k) * cell + cell * 0.5 - 0.5
+			if k == -h:
+				lo = -_wall + (0.0 if door else 1.0)
+			elif k == h:
+				hi = _wall - (0.0 if door else 1.0)
+			if door and absi(k) == h:
+				corner_doors[(d + along * signf(float(k))).round()] = true
+			var mid := (lo + hi) * 0.5
+			var width := hi - lo
+			var base := d * (_wall - BAY_DEPTH * 0.5) + along * mid
+			var sx := Vector3(width / 5.0, 1.0, 1.0)
+			if door:
+				var lintel := _kit(holder, "lintel", base + Vector3(0.0, LINTEL_Y, 0.0), 0.0, Vector3.ZERO, sx)
+				lintel.basis = face.scaled(sx)
+				var frieze := _kit(holder, "frieze", base + Vector3(0.0, FRIEZE_Y, 0.0), 0.0, Vector3.ZERO, sx)
+				frieze.basis = face.scaled(sx)
+			else:
+				var bay := _kit(holder, "wallbay", base, 0.0, Vector3.ZERO, sx)
+				bay.basis = face.scaled(sx)
+				_solid(holder, Vector3(width, 3.2, BAY_DEPTH), base + Vector3(0.0, 1.6, 0.0), atan2(-d.x, -d.z))
+		# The pilasters between the bays.
+		for k in range(-h, h):
+			var a := (float(k) + 0.5) * cell
+			var at := d * (_wall - JAMB_DEPTH * 0.5) + along * a
+			var p := _kit(holder, "jamb", at)
+			p.basis = face
+			_solid(holder, Vector3(1.0, 3.2, JAMB_DEPTH), at + Vector3(0.0, 1.6, 0.0), atan2(-d.x, -d.z))
+	# A pilaster across each corner, unless a way in opens beside it.
+	for sx: float in [-1.0, 1.0]:
+		for sz: float in [-1.0, 1.0]:
+			if corner_doors.has(Vector3(sx, 0.0, sz)):
+				continue
+			var at := Vector3(sx, 0.0, sz) * (_wall - 0.55)
+			var p := _kit(holder, "jamb", at)
+			p.basis = Basis(Vector3.UP, atan2(sx, sz) + PI)
+			_solid(holder, Vector3(1.2, 3.2, 1.2), at + Vector3(0.0, 1.6, 0.0), PI * 0.25)
 
 
-## The roof: a plank ceiling over the whole hall on heavy oak beams running
-## across it, each end on a stone corbel, braced up from the wall, a lighter
-## joist between each pair. It casts the moon's shadow like the corridors' lid.
+## The roof: a plank ceiling (the generated plank texture, world-mapped) over
+## the whole hall on oak beams in sections, each end on a grotesque stone
+## corbel with an oak brace under it. One MultiMesh for the beams.
 func _build_roof() -> void:
 	var span := _wall * 2.0 + 0.6
-	var parts: Array = [[Table._boxm(Vector3(span, 0.18, span)), Transform3D(Basis(), Vector3(0.0, CEIL + 0.09, 0.0)), &"planks"]]
-	var stone: Array = []
+	var ceiling := MeshInstance3D.new()
+	ceiling.name = "Ceiling"
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(span, span)
+	plane.flip_faces = true
+	ceiling.mesh = plane
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = PLANKS
+	m.albedo_color = Color(0.75, 0.68, 0.62)
+	m.roughness = 0.9
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3(0.4, 0.4, 0.4)
+	ceiling.material_override = m
+	ceiling.position = Vector3(0.0, CEIL, 0.0)
+	add_child(ceiling)
+	var beam := _mesh_of("beam")
+	var xfs: Array[Transform3D] = []
+	var count := ceili(span / BEAM_LEN)
 	for z in BEAM_Z:
-		parts.append([Table._boxm(Vector3(span - 0.3, BEAM.y, BEAM.x)), Transform3D(Basis(), Vector3(0.0, CEIL - BEAM.y * 0.5, z)), &"oak"])
+		for i in count:
+			var x := -span * 0.5 + BEAM_LEN * (float(i) + 0.5)
+			# Every other section turned end for end: the straps do not repeat.
+			xfs.append(Transform3D(Basis(Vector3.UP, PI * float(i % 2)), Vector3(x, CEIL - BEAM.y * 0.5, z)))
+	_multi(beam, xfs, "Beams")
+	var holder := Node3D.new()
+	holder.name = "BeamEnds"
+	add_child(holder)
+	for z in BEAM_Z:
 		for s: float in [-1.0, 1.0]:
-			stone.append([Table._boxm(Vector3(0.8, 0.7, BEAM.x + 0.2)), Transform3D(Basis(), Vector3(s * (_wall - 0.35), CEIL - BEAM.y - 0.35, z)), &"corbel"])
-			# The brace: from the wall 1.9 m under the beam up to it 1.6 m in.
-			var a := Vector3(s * (_wall - 0.15), CEIL - BEAM.y - 1.9, z)
-			var b := Vector3(s * (_wall - 1.75), CEIL - BEAM.y - 0.05, z)
-			parts.append([Table._boxm(Vector3(0.32, (b - a).length() + 0.2, 0.32)), Table._along(a, b), &"oak"])
-	for i in BEAM_Z.size() - 1:
-		var z := (BEAM_Z[i] + BEAM_Z[i + 1]) * 0.5
-		parts.append([Table._boxm(Vector3(span - 0.3, 0.28, 0.24)), Transform3D(Basis(), Vector3(0.0, CEIL - 0.14, z)), &"oak"])
-	for x in range(-12, 13, 4):
-		parts.append([Table._boxm(Vector3(0.2, 0.2, span - 0.3)), Transform3D(Basis(), Vector3(float(x), CEIL - 0.1, 0.0)), &"oak"])
-	add_child(Table._merge(parts, "Roof"))
-	add_child(Table._merge(stone, "Corbels"))
+			var x := s * (_wall - BAY_DEPTH)
+			var c := _kit(holder, "corbel", Vector3(x - s * 0.43, CEIL - BEAM.y, z))
+			c.rotation.y = -s * PI * 0.5
+			var b := _kit(holder, "brace", Vector3(x - s * 0.84, CEIL - BEAM.y - 0.95, z))
+			b.rotation.y = 0.0 if s < 0.0 else PI
 
 
-## A torch on the wall face every 6 m (where the pilasters stood), none in a
-## doorway.
+## A torch on the face of every pilaster, none at a way in.
 func _hang_wall_torches(h: int, cell: float) -> void:
 	var level = load("res://scripts/module_level.gd")
 	var scene: PackedScene = load(level.TORCH_SCENE)
@@ -797,15 +489,15 @@ func _hang_wall_torches(h: int, cell: float) -> void:
 	for k in range(-h, h):
 		var v := (float(k) + 0.5) * cell
 		for d: Vector3 in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
-			var at := d * (_wall - 0.02) + Vector3(-d.z, 0.0, d.x) * v
-			if _door_distance(at) < cell * 0.5 + 0.6:
+			var at := d * (_wall - JAMB_DEPTH - 0.02) + Vector3(-d.z, 0.0, d.x) * v
+			if _door_distance(at) < 2.0:
 				continue
 			level._hang_torch(self, scene, at + Vector3(0.0, TORCH_HEIGHT, 0.0), d, energy, 13.0)
 
 
-## Candle chandeliers (models/surgery/chandelier.glb) on chains from the beams,
-## their warm light under them. Plain lights without shadows: the hall's walls
-## close them in, and Graphics scales their reach (light_detail).
+## Candle chandeliers on chains from the beams, their warm light under them.
+## Plain lights without shadows: the hall's walls close them in, and Graphics
+## scales their reach (light_detail).
 func _hang_chandeliers() -> void:
 	for at: Vector2 in [Vector2(-6.5, -6.0), Vector2(6.5, -6.0), Vector2(-6.5, 6.0), Vector2(6.5, 6.0)]:
 		var c := Node3D.new()
@@ -813,11 +505,8 @@ func _hang_chandeliers() -> void:
 		add_child(c)
 		c.position = Vector3(at.x, CHANDELIER_TOP, at.y)
 		c.rotation.y = _rng.randf_range(-PI, PI)
-		var model: Node3D = CHANDELIER.instantiate()
-		c.add_child(model)
-		_glow(model, 1.4)
-		var drop := CEIL - BEAM.y - CHANDELIER_TOP
-		c.add_child(Table._merge([[Table._cylm(0.035, 0.035, drop, 6), Transform3D(Basis(), Vector3(0.0, drop * 0.5, 0.0)), &"dark"]], "Chain"))
+		_kit(c, "chandelier", Vector3.ZERO)
+		_chain(c, Vector3(0.0, CEIL - BEAM.y - CHANDELIER_TOP, 0.0), CEIL - BEAM.y - CHANDELIER_TOP)
 		var light := OmniLight3D.new()
 		light.name = "Candles"
 		light.light_color = CANDLE_COLOUR
@@ -832,45 +521,24 @@ func _hang_chandeliers() -> void:
 		c.add_child(light)
 
 
-## The great hearth in a wall slot: stone jambs, a mantel, a stepped chimney
-## breast up the wall, a sooted firebox with logs on an iron grate, embers, and
-## its fire alive -- flames, a flickering light, sparks. Built, not generated:
-## Tripo filled the reference hearth's firebox in solid.
+## The great hearth in a wall slot: two carved jambs, the mantel and hood on
+## them, an iron grate of burning logs between, its fire alive.
 func _build_hearth(s: Dictionary) -> void:
 	if s.is_empty():
 		return
 	var n := _on_wall(s, "Hearth")
-	var stone: Array = [
-		[Table._boxm(Vector3(4.0, 0.18, 1.6)), Transform3D(Basis(), Vector3(0.0, 0.09, 0.8)), &"corbel"],
-		[Table._boxm(Vector3(4.2, 0.45, 1.3)), Transform3D(Basis(), Vector3(0.0, 2.52, 0.65)), &"corbel"],
-		[Table._boxm(Vector3(4.5, 0.14, 1.45)), Transform3D(Basis(), Vector3(0.0, 2.81, 0.68)), &"corbel"],
-		[Table._boxm(Vector3(3.5, 1.5, 0.95)), Transform3D(Basis(), Vector3(0.0, 3.63, 0.47)), &"corbel"],
-		[Table._boxm(Vector3(2.6, 2.6, 0.7)), Transform3D(Basis(), Vector3(0.0, 5.65, 0.35)), &"corbel"],
-		[Table._boxm(Vector3(2.5, 2.3, 0.08)), Transform3D(Basis(), Vector3(0.0, 1.15, 0.06)), &"soot"],
-		[Table._boxm(Vector3(2.4, 0.06, 1.0)), Transform3D(Basis(), Vector3(0.0, 0.2, 0.55)), &"soot"],
-	]
-	for x: float in [-1.6, 1.6]:
-		stone.append([Table._boxm(Vector3(0.75, 2.3, 1.15)), Transform3D(Basis(), Vector3(x, 1.15, 0.58)), &"corbel"])
-		# The jambs' carved capitals.
-		stone.append([Table._boxm(Vector3(0.9, 0.22, 1.25)), Transform3D(Basis(), Vector3(x, 2.2, 0.6)), &"corbel"])
-	n.add_child(Table._merge(stone, "HearthStone"))
-	# The grate, the logs on it, the embers under.
-	var fire: Array = [[Table._boxm(Vector3(1.7, 0.05, 0.7)), Transform3D(Basis(), Vector3(0.0, 0.26, 0.6)), &"ember"]]
-	for i in 5:
-		fire.append([Table._cylm(0.025, 0.025, 1.6, 6), Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.0, 0.34, 0.35 + float(i) * 0.12)), &"dark"])
-	for lg: Array in [[Vector3(0.0, 0.45, 0.5), 0.15], [Vector3(-0.15, 0.48, 0.68), -0.35], [Vector3(0.2, 0.6, 0.58), 0.5]]:
-		fire.append([Table._cylm(0.1, 0.11, 1.3, 8), Transform3D(Basis(Vector3.UP, float(lg[1])) * Basis(Vector3.FORWARD, PI * 0.5), lg[0]), &"char"])
-	var fire_mesh := Table._merge(fire, "Fire")
-	fire_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	n.add_child(fire_mesh)
-	n.add_child(_flames(Vector3(0.0, 0.5, 0.58), Vector3(0.6, 0.05, 0.22), 26))
-	_solid(n, Vector3(4.2, 2.8, 1.25), Vector3(0.0, 1.4, 0.62))
-	_add_fire(n, Vector3(0.0, 0.7, 0.85), 2.8, 9.5, 1.0)
+	for x: float in [-1.75, 1.75]:
+		_kit(n, "hearthjamb", Vector3(x, 0.0, 0.3))
+	_kit(n, "mantel", Vector3(0.0, 2.3, 0.85))
+	_kit(n, "grate", Vector3(0.0, 0.0, 0.6))
+	n.add_child(_flames(Vector3(0.0, 0.55, 0.6), Vector3(0.5, 0.05, 0.2), 26, 1.0))
+	_solid(n, Vector3(4.2, 2.6, 1.3), Vector3(0.0, 1.3, 0.65))
+	_add_fire(n, Vector3(0.0, 0.7, 0.9), 2.8, 9.5, 1.0)
 
 
-## Flames: billboard licks rising and shrinking, added light. Part of the
-## fire's look, not an effect -- a few dozen quads.
-func _flames(at: Vector3, extents: Vector3, amount: int) -> CPUParticles3D:
+## Flames: billboard licks of the generated flame, rising and shrinking, added
+## light. Part of the fire's look, not an effect -- a few dozen quads.
+func _flames(at: Vector3, extents: Vector3, amount: int, size: float) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.name = "Flames"
 	p.amount = amount
@@ -890,50 +558,28 @@ func _flames(at: Vector3, extents: Vector3, amount: int) -> CPUParticles3D:
 	curve.add_point(Vector2(1.0, 0.0))
 	p.scale_amount_curve = curve
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.32, 0.5)
+	quad.size = Vector2(0.3, 0.55) * size
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# Added: the picture's black ground adds nothing.
 	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	m.vertex_color_use_as_albedo = true
-	m.albedo_texture = _flame_texture()
+	m.albedo_texture = FLAME
 	quad.material = m
 	p.mesh = quad
 	var ramp := Gradient.new()
-	ramp.set_color(0, Color(1.0, 0.85, 0.5, 0.9))
-	ramp.add_point(0.4, Color(1.0, 0.5, 0.15, 0.7))
-	ramp.set_color(ramp.get_point_count() - 1, Color(0.6, 0.15, 0.05, 0.0))
+	ramp.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
+	ramp.set_color(ramp.get_point_count() - 1, Color(1.0, 0.6, 0.4, 0.0))
 	p.color_ramp = ramp
 	p.position = at
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return p
 
 
-## A soft teardrop for the flame licks, made once.
-static var _flame_tex: Texture2D
-
-
-static func _flame_texture() -> Texture2D:
-	if _flame_tex != null:
-		return _flame_tex
-	var g := GradientTexture2D.new()
-	g.fill = GradientTexture2D.FILL_RADIAL
-	g.fill_from = Vector2(0.5, 0.75)
-	g.fill_to = Vector2(0.5, 0.0)
-	g.width = 32
-	g.height = 64
-	var grad := Gradient.new()
-	grad.set_color(0, Color(1, 1, 1, 1))
-	grad.set_color(1, Color(1, 1, 1, 0))
-	g.gradient = grad
-	_flame_tex = g
-	return _flame_tex
-
-
-## A fire's light at `at` on `n`, flickering (`_work_fires`), and, with effects
-## on, its sparks going up.
-func _add_fire(n: Node3D, at: Vector3, energy: float, reach: float, size: float) -> void:
+## A fire's light at `at` on `n`, flickering (`_work_fires`).
+func _add_fire(n: Node3D, at: Vector3, energy: float, reach: float, _size: float) -> void:
 	var light := OmniLight3D.new()
 	light.name = "Fire"
 	light.light_color = FIRE_COLOUR
@@ -945,35 +591,6 @@ func _add_fire(n: Node3D, at: Vector3, energy: float, reach: float, size: float)
 	light.position = at + Vector3(0.0, 0.3, 0.0)
 	n.add_child(light)
 	_fires.append({"light": light, "energy": energy, "seed": _rng.randf() * 100.0})
-	if not Graphics.effects:
-		return
-	var p := CPUParticles3D.new()
-	p.name = "Sparks"
-	p.amount = int(10.0 * size)
-	p.lifetime = 1.6
-	p.direction = Vector3.UP
-	p.spread = 18.0
-	p.gravity = Vector3(0.0, 0.6, 0.0)
-	p.initial_velocity_min = 0.4
-	p.initial_velocity_max = 1.3
-	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	p.emission_box_extents = Vector3(0.5, 0.05, 0.2) * size
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.03, 0.03)
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.vertex_color_use_as_albedo = true
-	quad.material = m
-	p.mesh = quad
-	var ramp := Gradient.new()
-	ramp.set_color(0, Color(1.0, 0.75, 0.35, 1.0))
-	ramp.set_color(1, Color(1.0, 0.3, 0.1, 0.0))
-	p.color_ramp = ramp
-	p.position = at
-	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	n.add_child(p)
 
 
 ## The fires flicker: two noises, slow and quick.
@@ -984,56 +601,479 @@ func _work_fires() -> void:
 		var s: float = f["seed"]
 		var k := 0.82 + 0.12 * sin(t * 2.3 + s) + 0.07 * sin(t * 7.9 + s * 1.7) + 0.05 * sin(t * 17.0 + s * 3.1)
 		light.light_energy = float(f["energy"]) * k
+	# The wrapped subjects sway on their hooks.
+	for hanging in _hanging:
+		var node: Node3D = hanging[0]
+		var ph: float = hanging[1]
+		node.rotation = Vector3(0.05 * sin(t * 0.7 + ph), node.rotation.y, 0.04 * sin(t * 0.9 + ph * 1.3))
 
 
-## Free-standing pieces on the floor, clear of the ways in and of the rail:
-## braziers and candelabras round the table, the rack and the pillory out in
-## the hall, gibbet cages hung from the beams with their dead in them.
-func _furnish_floor() -> void:
-	var spots := [
-		[BRAZIER, Vector3(3.6, 0.0, 3.4), Vector3(0.9, 1.6, 0.9), &"fire"],
-		[BRAZIER, Vector3(-3.6, 0.0, -3.4), Vector3(0.9, 1.6, 0.9), &"fire"],
-		[CANDELABRA, Vector3(-3.6, 0.0, 3.4), Vector3(0.6, 2.0, 0.6), &"candles"],
-		[CANDELABRA, Vector3(3.6, 0.0, -3.4), Vector3(0.6, 2.0, 0.6), &"candles"],
-		[RACK, Vector3(-8.6, 0.0, -9.6), Vector3(1.5, 1.2, 3.2), &""],
-		[PILLORY, Vector3(9.4, 0.0, 9.2), Vector3(2.0, 2.2, 1.1), &""],
-		[BARRELS, Vector3(-11.3, 0.0, 9.5), Vector3(1.9, 1.1, 2.0), &""],
-		[BARRELS, Vector3(11.3, 0.0, -8.0), Vector3(1.9, 1.1, 2.0), &""],
-	]
-	for s in spots:
-		var at: Vector3 = s[1]
-		if _door_distance(at) < 4.0:
-			continue
+# --- The machine's fittings ------------------------------------------------------------
+
+## The arms' mechanism: the piston panel, its gear turning whenever the claw
+## strikes.
+func _build_arms_mechanism(s: Dictionary) -> void:
+	if s.is_empty():
+		return
+	var n := _on_wall(s, "ArmsMechanism")
+	_kit(n, "pistons", Vector3(0.0, 0.0, 0.49))
+	var gear := Node3D.new()
+	gear.name = "Gear"
+	gear.position = Vector3(0.0, 2.0, 1.1)
+	n.add_child(gear)
+	_kit(gear, "gear", Vector3.ZERO)
+	_solid(n, Vector3(2.9, 3.0, 1.1), Vector3(0.0, 1.5, 0.55))
+	_mech[&"arms"] = {"node": n, "port": n.transform * Vector3(0.0, 0.45, 1.0), "gear": gear}
+
+
+## The hoist's (legs') mechanism: the great flywheel on the wall spinning as the
+## claw travels, and the iron bar hanging beside it that can be driven through
+## its spokes.
+func _build_legs_mechanism(s: Dictionary) -> void:
+	if s.is_empty():
+		return
+	var n := _on_wall(s, "LegsMechanism")
+	var wheel := Node3D.new()
+	wheel.name = "Flywheel"
+	wheel.position = Vector3(0.0, 1.65, 0.47)
+	n.add_child(wheel)
+	_kit(wheel, "flywheel", Vector3.ZERO)
+	_bar = Node3D.new()
+	_bar.name = "IronBar"
+	n.add_child(_bar)
+	_kit(_bar, "bar", Vector3.ZERO)
+	_bar_rest = Transform3D(Basis(Vector3.BACK, 0.06), Vector3(1.55, 1.3, 0.25))
+	_bar_jammed = Transform3D(Basis(Vector3.BACK, 0.9) * Basis(Vector3.RIGHT, 0.1), Vector3(0.35, 1.75, 0.95))
+	_bar.transform = _bar_rest
+	_jam_node = wheel
+	_jam_prompt = Interact.prompt("E   Jam", Vector3.ZERO)
+	wheel.add_child(_jam_prompt)
+	_solid(n, Vector3(2.2, 2.8, 0.95), Vector3(0.0, 1.4, 0.47))
+	_mech[&"legs"] = {"node": n, "port": n.transform * Vector3(0.6, 0.45, 0.6), "wheel": wheel}
+
+
+## The core's mechanism: the caged glass column, its light beating with the
+## core (its own glow materials, `_glow_own`).
+func _build_core_mechanism(s: Dictionary) -> void:
+	if s.is_empty():
+		return
+	var n := _on_wall(s, "CoreMechanism")
+	var column := _kit(n, "column", Vector3(0.0, 0.0, 0.7))
+	var mats := _glow_own(column)
+	var light := OmniLight3D.new()
+	light.name = "ColumnLight"
+	light.light_color = Table.CORE_COLOUR
+	light.omni_range = 4.5
+	light.omni_attenuation = 1.5
+	light.light_specular = 0.2
+	light.shadow_enabled = false
+	light.position = Vector3(0.0, 1.6, 1.6)
+	n.add_child(light)
+	_solid(n, Vector3(1.4, 3.2, 1.4), Vector3(0.0, 1.6, 0.7))
+	_mech[&"core"] = {"node": n, "port": n.transform * Vector3(0.0, 0.3, 1.0), "mats": mats, "light": light}
+
+
+## A piece's own glow materials (its picture as its emission), not shared with
+## any other copy: the column's light is driven by the core.
+func _glow_own(piece: Node) -> Array:
+	var out: Array = []
+	for node in piece.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		for i in mi.mesh.get_surface_count():
+			var src := mi.mesh.surface_get_material(i) as StandardMaterial3D
+			if src == null or src.albedo_texture == null:
+				continue
+			var m := src.duplicate() as StandardMaterial3D
+			m.emission_enabled = true
+			m.emission_texture = src.albedo_texture
+			m.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+			mi.set_surface_override_material(i, m)
+			out.append(m)
+	return out
+
+
+## The wall clamp: the iron mount and two toothed jaws on its hinges, shut
+## until the arms' relay springs them open.
+func _build_clamp(s: Dictionary) -> void:
+	if s.is_empty():
+		return
+	var n := _on_wall(s, "WallClamp")
+	_kit(n, "clampmount", Vector3(0.0, 0.0, 0.5))
+	var jaws: Array[Node3D] = []
+	for up: float in [1.0, -1.0]:
+		var jaw := Node3D.new()
+		jaw.name = "Jaw"
+		jaw.position = Vector3(0.0, 1.35 + up * 0.18, 0.95)
+		n.add_child(jaw)
+		# The upper jaw's teeth point down, the lower's up.
+		var piece := _kit(jaw, "clampjaw", Vector3.ZERO)
+		if up < 0.0:
+			piece.rotation.z = PI
+		jaws.append(jaw)
+	_solid(n, Vector3(1.4, 2.7, 1.0), Vector3(0.0, 1.35, 0.5))
+	_clamp = {"node": n, "jaws": jaws, "mouth": n.transform * CLAMP_MOUTH, "open": 0.0}
+
+
+## The iron rail let into the floor round the table, its amber lamps lit.
+func _build_rail() -> void:
+	var rail := _kit(self, "railring", Vector3(0.0, 0.0, 0.0))
+	for node in rail.find_children("*", "GeometryInstance3D", true, false):
+		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## The surgical lamp: the light in the hub of the ceiling ring, a cold spot down
+## onto the table. It is on the table's circuit.
+func _build_lamp() -> void:
+	var l := Node3D.new()
+	l.name = "SurgicalLamp"
+	l.position = Vector3(0.5, LAMP_HEIGHT, 0.0)
+	add_child(l)
+	_lamp = SpotLight3D.new()
+	_lamp.name = "LampLight"
+	_lamp.light_color = Color(0.8, 0.92, 1.0)
+	_lamp.light_energy = _lamp_energy
+	_lamp.spot_range = 8.0
+	_lamp.spot_angle = 42.0
+	_lamp.spot_attenuation = 1.0
+	_lamp.light_specular = 0.4
+	_lamp.shadow_enabled = false
+	_lamp.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
+	l.add_child(_lamp)
+	# And a dim warm fill under the roof: the beams and the ring above the lamp
+	# would be black.
+	var fill := OmniLight3D.new()
+	fill.name = "RoofFill"
+	fill.light_color = Color(1.0, 0.7, 0.45)
+	fill.light_energy = 0.9
+	fill.omni_range = 13.0
+	fill.omni_attenuation = 0.7
+	fill.light_specular = 0.0
+	fill.shadow_enabled = false
+	fill.position = Vector3(-0.5, CEIL - BEAM.y - 1.4 - LAMP_HEIGHT, 0.0)
+	l.add_child(fill)
+
+
+## A lever on each post (the kit's lever box on its oak post), its handle up.
+## Which system each cuts is shuffled.
+func _build_levers() -> void:
+	var order := SYSTEMS.duplicate()
+	for i in range(order.size() - 1, 0, -1):
+		var j := _rng.randi_range(0, i)
+		var t: StringName = order[i]
+		order[i] = order[j]
+		order[j] = t
+	for i in LEVER_PIERS.size():
+		var pier: Vector3 = LEVER_PIERS[i][0]
+		var face: Vector3 = LEVER_PIERS[i][1]
 		var n := Node3D.new()
-		n.name = "FloorPiece"
+		n.name = "Lever"
+		add_child(n)
+		n.transform = Transform3D(Basis.looking_at(-face, Vector3.UP), pier)
+		_kit(n, "leverbox", Vector3.ZERO, 0.0, Vector3(0.7, 2.2, 0.8))
+		var handle := Node3D.new()
+		handle.name = "Handle"
+		handle.position = Vector3(0.0, LEVER_HEIGHT, 0.45)
+		n.add_child(handle)
+		_kit(handle, "handle", Vector3.ZERO)
+		handle.rotation.x = -0.35
+		var prompt := Interact.prompt("E   Pull", Vector3(0.0, LEVER_HEIGHT, 0.45))
+		n.add_child(prompt)
+		_levers.append({"node": n, "handle": handle, "system": order[i], "prompt": prompt, "back_at": 0.0})
+
+
+# --- The four corners (note 98) ----------------------------------------------------------
+
+## Which corner is which: the shipping corner nearest a way in, the study
+## furthest from them all, the lab and the trials the other two. Each corner
+## dresses its own two wall slots and its floor.
+func _zones(slots: Array) -> void:
+	var corners: Array = [Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(-1, 0, 1), Vector3(1, 0, 1)]
+	corners.sort_custom(func(a, b): return _door_distance(a * 11.0) < _door_distance(b * 11.0))
+	var plan := {&"shipping": corners[0], &"study": corners[3]}
+	# The other two by the seed.
+	var mid: Array = [corners[1], corners[2]]
+	if _rng.randf() < 0.5:
+		mid.reverse()
+	plan[&"lab"] = mid[0]
+	plan[&"trials"] = mid[1]
+	for zone in plan:
+		var q: Vector3 = plan[zone]
+		var walls: Array = []
+		for s in slots:
+			if s["used"]:
+				continue
+			# A slot is the corner's when it is on one of the corner's two walls
+			# and on the corner's side of that wall's middle.
+			var at: Vector3 = s["at"]
+			var into: Vector3 = s["into"]
+			var mine := false
+			if absf(into.x) > 0.5:
+				mine = signf(into.x) == q.x and absf(at.z) > 1.0 and signf(at.z) == q.z
+			else:
+				mine = signf(into.z) == q.z and absf(at.x) > 1.0 and signf(at.x) == q.x
+			if mine:
+				s["used"] = true
+				walls.append(s)
+		match zone:
+			&"study":
+				_study(q, walls)
+			&"shipping":
+				_shipping(q, walls)
+			&"lab":
+				_lab(q, walls)
+			_:
+				_trials(q, walls)
+	# Any slot no corner took (a middle bay): an apothecary shelf pair.
+	for s in slots:
+		if not s["used"]:
+			s["used"] = true
+			var n := _on_wall(s, "Apothecary")
+			for x: float in [-0.92, 0.92]:
+				_kit(n, "shelf", Vector3(x, 0.0, 0.25), 0.0, Vector3(1.6, 3.0, 0.45))
+	# Two braziers by the rail, on the open sides.
+	for q: Vector3 in [plan[&"lab"], plan[&"trials"]]:
+		var at := q * 3.5
+		var n := Node3D.new()
+		n.name = "Brazier"
 		add_child(n)
 		n.position = at
-		_place(n, s[0], Vector3.ZERO, _rng.randf_range(-PI, PI) if s[3] != &"" else atan2(at.x, at.z) + PI + _rng.randf_range(-0.3, 0.3), s[2])
-		match s[3]:
-			&"fire":
-				_add_fire(n, Vector3(0.0, 1.45, 0.0), 1.6, 6.5, 0.5)
-				n.add_child(_flames(Vector3(0.0, 1.5, 0.0), Vector3(0.2, 0.03, 0.2), 12))
-			&"candles":
-				var light := OmniLight3D.new()
-				light.light_color = CANDLE_COLOUR
-				light.light_energy = 1.3
-				light.omni_range = 5.5
-				light.omni_attenuation = 1.3
-				light.shadow_enabled = false
-				light.position = Vector3(0.0, 2.1, 0.0)
-				n.add_child(light)
-	# Gibbet cages, the dead hung up in them, from the beams.
-	for at: Vector2 in [Vector2(-10.0, -6.0), Vector2(10.0, 2.0), Vector2(-4.0, 10.5), Vector2(4.5, -10.5)]:
-		var c := Node3D.new()
-		c.name = "Gibbet"
-		add_child(c)
+		_kit(n, "brazier", Vector3.ZERO, _rng.randf_range(-PI, PI), Vector3(0.9, 1.6, 0.9))
+		n.add_child(_flames(Vector3(0.0, 1.5, 0.0), Vector3(0.2, 0.03, 0.2), 12, 0.6))
+		_add_fire(n, Vector3(0.0, 1.45, 0.0), 1.6, 6.5, 0.5)
+
+
+## A point in corner `q`'s frame: `a` out along X, `b` along Z, from the middle.
+static func _q(q: Vector3, a: float, b: float) -> Vector3:
+	return Vector3(q.x * a, 0.0, q.z * b)
+
+
+## A yaw facing from `at` toward `to` (a kit piece's front is +Z).
+static func _facing(at: Vector3, to: Vector3) -> float:
+	return atan2(to.x - at.x, to.z - at.z)
+
+
+## A free-standing piece, unless it would stand by a way in or in the lane
+## from one to the table (`_in_lane`): the first build put the cage cart across
+## the shipping corner's doorway and walled it off.
+func _floor(name_: String, at: Vector3, yaw: float, size: Vector3) -> Node3D:
+	if _door_distance(at) < 4.0 or _in_lane(at, maxf(size.x, size.z) * 0.5):
+		print("[surgery] %s left out: it would stand in a way in" % name_)
+		return null
+	return _kit(self, name_, at, yaw, size)
+
+
+## Whether something `reach` across, at `at`, comes within LANE of the line
+## from any way in to the middle.
+func _in_lane(at: Vector3, reach: float) -> bool:
+	for d in _doorways:
+		var a: Vector3 = d[0]
+		var flat := Vector2(at.x, at.z)
+		var from := Vector2(a.x, a.z)
+		var t := clampf(flat.dot(from) / from.length_squared(), 0.0, 1.0)
+		# The lane runs from the door (t 1) to the middle (t 0).
+		if (flat - from * t).length() - reach < LANE:
+			return true
+	return false
+
+
+## The study: bookcases along both walls of the corner, a rug with the writing
+## desk on it, the lectern, the armillary sphere, piles of books, a candelabra.
+func _study(q: Vector3, walls: Array) -> void:
+	for s in walls:
+		var n := _on_wall(s, "Bookcases")
+		for x: float in [-1.35, 0.0, 1.35]:
+			_kit(n, "bookcase", Vector3(x, 0.0, 0.25), 0.0, Vector3(1.26, 3.0, 0.49))
+	# Two more in the corner's own bays, either wall.
+	var c := _wall - BAY_DEPTH - 0.25
+	_floor("bookcase", Vector3(q.x * c, 0.0, q.z * 11.2), atan2(-q.x, 0.0), Vector3(1.26, 3.0, 0.49))
+	_floor("bookcase", Vector3(q.x * 11.2, 0.0, q.z * c), atan2(0.0, -q.z), Vector3(1.26, 3.0, 0.49))
+	var centre := _q(q, 8.2, 8.2)
+	_floor("rug", centre, PI * 0.25, Vector3.ZERO)
+	_floor("desk", _q(q, 8.6, 8.6), _facing(_q(q, 8.6, 8.6), Vector3.ZERO), Vector3(2.0, 1.0, 1.6))
+	_floor("lectern", _q(q, 5.8, 10.2), _facing(_q(q, 5.8, 10.2), Vector3.ZERO), Vector3(0.9, 1.4, 0.7))
+	_floor("globe", _q(q, 10.4, 5.8), 0.3, Vector3(0.7, 1.9, 0.7))
+	_floor("books", _q(q, 11.3, 9.0), _rng.randf_range(-PI, PI), Vector3(1.0, 0.6, 1.0))
+	_floor("books", _q(q, 9.2, 11.4), _rng.randf_range(-PI, PI), Vector3(1.0, 0.6, 1.0))
+	_floor("chest", _q(q, 6.6, 11.6), atan2(0.0, -q.z), Vector3(1.15, 0.62, 0.92))
+	var cand := _floor("candelabra", _q(q, 6.4, 7.0), 0.0, Vector3(0.6, 2.0, 0.6))
+	if cand != null:
+		_candle_light(cand)
+
+
+## The lab: laboratory benches of glassware against its walls with the anatomy
+## chart over one, a bench as an island, the copper still in the corner,
+## specimen jars, the worktable, a chest.
+func _lab(q: Vector3, walls: Array) -> void:
+	var first := true
+	for s in walls:
+		var n := _on_wall(s, "LabBench")
+		_kit(n, "labbench", Vector3(0.0, 0.0, 0.75), 0.0, Vector3(3.0, 1.0, 1.5))
+		for x: float in [-2.0, 2.0]:
+			_kit(n, "jar", Vector3(x, 0.0, 0.45), _rng.randf_range(-PI, PI), Vector3(0.8, 2.1, 0.8))
+		if first:
+			first = false
+			_chart(n, Vector3(0.0, 3.2, 0.03))
+		var glow := OmniLight3D.new()
+		glow.name = "SpecimenGlow"
+		glow.light_color = Color(0.55, 1.0, 0.3)
+		glow.light_energy = 0.8
+		glow.omni_range = 4.0
+		glow.omni_attenuation = 1.5
+		glow.shadow_enabled = false
+		glow.position = Vector3(0.0, 1.6, 1.4)
+		n.add_child(glow)
+	var corner := _q(q, 11.1, 11.1)
+	_floor("still", corner, _facing(corner, Vector3.ZERO), Vector3(1.9, 3.0, 1.3))
+	_floor("labbench", _q(q, 7.6, 7.6), PI * 0.25 * (q.x * q.z), Vector3(3.0, 1.0, 1.5))
+	_floor("worktable", _q(q, 10.6, 6.2), PI * 0.5, Vector3(2.0, 0.95, 1.55))
+	_floor("jar", _q(q, 6.2, 10.8), 0.4, Vector3(0.8, 2.1, 0.8))
+	_floor("chest", _q(q, 8.4, 11.6), atan2(0.0, -q.z), Vector3(1.15, 0.62, 0.92))
+	var cand := _floor("candelabra", _q(q, 5.6, 6.8), 0.0, Vector3(0.6, 2.0, 0.6))
+	if cand != null:
+		_candle_light(cand)
+
+
+## The trials: the testing chair facing the table, the galvanic machine and an
+## iron maiden on the walls with the tool rack, slabs with subjects fitted with
+## their new arms, the rack and the pillory, gibbet cages from the beams, the
+## older dead in the corner.
+func _trials(q: Vector3, walls: Array) -> void:
+	var i := 0
+	for s in walls:
+		var n := _on_wall(s, "Trials")
+		if i == 0:
+			_kit(n, "galvanic", Vector3(-1.2, 0.0, 0.5), 0.0, Vector3(1.6, 2.6, 0.95))
+			_kit(n, "toolrack", Vector3(1.2, 1.1, 0.12), 0.0, Vector3(2.2, 1.5, 0.25))
+		else:
+			_kit(n, "maiden", Vector3(-1.0, 0.0, 0.5), _rng.randf_range(-0.2, 0.2), Vector3(1.2, 2.4, 0.9))
+			_kit(n, "toolrack", Vector3(1.1, 1.1, 0.12), 0.0, Vector3(2.2, 1.5, 0.25))
+		i += 1
+	var chair := _q(q, 7.4, 7.4)
+	_floor("testchair", chair, _facing(chair, Vector3.ZERO), Vector3(1.2, 2.4, 1.6))
+	_subject_slab(_q(q, 5.6, 10.6), 0.0, 0)
+	_subject_slab(_q(q, 10.6, 5.6), PI * 0.5, 1)
+	_floor("rack", _q(q, 10.2, 9.6), PI * 0.25, Vector3(1.1, 1.2, 3.0))
+	_floor("pillory", _q(q, 7.8, 11.6), atan2(0.0, -q.z), Vector3(2.0, 2.2, 1.1))
+	if _door_distance(_q(q, 11.8, 11.8)) > 4.0:
+		_corpse(_q(q, 11.9, 11.9), _rng.randf_range(-PI, PI), _missing(true))
+	for at: Vector2 in [Vector2(9.0, 6.0), Vector2(5.5, 10.5)]:
+		var g := Node3D.new()
+		g.name = "Gibbet"
+		add_child(g)
 		var top := 5.6 + _rng.randf_range(-0.3, 0.3)
-		c.position = Vector3(at.x, top, _nearest_beam(at.y))
-		c.rotation.y = _rng.randf_range(-PI, PI)
-		var cage: Node3D = GIBBET.instantiate()
-		c.add_child(cage)
-		var drop := CEIL - BEAM.y - top
-		c.add_child(Table._merge([[Table._cylm(0.03, 0.03, drop, 6), Transform3D(Basis(), Vector3(0.0, drop * 0.5, 0.0)), &"dark"]], "Chain"))
+		var z := _nearest_beam(q.z * at.y)
+		g.position = Vector3(q.x * at.x, top, z)
+		g.rotation.y = _rng.randf_range(-PI, PI)
+		_kit(g, "gibbet", Vector3.ZERO)
+		_chain(g, Vector3(0.0, CEIL - BEAM.y - top, 0.0), CEIL - BEAM.y - top)
+
+
+## The shipping corner: shipping caskets stood along its walls, the cage cart,
+## pallets of crates, the hand cart, barrels, and the overhead monorail along
+## its beam with the finished subjects hanging wrapped from its hooks.
+func _shipping(q: Vector3, walls: Array) -> void:
+	for s in walls:
+		var n := _on_wall(s, "Caskets")
+		for x: float in [-1.65, -0.55, 0.55, 1.65]:
+			_kit(n, "casket", Vector3(x, 0.0, 0.35), _rng.randf_range(-0.08, 0.08), Vector3(0.93, 2.3, 0.61))
+	_floor("cagecart", _q(q, 10.3, 4.6), PI * 0.5 * (1.0 if _rng.randf() < 0.5 else -1.0), Vector3(2.6, 2.1, 1.8))
+	_floor("crates", _q(q, 11.2, 11.2), _facing(_q(q, 11.2, 11.2), Vector3.ZERO), Vector3(2.0, 1.7, 1.64))
+	_floor("crates", _q(q, 10.8, 8.0), _rng.randf_range(-0.3, 0.3) + PI * 0.5, Vector3(2.0, 1.7, 1.64))
+	_floor("handcart", _q(q, 4.6, 11.0), _rng.randf_range(-PI, PI), Vector3(1.8, 1.0, 1.07))
+	_floor("barrels", _q(q, 7.0, 11.4), _rng.randf_range(-PI, PI), Vector3(1.9, 1.1, 2.0))
+	# The monorail: along the beam over the corner, from the middle out to the
+	# wall, its hooks hung with the wrapped subjects ready to go.
+	var z := q.z * absf(BEAM_Z[1])
+	var track := Node3D.new()
+	track.name = "Monorail"
+	add_child(track)
+	for i in 3:
+		var x := q.x * (2.4 + 4.0 * (float(i) + 0.5))
+		_kit(track, "track", Vector3(x, CEIL - BEAM.y, z))
+	for i in 5:
+		var x := q.x * (3.4 + 2.2 * float(i))
+		var hook := Node3D.new()
+		hook.name = "Hook"
+		track.add_child(hook)
+		hook.position = Vector3(x, CEIL - BEAM.y - 0.55, z)
+		hook.rotation.y = _rng.randf_range(-0.4, 0.4)
+		_kit(hook, "hook", Vector3.ZERO)
+		if i != 2:
+			_kit(hook, "bundle", Vector3(0.0, -1.35, 0.0))
+		_hanging.append([hook, _rng.randf() * TAU])
+
+
+func _candle_light(n: Node3D) -> void:
+	var light := OmniLight3D.new()
+	light.light_color = CANDLE_COLOUR
+	light.light_energy = 1.3
+	light.omni_range = 5.5
+	light.omni_attenuation = 1.3
+	light.shadow_enabled = false
+	light.position = Vector3(0.0, 2.1, 0.0)
+	n.add_child(light)
+
+
+## The anatomy chart (a generated picture) pinned to a bay.
+func _chart(n: Node3D, at: Vector3) -> void:
+	var chart := MeshInstance3D.new()
+	chart.name = "AnatomyChart"
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.35, 1.8)
+	chart.mesh = quad
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = CHART
+	m.albedo_color = Color(0.62, 0.58, 0.52)
+	m.roughness = 0.95
+	chart.material_override = m
+	chart.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	chart.position = at
+	chart.rotation.z = _rng.randf_range(-0.04, 0.04)
+	n.add_child(chart)
+
+
+## An iron operating slab with a subject strapped down on it: on its back, one
+## arm gone and the kit's mechanical arm fitted in its place.
+func _subject_slab(at: Vector3, yaw: float, kind: int) -> void:
+	if _door_distance(at) < 4.0 or _in_lane(at, 1.15):
+		return
+	var n := Node3D.new()
+	n.name = "OperatingSlab"
+	add_child(n)
+	n.transform = Transform3D(Basis(Vector3.UP, yaw), at)
+	_kit(n, "slab", Vector3.ZERO, 0.0, Vector3(1.05, 1.0, 2.3))
+	var body := _corpse(Vector3.ZERO, 0.0, [])
+	remove_child(body)
+	n.add_child(body)
+	var low := body.position.y
+	body.transform = Transform3D(Basis(Vector3.UP, PI * float(kind % 2)) * body.transform.basis, Vector3(0.0, 1.0 + low, 0.0))
+	var sk: Skeleton3D = null
+	var found := body.find_children("*", "Skeleton3D", true, false)
+	if not found.is_empty():
+		sk = found[0] as Skeleton3D
+	if sk == null:
+		return
+	var limb: StringName = [&"forearm.R", &"forearm.L"][kind % 2]
+	var b := sk.find_bone(limb)
+	if b < 0:
+		return
+	sk.set_bone_pose_scale(b, Vector3.ONE * 0.001)
+	var att := BoneAttachment3D.new()
+	att.bone_name = "upper_arm.R" if limb == &"forearm.R" else "upper_arm.L"
+	sk.add_child(att)
+	attach_prosthetic(att)
+
+
+## The kit's mechanical arm on an upper-arm bone attachment, out along the bone
+## from the elbow (the bone's +Y), its socket at the elbow. Shared with the
+## table's prisoner (surgical_table.gd).
+static func attach_prosthetic(att: Node3D) -> void:
+	var arm: Node3D = (K["prosthetic"] as PackedScene).instantiate()
+	att.add_child(arm)
+	# The model hangs from its top (its socket) down -Y: turned to run up +Y,
+	# from the elbow.
+	arm.transform = Transform3D(Basis(Vector3.RIGHT, PI), Vector3(0.0, 0.27, 0.0))
+	arm.scale = Vector3.ONE * 1.2
 
 
 func _nearest_beam(z: float) -> float:
@@ -1042,97 +1082,6 @@ func _nearest_beam(z: float) -> float:
 		if absf(b - z) < absf(best - z):
 			best = b
 	return best
-
-
-## The wall slots the mechanisms left, furnished as the reference's walls are:
-## a study (the worktable with its skull, book and tools, the anatomy chart over
-## it, a chest), apothecary shelves, specimen jars with a chest between them.
-func _furnish(slots: Array) -> void:
-	var free: Array = slots.filter(func(s): return not s["used"])
-	for i in range(free.size() - 1, 0, -1):
-		var j := _rng.randi_range(0, i)
-		var t = free[i]
-		free[i] = free[j]
-		free[j] = t
-	var kinds := [&"study", &"apothecary", &"maiden", &"specimens", &"tools", &"apothecary", &"maiden", &"tools"]
-	for i in free.size():
-		var s: Dictionary = free[i]
-		s["used"] = true
-		var n := _on_wall(s, "Furniture")
-		match kinds[i % kinds.size()]:
-			&"study":
-				_place(n, WORKTABLE, Vector3(0.0, 0.0, 0.9), PI * 0.5, Vector3(2.0, 0.95, 1.55))
-				_place(n, CHEST, Vector3(1.75, 0.0, 0.6), PI * 0.5 + _rng.randf_range(-0.15, 0.15), Vector3(1.15, 0.62, 0.92))
-				var chart := MeshInstance3D.new()
-				chart.name = "AnatomyChart"
-				var quad := QuadMesh.new()
-				quad.size = Vector2(1.35, 1.8)
-				chart.mesh = quad
-				var m := StandardMaterial3D.new()
-				m.albedo_texture = CHART
-				m.albedo_color = Color(0.62, 0.58, 0.52)
-				m.roughness = 0.95
-				chart.material_override = m
-				chart.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				chart.position = Vector3(-0.2, 2.55, 0.03)
-				chart.rotation.z = _rng.randf_range(-0.04, 0.04)
-				n.add_child(chart)
-			&"apothecary":
-				for x: float in [-0.92, 0.92]:
-					_place(n, SHELF, Vector3(x, 0.0, 0.25), 0.0, Vector3(1.6, 3.0, 0.45))
-			&"maiden":
-				# An iron maiden, half open, and the other shut beside it.
-				_place(n, MAIDEN, Vector3(-0.8, 0.0, 0.55), _rng.randf_range(-0.2, 0.2), Vector3(1.1, 2.4, 0.9))
-				_place(n, CHEST, Vector3(1.0, 0.0, 0.55), PI * 0.5 + _rng.randf_range(-0.3, 0.3), Vector3(1.15, 0.62, 0.92))
-			&"tools":
-				# The torturer's rack of saws, cleavers and hooks, the barrels under it.
-				_place(n, TOOLRACK, Vector3(0.0, 1.1, 0.12), 0.0, Vector3(2.2, 1.5, 0.25))
-				_place(n, BARRELS, Vector3(0.6, 0.0, 0.9), _rng.randf_range(-0.4, 0.4), Vector3(2.0, 1.2, 1.5))
-			_:
-				for x: float in [-1.15, 1.15]:
-					_place(n, JAR, Vector3(x, 0.0, 0.55), _rng.randf_range(-PI, PI), Vector3(0.8, 2.1, 0.8))
-				_place(n, CHEST, Vector3(0.0, 0.0, 0.55), PI * 0.5 + _rng.randf_range(-0.2, 0.2), Vector3(1.15, 0.62, 0.92))
-				# The jars' glow.
-				var glow := OmniLight3D.new()
-				glow.name = "SpecimenGlow"
-				glow.light_color = Color(0.55, 1.0, 0.3)
-				glow.light_energy = 0.7
-				glow.omni_range = 3.6
-				glow.omni_attenuation = 1.6
-				glow.shadow_enabled = false
-				glow.position = Vector3(0.0, 1.3, 1.1)
-				n.add_child(glow)
-
-
-## How much each kit piece glows with its own picture (`_glow`).
-const GLOWS := {"shelf": 0.35, "jar": 1.1, "worktable": 0.3, "chest": 0.0}
-
-
-## Lights a kit piece with its own picture (surgical_table.gd `glow`).
-func _glow(piece: Node, energy: float) -> void:
-	Table.glow(piece, energy)
-
-
-## A kit piece on wall node `n` at `at` (+Z out into the room), turned `yaw`,
-## solid as a box of `size` (its footprint, before the turn).
-func _place(n: Node3D, scene: PackedScene, at: Vector3, yaw: float, size: Vector3) -> void:
-	var piece: Node3D = scene.instantiate()
-	n.add_child(piece)
-	_glow(piece, float(GLOWS.get(scene.resource_path.get_file().get_basename(), 0.0)))
-	piece.position = at
-	piece.rotation.y = yaw
-	for node in piece.find_children("*", "GeometryInstance3D", true, false):
-		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	var body := StaticBody3D.new()
-	body.collision_layer = 1 | 2
-	body.collision_mask = 0
-	piece.add_child(body)
-	var shape := BoxShape3D.new()
-	shape.size = size
-	var cs := CollisionShape3D.new()
-	cs.shape = shape
-	cs.position = Vector3(0.0, size.y * 0.5, 0.0)
-	body.add_child(cs)
 
 
 # --- The table ------------------------------------------------------------------
@@ -1204,14 +1153,14 @@ func clamp_state() -> StringName:
 # --- The cables -------------------------------------------------------------------------
 
 func _build_cables() -> void:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = CABLE_RADIUS
-	mesh.bottom_radius = CABLE_RADIUS
-	mesh.height = 1.0
-	mesh.radial_segments = 8
-	mesh.rings = 1
+	# The kit's cable section (1 m along Y), its picture as the sheath under
+	# the glow shader.
+	var mesh := _mesh_of("cable")
 	var mat := ShaderMaterial.new()
 	mat.shader = CABLE_SHADER
+	var src := mesh.surface_get_material(0) as StandardMaterial3D
+	if src != null and src.albedo_texture != null:
+		mat.set_shader_parameter("sheath_tex", src.albedo_texture)
 	for i in SYSTEMS.size():
 		var system := SYSTEMS[i]
 		if not _mech.has(system):
@@ -1377,10 +1326,6 @@ func _work_mechanisms(delta: float) -> void:
 		var arm: float = table.get("arm_motion")
 		_spin["arms"] = float(_spin["arms"]) + delta * arm * 4.0
 		(m["gear"] as Node3D).rotation.z = float(_spin["arms"])
-		var rods: Array = m["rods"]
-		for k in rods.size():
-			var pump := 0.22 * arm * sin(float(_spin["arms"]) * 3.0 + float(k) * PI)
-			(rods[k] as Node3D).position.y = 1.0 + pump
 	if _mech.has(&"legs"):
 		var m: Dictionary = _mech[&"legs"]
 		var legs_on: bool = table.call("legs_on")
@@ -1395,9 +1340,10 @@ func _work_mechanisms(delta: float) -> void:
 	if _mech.has(&"core"):
 		var m: Dictionary = _mech[&"core"]
 		var feed: float = maxf(table.get("feed_arms"), table.get("feed_legs"))
-		var rod: StandardMaterial3D = m["rod"]
-		rod.emission = Table.CORE_COLOUR.lerp(Table.FEED_COLOUR, clampf(feed, 0.0, 1.0))
-		rod.emission_energy_multiplier = 0.2 + 4.0 * glow + 2.0 * feed
+		for mat in m["mats"]:
+			var rod: StandardMaterial3D = mat
+			rod.emission = Table.CORE_COLOUR.lerp(Table.FEED_COLOUR, clampf(feed, 0.0, 1.0))
+			rod.emission_energy_multiplier = 0.15 + 1.6 * glow + 1.2 * feed
 		var light: OmniLight3D = m["light"]
 		light.light_energy = 0.9 * glow + 0.6 * feed
 		light.visible = light.light_energy > 0.02
@@ -1421,7 +1367,6 @@ func _work_mechanisms(delta: float) -> void:
 			e = 0.0 if float(table.get("core_glow")) < 0.05 else e
 		_lamp.light_energy = e
 		_lamp.visible = e > 0.02
-		_lamp_mat.emission_energy_multiplier = e * 0.8
 
 
 ## Levers and the jam: who is at one, and what pulling it does.
@@ -1471,8 +1416,7 @@ func _pull(l: Dictionary) -> void:
 func _jam() -> void:
 	_jam_prompt.visible = false
 	var tw := _bar.create_tween()
-	tw.tween_property(_bar, "transform", Transform3D(Basis(Vector3.BACK, 0.9) * Basis(Vector3.RIGHT, 0.1),
-		Vector3(0.35, 1.45, 0.72)), 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_bar, "transform", _bar_jammed, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	table.call("_sparks", _jam_node.global_position, Color(1.0, 0.8, 0.5), 20)
 	table.call("jam_legs")
 
@@ -1495,7 +1439,7 @@ func restore_state(data: Dictionary) -> void:
 	var p := table.global_position if at.size() < 3 else Vector3(float(at[0]), float(at[1]), float(at[2]))
 	table.call("set_dead_now", p, float(data.get("yaw", 0.0)))
 	if bool(data.get("jammed", false)) and _bar != null:
-		_bar.transform = Transform3D(Basis(Vector3.BACK, 0.9) * Basis(Vector3.RIGHT, 0.1), Vector3(0.35, 1.45, 0.72))
+		_bar.transform = _bar_jammed
 	_clamp_state = &"shut"
 
 
