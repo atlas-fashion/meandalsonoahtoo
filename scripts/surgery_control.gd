@@ -114,6 +114,7 @@ func booth_centre() -> Vector3:
 
 func _piece(name_: String, parent: Node3D, at: Vector3, yaw := 0.0) -> Node3D:
 	var n: Node3D = (KIT[name_] as PackedScene).instantiate()
+	Table.grade(n)
 	parent.add_child(n)
 	n.position = at
 	n.rotation.y = yaw
@@ -286,6 +287,14 @@ func _move_lift(to: float) -> void:
 
 
 func _run_lift(delta: float) -> void:
+	# The whole position, every frame (note 100): maze.gd moves the level under
+	# the navmesh region after it is built, and a sync_to_physics body moved like
+	# that takes back the physics server's transform -- still the origin -- so
+	# the cage turned up on the surgical table in the middle of the hall, and a
+	# player in it stood on the table top with their head through its roof.
+	var want := _lift_centre() + Vector3(0.0, _cage_y, 0.0)
+	if not _cage.position.is_equal_approx(want):
+		_cage.position = want
 	if _cage_t < 0.0:
 		return
 	_cage_t += delta

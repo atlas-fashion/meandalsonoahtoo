@@ -111,7 +111,9 @@ const GIRDER_H := 0.53
 ## The maze: N x N cells across the hall; the bookcases' depth and height.
 const N := 9
 const SHELF_DEPTH := 0.42
-const SHELF_H := 3.3
+const SHELF_H := 3.9
+## The oak posts at the maze's joins (note 100).
+const POST_W := 0.88
 const SHELVES := ["shelf_ledgers", "shelf_ledgers", "shelf_drawers", "shelf_scrolls", "shelf_specimens",
 	"shelf_trays", "shelf_ruined"]
 ## A share of the walls left standing after the maze is carved is cut open,
@@ -230,6 +232,7 @@ func _kit(n: Node3D, name_: String, at: Vector3, yaw := 0.0, size := Vector3.ZER
 	piece.position = at
 	piece.rotation.y = yaw
 	piece.scale = scale_
+	Table.grade(piece)
 	Table.glow(piece, float(GLOWS.get(name_, 0.0)))
 	for node in piece.find_children("*", "GeometryInstance3D", true, false):
 		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
@@ -250,6 +253,7 @@ func _kit(n: Node3D, name_: String, at: Vector3, yaw := 0.0, size := Vector3.ZER
 ## The first mesh in a kit piece, for MultiMeshes.
 static func _mesh_of(name_: String) -> Mesh:
 	var scene: Node = (K[name_] as PackedScene).instantiate()
+	Table.grade(scene)
 	var mesh: Mesh = null
 	for node in scene.find_children("*", "MeshInstance3D", true, false):
 		mesh = (node as MeshInstance3D).mesh
@@ -559,6 +563,7 @@ func _carve_maze() -> void:
 ## the trays and the catalogue drawers nearest the intake.
 func _build_maze() -> void:
 	var holder := _node("Maze", Vector3.ZERO)
+	var posts := {}
 	for c in _cells:
 		for step: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
 			var o: Vector2i = c + step
@@ -572,14 +577,40 @@ func _build_maze() -> void:
 			var b := cell_at(o.x, o.y)
 			var mid := (a + b) * 0.5
 			var normal := (b - a).normalized()
-			# The pair's wall runs across `normal`; each case faces its own cell.
+			# The pair's wall runs across `normal`; each case stands on its own
+			# cell's side of the line, its back on the line, its front (+Z)
+			# out into its cell. (Note 99 had them the other way round: both
+			# fronts met inside the wall and only backs showed.)
 			var near_intake := c.x <= 2 and c.y <= 3
-			for side: float in [-1.0, 1.0]:
-				var facing := -normal * side
+			for facing: Vector3 in [normal, -normal]:
 				var name_: String = _pick_shelf(near_intake)
-				_kit(holder, name_, mid - facing * (SHELF_DEPTH * 0.5 + 0.005), atan2(facing.x, facing.z))
+				_kit(holder, name_, mid + facing * (SHELF_DEPTH * 0.5 + 0.005), atan2(facing.x, facing.z))
 			_solid(holder, Vector3(_c - 0.06, SHELF_H, SHELF_DEPTH * 2.0), mid + Vector3(0.0, SHELF_H * 0.5, 0.0),
 				atan2(normal.x, normal.z))
+			# Its two ends, and which way the wall runs from each (note 100).
+			var along := Vector3(-normal.z, 0.0, normal.x)
+			for s: float in [-1.0, 1.0]:
+				var v := mid + along * (_c * 0.5 * s)
+				var key := Vector2i(roundi(v.x * 10.0), roundi(v.z * 10.0))
+				if not posts.has(key):
+					posts[key] = [v, {}]
+				(posts[key][1] as Dictionary)[absf(along.x) > 0.5] = true
+	# A post where two walls meet at a corner, a T or a cross: there the cases of
+	# the one wall run into the other's, and the post covers the join. Where a
+	# wall runs straight on, or ends, the cases stand as they are.
+	for p in posts.values():
+		if (p[1] as Dictionary).size() > 1:
+			_maze_post(holder, p[0])
+
+
+## An oak post at a join in the maze: the kit's beam stood on end, wide enough
+## to cover both pairs' ends, its top under the cases' carved crests (which
+## carry on over it).
+func _maze_post(holder: Node3D, at: Vector3) -> void:
+	var h := SHELF_H - 0.45
+	var post := _kit(holder, "beam", at + Vector3(0.0, h * 0.5, 0.0))
+	post.basis = Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(h / 4.66, POST_W / 0.55, POST_W / 0.75))
+	_solid(holder, Vector3(POST_W, h, POST_W), at + Vector3(0.0, h * 0.5, 0.0))
 
 
 func _pick_shelf(near_intake: bool) -> String:
@@ -805,6 +836,7 @@ func _build_centre() -> void:
 ## table's prisoner (surgical_table.gd).
 static func attach_prosthetic(att: Node3D) -> void:
 	var arm: Node3D = (K["prosthetic"] as PackedScene).instantiate()
+	load("res://scripts/surgical_table.gd").grade(arm)
 	att.add_child(arm)
 	arm.transform = Transform3D(Basis(Vector3.RIGHT, PI), Vector3(0.0, 0.27, 0.0))
 	arm.scale = Vector3.ONE * 1.2

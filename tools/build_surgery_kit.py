@@ -28,6 +28,7 @@ For each piece this script:
   maps to TEX px.
 """
 
+import bmesh
 import bpy
 import math
 import os
@@ -117,18 +118,18 @@ PIECES = {
     "girder": ("long", 4.4, "centre", -90.0, 3000, 512, 0.5),
     "endtruck": ("long", 3.0, "bottom", 0.0, 6000, 512, 0.5),
     "handrail": ("long", 3.0, "bottom", -90.0, 3000, 512, 0.5),
-    "shelf_ledgers": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
-    "shelf_drawers": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
-    "shelf_trays": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
-    "shelf_scrolls": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
-    "shelf_specimens": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.1),
-    "shelf_ruined": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_ledgers": ("fit", (2.9, 0.42, 3.9), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_drawers": ("fit", (2.9, 0.42, 3.9), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_trays": ("fit", (2.9, 0.42, 3.9), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_scrolls": ("fit", (2.9, 0.42, 3.9), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_specimens": ("fit", (2.9, 0.42, 3.9), "bottom", -90.0, 9000, 1024, 0.1),
+    "shelf_ruined": ("fit", (2.9, 0.42, 3.9), "bottom", -90.0, 9000, 1024, 0.05),
     "boothwindow": ("fit", (5.94, 0.25, 2.5), "bottom", -90.0, 6000, 1024, 0.1),
     "boothdoorwall": ("fit", (2.97, 0.25, 2.5), "bottom", -90.0, 5000, 1024, 0.1),
     "door": ("fit", (1.05, 0.12, 2.1), "bottom", -90.0, 4000, 1024, 0.15),
     "console": ("long", 2.2, "bottom", -90.0, 12000, 1024, 0.5),
     "platform": ("fit", (5.94, 2.97, 0.45), "top", -90.0, 5000, 1024, 0.15),
-    "liftcage": ("fit", (2.6, 2.6, 2.4), "bottom", 0.0, 8000, 1024, 0.5),
+    "liftcage": ("fit", (2.6, 2.6, 2.4), "bottom", 0.0, 8000, 1024, 0.5, (0.0, 0.0), 0.745),
     "floorrail": ("long", 3.0, "bottom", 0.0, 3000, 512, 0.4),
     "traycart": ("long", 2.2, "bottom", 0.0, 7000, 1024, 0.3),
     "portcullis": ("fit", (2.9, 0.6, 3.6), "bottom", -90.0, 7000, 1024, 0.4),
@@ -192,6 +193,18 @@ def build(name, out_dir):
         o.data.transform(Matrix.Rotation(math.radians(rot[1]), 4, 'Y'))
     if yaw != 0.0:
         o.data.transform(Matrix.Rotation(math.radians(yaw), 4, 'Z'))
+    # An optional 9th field: keep only the bottom `crop` of the height (the
+    # lift cage, note 100: its chains and pulley above the roof were counted in
+    # its height, and fitted to 2.4 m its roof came down to 1.8).
+    crop = entry[8] if len(entry) > 8 else 1.0
+    if crop < 1.0:
+        zs = [v.co.z for v in o.data.vertices]
+        cut = min(zs) + (max(zs) - min(zs)) * crop
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z > cut], context='VERTS')
+        bm.to_mesh(o.data)
+        bm.free()
     span = max(o.dimensions)
     with bpy.context.temp_override(active_object=o, object=o, selected_objects=[o], selected_editable_objects=[o]):
         bpy.ops.object.mode_set(mode='EDIT')

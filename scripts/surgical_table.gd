@@ -103,9 +103,10 @@ const CLAW_SCALE := 0.95
 const HOIST_SPEED := 3.2
 ## Asleep: the claw drawn right up under the trolley, over the table.
 const FOLD_LEN := 0.3
-## Following: the wrist this high over the floor under it (the fingertips clear
-## the 3.3 m bookshelves), the trolley this far back toward the table from them.
-const HOVER_Y := 5.0
+## Following: the wrist this high over the floor under it (the fingertips,
+## CLAW_LEN under it, clear the 3.9 m bookshelves -- note 100), the trolley this
+## far back toward the table from them.
+const HOVER_Y := 5.6
 const HOVER_BACK := 0.8
 ## A little ahead of them: their velocity times this.
 const LEAD := 0.25
@@ -135,12 +136,17 @@ const PULL_TIME := 0.5
 const GRAB_RADIUS := 1.3
 const SHAKE_RADIUS := 2.6
 const GRAB_DAMAGE := 12.0
-const REAR_COOLDOWN: Array[float] = [2.6, 2.3, 2.0, 1.8, 1.6]
+## Between one slam ending and the next beginning (note 100: was 2.6 .. 1.6 s,
+## the user wanted more time between its attacks).
+const REAR_COOLDOWN: Array[float] = [5.0, 4.5, 4.0, 3.6, 3.2]
 
 ## --- Carried and strapped down ----------------------------------------------------
 const CARRY_SPEED := 5.0
-## Carried with the wrist this high.
-const CARRY_Y := 4.6
+## Carried with the wrist this high, held this far down the claw (`CARRY_GRIP`,
+## of CLAW_LEN): the body's feet then clear the 3.9 m shelves as the gantry
+## runs it over them (note 100; at 4.6 and 0.75 they swept through them).
+const CARRY_Y := 5.9
+const CARRY_GRIP := 0.45
 ## The struggles it takes to break free: carried, and strapped down (more as it
 ## angers).
 const CARRY_BREAK := 8
@@ -150,7 +156,7 @@ const OPERATE_EVERY := 0.9
 const OPERATE_DAMAGE: Array[float] = [6.0, 7.0, 8.0, 9.0, 10.0]
 ## Let go: thrown off this hard, and the claw holds off this long.
 const THROW := 6.5
-const RELEASE_REST := 2.2
+const RELEASE_REST := 3.5
 
 ## --- The floor's scars ----------------------------------------------------------
 ## Crack decals left where it lands: this many at most, fading after DECAL_LIFE.
@@ -363,6 +369,7 @@ func _build_arm() -> void:
 		seg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(seg)
 		_segs.append(seg)
+		grade(seg)
 		_power_glow(seg, 0.3)
 	_claw = Node3D.new()
 	_claw.name = "Claw"
@@ -400,7 +407,57 @@ func _build_arm() -> void:
 	_claw_box.add_child(kshape)
 
 
+## --- One palette (note 100) ---------------------------------------------------------
+## Each Higgsfield piece came with its own idea of colour: the kit's mean albedo
+## ran from 0.08 to 0.19 in luminance and 0.12 to 0.70 in saturation, so pieces
+## side by side looked dropped in from different sets. `grade` pulls each
+## material's mean colour GRADE_PULL of the way toward GRADE_TARGET (the kit's own
+## mean, a little desaturated), per channel, through its albedo_color -- the
+## texture's detail is untouched. Once per material (they are shared by every
+## copy of a piece), before any glow duplicate is made from it.
+const GRADE_TARGET := Color(0.17, 0.135, 0.105)
+const GRADE_PULL := 0.65
+static var _graded := {}
+
+
+static func grade(n: Node) -> void:
+	var nodes := n.find_children("*", "MeshInstance3D", true, false)
+	if n is MeshInstance3D:
+		nodes.append(n)
+	for node in nodes:
+		var mi := node as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		for i in mi.mesh.get_surface_count():
+			var m := mi.mesh.surface_get_material(i) as StandardMaterial3D
+			if m == null or m.albedo_texture == null or _graded.has(m.get_instance_id()):
+				continue
+			_graded[m.get_instance_id()] = true
+			var mean := _mean_colour(m.albedo_texture)
+			var tint := Color(1.0, 1.0, 1.0)
+			for c in 3:
+				var want: float = GRADE_TARGET[c] / maxf(mean[c], 0.01)
+				tint[c] = clampf(lerpf(1.0, want, GRADE_PULL), 0.6, 1.7)
+			m.albedo_color = m.albedo_color * tint
+
+
+## A texture's mean colour, from a 16 x 16 reduction of its image.
+static func _mean_colour(t: Texture2D) -> Color:
+	var img := t.get_image()
+	if img == null:
+		return GRADE_TARGET
+	if img.is_compressed():
+		img.decompress()
+	img.resize(16, 16, Image.INTERPOLATE_BILINEAR)
+	var sum := Color(0.0, 0.0, 0.0, 0.0)
+	for y in 16:
+		for x in 16:
+			sum += img.get_pixel(x, y)
+	return sum / 256.0
+
+
 static func _shadows(n: Node) -> void:
+	grade(n)
 	for node in n.find_children("*", "GeometryInstance3D", true, false):
 		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
@@ -631,7 +688,8 @@ func _physics_process(delta: float) -> void:
 			_hoist = 2.0
 			if _t >= 3.0:
 				_enter(State.HUNT)
-				_next_rear = now + 1.0
+				# The first slam a while after it wakes (note 100).
+				_next_rear = now + 2.5
 		State.HUNT:
 			_hunt(now)
 		State.REAR:
@@ -1112,7 +1170,7 @@ func _hold_victim() -> void:
 		return
 	match state:
 		State.CARRY:
-			var grip := room.to_global(_w + _axis * CLAW_LEN * 0.75)
+			var grip := room.to_global(_w + _axis * CLAW_LEN * CARRY_GRIP)
 			_victim.global_position = grip - Vector3(0.0, 1.05, 0.0)
 			_victim.set("restrain_view", Vector3(0.0, -18.0, 12.0 * sin(_t * 5.0)))
 		State.STRAP:

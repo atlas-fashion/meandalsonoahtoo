@@ -556,3 +556,9 @@ rigged three times, each with one clip ("Checkout_Gesture",
 "Alert_Quick_Turn_Right", "Fall_Dead_from_Abdominal_Injury"). The script puts
 all three on the first armature as NLA tracks "work", "alert", "die", drops
 Meshy's stray icosphere, and writes `models/surgery/surgeon.glb`.
+
+Note 100: an optional 9th field `crop` keeps only the bottom fraction of a raw
+model's height before fitting (the lift cage's chains and pulley, 0.745). Find
+the fraction from a height profile of the raw (vertex extent per band). After
+rebuilding a piece, check its textures' `.import` files: a rebuild can come back
+with mipmaps off and a new uid -- `git checkout` them and reimport.
