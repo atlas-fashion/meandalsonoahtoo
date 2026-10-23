@@ -215,20 +215,68 @@ func _build_booth() -> void:
 	_booth_light.position = Vector3(x0 + 0.5, BOOTH_FLOOR + 2.0, mid.z)
 
 
-## The window's panes (the kit's split-off "Glass") drawn as thin leaded glass:
-## their own picture, mostly see-through.
+## The window's glazing (note 101). The kit's split-off "Glass" holds the
+## mullions and lancet tracery as well as the panes, and the panes are not flat
+## -- Tripo's surface, crumpled, with the lead painted on in a smeared atlas --
+## so drawn see-through it glittered like foil and showed nothing clearly. Now
+## the pane faces (flat-on, within PANE_DEPTH of the middle) are taken out, the
+## ironwork left opaque in its own picture, and behind it one FLAT pane of the
+## Higgsfield leaded-glass picture (shaders/surgery_glass.gdshader): crisp lead
+## cames, the quarries between them nearly clear.
+const PANE_DEPTH := 0.045
+## The opening behind the tracery, model frame (the Glass part's extent).
+const PANE_X := 2.57
+const PANE_Y := Vector2(0.81, 2.33)
+const GLASS_PIC := preload("res://textures/surgery_glass.png")
+const GLASS_SHADER := preload("res://shaders/surgery_glass.gdshader")
+static var _tracery := {}
+
+
 func _glaze(win: Node3D) -> void:
 	for node in win.find_children("Glass*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
-		var src := mi.mesh.surface_get_material(0) as StandardMaterial3D
-		var m := StandardMaterial3D.new() if src == null else src.duplicate() as StandardMaterial3D
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.albedo_color = Color(0.75, 0.82, 0.8, 0.28)
-		m.cull_mode = BaseMaterial3D.CULL_DISABLED
-		m.roughness = 0.2
-		m.metallic = 0.0
-		mi.material_override = m
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var key := mi.mesh.get_instance_id()
+		if not _tracery.has(key):
+			_tracery[key] = _without_panes(mi.mesh)
+		mi.mesh = _tracery[key]
+	var pane := MeshInstance3D.new()
+	pane.name = "Pane"
+	var quad := QuadMesh.new()
+	quad.size = Vector2(PANE_X * 2.0, PANE_Y.y - PANE_Y.x)
+	pane.mesh = quad
+	var m := ShaderMaterial.new()
+	m.shader = GLASS_SHADER
+	m.set_shader_parameter("pic", GLASS_PIC)
+	m.set_shader_parameter("scale", Vector2(win.scale.x, win.scale.y))
+	pane.material_override = m
+	pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	win.add_child(pane)
+	pane.position = Vector3(0.0, (PANE_Y.x + PANE_Y.y) * 0.5, 0.0)
+
+
+## `mesh` without its flat-on faces near the middle plane: the ironwork alone.
+static func _without_panes(mesh: Mesh) -> Mesh:
+	var out := ArrayMesh.new()
+	for s in mesh.get_surface_count():
+		var arr := mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		if v.is_empty() or idx.is_empty():
+			# The headless dummy renderer keeps no mesh data: leave it whole.
+			return mesh
+		var keep := PackedInt32Array()
+		for t in range(0, idx.size(), 3):
+			var a := v[idx[t]]
+			var b := v[idx[t + 1]]
+			var c := v[idx[t + 2]]
+			var n := (b - a).cross(c - a).normalized()
+			if absf(n.z) > 0.8 and absf((a.z + b.z + c.z) / 3.0) < PANE_DEPTH:
+				continue
+			keep.append_array([idx[t], idx[t + 1], idx[t + 2]])
+		arr[Mesh.ARRAY_INDEX] = keep
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		out.surface_set_material(s, mesh.surface_get_material(s))
+	return out
 
 
 # --- The freight lift --------------------------------------------------------------

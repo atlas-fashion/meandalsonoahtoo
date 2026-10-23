@@ -91,6 +91,11 @@ const GLOWS := {"jar": 1.1, "candelabra": 1.2, "desk": 0.4, "books": 0.2, "shelf
 
 ## The walls: open frames BAY_DEPTH deep in front of the brick, CEIL tall.
 const BAY_DEPTH := 0.5
+## The wallframe's end colonettes, measured off the model (5 m wide, 0.5 deep):
+## their middles this far either side of its centre, their faces this far in
+## front of its middle -- where the wall torches hang (note 101).
+const FRAME_POST_X := 2.07
+const FRAME_POST_FRONT := 0.135
 ## Over a way in: the lintel's underside, and the frieze above it.
 const LINTEL_Y := 3.7
 const FRIEZE_Y := 4.8
@@ -133,6 +138,8 @@ var _inner := 13.4
 var _c := 2.98
 ## The ways in: [point on the wall face, the way out], room frame.
 var _doorways: Array = []
+## The frames' end colonettes: [their face at the floor, the wall], room frame.
+var _posts: Array = []
 ## The plan's frame (see the header), and its turn in quarter turns.
 var _plan: Node3D
 var _turn := 0
@@ -350,6 +357,8 @@ func _build_walls(h: int, cell: float) -> void:
 				var bay := _kit(holder, "wallframe", base)
 				bay.basis = face.scaled(sx)
 				_solid(holder, Vector3(width, 3.2, BAY_DEPTH), base + Vector3(0.0, 1.6, 0.0), atan2(-d.x, -d.z))
+				for s: float in [-1.0, 1.0]:
+					_posts.append([base - d * FRAME_POST_FRONT + along * s * FRAME_POST_X * sx.x, d])
 
 
 ## The roof: a plank ceiling (the generated plank texture, world-mapped) over
@@ -405,7 +414,10 @@ func _build_runways() -> void:
 	_multi(girder, xfs, "RunwayGirders")
 
 
-## A torch on the wall between every two frames, none at a way in.
+## A torch at every join between two frames, none at a way in -- on the face
+## of the frame's end colonette beside the join. (The frame is open at the join
+## itself, so a torch hung on the frames' front plane there stood in the air,
+## half a metre out from the brick and clear of both colonettes: note 101.)
 func _hang_wall_torches(h: int, cell: float) -> void:
 	var level = load("res://scripts/module_level.gd")
 	var scene: PackedScene = load(level.TORCH_SCENE)
@@ -418,10 +430,27 @@ func _hang_wall_torches(h: int, cell: float) -> void:
 	for k in range(-h, h):
 		var v := (float(k) + 0.5) * cell
 		for d: Vector3 in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
-			var at := d * (_inner - 0.05) + Vector3(-d.z, 0.0, d.x) * v
+			var at := d * _inner + Vector3(-d.z, 0.0, d.x) * v
 			if _door_distance(at) < 2.0:
 				continue
-			level._hang_torch(self, scene, at + Vector3(0.0, TORCH_HEIGHT, 0.0), d, energy, 13.0)
+			var post := _post_near(at, d)
+			if post == Vector3.INF:
+				continue
+			level._hang_torch(self, scene, post + Vector3(0.0, TORCH_HEIGHT, 0.0), d, energy, 13.0)
+
+
+## The colonette face on wall `d` nearest `at` (within a metre), or INF.
+func _post_near(at: Vector3, d: Vector3) -> Vector3:
+	var best := Vector3.INF
+	var best_d := 1.0
+	for p in _posts:
+		if (p[1] as Vector3).dot(d) < 0.9:
+			continue
+		var dist := (p[0] as Vector3).distance_to(at)
+		if dist < best_d:
+			best_d = dist
+			best = p[0]
+	return best
 
 
 # --- The plan (note 99) ------------------------------------------------------------
