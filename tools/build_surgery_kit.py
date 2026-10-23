@@ -2,6 +2,7 @@
 
     blender -b --factory-startup -P tools/build_surgery_kit.py -- models/surgery
     blender -b --factory-startup -P tools/build_surgery_kit.py -- --preview <dir>
+    blender -b --factory-startup -P tools/build_surgery_kit.py -- --reduce [names]
     godot --headless --import --path .
 
 Sources: models/source/surgery_hf/ (under models/source/.gdignore). Each
@@ -107,7 +108,44 @@ PIECES = {
     "grate": ("long", 1.5, "bottom", -90.0, 6000, 512, 0.3),
     "hearthjamb": ("z", 2.4, "bottom", -90.0, 4000, 1024, 0.05),
     "mantel": ("long", 4.4, "bottom", -90.0, 6000, 1024, 0.05),
+    # The surgery redone (note 99): open stone frames with no skulls in front of
+    # the dungeon's own brick, the bookshelf maze, the gantry the claw now rides,
+    # the freight lift, the control room, the assembly line and the dispatch.
+    "wallframe": ("fit", (5.0, 0.5, 8.6), "bottom", -90.0, 9000, 1024, 0.05),
+    "lintel2": ("fit", (5.0, 0.7, 1.1), "bottom", -90.0, 5000, 1024, 0.05),
+    "frieze2": ("fit", (5.0, 0.5, 3.9), "bottom", -90.0, 7000, 1024, 0.05),
+    "girder": ("long", 4.4, "centre", -90.0, 3000, 512, 0.5),
+    "endtruck": ("long", 3.0, "bottom", 0.0, 6000, 512, 0.5),
+    "handrail": ("long", 3.0, "bottom", -90.0, 3000, 512, 0.5),
+    "shelf_ledgers": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_drawers": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_trays": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_scrolls": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
+    "shelf_specimens": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.1),
+    "shelf_ruined": ("fit", (2.9, 0.42, 3.3), "bottom", -90.0, 9000, 1024, 0.05),
+    "boothwindow": ("fit", (5.94, 0.25, 2.5), "bottom", -90.0, 6000, 1024, 0.1),
+    "boothdoorwall": ("fit", (2.97, 0.25, 2.5), "bottom", -90.0, 5000, 1024, 0.1),
+    "door": ("fit", (1.05, 0.12, 2.1), "bottom", -90.0, 4000, 1024, 0.15),
+    "console": ("long", 2.2, "bottom", -90.0, 12000, 1024, 0.5),
+    "platform": ("fit", (5.94, 2.97, 0.45), "top", -90.0, 5000, 1024, 0.15),
+    "liftcage": ("fit", (2.6, 2.6, 2.4), "bottom", 0.0, 8000, 1024, 0.5),
+    "floorrail": ("long", 3.0, "bottom", 0.0, 3000, 512, 0.4),
+    "traycart": ("long", 2.2, "bottom", 0.0, 7000, 1024, 0.3),
+    "portcullis": ("fit", (2.9, 0.6, 3.6), "bottom", -90.0, 7000, 1024, 0.4),
+    "penbars": ("fit", (2.97, 0.35, 2.4), "bottom", -90.0, 5000, 512, 0.45),
+    "shaftgrate": ("long", 3.6, "top", 0.0, 6000, 1024, 0.45),
 }
+
+# Pieces whose see-through part is split off into its own mesh named "Glass"
+# (Godot draws it translucent): the booth window's leaded panes, which Tripo
+# returns as solid textured faces. (x0, x1, z0, z1): the window's opening as
+# shares of the fitted width and height (origin bottom centre, so x in -0.5..0.5).
+GLASS = {"boothwindow": (-0.43, 0.43, 0.33, 0.93)}
+
+# `--reduce`: some Tripo returns (note 99's) arrive at 1.3-1.4M triangles, 45 MB
+# each, for pieces built down to 12000 at most. They are welded and decimated
+# in place to RAW_MAX before they are committed, maps untouched.
+RAW_MAX = 100000
 
 
 def log(*a):
@@ -212,11 +250,74 @@ def build(name, out_dir):
     size_m = hi - lo
     log("%s: %d -> %d tris, %.2f x %.2f x %.2f m (Blender x y z), maps %d px, metallic %.2f"
         % (name, tris, len(o.data.loop_triangles), size_m.x, size_m.y, size_m.z, tex, metal))
+    if name in GLASS:
+        split_glass(o, GLASS[name], size_m)
     if out_dir is not None:
         path = os.path.join(out_dir, "%s.glb" % name)
         bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True,
                                   export_image_format='JPEG', export_jpeg_quality=90, export_apply=True)
     return o
+
+
+def reduce_raw(name):
+    """raw_<name>.glb rewritten at RAW_MAX triangles if it has more."""
+    path = os.path.join(SRC, "raw_%s.glb" % name)
+    o = load(name)
+    o.data.calc_loop_triangles()
+    tris = len(o.data.loop_triangles)
+    if tris <= RAW_MAX:
+        log("%s: %d tris, left as it is" % (name, tris))
+        return
+    span = max(o.dimensions)
+    ctx = dict(active_object=o, object=o, selected_objects=[o], selected_editable_objects=[o])
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.remove_doubles(threshold=span * 0.0004)
+        bpy.ops.object.mode_set(mode='OBJECT')
+    o.data.calc_loop_triangles()
+    mod = o.modifiers.new(name="Raw", type='DECIMATE')
+    mod.decimate_type = 'COLLAPSE'
+    mod.use_collapse_triangulate = True
+    mod.ratio = min(1.0, RAW_MAX / float(len(o.data.loop_triangles)))
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+    o.data.calc_loop_triangles()
+    before = os.path.getsize(path)
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True,
+                                  export_image_format='AUTO', export_apply=True, use_selection=True)
+    log("%s: %d -> %d tris, %.1f -> %.1f MB" % (name, tris, len(o.data.loop_triangles),
+                                                before / 1e6, os.path.getsize(path) / 1e6))
+
+
+def split_glass(o, rect, size_m):
+    """The faces inside the window's opening that face front or back (the flat
+    pane, its lead lines are only texture) separated into an object "Glass"."""
+    import bmesh
+    x0, x1, z0, z1 = rect
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    n = 0
+    for f in bm.faces:
+        c = f.calc_center_median()
+        if abs(f.normal.y) > 0.8 and x0 * size_m.x <= c.x <= x1 * size_m.x \
+                and z0 * size_m.z <= c.z <= z1 * size_m.z:
+            f.select = True
+            n += 1
+        else:
+            f.select = False
+    bm.to_mesh(o.data)
+    bm.free()
+    with bpy.context.temp_override(active_object=o, object=o, selected_objects=[o], selected_editable_objects=[o]):
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.separate(type='SELECTED')
+        bpy.ops.object.mode_set(mode='OBJECT')
+    for ob in bpy.data.objects:
+        if ob.type == 'MESH' and ob != o:
+            ob.name = "Glass"
+            ob.data.name = "Glass"
+    log("%s: %d faces split off as Glass" % (o.name, n))
 
 
 def preview(name, out_dir):
@@ -244,7 +345,11 @@ def preview(name, out_dir):
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 only = [a for a in argv[1:] if not a.startswith("--")] if argv and argv[0] == "--preview" else argv[1:]
-if argv and argv[0] == "--preview":
+if argv and argv[0] == "--reduce":
+    for n in argv[1:] or list(PIECES):
+        if os.path.exists(os.path.join(SRC, "raw_%s.glb" % n)):
+            reduce_raw(n)
+elif argv and argv[0] == "--preview":
     out = argv[1]
     names = argv[2:] or list(PIECES)
     os.makedirs(out, exist_ok=True)

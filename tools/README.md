@@ -535,3 +535,24 @@ machine's parts. Most Tripo returns face +X; render each raw model from +X and
 from -Y before choosing its yaw (one front render cannot tell +X from -X).
 `textures/surgery_planks.png` and `surgery_flame.png` are generated pictures
 used as textures (the ceiling, the flame licks).
+
+The redone surgery (note 99) adds 23: skull-free wall frames, the gantry's
+`girder` and `endtruck`, six shelves (`shelf_*`) for the maze, the tray rail
+and cart, the pens' portcullis and bars, the disposal shaft's grate, and the
+booth and lift (`platform`, `boothwindow`, `boothdoorwall`, `door`,
+`console`, `handrail`, `liftcage`). `boothwindow`'s panes are split off as a
+"Glass" object (`GLASS` / `split_glass()`) to be drawn see-through. The claw's
+impact effects use `textures/surgery_fx_dust.png`, `surgery_fx_crack.png` and
+`surgery_fx_chip.png` (generated pictures).
+
+# The surgeon (2026-10-22, Higgsfield / Meshy)
+
+```
+blender -b --factory-startup -P tools/build_surgeon.py
+```
+
+`models/source/surgery_hf/raw_surgeon*.glb`: one Meshy image-to-3D character
+rigged three times, each with one clip ("Checkout_Gesture",
+"Alert_Quick_Turn_Right", "Fall_Dead_from_Abdominal_Injury"). The script puts
+all three on the first armature as NLA tracks "work", "alert", "die", drops
+Meshy's stray icosphere, and writes `models/surgery/surgeon.glb`.

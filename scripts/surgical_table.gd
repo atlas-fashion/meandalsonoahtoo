@@ -1,54 +1,44 @@
 extends CharacterBody3D
 
 ## The surgical table (2026-10-21; stationary under a ceiling claw, note 95; the
-## claw a hunter that carries its victims to the table, note 96): the machine in
-## the surgery (surgery.gd) that was to make the dead prisoners bionic. It cannot
-## be killed -- a blow on it only rings off the iron -- only DEPOWERED.
+## claw a hunter that carries its victims to the table, note 96; on an overhead
+## GANTRY that crosses the whole hall, note 99): the machine in the surgery
+## (surgery.gd) that was to make the dead prisoners bionic. It cannot be killed
+## -- a blow on it only rings off the iron. It is switched off from the CONTROL
+## ROOM (surgery_control.gd: kick the door in, kill the surgeon, throw the
+## master lever), and only there (note 99: "control room only").
 ##
 ## The table itself never moves: a riveted iron slab on a base of gears and
-## pistons (models/surgery/table.glb, Higgsfield), in the middle of the hall,
-## a dead prisoner strapped to it with a mechanical arm half fitted.
-## Above it hangs the CEILING RING (ring.glb) from the roof beams and from the
-## ring the CLAW: a very long jointed arm (segment.glb, as many as its length
-## needs) ending in a three-fingered claw (claw.glb) with one red lens at the
-## wrist. A player walking in wakes it: the restraints snap open and throw the
-## body off, the claw unfolds from the ring and hunts the hall.
+## pistons (models/surgery/table.glb), in the middle of the hall over the
+## disposal shaft, a dead prisoner strapped to it with a mechanical arm half
+## fitted. A player walking in wakes it: the restraints snap open and throw the
+## body off, and the claw comes down off its gantry and hunts the hall.
 ##
-## The hall is open (no piers since note 96), so the claw goes anywhere in it:
-## it FOLLOWS a player, hanging over them, and SLAMS down trying to GRAB them.
-## Caught, they are CARRIED to the table and STRAPPED down, the cuffs shut, and
-## the claw sets to work on them -- unless they STRUGGLE free (player.gd
-## `restrain` / `struggles`), a partner cuts the arms, or they die there. A
-## slam that misses leaves the claw stuck in the floor, its cable in reach.
+## THE GANTRY (note 99, the user: "base of claw should move on the X and Y axis
+## across the whole room"): an overhead crane. A bridge girder spans the hall
+## between the side walls, its end carriages running on runway girders along
+## those walls (Z); along the bridge runs the trolley (X) -- the old ceiling
+## ring, now the hub the arm hangs from. Each axis is driven on its own with its
+## own acceleration and top speed (`_drive`), as a real crane's are, so a
+## diagonal chase bends; the heavy bridge is slower to start and stop than the
+## trolley. The arm telescopes straight down from the trolley to the wrist and
+## SWINGS under it -- a stiff, damped pendulum driven by the trolley's
+## acceleration (`_swing`) -- so it lags behind a start, overshoots a stop and
+## settles, instead of sliding about rigidly.
 ##
-## Three SYSTEMS, each fed by its own thick cable to its own wall mechanism
-## (surgery.gd draws the cables and works the mechanisms off what this exposes):
-## - ARMS: the claw's grip: the slam-and-grab and the work on the table. Their
-##   cable twitches whenever the claw strikes (`arm_motion`). Cut, the claw
-##   lets go of whoever it holds.
-## - LEGS (kept as the key the saves, levers and cables use): the HOIST that
-##   holds the arm up -- the following and the slam. Its cable shivers as the
-##   claw travels (`leg_motion`).
-## - CORE: the light in the table's base. Its cable pulses with it (`core_glow`).
-## A lever cuts one for a while (`cut`): the claw goes limp; the hoist gives and
-## the claw sags to the floor, dragging; the core stalls it for a moment and then
-## the arms' and hoist's cables flare as they feed it back (`feed_*`). Each first
-## cut makes it angrier (`level`): faster, quicker to strike, its levers shorter.
-##
-## Its weakness is the POWER CABLE wound round the claw's wrist: three cuts
-## sever it (`_cable_hit`). It is only in reach when the wrist is (`exposed`):
-## stuck in the floor after a slam that missed (longer after a parried one),
-## held by the wall clamp, or sagging with the hoist dead. The ways to finish it:
-## - lure a slam into the wall clamp (opened by cutting the ARMS -- it sits on
-##   the arms' relay): stand by its jaws and step away as the claw comes down;
-##   cut the cable while it is held;
-## - cut the cable while the claw is stuck after a slam;
-## - jam the hoist's flywheel while the hoist is cut, so the claw sags for good;
-## - the relay sequence: cut the CORE while the arms and hoist are both cut, so
-##   nothing feeds it back.
+## It FOLLOWS the nearest player (the trolley over them, the claw hanging above
+## the bookshelves) and SLAMS down to GRAB them. The slam (State.REAR) is made
+## hard to get away from (the user: "make it pause to drop much later"): it
+## draws up (WIND), keeps following them the whole time it is drawn up
+## (TRACK), and only at the very end locks on where they are (LOCK -- a brief
+## shudder, the parry cue) and drops (DROP, accelerating like a weight). Where
+## it lands the floor cracks, dust and stone chips burst out, sparks fly, a flash
+## lights the stone and the view shakes (`_impact_fx`). Caught, they are CARRIED
+## to the table and STRAPPED down; they can STRUGGLE free (player.gd `restrain`
+## / `struggles`). Missed, the claw is stuck in the floor a moment and tears
+## itself free in a spray of grit.
 
 signal depowered(cause: StringName)
-signal system_changed(system: StringName, on: bool)
 signal woke
 
 const SKELETON := preload("res://models/ossuary_skeleton_rigged.glb")
@@ -58,9 +48,14 @@ const TABLE_MODEL := preload("res://models/surgery/table.glb")
 const RING_MODEL := preload("res://models/surgery/ring.glb")
 const CLAW_MODEL := preload("res://models/surgery/claw.glb")
 const SEGMENT_MODEL := preload("res://models/surgery/segment.glb")
+const GIRDER_MODEL := preload("res://models/surgery/girder.glb")
+const TRUCK_MODEL := preload("res://models/surgery/endtruck.glb")
+const FX_DUST := preload("res://textures/surgery_fx_dust.png")
+const FX_CRACK := preload("res://textures/surgery_fx_crack.png")
+const FX_CHIP := preload("res://textures/surgery_fx_chip.png")
 
-## GRAB and SWEEP (note 95's thrust and rake) are gone; the slam is REAR.
-## CARRY: a player in the claw, on the way to the table. STRAP: on it.
+## (GRAB, SWEEP, CLAMPED and STALL are gone with the levers and the clamp; kept
+## so the numbering of the rest is what it was.)
 enum State { DORMANT, WAKING, HUNT, GRAB, SWEEP, REAR, CLAMPED, STALL, DYING, DEAD, CARRY, STRAP }
 
 ## --- The table -------------------------------------------------------------------
@@ -69,76 +64,83 @@ const TOP := 1.2
 const TABLE_SIZE := Vector3(1.48, 1.2, 3.0)
 ## Kept for the sandbox, which reads it.
 const RADIUS := 1.6
-## The core: two glass bulbs either side of the base, and the three plugs the
-## cables come out of (arms, legs, core) at its foot end, table frame.
 const CORE_AT := Vector3(0.52, 0.55, 0.0)
-const PLUGS := [Vector3(-0.32, 0.3, 1.15), Vector3(0.32, 0.3, 1.15), Vector3(0.0, 0.25, 1.25)]
-## The colours.
 const CORE_COLOUR := Color(0.55, 0.9, 1.0)
 const EYE_COLOUR := Color(1.0, 0.32, 0.12)
-const FEED_COLOUR := Color(1.0, 0.72, 0.4)
 
-## --- The ring and the arm (the room's frame: the hall's middle on the floor) -----
-## The ring hangs from the roof's middle beams (surgery.gd CEIL 8.6, beams to
-## 7.85); the arm leaves its hub and runs out under the roof to the wrist.
-const RING_TOP := 7.5
-const RING_SCALE := 0.95
-const ROOT := Vector3(0.0, 6.75, 0.0)
-## The arm's first bend: out toward the wrist, this high, this share of the way.
-const BEND_Y := 6.3
-const BEND_SHARE := 0.45
-## Arm segments: about this long each, this thick (the model is 0.13 m).
-const SEG_LEN := 1.1
-const SEG_MAX := 18
-const SEG_THICK := 2.7
+## --- The gantry (the room's frame: the hall's middle on the floor) ---------------
+## The bridge girder's middle, the trolley (the old ring, smaller) under it, and
+## the arm's root under the trolley. surgery.gd's runways sit under the bridge's
+## end carriages at +-`rail_x`.
+const BRIDGE_Y := 7.2
+const TROLLEY_TOP := 6.95
+const TROLLEY_SCALE := 0.5
+const ROOT_Y := 6.25
+## Bridge girder sections (girder.glb is 4.4 m) and the end carriages
+## (endtruck.glb, 3 m along Z, its wheels on the runway at RUNWAY_TOP).
+const GIRDER_LEN := 4.4
+const RUNWAY_TOP := 6.75
+## The drives: the trolley (along X) quicker than the heavy bridge (along Z).
+## Top speed by anger (`level`), acceleration fixed.
+const TROLLEY_SPEED: Array[float] = [5.0, 5.6, 6.2, 6.8, 7.4]
+const BRIDGE_SPEED: Array[float] = [4.0, 4.5, 5.0, 5.5, 6.0]
+const TROLLEY_ACCEL := 9.0
+const BRIDGE_ACCEL := 6.0
+## The swing of the hanging arm: its natural rate (rad/s) and damping ratio,
+## and how far a hard start or stop throws it (m per m/s^2), at most SWING_MAX.
+const SWING_RATE := 3.4
+const SWING_DAMP := 0.32
+const SWING_GAIN := 0.075
+const SWING_MAX := 1.2
+## The arm: segments about this long, this thick (segment.glb is 1 m, 0.13 m).
+const SEG_LEN := 0.9
+const SEG_MAX := 10
+const SEG_THICK := 2.4
 ## The claw: wrist to fingertips, and its scale.
 const CLAW_LEN := 1.55
 const CLAW_SCALE := 0.95
-## Folded up under the ring, asleep.
-const FOLD := Vector3(0.0, 5.0, 0.0)
-## Following: the wrist this high over a player, this far back toward the
-## table from them.
-const HOVER_Y := 4.1
-const HOVER_BACK := 1.2
-## As far as the wrist goes from the middle (the walls are 13.9 out).
-const REACH := 12.6
+## Hoisting and paying out the arm (m/s).
+const HOIST_SPEED := 3.2
+## Asleep: the claw drawn right up under the trolley, over the table.
+const FOLD_LEN := 0.3
+## Following: the wrist this high over the floor under it (the fingertips clear
+## the 3.3 m bookshelves), the trolley this far back toward the table from them.
+const HOVER_Y := 5.0
+const HOVER_BACK := 0.8
+## A little ahead of them: their velocity times this.
+const LEAD := 0.25
 
-## --- Pace, by anger (`level` 0..4) ------------------------------------------------
-## The wrist's top speed following (m/s).
-const SPEED: Array[float] = [4.2, 4.9, 5.6, 6.3, 7.0]
-## Sagging, the hoist dead: dragged along the floor this fast.
-const DRAG_SPEED := 1.1
-## Lever cuts last this long.
-const CUT_TIME: Array[float] = [7.5, 6.5, 5.5, 5.0, 4.5]
+## --- Pace, by anger (`level` 0..4; it rises with each player it carries off and
+## each time one breaks free) -----------------------------------------------------
 const LEVEL_MAX := 4
 
-## --- The slam (State.REAR): down onto them, to grab ----------------------------
+## --- The slam (State.REAR) -------------------------------------------------------
 ## Over them within this (horizontally) and it may slam.
-const SLAM_OVER := 2.0
-const REAR_RISE := 0.55
-## The hold over the spot: the aim fixed at its start -- step aside then.
-const REAR_HOLD: Array[float] = [0.6, 0.55, 0.5, 0.45, 0.4]
-const REAR_SLAM := 0.13
-const REAR_HIGH := 4.6
-## Missed: stuck in the floor this long (parried: PARRY_STUCK), then torn free.
-const REAR_STUCK := 1.8
-const PARRY_STUCK := 3.2
-const REAR_SETTLE := 0.6
+const SLAM_OVER := 1.6
+## WIND: drawn up this much over WIND_TIME, still following. TRACK: held drawn
+## up, still following -- the long part. LOCK: the aim fixed where they are, a
+## shudder, the parry cue. DROP: down, accelerating, onto the spot.
+const WIND_RISE := 0.7
+const WIND_TIME := 0.35
+const TRACK_TIME: Array[float] = [0.5, 0.45, 0.4, 0.35, 0.3]
+const LOCK_TIME: Array[float] = [0.16, 0.15, 0.14, 0.13, 0.12]
+const DROP_TIME := 0.17
+## Missed: stuck in the floor this long (parried: PARRY_STUCK), torn free and
+## drawn up over PULL_TIME.
+const REAR_STUCK := 1.3
+const PARRY_STUCK := 3.0
+const PULL_TIME := 0.5
 ## A player this near where it lands is GRABBED; nearer than SHAKE_RADIUS is
 ## thrown down by the blow.
 const GRAB_RADIUS := 1.3
 const SHAKE_RADIUS := 2.6
 const GRAB_DAMAGE := 12.0
-const REAR_COOLDOWN: Array[float] = [3.4, 3.0, 2.6, 2.3, 2.0]
-## Sagging, it lashes at anyone it is dragged into.
-const LASH_DAMAGE := 8.0
-const LASH_RANGE := 1.6
-const LASH_EVERY := 1.4
+const REAR_COOLDOWN: Array[float] = [2.6, 2.3, 2.0, 1.8, 1.6]
 
 ## --- Carried and strapped down ----------------------------------------------------
-## Carried at this speed, this high, to over the table.
-const CARRY_SPEED := 5.5
-const CARRY_Y := 4.4
+const CARRY_SPEED := 5.0
+## Carried with the wrist this high.
+const CARRY_Y := 4.6
 ## The struggles it takes to break free: carried, and strapped down (more as it
 ## angers).
 const CARRY_BREAK := 8
@@ -150,110 +152,85 @@ const OPERATE_DAMAGE: Array[float] = [6.0, 7.0, 8.0, 9.0, 10.0]
 const THROW := 6.5
 const RELEASE_REST := 2.2
 
-## --- The core stalled -----------------------------------------------------------
-const STALL_TIME := 1.9
-## When in the stall the cut systems' cables flare, feeding it back.
-const FEED_AT := 0.9
-
-## --- The power cable ------------------------------------------------------------
-const CABLE_CUTS := 3
-## Held by the wall clamp this long while the hoist pulls (`level` shortens it).
-const CLAMP_HOLD: Array[float] = [7.5, 6.8, 6.0, 5.4, 4.8]
+## --- The floor's scars ----------------------------------------------------------
+## Crack decals left where it lands: this many at most, fading after DECAL_LIFE.
+const DECAL_MAX := 6
+const DECAL_LIFE := 9.0
 
 var room: Node3D
-## Not used since the table stopped walking; kept for surgery.gd's setter.
-var nav_map := RID()
-## Where it stands, and which way.
+## Where the table stands, and which way.
 var home := Vector3.ZERO
 var home_yaw := 0.0
-## The room's walls, as half its inner square in the room's frame.
+## The hall's inner half width (room frame), and where the runways run.
 var bound := 12.6
+var rail_x := 12.1
 
 var state: State = State.DORMANT
 var level := 0
-var cuts := 0
-var legs_jammed := false
-## What the cables and mechanisms show (surgery.gd), 0..1.
-var arm_motion := 0.0
-var leg_motion := 0.0
+## The table's light (the surgery's lamp and the control room read it).
 var core_glow := 0.0
-var feed_arms := 0.0
-var feed_legs := 0.0
-## While the wrist's power cable is in reach.
-var exposed := false
 ## The axe treats a body with this set as down (axe.gd `_is_down`).
 var _dying := false
 
 var _t := 0.0
-var _arms_off_until := -INF
-var _legs_off_until := -INF
-var _was_arms := true
-var _was_legs := true
-var _cut_once := {}
 var _target: Node3D = null
 var _next_rear := 0.0
-var _next_lash := 0.0
 var _hit_done := false
-var _aim_locked := false
 var _parried := false
-var _clamp_point := Vector3.ZERO
-var _strain := 0.0
-var _last_cable_hit := -INF
 var _stun_until := 0.0
-## The player in the claw or on the table, and when the claw next cuts.
 var _victim: Node3D = null
 var _next_cut := 0.0
 var _strap_prompt: Interact.Prompt
 
-## The claw, in the room's frame: the wrist, the way the claw points from it,
-## the arm's heading (an angle about Y from the room's +X).
-var _w := FOLD
+## The gantry, in the room's frame: the trolley's place over the floor (x, z),
+## its velocity, where it is driven to; the arm's length under the root and the
+## length wanted; the swing of the wrist from under the trolley and its rate.
+var _b := Vector2.ZERO
+var _bv := Vector2.ZERO
+var _b_goal := Vector2.ZERO
+var _b_speed := 1.0
+var _len := FOLD_LEN
+var _len_goal := FOLD_LEN
+var _hoist := HOIST_SPEED
+var _o := Vector2.ZERO
+var _ov := Vector2.ZERO
+var _swing_lock := 0.0
+## The wrist and the way the claw points, room frame (from the above, each tick).
+var _w := Vector3(0.0, ROOT_Y - FOLD_LEN, 0.0)
 var _axis := Vector3.DOWN
-var _theta := 0.0
-var _want_w := FOLD
-var _want_axis := Vector3.DOWN
-var _w_speed := 3.0
-var _w_vel := 0.0
-## Where the slam comes down.
+## The slam: where it comes down (room frame, on the floor of whoever it is
+## after), and how far the arm pays out to get there.
 var _to := Vector3.ZERO
-var _blocked := false
+var _drop_len := 4.0
 
 ## Pose, eased.
 var _power := 0.0
 var _roll := 0.0
 var _spin := 0.0
+var _flex := 0.0
 
 ## Nodes.
 var _body: Node3D
 var _claw_mats: Array = []
 var _core_light: OmniLight3D
 var _eye_light: OmniLight3D
+var _lamp: SpotLight3D
 var _power_mats: Array = []
 var _ring: Node3D
+var _bridge: Node3D
 var _claw: Node3D
-var _claw_model: Node3D
 var _segs: Array[MeshInstance3D] = []
 var _seg_mesh: Mesh
 var _cuffs: Array[Node3D] = []
-var _cable_box: StaticBody3D
 var _claw_box: StaticBody3D
 var _prisoner: Node3D
 var _prisoner_rest := Transform3D()
 var _audio: AudioStreamPlayer3D
 var _playback: AudioStreamGeneratorPlayback
 var _phase := Vector3.ZERO
+var _decals: Array[Decal] = []
 
 static var _mats := {}
-
-
-## A hitbox on the wrist's power cable: anything that hurts takes a cut out of
-## it.
-class CableHitbox extends StaticBody3D:
-	var table: Node
-
-	func take_damage(_amount: float, from_direction: Vector3 = Vector3.ZERO, _attacker: Node3D = null) -> void:
-		if is_instance_valid(table):
-			table.call("_cable_hit", from_direction)
 
 
 ## The claw's fingers: a blow only rings off them.
@@ -274,13 +251,14 @@ func _ready() -> void:
 	collision_layer = 1 | 4
 	collision_mask = 0
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(TABLE_SIZE.x, TABLE_SIZE.y, TABLE_SIZE.z)
+	shape.size = TABLE_SIZE
 	var cs := CollisionShape3D.new()
 	cs.name = "CollisionShape3D"
 	cs.shape = shape
 	cs.position = Vector3(0.0, TABLE_SIZE.y * 0.5, 0.0)
 	add_child(cs)
 	_build_body()
+	_build_gantry()
 	_build_arm()
 	_build_audio()
 	_strap_prompt = Interact.prompt("Struggle free", Vector3(0.0, TOP + 1.2, 0.0))
@@ -298,9 +276,6 @@ func _build_body() -> void:
 	_body.add_child(model)
 	_shadows(model)
 	_power_glow(model, 0.55)
-
-	# The core's light under the slab: the base's own amber lamps glow with it
-	# (`_power_glow`). The cables run into the base at PLUGS.
 	_core_light = OmniLight3D.new()
 	_core_light.name = "CoreLight"
 	_core_light.light_color = CORE_COLOUR
@@ -311,10 +286,8 @@ func _build_body() -> void:
 	_core_light.shadow_enabled = false
 	_core_light.position = Vector3(0.0, 0.45, 0.0)
 	_body.add_child(_core_light)
-
-	# The restraints on the top: wrists by the head, ankles by the foot. Each
-	# the kit's hinged iron cuff, shut over the prisoner; it swings open about
-	# its hinge (`rotation.z`).
+	# The restraints on the top: wrists by the head, ankles by the foot; each
+	# swings open about its hinge (`rotation.z`).
 	var cuff_at := [Vector3(-0.3, 0.0, -0.52), Vector3(0.3, 0.0, -0.52), Vector3(-0.13, 0.0, 0.92), Vector3(0.13, 0.0, 0.92)]
 	for c: Vector3 in cuff_at:
 		var hinge := Node3D.new()
@@ -330,15 +303,53 @@ func _build_body() -> void:
 	_build_prisoner()
 
 
-## The ring in the vault and the arm and claw hanging from it. All of it is
-## placed in world space every frame from the room's frame (`_pose_arm`).
-func _build_arm() -> void:
+## The bridge (girder sections end to end across the hall, an end carriage at
+## each end on the runways) and the trolley (the old ceiling ring) on it. Placed
+## in world space every frame from the room's frame (`_pose_arm`).
+func _build_gantry() -> void:
+	_bridge = Node3D.new()
+	_bridge.name = "GantryBridge"
+	_bridge.top_level = true
+	add_child(_bridge)
+	var count := maxi(ceili(rail_x * 2.0 / GIRDER_LEN), 1)
+	var span := float(count) * GIRDER_LEN
+	for i in count:
+		var g: Node3D = GIRDER_MODEL.instantiate()
+		g.position = Vector3(-span * 0.5 + GIRDER_LEN * (float(i) + 0.5), BRIDGE_Y, 0.0)
+		# Every other section turned end for end: the rivets do not repeat.
+		g.rotation.y = PI * float(i % 2)
+		g.scale = Vector3(rail_x * 2.0 / span, 1.0, 1.0)
+		g.position.x *= rail_x * 2.0 / span
+		_bridge.add_child(g)
+		_shadows(g)
+	for s: float in [-1.0, 1.0]:
+		var truck: Node3D = TRUCK_MODEL.instantiate()
+		truck.position = Vector3(s * rail_x, RUNWAY_TOP, 0.0)
+		_bridge.add_child(truck)
+		_shadows(truck)
 	_ring = RING_MODEL.instantiate()
-	_ring.name = "CeilingRing"
+	_ring.name = "Trolley"
 	_ring.top_level = true
 	add_child(_ring)
 	_shadows(_ring)
 	_power_glow(_ring, 0.45)
+	# Its lamp: a cold beam straight down from the trolley -- the light that
+	# hunts the hall, on the machine's own circuit.
+	_lamp = SpotLight3D.new()
+	_lamp.name = "TrolleyLamp"
+	_lamp.light_color = Color(0.85, 0.95, 1.0)
+	_lamp.light_energy = 0.0
+	_lamp.spot_range = 9.0
+	_lamp.spot_angle = 28.0
+	_lamp.spot_attenuation = 0.9
+	_lamp.light_specular = 0.2
+	_lamp.shadow_enabled = false
+	_lamp.top_level = true
+	add_child(_lamp)
+
+
+## The arm's segments and the claw hanging from the trolley.
+func _build_arm() -> void:
 	var seg_scene := SEGMENT_MODEL.instantiate()
 	for node in seg_scene.find_children("*", "MeshInstance3D", true, false):
 		_seg_mesh = (node as MeshInstance3D).mesh
@@ -363,8 +374,8 @@ func _build_arm() -> void:
 	_shadows(claw_model)
 	_power_glow(claw_model, 0.3)
 	_claw_mats = glow(claw_model, 0.3)
-	# Its glow, the only light that travels with it: the claw is seen coming
-	# by its own red light on the stone.
+	# Its glow, the only light that travels with it: the claw is seen coming by
+	# its own red light on the stone.
 	_eye_light = OmniLight3D.new()
 	_eye_light.name = "EyeLight"
 	_eye_light.light_color = EYE_COLOUR
@@ -375,21 +386,6 @@ func _build_arm() -> void:
 	_eye_light.shadow_enabled = false
 	_eye_light.position = Vector3(0.0, -0.5, 0.55)
 	_claw.add_child(_eye_light)
-	# The power cable runs into the wrist: there is nothing of it to see but the
-	# claw itself, which glows cold and reddens as it is cut once it is in reach
-	# (`_apply_pose`, `_claw_mats`).
-	_cable_box = CableHitbox.new()
-	_cable_box.name = "PowerCableHitbox"
-	_cable_box.set("table", self)
-	_cable_box.collision_layer = 0
-	_cable_box.collision_mask = 0
-	_cable_box.position = Vector3(0.0, -0.3, 0.0)
-	_claw.add_child(_cable_box)
-	var cshape := CollisionShape3D.new()
-	var cbox := BoxShape3D.new()
-	cbox.size = Vector3(0.9, 0.9, 0.9)
-	cshape.shape = cbox
-	_cable_box.add_child(cshape)
 	_claw_box = ClawHitbox.new()
 	_claw_box.name = "ClawHitbox"
 	_claw_box.set("table", self)
@@ -420,12 +416,10 @@ func _power_glow(piece: Node, energy: float) -> void:
 			_power_mats.append([m, energy])
 
 
-## Lights a Higgsfield kit piece with its own albedo: the candle flames, the
-## amber indicator lamps, the green bottles and the specimen fluid are the
-## bright parts of the generated pictures and the iron and wood the dark ones,
-## so the picture itself is the emission map -- the lamps burn, the iron stays
-## dark. Materials are duplicated once per source and energy (`_glow_mats`),
-## so every copy shares them.
+## Lights a Higgsfield kit piece with its own albedo: the lamps and the green
+## bottles are the bright parts of the generated pictures and the iron and wood
+## the dark ones, so the picture itself is the emission map. Materials are
+## duplicated once per source and energy, so every copy shares them.
 static var _glow_mats := {}
 
 
@@ -479,20 +473,16 @@ func _build_prisoner() -> void:
 				m.albedo_color = m.albedo_color * Color(0.78, 0.74, 0.68)
 				_mats[key] = m
 			mi.set_surface_override_material(i, _mats[key])
-	var sk: Skeleton3D = null
 	var found := model.find_children("*", "Skeleton3D", true, false)
 	if not found.is_empty():
-		sk = found[0] as Skeleton3D
-	if sk != null:
+		var sk := found[0] as Skeleton3D
 		var fore := sk.find_bone(&"forearm.R")
 		if fore >= 0:
 			sk.set_bone_pose_scale(fore, Vector3.ONE * 0.001)
 			var att := BoneAttachment3D.new()
 			att.bone_name = "upper_arm.R"
 			sk.add_child(att)
-			# The kit's mechanical arm where the forearm was (surgery.gd).
 			load("res://scripts/surgery.gd").attach_prosthetic(att)
-	# On its back along the slab, head to the head end.
 	_prisoner.transform = Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0.0, TOP + 0.08, 0.88))
 	_prisoner_rest = _prisoner.transform
 
@@ -513,19 +503,22 @@ func _build_audio() -> void:
 
 # --- Asleep, awake, depowered -------------------------------------------------------
 
-## As built: the claw folded up under the ring, the prisoner strapped down.
+## As built: the trolley parked over the table, the claw drawn up under it, the
+## prisoner strapped down.
 func _sleep_pose() -> void:
 	state = State.DORMANT
 	_dying = false
 	global_position = home
 	global_rotation = Vector3(0.0, home_yaw, 0.0)
 	_power = 0.0
-	_w = FOLD
-	_want_w = FOLD
-	_axis = Vector3.DOWN
-	_want_axis = Vector3.DOWN
-	_theta = 0.0
-	exposed = false
+	_b = Vector2.ZERO
+	_bv = Vector2.ZERO
+	_b_goal = Vector2.ZERO
+	_len = FOLD_LEN
+	_len_goal = FOLD_LEN
+	_o = Vector2.ZERO
+	_ov = Vector2.ZERO
+	_update_wrist()
 	for c in _cuffs:
 		c.rotation = Vector3.ZERO
 	if _prisoner != null:
@@ -543,115 +536,55 @@ func reset_to_sleep() -> void:
 	if _victim != null:
 		_let_go(_now(), false)
 	level = 0
-	cuts = 0
-	legs_jammed = false
-	_cut_once.clear()
-	_arms_off_until = -INF
-	_legs_off_until = -INF
-	_was_arms = true
-	_was_legs = true
-	_strain = 0.0
 	_sleep_pose()
 
 
-## A save that had it depowered: the claw down where it fell (`at`, world; the
-## aisle `yaw`). Saves from before the claw held the walking table's position,
-## in the middle: the claw is laid out in the aisle instead.
-func set_dead_now(at: Vector3, yaw: float) -> void:
+## A save that had it switched off: the claw lying where it fell (`at`, world,
+## the wrist), the trolley over it.
+func set_dead_now(at: Vector3, _yaw: float) -> void:
 	state = State.DEAD
 	_dying = true
 	global_position = home
 	global_rotation = Vector3(0.0, home_yaw, 0.0)
 	_power = 0.0
-	exposed = false
 	_throw_prisoner(true)
 	for c in _cuffs:
 		c.rotation.z = 1.9 * signf(c.position.x)
-	_theta = yaw if is_finite(yaw) else 0.0
 	var local: Vector3 = room.to_local(at) if room != null else Vector3.ZERO
-	if Vector2(local.x, local.z).length() < 2.5:
-		local = _dir(_theta) * 4.2
-	_w = Vector3(local.x, CLAW_LEN * 0.55, local.z)
-	_axis = (_dir(_theta) + Vector3.DOWN * 0.6).normalized()
-	_want_w = _w
-	_want_axis = _axis
+	if Vector2(local.x, local.z).length() < 2.0:
+		local = Vector3(2.6, 0.0, 1.0)
+	_b = Vector2(local.x, local.z)
+	_bv = Vector2.ZERO
+	_b_goal = _b
+	_o = Vector2(0.35, 0.2)
+	_len = ROOT_Y - CLAW_LEN * 0.95
+	_len_goal = _len
+	_update_wrist()
 	_apply_pose(0.0)
 
 
-## Where its claw lies, for the save (world), and the aisle it is in.
+## Where its claw lies, for the save (world).
 func rest_point() -> Vector3:
 	return room.to_global(_w) if room != null else global_position
 
 
 func rest_yaw() -> float:
-	return _theta
+	return 0.0
 
 
 func is_depowered() -> bool:
 	return state == State.DEAD or state == State.DYING
 
 
-func arms_on() -> bool:
-	return _now() >= _arms_off_until and not is_depowered()
-
-
-func legs_on() -> bool:
-	return not legs_jammed and _now() >= _legs_off_until and not is_depowered()
-
-
-## A lever: `system` off for a while. Cutting the core while both the arms and
-## the hoist are off shuts it down for good.
-func cut(system: StringName) -> void:
-	if is_depowered():
-		return
+## The master lever in the control room (surgery_control.gd): the power cut.
+func power_off(cause: StringName = &"control") -> void:
 	if state == State.DORMANT:
-		_wake()
-	var now := _now()
-	var span: float = CUT_TIME[level]
-	if not _cut_once.has(system):
-		_cut_once[system] = true
-		_anger()
-	match system:
-		&"arms":
-			_arms_off_until = now + span
-			# Whoever it holds is let go (`_carry` / `_strap` see it next tick).
-		&"legs":
-			_legs_off_until = now + span
-			if state == State.REAR:
-				_enter(State.HUNT)
-		&"core":
-			if not arms_on() and not legs_on():
-				_shutdown(&"relay")
-				return
-			if state != State.CLAMPED:
-				if _victim != null:
-					_let_go(now, true)
-				_enter(State.STALL)
-	_update_systems()
-
-
-## The hoist's flywheel jammed while it was cut: it never comes back.
-func jam_legs() -> void:
-	if is_depowered():
-		return
-	legs_jammed = true
-	_anger()
-	_update_systems()
+		_enter(State.HUNT)
+	_shutdown(cause)
 
 
 func _anger() -> void:
 	level = mini(level + 1, LEVEL_MAX)
-
-
-func _update_systems() -> void:
-	var a := arms_on()
-	var l := legs_on()
-	if a != _was_arms:
-		_was_arms = a
-		system_changed.emit(&"arms", a)
-	if l != _was_legs:
-		_was_legs = l
-		system_changed.emit(&"legs", l)
 
 
 func _wake() -> void:
@@ -666,11 +599,8 @@ func _shutdown(cause: StringName) -> void:
 		return
 	if _victim != null:
 		_let_go(_now(), true)
-	if state == State.CLAMPED and room != null and room.has_method("clamp_release"):
-		room.call("clamp_release", false)
 	_enter(State.DYING)
 	_dying = true
-	exposed = false
 	print("[surgery] the table is depowered (%s)" % cause)
 	depowered.emit(cause)
 
@@ -679,8 +609,6 @@ func _enter(s: State) -> void:
 	state = s
 	_t = 0.0
 	_hit_done = false
-	_aim_locked = false
-	_blocked = false
 
 
 # --- Each tick ----------------------------------------------------------------------
@@ -688,97 +616,88 @@ func _enter(s: State) -> void:
 func _physics_process(delta: float) -> void:
 	if room == null:
 		return
-	_update_systems()
 	var now := _now()
 	_t += delta
-	var sagging := _sagging()
 	match state:
 		State.DORMANT:
 			if _intruder() != null:
 				_wake()
-			_want_w = FOLD
-			_want_axis = Vector3.DOWN
-			_w_speed = 2.0
+			_b_goal = Vector2.ZERO
+			_len_goal = FOLD_LEN
 		State.WAKING:
-			# Unfolding out of the ring, the claw flexing.
-			_want_w = FOLD + Vector3(0.0, -0.8 * clampf((_t - 1.4) / 0.8, 0.0, 1.0), 0.0)
-			_want_axis = (Vector3.DOWN + Vector3(sin(_t * 3.0), 0.0, cos(_t * 2.3)) * 0.25).normalized()
-			_w_speed = 2.0
+			# The arm pays out of the trolley, the claw flexing.
+			_b_goal = Vector2.ZERO
+			_len_goal = lerpf(FOLD_LEN, ROOT_Y - HOVER_Y, clampf((_t - 1.4) / 1.2, 0.0, 1.0))
+			_hoist = 2.0
 			if _t >= 3.0:
 				_enter(State.HUNT)
-				_next_rear = now + 1.2
+				_next_rear = now + 1.0
 		State.HUNT:
-			_hunt(now, sagging)
+			_hunt(now)
 		State.REAR:
 			_slam(now)
 		State.CARRY:
 			_carry(now)
 		State.STRAP:
 			_strap(now)
-		State.CLAMPED:
-			_clamped(now, delta)
-		State.STALL:
-			# The hoist slack for a moment: the claw sinks.
-			_want_w = Vector3(_w.x, lerpf(_w.y, 2.4, 0.5), _w.z)
-			_want_axis = Vector3.DOWN
-			_w_speed = 2.5
-			if _t >= STALL_TIME:
-				_enter(State.HUNT)
 		State.DYING:
-			# Swinging, then crashing down to the floor.
-			var drop := clampf((_t - 1.0) / 0.35, 0.0, 1.0)
-			var flat := Vector3(_w.x, 0.0, _w.z)
-			if flat.length() < 2.5:
-				flat = _dir(_theta) * 3.5
-			_want_w = Vector3(flat.x, lerpf(_w.y, CLAW_LEN * 0.55, drop), flat.z)
-			_want_axis = (_dir(_theta) * drop + Vector3.DOWN * (1.0 - 0.4 * drop)).normalized()
-			_w_speed = 1.5 + 9.0 * drop
-			if drop >= 1.0 and not _hit_done:
-				_hit_done = true
-				for p in Coop.all():
-					var n := p as Node3D
-					if n != null and n.get("_shake") != null and n.global_position.distance_to(room.to_global(_w)) < 16.0:
-						n.set("_shake", maxf(float(n.get("_shake")), 0.6))
-				_sparks(room.to_global(_w + _axis * CLAW_LEN), Color(1.0, 0.75, 0.45), 40)
-			if _t >= 3.2:
-				_die_done()
+			_die_out(delta)
 		State.DEAD:
 			pass
 		_:
 			_enter(State.HUNT)
-	_move_claw(delta)
+	if state != State.DEAD:
+		_drive(delta)
+		_swing(delta)
+		_len = move_toward(_len, _len_goal, _hoist * delta)
+		_update_wrist()
 	_hold_victim()
 
 
-## The hoist dead: the claw on the floor, dragged.
-func _sagging() -> bool:
-	return not legs_on() and state not in [State.DORMANT, State.WAKING, State.DYING, State.DEAD, State.CLAMPED]
+## The two drives: each axis toward its goal at its own top speed and
+## acceleration, braking to arrive (a crane's motors, not a slide).
+func _drive(delta: float) -> void:
+	var lim := Vector2(rail_x - 0.4, bound - 0.6)
+	_b_goal = Vector2(clampf(_b_goal.x, -lim.x, lim.x), clampf(_b_goal.y, -lim.y, lim.y))
+	var vmax := Vector2(TROLLEY_SPEED[level], BRIDGE_SPEED[level]) * _b_speed
+	var acc := Vector2(TROLLEY_ACCEL, BRIDGE_ACCEL) * maxf(_b_speed, 0.6)
+	var before := _bv
+	for i in 2:
+		var d := _b_goal[i] - _b[i]
+		# The speed it can still stop from in the distance left.
+		var want := signf(d) * minf(vmax[i], sqrt(2.0 * acc[i] * absf(d)))
+		_bv[i] = move_toward(_bv[i], want, acc[i] * delta)
+		_b[i] += _bv[i] * delta
+	_last_accel = (_bv - before) / maxf(delta, 0.0001)
 
 
-## The wrist toward `_want_w`, no faster than `_w_speed`, kept inside the hall
-## and under the roof; the arm's heading follows it.
-func _move_claw(delta: float) -> void:
-	if state == State.DEAD:
-		return
-	var flat := Vector2(_want_w.x, _want_w.z).limit_length(REACH)
-	var want := Vector3(flat.x, clampf(_want_w.y, CLAW_LEN * 0.5, ROOT.y - 1.2), flat.y)
-	var before := _w
-	_w = _w.move_toward(want, _w_speed * delta)
-	_w_vel = (_w - before).length() / maxf(delta, 0.0001)
-	# Lerped, not slerped: slerp between two nearly equal directions takes the
-	# axis of their tiny cross product and Godot rejects it as not normalised.
-	var turned := _axis.lerp(_want_axis.normalized(), clampf(delta * (14.0 if state == State.REAR else 5.0), 0.0, 1.0))
-	if turned.length_squared() > 0.0001:
-		_axis = turned.normalized()
-	if Vector2(_w.x, _w.z).length() > 0.4:
-		_theta = lerp_angle(_theta, atan2(_w.z, _w.x), clampf(delta * 4.0, 0.0, 1.0))
+var _last_accel := Vector2.ZERO
 
 
-static func _dir(theta: float) -> Vector3:
-	return Vector3(cos(theta), 0.0, sin(theta))
+## The hanging arm swings: a damped spring pulled back under the trolley, thrown
+## the other way by the trolley's acceleration. Locked (`_swing_lock`) while it
+## strikes, so the drop goes where it was aimed.
+func _swing(delta: float) -> void:
+	var w := SWING_RATE * (1.0 + 2.0 * _swing_lock)
+	var acc := -_o * w * w - _ov * 2.0 * SWING_DAMP * w - _last_accel * SWING_GAIN * w * w * (1.0 - _swing_lock)
+	_ov += acc * delta
+	_o += _ov * delta
+	if _o.length() > SWING_MAX:
+		_o = _o.normalized() * SWING_MAX
+		_ov *= 0.5
 
 
-## The nearest standing player inside the hall, or null. Not one already held.
+## The wrist under the trolley, swung out, and the way the claw points: along
+## the arm, from the root to the wrist.
+func _update_wrist() -> void:
+	var root := Vector3(_b.x, ROOT_Y, _b.y)
+	_w = Vector3(_b.x + _o.x, ROOT_Y - _len, _b.y + _o.y)
+	var d := _w - root
+	_axis = d.normalized() if d.length() > 0.2 else Vector3.DOWN
+
+
+## The nearest standing player inside the hall (at any height: on the floor, in
+## the lift, on the landing), or null. Not one already held.
 func _intruder() -> Node3D:
 	if Sandbox.enemies_passive:
 		return null
@@ -788,8 +707,10 @@ func _intruder() -> Node3D:
 		var n := p as Node3D
 		if n == null or n.get("_dead") == true or (n.has_method("is_hidden") and n.is_hidden()) or n == _victim:
 			continue
+		if n.get("in_cutscene") == true:
+			continue
 		var local: Vector3 = room.to_local(n.global_position)
-		if absf(local.x) > bound + 1.2 or absf(local.z) > bound + 1.2 or absf(local.y) > 3.0:
+		if absf(local.x) > bound + 1.2 or absf(local.z) > bound + 1.2 or local.y < -1.0 or local.y > 5.5:
 			continue
 		var d := n.global_position.distance_squared_to(global_position)
 		if d < best_d:
@@ -798,43 +719,40 @@ func _intruder() -> Node3D:
 	return best
 
 
-## Following: hanging over them, a little back toward the table, and slamming
-## down when it is over them. Sagging, dragged after them, lashing.
-func _hunt(now: float, sagging: bool) -> void:
+## Following: the trolley over them, a little ahead of where they are going and
+## a little back toward the table, the claw hanging over the shelves; over them
+## and ready, down it comes.
+func _hunt(now: float) -> void:
 	_target = _intruder()
-	exposed = sagging
+	_hoist = HOIST_SPEED
+	_b_speed = 1.0
 	if _target == null or now < _stun_until:
 		if _target == null:
-			# Nobody in the hall: back up over the table, to wait.
-			_want_w = Vector3(0.0, HOVER_Y + 0.6, 0.0) if not sagging else Vector3(_w.x, CLAW_LEN * 0.6, _w.z)
-			_want_axis = Vector3.DOWN
-			_w_speed = 2.0
+			# Nobody in the hall: back over the table, to wait.
+			_b_goal = Vector2.ZERO
+			_len_goal = ROOT_Y - HOVER_Y - 0.4
 		return
-	var p: Vector3 = room.to_local(_target.global_position)
+	var p := _aim_point(_target, LEAD)
 	var flat := Vector2(p.x, p.z)
-	if sagging:
-		_want_w = Vector3(p.x, CLAW_LEN * 0.6, p.z)
-		var to := Vector3(p.x - _w.x, 0.0, p.z - _w.z)
-		_want_axis = (to.normalized() * 0.8 + Vector3.DOWN).normalized() if to.length() > 0.1 else Vector3.DOWN
-		_w_speed = DRAG_SPEED
-		var tip := room.to_global(_w + _axis * CLAW_LEN)
-		if arms_on() and now >= _next_lash \
-				and Vector2(tip.x - _target.global_position.x, tip.z - _target.global_position.z).length() < LASH_RANGE:
-			_next_lash = now + LASH_EVERY
-			_strike(_target, LASH_DAMAGE)
-		return
 	var back := flat.normalized() * HOVER_BACK if flat.length() > HOVER_BACK + 0.5 else Vector2.ZERO
-	var sway := Vector3(sin(now * 1.3), sin(now * 0.9) * 0.4, cos(now * 1.1)) * 0.3
-	_want_w = Vector3(p.x - back.x, HOVER_Y, p.z - back.y) + sway
-	var look := Vector3(p.x, 1.0, p.z) - _w
-	_want_axis = (Vector3.DOWN * 1.8 + look.normalized()).normalized()
-	_w_speed = SPEED[level]
-	# Over them: down it comes.
+	_b_goal = flat - back
+	# Over a player up on the lift or the landing, it hangs over them there.
+	var floor_y := maxf(p.y, 0.0)
+	_len_goal = clampf(ROOT_Y - (floor_y + HOVER_Y), FOLD_LEN, ROOT_Y - 1.0)
 	var over := Vector2(_w.x - p.x, _w.z - p.z).length()
-	if arms_on() and legs_on() and over < SLAM_OVER and now >= _next_rear:
-		_to = Vector3(p.x, CLAW_LEN * 0.95, p.z)
+	if over < SLAM_OVER and now >= _next_rear:
 		_parried = false
 		_enter(State.REAR)
+
+
+## Where a player is (room frame), `lead` seconds ahead along their velocity.
+func _aim_point(n: Node3D, lead: float) -> Vector3:
+	var p: Vector3 = room.to_local(n.global_position)
+	var vel: Vector3 = Vector3.ZERO
+	if n.get("velocity") != null:
+		vel = n.get("velocity")
+	var v: Vector3 = room.global_basis.inverse() * vel
+	return p + Vector3(v.x, 0.0, v.z) * lead
 
 
 func _chest(p: Node3D) -> Vector3:
@@ -859,94 +777,108 @@ func _strike(p: Node3D, amount: float) -> bool:
 	return parried[0]
 
 
-static func _segment_distance(p: Vector3, a: Vector3, b: Vector3) -> float:
-	var ab := b - a
-	var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
-	return p.distance_to(a + ab * t)
-
-
 # --- The slam ----------------------------------------------------------------------
 
-## Up over them, a hold with the aim fixed (step aside then), down into the
-## floor: whoever it lands on is grabbed. Missed, it is stuck there.
+## WIND (drawn up), TRACK (held up, still following them), LOCK (the aim fixed,
+## a shudder, the parry cue), DROP (down onto the spot), then stuck in the
+## floor and torn free.
 func _slam(now: float) -> void:
-	var hold: float = REAR_HOLD[level]
-	var stuck_at := REAR_RISE + hold + REAR_SLAM
+	var track: float = TRACK_TIME[level]
+	var lock: float = LOCK_TIME[level]
+	var lock_at := WIND_TIME + track
+	var drop_at := lock_at + lock
+	var land_at := drop_at + DROP_TIME
 	var stuck_for := PARRY_STUCK if _parried else REAR_STUCK
-	exposed = _t >= stuck_at and _t < stuck_at + stuck_for
-	if not legs_on() or not arms_on():
-		exposed = false
-		_enter(State.HUNT)
+	var hover_len := clampf(ROOT_Y - (_to.y + HOVER_Y), FOLD_LEN, ROOT_Y - 1.0)
+	if _t < lock_at:
+		# Still following, drawn up over them: the arm hauled in, the claw spread.
+		if _target != null and is_instance_valid(_target):
+			var p := _aim_point(_target, LEAD * 0.6)
+			_to = Vector3(p.x, maxf(p.y, 0.0), p.z)
+		_b_goal = Vector2(_to.x, _to.z)
+		_b_speed = 1.15
+		var wind := clampf(_t / WIND_TIME, 0.0, 1.0)
+		hover_len = clampf(ROOT_Y - (_to.y + HOVER_Y), FOLD_LEN, ROOT_Y - 1.0)
+		_len_goal = maxf(hover_len - WIND_RISE * (wind * wind * (3.0 - 2.0 * wind)), FOLD_LEN)
+		_hoist = 4.0
+		_swing_lock = 0.35
+		_flex = wind
 		return
-	if _t < REAR_RISE + hold:
-		# Up over them, following until the hold, the claw spread and trembling.
-		if _target != null and is_instance_valid(_target) and _t < REAR_RISE:
-			var p: Vector3 = room.to_local(_target.global_position)
-			_to = Vector3(p.x, CLAW_LEN * 0.95, p.z)
-		_want_w = Vector3(_to.x, REAR_HIGH, _to.z)
-		_want_axis = Vector3.DOWN
-		_w_speed = SPEED[level] * 1.8
-		if not _aim_locked and _t >= REAR_RISE:
-			_aim_locked = true
-			for p in Coop.all():
-				if p.has_method("parry_cue"):
-					p.call("parry_cue", self, hold + REAR_SLAM)
+	if _t < drop_at:
+		# LOCKED: the aim fixed where they are now; the trolley brakes hard over
+		# it, the swing is killed, the claw shudders -- and this is the cue.
+		if not _hit_done:
+			_hit_done = true
+			if _target != null and is_instance_valid(_target):
+				var p: Vector3 = room.to_local(_target.global_position)
+				_to = Vector3(p.x, maxf(p.y, 0.0), p.z)
+			for pl in Coop.all():
+				if pl.has_method("parry_cue"):
+					pl.call("parry_cue", self, lock + DROP_TIME)
+		_b_goal = Vector2(_to.x, _to.z) - _o * 0.6
+		_b_speed = 1.6
+		_swing_lock = 1.0
+		_flex = 1.0
 		return
-	if _t < stuck_at:
-		_want_w = _to
-		_want_axis = Vector3.DOWN
-		_w_speed = (REAR_HIGH - _to.y) / REAR_SLAM + 2.0
+	if _t < land_at:
+		# DROPPING: paid out with gravity's ease-in, straight onto the spot.
+		var k := clampf((_t - drop_at) / DROP_TIME, 0.0, 1.0)
+		_drop_len = ROOT_Y - (_to.y + CLAW_LEN * 0.95)
+		var from := maxf(hover_len - WIND_RISE, FOLD_LEN)
+		_len = lerpf(from, _drop_len, k * k)
+		_len_goal = _len
+		_swing_lock = 1.0
+		_flex = 0.4
 		return
-	if not _hit_done:
-		_hit_done = true
+	if _hit_done:
+		_hit_done = false
+		_len = _drop_len
+		_len_goal = _drop_len
 		_impact(now)
 		if state != State.REAR:
 			return
-	if _t < stuck_at + stuck_for:
+	if _t < land_at + stuck_for:
 		# Stuck in the floor, wrenching at it.
-		var wr := 0.04 * sin(_t * 31.0)
-		_want_w = _to + Vector3(wr, 0.0, -wr)
-		_want_axis = Vector3.DOWN
-		_w_speed = 4.0
+		var wr := 0.05 * sin(_t * 31.0)
+		_o = Vector2(wr, -wr) * 0.3
+		_len_goal = _drop_len - absf(wr) * 2.0
+		_hoist = 6.0
+		_b_goal = _b
 		return
-	if not _blocked:
-		# Torn free.
-		_blocked = true
-		_sparks(room.to_global(Vector3(_to.x, 0.05, _to.z)), Color(1.0, 0.75, 0.45), 16)
-	_want_w = Vector3(_to.x, HOVER_Y, _to.z)
-	_w_speed = 5.0
-	if _t >= stuck_at + stuck_for + REAR_SETTLE:
+	if _t < land_at + stuck_for + 0.05 and _flex < 2.0:
+		# Torn free: grit and chips off the floor.
+		_flex = 2.0
+		_impact_fx(room.to_global(Vector3(_to.x, _to.y, _to.z)), 0.45)
+	_len_goal = hover_len
+	_hoist = absf(_drop_len - hover_len) / PULL_TIME + 0.5
+	_swing_lock = 0.0
+	_flex = 0.0
+	if _t >= land_at + stuck_for + PULL_TIME:
 		_next_rear = now + REAR_COOLDOWN[level]
 		_enter(State.HUNT)
 
 
-## Where it lands: the wall clamp's jaws if they are open and it came down by
-## them; else whoever is under it is grabbed, and everyone near thrown down.
+## Where it lands: whoever is under it is grabbed, everyone near thrown down,
+## and the floor takes the blow (`_impact_fx`).
 func _impact(now: float) -> void:
-	var at := room.to_global(Vector3(_to.x, 0.0, _to.z))
-	_sparks(at + Vector3(0.0, 0.1, 0.0), Color(1.0, 0.7, 0.4), 30)
-	if room.has_method("clamp_try_catch_at") and room.call("clamp_try_catch_at", at):
-		_clamp_point = room.to_local(room.call("clamp_hold_point"))
-		_enter(State.CLAMPED)
-		_strain = 0.0
-		_anger()
-		return
+	var at := room.to_global(Vector3(_to.x, _to.y, _to.z))
+	_impact_fx(at, 1.0)
 	var caught: Node3D = null
 	for p in Coop.all():
 		var n := p as Node3D
 		if n == null or n.get("_dead") == true or (n.has_method("is_hidden") and n.is_hidden()) \
 				or (n.has_method("is_restrained") and n.is_restrained()):
 			continue
-		var d := Vector2(n.global_position.x - at.x, n.global_position.z - at.z).length()
-		if n.get("_shake") != null and d < 9.0:
-			n.set("_shake", maxf(float(n.get("_shake")), 0.45 * (1.0 - d / 9.0)))
+		var flat := Vector2(n.global_position.x - at.x, n.global_position.z - at.z).length()
+		var d := Vector3(n.global_position.x - at.x, (n.global_position.y - at.y) * 2.0, n.global_position.z - at.z).length()
+		if n.get("_shake") != null and flat < 12.0:
+			n.set("_shake", maxf(float(n.get("_shake")), 0.6 * (1.0 - flat / 12.0)))
 		if d > SHAKE_RADIUS:
 			continue
 		var guarded: bool = n.has_method("is_blocking") and n.call("is_blocking")
 		if d <= GRAB_RADIUS:
 			if _strike(n, GRAB_DAMAGE):
-				# Turned aside: it bites deep into the floor and is stuck there
-				# longer.
+				# Turned aside: it bites deep into the floor and is stuck longer.
 				_parried = true
 				_sparks(at + Vector3(0.0, 0.4, 0.0), Color(1.0, 0.85, 0.55), 24)
 				continue
@@ -959,18 +891,165 @@ func _impact(now: float) -> void:
 		_take(caught, now)
 
 
+## The floor taking the blow at `at` (world, on the floor), `strength` 0..1: a
+## crack decal (it stays a while), a burst of dust rolling out low, stone chips
+## thrown up and out, sparks off the iron, a flash on the stone. Off with
+## `Graphics.effects` but for the crack and a little dust.
+func _impact_fx(at: Vector3, strength: float) -> void:
+	if not is_inside_tree():
+		return
+	var parent := get_parent()
+	var effects: bool = Graphics.effects
+	if strength >= 0.9:
+		_crack(at)
+	_emit(parent, _dust_burst(strength, effects), at + Vector3(0.0, 0.25, 0.0), 2.6)
+	if effects:
+		_emit(parent, _chips(strength), at + Vector3(0.0, 0.1, 0.0), 1.8)
+		_sparks(at + Vector3(0.0, 0.15, 0.0), Color(1.0, 0.7, 0.4), int(30.0 * strength))
+		var flash := OmniLight3D.new()
+		flash.light_color = Color(1.0, 0.78, 0.55)
+		flash.light_energy = 3.2 * strength
+		flash.omni_range = 6.0
+		flash.shadow_enabled = false
+		parent.add_child(flash)
+		flash.global_position = at + Vector3(0.0, 0.6, 0.0)
+		var tw := flash.create_tween()
+		tw.tween_property(flash, "light_energy", 0.0, 0.22).set_ease(Tween.EASE_OUT)
+		tw.tween_callback(flash.queue_free)
+
+
+## The crack left in the flagstones, fading after DECAL_LIFE; the oldest goes
+## when there are DECAL_MAX.
+func _crack(at: Vector3) -> void:
+	var d := Decal.new()
+	d.texture_albedo = FX_CRACK
+	d.size = Vector3(3.4, 1.2, 3.4)
+	d.cull_mask = 1
+	d.upper_fade = 0.2
+	d.lower_fade = 0.2
+	get_parent().add_child(d)
+	d.global_position = at
+	d.global_rotation = Vector3(0.0, randf() * TAU, 0.0)
+	_decals.append(d)
+	if _decals.size() > DECAL_MAX:
+		var old: Decal = _decals.pop_front()
+		if is_instance_valid(old):
+			old.queue_free()
+	var tw := d.create_tween()
+	tw.tween_interval(DECAL_LIFE)
+	tw.tween_property(d, "modulate:a", 0.0, 2.5)
+	tw.tween_callback(_drop_decal.bind(d))
+
+
+func _drop_decal(d: Decal) -> void:
+	_decals.erase(d)
+	if is_instance_valid(d):
+		d.queue_free()
+
+
+## A one-shot burst into `parent` at `at` (world), freed after `life` s.
+func _emit(parent: Node, p: CPUParticles3D, at: Vector3, life: float) -> void:
+	parent.add_child(p)
+	p.global_position = at
+	p.restart()
+	get_tree().create_timer(life).timeout.connect(p.queue_free)
+
+
+## Dust: the generated puff, billboards rolling out low along the floor in a
+## ring and rising slowly, swelling and thinning out.
+func _dust_burst(strength: float, effects: bool) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.emitting = false
+	p.amount = int((22.0 if effects else 6.0) * strength) + 2
+	p.lifetime = 1.8
+	p.explosiveness = 0.92
+	p.lifetime_randomness = 0.35
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
+	p.emission_ring_axis = Vector3.UP
+	p.emission_ring_radius = 0.5
+	p.emission_ring_inner_radius = 0.2
+	p.emission_ring_height = 0.1
+	p.direction = Vector3(1.0, 0.15, 0.0)
+	p.spread = 180.0
+	p.flatness = 0.85
+	p.initial_velocity_min = 2.5 * strength
+	p.initial_velocity_max = 6.0 * strength
+	p.damping_min = 3.0
+	p.damping_max = 5.0
+	p.gravity = Vector3(0.0, 0.35, 0.0)
+	p.angle_min = -180.0
+	p.angle_max = 180.0
+	p.angular_velocity_min = -30.0
+	p.angular_velocity_max = 30.0
+	p.scale_amount_min = 0.8
+	p.scale_amount_max = 1.5
+	var grow := Curve.new()
+	grow.add_point(Vector2(0.0, 0.45))
+	grow.add_point(Vector2(0.35, 1.0))
+	grow.add_point(Vector2(1.0, 1.6))
+	p.scale_amount_curve = grow
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.72, 0.66, 0.58, 0.75))
+	ramp.set_color(ramp.get_point_count() - 1, Color(0.55, 0.5, 0.45, 0.0))
+	p.color_ramp = ramp
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.3, 1.3)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = FX_DUST
+	m.disable_receive_shadows = true
+	quad.material = m
+	p.mesh = quad
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
+
+
+## Stone chips: the generated chip, thrown up and out, tumbling, falling.
+func _chips(strength: float) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.emitting = false
+	p.amount = int(26.0 * strength) + 4
+	p.lifetime = 1.1
+	p.explosiveness = 1.0
+	p.lifetime_randomness = 0.3
+	p.direction = Vector3.UP
+	p.spread = 62.0
+	p.initial_velocity_min = 3.5 * strength
+	p.initial_velocity_max = 8.5 * strength
+	p.gravity = Vector3(0.0, -15.0, 0.0)
+	p.angle_min = -180.0
+	p.angle_max = 180.0
+	p.angular_velocity_min = -720.0
+	p.angular_velocity_max = 720.0
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.4
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.13, 0.13)
+	var m := StandardMaterial3D.new()
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	m.alpha_scissor_threshold = 0.4
+	m.albedo_texture = FX_CHIP
+	m.roughness = 0.95
+	quad.material = m
+	p.mesh = quad
+	return p
+
+
 # --- Carried to the table and strapped down -----------------------------------------
 
 ## `n` is in the claw.
 func _take(n: Node3D, _now_: float) -> void:
 	_victim = n
 	n.call("restrain", self)
-	# What to do about it: the brackets round the crosshair close in too
-	# (`_strap_prompt`), but a prompt's text is never shown.
 	var hud: Node = Coop.hud(n)
 	if hud != null and hud.has_method("announce"):
 		hud.call("announce", "Struggle!", "Mash attack / jump to break free")
-	exposed = false
 	_enter(State.CARRY)
 	_sparks(_chest(n), Color(1.0, 0.8, 0.5), 12)
 
@@ -980,44 +1059,43 @@ func _victim_ok() -> bool:
 		and _victim.get("restrained_by") == self
 
 
-## Up, then across the hall to over the table, the claw shut on them.
+## Up, then the gantry runs them across the hall to over the table.
 func _carry(now: float) -> void:
-	if not _victim_ok() or not arms_on() or not legs_on():
+	if not _victim_ok():
 		_let_go(now, false)
 		return
 	if int(_victim.get("struggles")) >= CARRY_BREAK:
 		_let_go(now, false)
+		_anger()
 		return
-	if _t < 0.6:
-		_want_w = Vector3(_w.x, CARRY_Y, _w.z)
-		_w_speed = 4.0
-	else:
-		_want_w = Vector3(0.0, CARRY_Y, 0.0)
-		_w_speed = CARRY_SPEED
-	_want_axis = Vector3.DOWN
-	if _t >= 0.6 and Vector2(_w.x, _w.z).length() < 0.25:
+	_len_goal = ROOT_Y - CARRY_Y
+	_hoist = 4.0
+	_swing_lock = 0.0
+	if _t >= 0.5:
+		_b_goal = Vector2.ZERO
+		_b_speed = CARRY_SPEED / TROLLEY_SPEED[level]
+	if _t >= 0.6 and _b.length() < 0.3 and absf(_len - _len_goal) < 0.2:
 		# Laid down on it, the cuffs shut.
 		_victim.set("struggles", 0)
 		_next_cut = now + 1.2
 		_enter(State.STRAP)
 
 
-## On the table: the claw over them works at them until they struggle free, a
-## partner cuts the arms, or they die.
+## On the table: the claw over them works at them until they struggle free or
+## die.
 func _strap(now: float) -> void:
-	if not _victim_ok() or not arms_on():
+	if not _victim_ok():
 		_let_go(now, true)
 		return
 	if int(_victim.get("struggles")) >= STRAP_BREAK[level]:
-		# The cuffs burst.
 		for c in _cuffs:
 			_sparks(c.global_position, Color(1.0, 0.8, 0.5), 6)
 		_let_go(now, true)
+		_anger()
 		return
-	var work := 0.35 * sin(_t * 9.0)
-	_want_w = Vector3(0.0, TOP + 2.4 + work, 0.0)
-	_want_axis = Vector3.DOWN
-	_w_speed = 3.0
+	_b_goal = Vector2.ZERO
+	_len_goal = ROOT_Y - (TOP + 2.4 + 0.35 * sin(_t * 9.0))
+	_hoist = 3.0
 	if now >= _next_cut:
 		_next_cut = now + OPERATE_EVERY
 		_victim.call("take_damage", OPERATE_DAMAGE[level], Vector3.DOWN, self)
@@ -1038,7 +1116,6 @@ func _hold_victim() -> void:
 			_victim.global_position = grip - Vector3(0.0, 1.05, 0.0)
 			_victim.set("restrain_view", Vector3(0.0, -18.0, 12.0 * sin(_t * 5.0)))
 		State.STRAP:
-			# On their back along the slab: the view put down on it, looking up.
 			_victim.global_position = global_transform * Vector3(0.0, TOP + 0.02, 0.25)
 			_victim.set("restrain_view", Vector3(1.25, 72.0, 4.0 * sin(_t * 13.0)))
 	_strap_prompt.player = _victim
@@ -1064,32 +1141,39 @@ func _let_go(now: float, thrown: bool) -> void:
 		_enter(State.HUNT)
 
 
-# --- Held by the clamp -------------------------------------------------------------
+# --- Switched off -------------------------------------------------------------------
 
-func _clamped(now: float, delta: float) -> void:
-	exposed = true
-	# The claw held in the jaws, the wrist out before them.
-	var out := Vector3(-_clamp_point.x, 0.0, -_clamp_point.z).normalized()
-	var shake := Vector3(sin(now * 37.0), sin(now * 29.0), cos(now * 33.0)) * 0.04 * (1.0 if legs_on() else 0.3)
-	_want_w = _clamp_point + out * (CLAW_LEN * 0.5) + Vector3(0.0, 0.5, 0.0) + shake
-	_want_axis = (-out * 0.8 + Vector3.DOWN * 0.4).normalized()
-	_w_speed = 12.0
-	# The hoist pulls it free in time; with it cut it cannot pull at all.
-	if legs_on():
-		_strain += delta
-	if _strain >= CLAMP_HOLD[level]:
-		exposed = false
-		if room.has_method("clamp_release"):
-			room.call("clamp_release", true)
-		_stun_until = now + 0.6
-		_next_rear = now + REAR_COOLDOWN[level] + 1.5
-		_anger()
-		_enter(State.HUNT)
+## The power gone: the drives coast to a stop, the hoist runs slack -- the claw
+## falls, swinging, and crashes into the floor -- and every light dies.
+func _die_out(delta: float) -> void:
+	_b_goal = _b + _bv * 0.6
+	_b_speed = 0.4
+	_swing_lock = 0.0
+	var fall := clampf((_t - 0.6) / 0.7, 0.0, 1.0)
+	var floor_len := ROOT_Y - CLAW_LEN * 0.95
+	if _t > 0.6:
+		_hoist = 2.0 + 14.0 * fall
+		_len_goal = floor_len
+	if not _hit_done and _t > 0.6 and _len >= floor_len - 0.05:
+		_hit_done = true
+		_impact_fx(room.to_global(Vector3(_w.x, 0.0, _w.z)), 1.0)
+		for p in Coop.all():
+			var n := p as Node3D
+			if n != null and n.get("_shake") != null and n.global_position.distance_to(room.to_global(_w)) < 16.0:
+				n.set("_shake", maxf(float(n.get("_shake")), 0.6))
+	_o += Vector2(sin(_t * 3.0), cos(_t * 2.3)) * 0.12 * delta * (1.0 - fall)
+	if _t >= 3.2:
+		_die_done()
 
 
-## How far it has pulled against the clamp, 0..1 (surgery.gd shakes the clamp).
-func strain() -> float:
-	return clampf(_strain / float(CLAMP_HOLD[level]), 0.0, 1.0) if state == State.CLAMPED else 0.0
+func _die_done() -> void:
+	_enter(State.DEAD)
+	_dying = true
+	# What it held: the core's crystals and the coins prised from the dead it
+	# worked on.
+	var at := _body.global_transform * (CORE_AT + Vector3(0.5, 0.0, 0.0))
+	ITEM_DROP.spawn(get_parent(), at, &"gold_crystal", 2)
+	ITEM_DROP.spawn(get_parent(), at + Vector3(0.0, 0.1, 0.0), &"coins", 40)
 
 
 # --- Being hit ----------------------------------------------------------------------
@@ -1102,7 +1186,6 @@ func take_damage(_amount: float, from_direction: Vector3 = Vector3.ZERO, _attack
 	_ring_off(at, from_direction)
 
 
-## A blow on the table or the claw's fingers.
 func _ring_off(at: Vector3, _dir_: Vector3) -> void:
 	if state == State.DEAD:
 		return
@@ -1116,27 +1199,8 @@ func apply_knockback(_impulse: Vector3, _stun_time := 0.0) -> void:
 	pass
 
 
-## A cut in the power cable. Only reachable while `exposed` (the hitbox is off
-## otherwise).
-func _cable_hit(_dir: Vector3) -> void:
-	if not exposed or is_depowered():
-		return
-	var now := _now()
-	if now - _last_cable_hit < 0.15:
-		return
-	_last_cable_hit = now
-	cuts += 1
-	_sparks(_cable_box.global_position, Color(0.7, 0.95, 1.0), 40)
-	_power = minf(_power, 0.6)
-	if cuts >= CABLE_CUTS:
-		_shutdown(&"cable")
-		return
-	# It feels that: a lurch, and it comes for them harder.
-	_stun_until = now + 0.35
-
-
 func _sparks(at: Vector3, colour: Color, amount: int) -> void:
-	if not Graphics.effects or not is_inside_tree():
+	if not Graphics.effects or not is_inside_tree() or amount <= 0:
 		return
 	var p := CPUParticles3D.new()
 	p.one_shot = true
@@ -1165,16 +1229,6 @@ func _sparks(at: Vector3, colour: Color, amount: int) -> void:
 	get_tree().create_timer(1.2).timeout.connect(p.queue_free)
 
 
-func _die_done() -> void:
-	_enter(State.DEAD)
-	_dying = true
-	# What it held: the core's crystals and the coins prised from the dead it
-	# worked on, out of a cracked porthole.
-	var at := _body.global_transform * (CORE_AT + Vector3(0.5, 0.0, 0.0))
-	ITEM_DROP.spawn(get_parent(), at, &"gold_crystal", 2)
-	ITEM_DROP.spawn(get_parent(), at + Vector3(0.0, 0.1, 0.0), &"coins", 40)
-
-
 # --- The pose -------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
@@ -1188,14 +1242,11 @@ func _apply_pose(delta: float) -> void:
 	var now := _now()
 	var power := 1.0
 	var roll := 0.0
-	var arms_live := arms_on()
-	var legs_live := legs_on()
 	match state:
 		State.DORMANT:
 			power = 0.0
 		State.WAKING:
 			power = clampf(_t / 1.2, 0.0, 1.0) * (0.6 + 0.4 * absf(sin(_t * 23.0))) if _t < 1.2 else 1.0
-			# The restraints snap open one after another, and the body is thrown.
 			for i in _cuffs.size():
 				var open_at := 1.0 + float(i) * 0.12
 				if _t >= open_at:
@@ -1205,20 +1256,13 @@ func _apply_pose(delta: float) -> void:
 			roll = 0.012 * sin(_t * 40.0) if _t < 1.6 else 0.0
 			if _t >= 1.25 and _prisoner.get_parent() == _body:
 				_throw_prisoner(false)
-		State.STALL:
-			power = 0.06 if _t < FEED_AT else clampf((_t - FEED_AT) / 0.5, 0.0, 1.0) * (1.0 + 0.6 * sin(_t * 40.0))
 		State.DYING:
 			power = clampf(1.0 - _t / 2.6, 0.0, 1.0) * (0.5 + 0.5 * absf(sin(_t * 31.0)))
 			roll = 0.01 * sin(_t * 21.0) * clampf(1.0 - _t / 2.0, 0.0, 1.0)
 		State.DEAD:
 			power = 0.0
-	if state == State.REAR and _hit_done and exposed:
-		roll = 0.006 * sin(now * 37.0)
 	if now < _stun_until:
 		roll += 0.006 * sin(now * 40.0)
-	if state in [State.DORMANT, State.STALL, State.DYING, State.DEAD]:
-		exposed = exposed and state == State.STALL and _sagging()
-	# The cuffs: shut on whoever it straps down, thrown open again after.
 	if state == State.STRAP:
 		for c in _cuffs:
 			c.rotation.z = lerp_angle(c.rotation.z, 0.0, fast)
@@ -1228,129 +1272,66 @@ func _apply_pose(delta: float) -> void:
 	_roll = lerpf(_roll, roll, k) if delta > 0.0 else roll
 	_power = lerpf(_power, power, fast) if delta > 0.0 else power
 	_body.transform = Transform3D(Basis(Vector3.FORWARD, _roll), Vector3.ZERO)
-
-	# The power cable's hitbox only while it can be reached.
-	_cable_box.collision_layer = 4 if exposed and not is_depowered() else 0
-
-	# The core and its glow: a heartbeat, quicker as it angers.
 	var beat := 0.75 + 0.25 * pow(absf(sin(now * (2.6 + 0.5 * float(level)))), 6.0)
 	core_glow = _power * beat
 	_core_light.light_energy = 1.6 * core_glow
 	_core_light.visible = core_glow > 0.02
-	_eye_light.light_energy = (1.4 + 0.4 * float(level) / LEVEL_MAX) * _power
+	_eye_light.light_energy = (1.4 + 0.4 * float(level) / LEVEL_MAX) * _power * (1.0 + 0.8 * _flex)
 	_eye_light.visible = _power > 0.03
+	_lamp.light_energy = 2.2 * _power
+	_lamp.visible = _power > 0.03
 	for pair in _power_mats:
 		(pair[0] as StandardMaterial3D).emission_energy_multiplier = float(pair[1]) * (0.3 + 0.7 * _power)
-	# The claw while its cable is in reach: a cold pulse through it, redder with
-	# each cut -- the only sign, now the cable runs inside the wrist.
-	var wound := float(cuts) / float(CABLE_CUTS)
-	var hot := (0.5 + 0.5 * sin(now * 9.0)) if exposed and not is_depowered() else 0.0
+	# The claw reddens as it locks on.
+	var hot := clampf(_flex, 0.0, 1.0) * _power if state == State.REAR else 0.0
 	for m in _claw_mats:
 		var mat: StandardMaterial3D = m
-		mat.emission = Color.WHITE.lerp(CORE_COLOUR.lerp(Color(1.0, 0.3, 0.1), wound), clampf(hot + wound * 0.5, 0.0, 1.0))
-		mat.emission_energy_multiplier = 0.3 * (0.3 + 0.7 * _power) + 1.4 * hot * _power
-	# The feed-back flare along the cables while the core stalls.
-	var feed := 0.0
-	if state == State.STALL and _t >= FEED_AT:
-		feed = clampf(1.0 - (_t - FEED_AT) / 0.9, 0.0, 1.0)
-	feed_arms = lerpf(feed_arms, feed if arms_live else 0.0, fast)
-	feed_legs = lerpf(feed_legs, feed if legs_live else 0.0, fast)
-
+		mat.emission = Color.WHITE.lerp(Color(1.0, 0.35, 0.15), hot)
+		mat.emission_energy_multiplier = 0.3 * (0.3 + 0.7 * _power) + 1.2 * hot
 	_pose_arm(delta)
 
-	# What the cables show.
-	var arms_moving := 0.0
-	if arms_live and _power > 0.3:
-		arms_moving = 0.2
-		if state in [State.REAR, State.CARRY, State.STRAP, State.CLAMPED] or _sagging():
-			arms_moving = 1.0
-	arm_motion = lerpf(arm_motion, arms_moving, fast)
-	leg_motion = lerpf(leg_motion, clampf(_w_vel / 4.0, 0.0, 1.0) if legs_live and _power > 0.3 else 0.0, fast)
 
-
-## The ring, the arm's segments and the claw, from the wrist and the aisle.
+## The bridge, the trolley, the arm's segments and the claw.
 func _pose_arm(delta: float) -> void:
 	if room == null:
 		return
 	var rt := room.global_transform
-	# The ring turns with the arm.
-	_ring.global_transform = rt * Transform3D(Basis(Vector3.UP, -_theta).scaled(Vector3.ONE * RING_SCALE), Vector3(0.0, RING_TOP, 0.0))
-	# The claw: its -Y along the axis, turning slowly at the wrist (fast while
-	# it strikes).
+	_bridge.global_transform = rt * Transform3D(Basis(), Vector3(0.0, 0.0, _b.y))
+	_ring.global_transform = rt * Transform3D(Basis().scaled(Vector3.ONE * TROLLEY_SCALE), Vector3(_b.x, TROLLEY_TOP, _b.y))
+	_lamp.global_transform = rt * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(_b.x, ROOT_Y - 0.2, _b.y))
+	# The claw: its -Y along the arm, turning slowly at the wrist (fast while it
+	# works on someone), its fingers trembling as it locks on.
 	if delta > 0.0 and _power > 0.05:
 		_spin += delta * (0.4 + (4.0 if state == State.STRAP else 0.0)) * _power
 	var y := -_axis.normalized()
 	var ref := Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT
 	var x := ref.cross(y).normalized()
 	var z := x.cross(y).normalized()
-	var claw_basis := Basis(x, y, z) * Basis(Vector3.UP, _spin)
+	var shudder := 0.0
+	if state == State.REAR and _flex >= 1.0:
+		shudder = 0.05 * sin(_now() * 63.0)
+	var claw_basis := Basis(x, y, z) * Basis(Vector3.UP, _spin + shudder) * Basis(Vector3.RIGHT, shudder)
 	_claw.global_transform = rt * Transform3D(claw_basis, _w)
-	# The arm: from the hub out under the roof toward the wrist, bending down,
-	# and into the wrist along the claw's line -- a crane's reach.
-	var flat := Vector3(_w.x, 0.0, _w.z)
-	var bend := flat * BEND_SHARE + Vector3(0.0, BEND_Y, 0.0)
-	var pts: Array[Vector3] = [ROOT + Vector3(0.0, 0.4, 0.0), ROOT]
-	# Each further point only if it brings the arm nearer the wrist: folded up,
-	# or hovering close in, the bends would double back on themselves.
-	for c: Vector3 in [bend, _w - _axis * 1.0]:
-		if c.distance_to(_w) < pts[pts.size() - 1].distance_to(_w) - 0.3:
-			pts.append(c)
-	pts.append(_w)
-	var line := _spline(pts, 6)
-	var lengths: Array[float] = [0.0]
-	for i in range(1, line.size()):
-		lengths.append(lengths[i - 1] + line[i].distance_to(line[i - 1]))
-	var total: float = lengths[lengths.size() - 1]
-	var n := clampi(ceili(total / SEG_LEN), 2, SEG_MAX)
-	var prev := _at_length(line, lengths, 0.0)
+	# The arm: from the trolley straight down into the wrist, its segments as
+	# many as the length needs -- it telescopes.
+	var root := Vector3(_b.x, ROOT_Y + 0.35, _b.y)
+	var total := root.distance_to(_w)
+	var n := clampi(ceili(total / SEG_LEN), 1, SEG_MAX)
 	for i in SEG_MAX:
 		var seg := _segs[i]
-		if i >= n:
+		if i >= n or total < 0.05:
 			seg.visible = false
 			continue
 		seg.visible = true
-		var next := _at_length(line, lengths, total * float(i + 1) / float(n))
-		var d := next - prev
+		var a := root.lerp(_w, float(i) / float(n))
+		var b := root.lerp(_w, float(i + 1) / float(n))
+		var d := b - a
 		var len_ := d.length()
-		if len_ < 0.001:
-			seg.visible = false
-			prev = next
-			continue
 		var sy := d / len_
 		var sref := Vector3.UP if absf(sy.y) < 0.95 else Vector3.RIGHT
 		var sx := sref.cross(sy).normalized()
 		var sz := sx.cross(sy).normalized()
-		# The model is 1 m along Y: stretched to the span, a little over so the
-		# joint collars overlap.
-		seg.global_transform = rt * Transform3D(Basis(sx * SEG_THICK, sy * (len_ * 1.06), sz * SEG_THICK), (prev + next) * 0.5)
-		prev = next
-
-
-## A Catmull-Rom curve through `pts`, `per` points a span.
-static func _spline(pts: Array[Vector3], per: int) -> PackedVector3Array:
-	var out := PackedVector3Array()
-	var m := pts.size()
-	for i in m - 1:
-		var p0 := pts[maxi(i - 1, 0)]
-		var p1 := pts[i]
-		var p2 := pts[i + 1]
-		var p3 := pts[mini(i + 2, m - 1)]
-		for s in per:
-			var t := float(s) / float(per)
-			var t2 := t * t
-			var t3 := t2 * t
-			out.append(0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
-				+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3))
-	out.append(pts[m - 1])
-	return out
-
-
-static func _at_length(line: PackedVector3Array, lengths: Array[float], d: float) -> Vector3:
-	for i in range(1, line.size()):
-		if lengths[i] >= d:
-			var span := maxf(lengths[i] - lengths[i - 1], 0.00001)
-			return line[i - 1].lerp(line[i], clampf((d - lengths[i - 1]) / span, 0.0, 1.0))
-	return line[line.size() - 1]
+		seg.global_transform = rt * Transform3D(Basis(sx * SEG_THICK, sy * (len_ * 1.08), sz * SEG_THICK), (a + b) * 0.5)
 
 
 ## The prisoner thrown off the side as the restraints open (`instant` for a
@@ -1374,15 +1355,9 @@ func _throw_prisoner(instant: bool) -> void:
 	tw.tween_property(_prisoner, "global_basis", flat, 0.5)
 
 
-## Plug `i` (0 arms, 1 legs, 2 core) in world space: where its cable leaves the
-## table.
-func plug_point(i: int) -> Vector3:
-	return _body.global_transform * (PLUGS[i] as Vector3 + Vector3(0.0, 0.0, 0.08))
-
-
 # --- The hum ----------------------------------------------------------------------------
 
-## A low electric hum while it has power, whining up as the claw moves -- the
+## A low electric hum while it has power, whining up as the gantry runs -- the
 ## only machine sound in the dungeon, so that when it dies the silence is felt.
 func _feed_audio() -> void:
 	var near := Coop.nearest_distance(global_position) if Coop.count() > 0 else INF
@@ -1401,10 +1376,11 @@ func _feed_audio() -> void:
 	if frames <= 0:
 		return
 	var rate := 22050.0
+	var motion := clampf(_bv.length() / 5.0 + absf(_len_goal - _len) * 0.5, 0.0, 1.0)
 	var hum := 46.0 * (0.55 + 0.45 * _power)
-	var whine := 180.0 + 260.0 * maxf(arm_motion, leg_motion)
+	var whine := 180.0 + 260.0 * motion
 	var amp := 0.22 * _power
-	var w_amp := 0.05 * _power * maxf(arm_motion, leg_motion)
+	var w_amp := 0.05 * _power * motion
 	var buf := PackedVector2Array()
 	buf.resize(frames)
 	for i in frames:
