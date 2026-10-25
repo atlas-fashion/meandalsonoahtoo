@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 102), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 103), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -486,6 +486,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 100 | 2026-10-23 | The shelves face out and stand taller, the lift in its corner (it was on the table), one palette, slower slams | [docs/notes/100-shelves-face-out-the-lift-in-its-corner-one-palette.md](docs/notes/100-shelves-face-out-the-lift-in-its-corner-one-palette.md) |
 | 101 | 2026-10-23 | The surgery's torches on the colonettes, leaded glass in the booth, a second claw that beams (and stops before the slam) | [docs/notes/101-torches-on-the-colonettes-leaded-glass-the-beam-claw.md](docs/notes/101-torches-on-the-colonettes-leaded-glass-the-beam-claw.md) |
 | 102 | 2026-10-25 | The surgery's shelves turned to rows of pushable vats; its power a crystal in a room under the floor, through a hatch under one vat; the beam claw gone; the surgeon gone once it is pulled | [docs/notes/102-vats-a-hatch-the-powering-room-and-its-crystal.md](docs/notes/102-vats-a-hatch-the-powering-room-and-its-crystal.md) |
+| 103 | 2026-10-25 | The claw opens and shakes before it drops; a block is caught, a parry knocks it limp 2 s; the vats a bit faster | [docs/notes/103-the-claw-opens-shakes-and-can-be-parried-limp.md](docs/notes/103-the-claw-opens-shakes-and-can-be-parried-limp.md) |
 
 ## Notes by source file
 
@@ -577,9 +578,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102
-- `scripts/surgery_vat.gd`: 102
+- `scripts/surgery_vat.gd`: 102, 103
 - `scripts/surgery_control.gd`: 99, 100, 101, 102
-- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102
+- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80

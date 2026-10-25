@@ -29,14 +29,20 @@ extends CharacterBody3D
 ## It FOLLOWS the nearest player (the trolley over them, the claw hanging above
 ## the vats) and SLAMS down to GRAB them. The slam (State.REAR) is made
 ## hard to get away from (the user: "make it pause to drop much later"): it
-## draws up (WIND), keeps following them the whole time it is drawn up
-## (TRACK), and only at the very end locks on where they are (LOCK -- a brief
-## shudder, the parry cue) and drops (DROP, accelerating like a weight). Where
-## it lands the floor cracks, dust and stone chips burst out, sparks fly, a flash
-## lights the stone and the view shakes (`_impact_fx`). Caught, they are CARRIED
-## to the table and STRAPPED down; they can STRUGGLE free (player.gd `restrain`
-## / `struggles`). Missed, the claw is stuck in the floor a moment and tears
-## itself free in a spray of grit.
+## draws up, its claw opening (WIND), keeps following them the whole time it is
+## drawn up (TRACK), opens wide and shakes lightly (SHAKE -- the parry cue;
+## note 103), and only at the very end locks on where they are (LOCK) and
+## drops (DROP, accelerating like a weight), its fingers snapping shut as it
+## lands. Where it lands the floor cracks, dust and stone chips burst out,
+## sparks fly, a flash lights the stone and the view shakes (`_impact_fx`).
+## Caught -- a guard is no help, only a parry -- they are CARRIED to the table
+## and STRAPPED down; they can STRUGGLE free (player.gd `restrain` /
+## `struggles`). Missed, the claw is stuck in the floor a moment and tears
+## itself free in a spray of grit. PARRIED, it is knocked up off the blade and
+## hangs LIMP, swinging, its light guttering, for LIMP_TIME, then hunts again.
+##
+## The claw's fingers (note 103): claw.glb is one mesh, skinned here to a hub
+## and three fingers (`_rig_claw`) that open and shut about their knuckles.
 ##
 ## Its power (note 102) is the CRYSTAL in the powering room under the hall
 ## (surgery_power.gd): pulled from its cradle, the machine dies (`power_off`).
@@ -61,7 +67,7 @@ const FX_CHIP := preload("res://textures/surgery_fx_chip.png")
 ## so the numbering of the rest is what it was.) Note 101's second claw, the one
 ## that fired the enforcer's beam, is gone too (note 102: "Remove the arm that
 ## shoots the enforcer beam").
-enum State { DORMANT, WAKING, HUNT, GRAB, SWEEP, REAR, CLAMPED, STALL, DYING, DEAD, CARRY, STRAP }
+enum State { DORMANT, WAKING, HUNT, GRAB, SWEEP, REAR, CLAMPED, STALL, DYING, DEAD, CARRY, STRAP, LIMP }
 
 ## --- The table -------------------------------------------------------------------
 ## The slab's top off the floor (the model is 3.0 long along Z, 1.48 wide).
@@ -124,19 +130,41 @@ const LEVEL_MAX := 4
 ## --- The slam (State.REAR) -------------------------------------------------------
 ## Over them within this (horizontally) and it may slam.
 const SLAM_OVER := 1.6
-## WIND: drawn up this much over WIND_TIME, still following. TRACK: held drawn
-## up, still following -- the long part. LOCK: the aim fixed where they are, a
-## shudder, the parry cue. DROP: down, accelerating, onto the spot.
+## WIND: drawn up this much over WIND_TIME, still following, the claw opening.
+## TRACK: held drawn up, still following -- the long part. SHAKE: open wide, it
+## shakes lightly, still following -- the parry cue opens here (note 103: "open
+## its claw and shake lightly before dropping"). LOCK: the aim fixed where they
+## are. DROP: down, accelerating, onto the spot.
 const WIND_RISE := 0.7
 const WIND_TIME := 0.35
-const TRACK_TIME: Array[float] = [0.5, 0.45, 0.4, 0.35, 0.3]
+const TRACK_TIME: Array[float] = [0.35, 0.3, 0.25, 0.2, 0.15]
+const SHAKE_TIME := 0.3
 const LOCK_TIME: Array[float] = [0.16, 0.15, 0.14, 0.13, 0.12]
 const DROP_TIME := 0.17
-## Missed: stuck in the floor this long (parried: PARRY_STUCK), torn free and
-## drawn up over PULL_TIME.
+## Missed: stuck in the floor this long, torn free and drawn up over PULL_TIME.
 const REAR_STUCK := 1.3
-const PARRY_STUCK := 3.0
 const PULL_TIME := 0.5
+## PARRIED (note 103): knocked up over KNOCK_TIME, KNOCK_RISE over where it
+## hovers, its swing kicked away from the player (KNOCK_SWING); then LIMP -- the
+## power out of it, hanging slack and swinging -- for LIMP_TIME, then back to
+## the hunt.
+const KNOCK_TIME := 0.25
+const KNOCK_RISE := 1.2
+const KNOCK_SWING := 4.0
+const LIMP_TIME := 2.0
+## --- The fingers (note 103) ---------------------------------------------------------
+## claw.glb is one mesh; `_rig_claw` skins it to a hub and its three fingers,
+## each hinged at its knuckle and swung out (+) or in (-) about it, in radians.
+## The fingers' bearings round the claw's axis (degrees, atan2(z, x) in the
+## model), where the knuckles are, and the band over which the hub gives way to
+## the finger.
+const FINGER_AT: Array[float] = [30.0, 150.0, 270.0]
+const KNUCKLE_Y := -0.85
+const KNUCKLE_R := 0.14
+const FINGER_FROM := -0.72
+const FINGER_TO := -0.98
+const FINGER_OPEN := 0.75
+const FINGER_SHUT := -0.3
 ## A player this near where it lands is GRABBED; nearer than SHAKE_RADIUS is
 ## thrown down by the blow.
 const GRAB_RADIUS := 1.3
@@ -189,6 +217,10 @@ var _target: Node3D = null
 var _next_rear := 0.0
 var _hit_done := false
 var _parried := false
+## The slam's parry cue sent (at SHAKE).
+var _cued := false
+## Inside `_strike`, dealing the blow to a player.
+var _striking := false
 var _stun_until := 0.0
 var _victim: Node3D = null
 var _next_cut := 0.0
@@ -220,6 +252,13 @@ var _power := 0.0
 var _roll := 0.0
 var _spin := 0.0
 var _flex := 0.0
+## The fingers: where they are going (FINGER_SHUT .. FINGER_OPEN) and how fast
+## (a share a second), the light shake before the drop (0..1), where they are.
+var _open_goal := 0.0
+var _open_rate := 6.0
+var _shaking := 0.0
+var _open := 0.0
+var _skel: Skeleton3D
 
 ## Nodes.
 var _body: Node3D
@@ -384,6 +423,7 @@ func _build_arm() -> void:
 	var claw_model: Node3D = CLAW_MODEL.instantiate()
 	claw_model.scale = Vector3.ONE * CLAW_SCALE
 	_claw.add_child(claw_model)
+	_rig_claw(claw_model)
 	_shadows(claw_model)
 	_power_glow(claw_model, 0.3)
 	_claw_mats = glow(claw_model, 0.3)
@@ -411,6 +451,92 @@ func _build_arm() -> void:
 	kbox.size = Vector3(0.8, 1.0, 0.8)
 	kshape.shape = kbox
 	_claw_box.add_child(kshape)
+
+
+## The claw's mesh skinned (once; shared) to a hub and three fingers, and a
+## Skeleton3D put in over it, so the fingers open and shut (`_pose_fingers`).
+## Each vertex below FINGER_FROM goes to the finger whose bearing is nearest,
+## all of it by FINGER_TO: the bend is spread over the knuckle, not a crease.
+static var _claw_rig := {}
+
+
+func _rig_claw(model: Node3D) -> void:
+	var mi: MeshInstance3D = null
+	for n in model.find_children("*", "MeshInstance3D", true, false):
+		mi = n
+		break
+	if mi == null or mi.mesh == null:
+		return
+	if not _claw_rig.has(mi.mesh.get_rid()):
+		var src := mi.mesh
+		var arrays := src.surface_get_arrays(0)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bones := PackedInt32Array()
+		var weights := PackedFloat32Array()
+		bones.resize(verts.size() * 4)
+		weights.resize(verts.size() * 4)
+		for i in verts.size():
+			var v := verts[i]
+			var t := clampf((FINGER_FROM - v.y) / (FINGER_FROM - FINGER_TO), 0.0, 1.0)
+			var w := t * t * (3.0 - 2.0 * t)
+			var a := rad_to_deg(atan2(v.z, v.x))
+			var best := 0
+			var best_d := INF
+			for f in FINGER_AT.size():
+				var d := absf(angle_difference(deg_to_rad(a), deg_to_rad(FINGER_AT[f])))
+				if d < best_d:
+					best_d = d
+					best = f
+			bones[i * 4] = 0
+			bones[i * 4 + 1] = best + 1
+			weights[i * 4] = 1.0 - w
+			weights[i * 4 + 1] = w
+		arrays[Mesh.ARRAY_BONES] = bones
+		arrays[Mesh.ARRAY_WEIGHTS] = weights
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mesh.surface_set_material(0, src.surface_get_material(0))
+		var skin := Skin.new()
+		skin.add_named_bind("hub", Transform3D.IDENTITY)
+		for f in FINGER_AT.size():
+			skin.add_named_bind("finger%d" % f, Transform3D(Basis(), -_knuckle(f)))
+		_claw_rig[mi.mesh.get_rid()] = [mesh, skin]
+	var rig: Array = _claw_rig[mi.mesh.get_rid()]
+	_skel = Skeleton3D.new()
+	_skel.name = "Fingers"
+	_skel.add_bone("hub")
+	for f in FINGER_AT.size():
+		var b := _skel.add_bone("finger%d" % f)
+		_skel.set_bone_parent(b, 0)
+		_skel.set_bone_rest(b, Transform3D(Basis(), _knuckle(f)))
+		_skel.reset_bone_pose(b)
+	mi.get_parent().add_child(_skel)
+	_skel.transform = mi.transform
+	mi.reparent(_skel, false)
+	mi.transform = Transform3D.IDENTITY
+	mi.mesh = rig[0]
+	mi.skin = rig[1]
+	mi.skeleton = NodePath("..")
+
+
+## Finger `f`'s knuckle, in the model.
+static func _knuckle(f: int) -> Vector3:
+	var a := deg_to_rad(FINGER_AT[f])
+	return Vector3(cos(a) * KNUCKLE_R, KNUCKLE_Y, sin(a) * KNUCKLE_R)
+
+
+## Each finger swung `open` radians out about its knuckle (in, below 0), and
+## trembling by `shake`.
+func _pose_fingers(open: float, shake: float) -> void:
+	if _skel == null:
+		return
+	var now := _now()
+	for f in FINGER_AT.size():
+		var a := deg_to_rad(FINGER_AT[f])
+		# Out from the axis: about the knuckle's tangent.
+		var axis := Vector3(-sin(a), 0.0, cos(a))
+		var tremble := shake * 0.07 * sin(now * (41.0 + 7.0 * float(f)) + _phase[f % 3] * 3.0)
+		_skel.set_bone_pose_rotation(f + 1, Quaternion(axis, open + tremble))
 
 
 ## --- One palette (note 100) ---------------------------------------------------------
@@ -579,6 +705,9 @@ func _sleep_pose() -> void:
 	_b_goal = Vector2.ZERO
 	_len = FOLD_LEN
 	_len_goal = FOLD_LEN
+	_shaking = 0.0
+	_open = -0.1
+	_open_goal = -0.1
 	_o = Vector2.ZERO
 	_ov = Vector2.ZERO
 	_update_wrist()
@@ -620,6 +749,9 @@ func set_dead_now(at: Vector3, _yaw: float) -> void:
 	_bv = Vector2.ZERO
 	_b_goal = _b
 	_o = Vector2(0.35, 0.2)
+	_open = 0.4
+	_open_goal = 0.4
+	_shaking = 0.0
 	_len = ROOT_Y - CLAW_LEN * 0.95
 	_len_goal = _len
 	_update_wrist()
@@ -672,6 +804,22 @@ func _enter(s: State) -> void:
 	state = s
 	_t = 0.0
 	_hit_done = false
+	_shaking = 0.0
+	# The fingers' hold for the state (the slam and the table work them
+	# themselves).
+	match s:
+		State.DORMANT:
+			_open_goal = -0.1
+			_open_rate = 3.0
+		State.HUNT:
+			_open_goal = 0.05
+			_open_rate = 4.0
+		State.CARRY:
+			_open_goal = FINGER_SHUT
+			_open_rate = 30.0
+		State.DYING, State.LIMP:
+			_open_goal = 0.4
+			_open_rate = 2.0
 
 
 # --- Each tick ----------------------------------------------------------------------
@@ -691,6 +839,9 @@ func _physics_process(delta: float) -> void:
 			# The arm pays out of the trolley, the claw flexing.
 			_b_goal = Vector2.ZERO
 			_len_goal = lerpf(FOLD_LEN, ROOT_Y - HOVER_Y, clampf((_t - 1.4) / 1.2, 0.0, 1.0))
+			# The fingers trying themselves as it pays out.
+			_open_goal = 0.35 * sin(maxf(_t - 1.4, 0.0) * 5.0) if _t >= 1.4 else -0.1
+			_open_rate = 8.0
 			_hoist = 2.0
 			if _t >= 3.0:
 				_enter(State.HUNT)
@@ -700,6 +851,8 @@ func _physics_process(delta: float) -> void:
 			_hunt(now)
 		State.REAR:
 			_slam(now)
+		State.LIMP:
+			_limp(now)
 		State.CARRY:
 			_carry(now)
 		State.STRAP:
@@ -743,7 +896,9 @@ var _last_accel := Vector2.ZERO
 ## strikes, so the drop goes where it was aimed.
 func _swing(delta: float) -> void:
 	var w := SWING_RATE * (1.0 + 2.0 * _swing_lock)
-	var acc := -_o * w * w - _ov * 2.0 * SWING_DAMP * w - _last_accel * SWING_GAIN * w * w * (1.0 - _swing_lock)
+	# Limp, it swings on and on.
+	var damp := SWING_DAMP * (0.3 if state == State.LIMP else 1.0)
+	var acc := -_o * w * w - _ov * 2.0 * damp * w - _last_accel * SWING_GAIN * w * w * (1.0 - _swing_lock)
 	_ov += acc * delta
 	_o += _ov * delta
 	if _o.length() > SWING_MAX:
@@ -807,6 +962,7 @@ func _hunt(now: float) -> void:
 	var over := Vector2(_w.x - p.x, _w.z - p.z).length()
 	if over < SLAM_OVER and now >= _next_rear:
 		_parried = false
+		_cued = false
 		_enter(State.REAR)
 
 
@@ -825,8 +981,10 @@ func _chest(p: Node3D) -> Vector3:
 
 
 ## A blow on player `p`; true if they parried it.
+## It comes down from above, so whichever way they face, a guard meets it: the
+## blow is given as travelling back along their own facing.
 func _strike(p: Node3D, amount: float) -> bool:
-	var dir := p.global_position - room.to_global(_w)
+	var dir := p.global_basis.z
 	dir.y = 0.0
 	dir = dir.normalized() if dir.length_squared() > 0.0001 else -global_basis.z
 	var parried := [false]
@@ -835,25 +993,37 @@ func _strike(p: Node3D, amount: float) -> bool:
 			parried[0] = true
 	if p.has_signal("guarded"):
 		p.connect("guarded", watch)
+	_striking = true
 	if p.has_method("take_damage"):
 		p.call("take_damage", amount, dir, self)
+	_striking = false
 	if p.has_signal("guarded") and p.is_connected("guarded", watch):
 		p.disconnect("guarded", watch)
 	return parried[0]
 
 
+## A parry's flash (player.gd `_on_guarded`) goes in the middle of the view,
+## where the blade meets the claw -- not toward the table, which is the
+## attacker's body but nowhere near.
+func guard_flash_centre() -> bool:
+	return _striking
+
+
 # --- The slam ----------------------------------------------------------------------
 
-## WIND (drawn up), TRACK (held up, still following them), LOCK (the aim fixed,
-## a shudder, the parry cue), DROP (down onto the spot), then stuck in the
-## floor and torn free.
+## WIND (drawn up, the claw opening), TRACK (held up, still following them),
+## SHAKE (open wide and shaking lightly, still following; the parry cue), LOCK
+## (the aim fixed), DROP (down onto the spot, the fingers snapping shut as it
+## lands), then stuck in the floor and torn free -- or, parried, knocked up and
+## limp (`_limp`).
 func _slam(now: float) -> void:
 	var track: float = TRACK_TIME[level]
 	var lock: float = LOCK_TIME[level]
-	var lock_at := WIND_TIME + track
+	var shake_at := WIND_TIME + track
+	var lock_at := shake_at + SHAKE_TIME
 	var drop_at := lock_at + lock
 	var land_at := drop_at + DROP_TIME
-	var stuck_for := PARRY_STUCK if _parried else REAR_STUCK
+	var stuck_for := REAR_STUCK
 	var hover_len := clampf(ROOT_Y - (_to.y + HOVER_Y), FOLD_LEN, ROOT_Y - 1.0)
 	if _t < lock_at:
 		# Still following, drawn up over them: the arm hauled in, the claw spread.
@@ -868,22 +1038,32 @@ func _slam(now: float) -> void:
 		_hoist = 4.0
 		_swing_lock = 0.35
 		_flex = wind
+		_open_goal = FINGER_OPEN * 0.85
+		_open_rate = 5.0
+		if _t >= shake_at:
+			# Open wide, it shakes -- the cue: from here the game listens for
+			# block until it lands.
+			_open_goal = FINGER_OPEN
+			_shaking = 1.0
+			if not _cued:
+				_cued = true
+				for pl in Coop.all():
+					if pl.has_method("parry_cue"):
+						pl.call("parry_cue", self, SHAKE_TIME + lock + DROP_TIME)
 		return
 	if _t < drop_at:
 		# LOCKED: the aim fixed where they are now; the trolley brakes hard over
-		# it, the swing is killed, the claw shudders -- and this is the cue.
+		# it, the swing is killed, still shaking.
 		if not _hit_done:
 			_hit_done = true
 			if _target != null and is_instance_valid(_target):
 				var p: Vector3 = room.to_local(_target.global_position)
 				_to = Vector3(p.x, maxf(p.y, 0.0), p.z)
-			for pl in Coop.all():
-				if pl.has_method("parry_cue"):
-					pl.call("parry_cue", self, lock + DROP_TIME)
 		_b_goal = Vector2(_to.x, _to.z) - _o * 0.6
 		_b_speed = 1.6
 		_swing_lock = 1.0
 		_flex = 1.0
+		_shaking = 1.0
 		return
 	if _t < land_at:
 		# DROPPING: paid out with gravity's ease-in, straight onto the spot.
@@ -894,21 +1074,27 @@ func _slam(now: float) -> void:
 		_len_goal = _len
 		_swing_lock = 1.0
 		_flex = 0.4
+		_shaking = 0.0
 		return
 	if _hit_done:
 		_hit_done = false
 		_len = _drop_len
 		_len_goal = _drop_len
+		# Shut on whatever is under it.
+		_open_goal = FINGER_SHUT
+		_open_rate = 30.0
 		_impact(now)
 		if state != State.REAR:
 			return
 	if _t < land_at + stuck_for:
-		# Stuck in the floor, wrenching at it.
+		# Stuck in the floor, wrenching at it, the fingers dug in.
 		var wr := 0.05 * sin(_t * 31.0)
 		_o = Vector2(wr, -wr) * 0.3
 		_len_goal = _drop_len - absf(wr) * 2.0
 		_hoist = 6.0
 		_b_goal = _b
+		_open_goal = FINGER_SHUT * 0.5 + 0.08 * sin(_t * 23.0)
+		_open_rate = 12.0
 		return
 	if _t < land_at + stuck_for + 0.05 and _flex < 2.0:
 		# Torn free: grit and chips off the floor.
@@ -918,6 +1104,8 @@ func _slam(now: float) -> void:
 	_hoist = absf(_drop_len - hover_len) / PULL_TIME + 0.5
 	_swing_lock = 0.0
 	_flex = 0.0
+	_open_goal = 0.0
+	_open_rate = 4.0
 	if _t >= land_at + stuck_for + PULL_TIME:
 		_next_rear = now + REAR_COOLDOWN[level]
 		_enter(State.HUNT)
@@ -947,13 +1135,67 @@ func _impact(now: float) -> void:
 				_parried = true
 				_sparks(at + Vector3(0.0, 0.4, 0.0), Color(1.0, 0.85, 0.55), 24)
 				continue
-			if not guarded and caught == null and n.has_method("restrain"):
+			# Blocked or not, it has them (note 103: a guard is no use against
+			# it -- only a parry).
+			if caught == null and n.has_method("restrain"):
 				caught = n
 				continue
 		if not guarded and n.has_method("knock_down"):
 			n.call("knock_down", n.global_position - at, 5.5)
+	if _parried:
+		_knocked(now)
+		return
 	if caught != null:
 		_take(caught, now)
+
+
+## PARRIED: the claw knocked up off the blade and away from whoever parried it,
+## a purple burst off its fingers, and the power out of it (`_limp`).
+func _knocked(_now_: float) -> void:
+	var tip := room.to_global(_w + _axis * CLAW_LEN * 0.8)
+	var colour := Color(0.66, 0.28, 1.0)
+	var away := Vector3.ZERO
+	for p in Coop.all():
+		var n := p as Node3D
+		if n != null and n.get("parry_color") != null and n.global_position.distance_to(tip) < SHAKE_RADIUS + 1.5:
+			colour = n.get("parry_color")
+			away += tip - n.global_position
+	away = room.global_basis.inverse() * away
+	var flat := Vector2(away.x, away.z)
+	flat = flat.normalized() if flat.length_squared() > 0.0001 else Vector2(randf() - 0.5, randf() - 0.5).normalized()
+	_enter(State.LIMP)
+	_ov += flat * KNOCK_SWING
+	_swing_lock = 0.0
+	_flex = 0.0
+	# Flung open by the blow.
+	_open = FINGER_OPEN
+	_sparks(tip, colour, 40)
+	_sparks(tip + Vector3(0.0, 0.3, 0.0), Color(1.0, 0.85, 0.55), 12)
+
+
+## Knocked up, then LIMP_TIME hanging slack: the drives coasting to a stop, the
+## arm sagging, the claw swinging loose and its light guttering. Then the power
+## comes back with a jolt and it hunts again.
+func _limp(now: float) -> void:
+	var hover_len := clampf(ROOT_Y - (_to.y + HOVER_Y), FOLD_LEN, ROOT_Y - 1.0)
+	_swing_lock = 0.0
+	_b_goal = _b + _bv * 0.4
+	_b_speed = 0.4
+	if _t < KNOCK_TIME:
+		# Thrown up off the blade.
+		_len_goal = maxf(hover_len - KNOCK_RISE, FOLD_LEN)
+		_hoist = 18.0
+		return
+	# Slack: sagging back down to a little under where it hovers.
+	_len_goal = hover_len + 0.4
+	_hoist = 1.2
+	_open_goal = 0.35 + 0.1 * sin(_t * 2.1)
+	_open_rate = 2.0
+	if _t >= KNOCK_TIME + LIMP_TIME:
+		_next_rear = now + REAR_COOLDOWN[level]
+		_enter(State.HUNT)
+		# The jolt of the power coming back.
+		_open = FINGER_SHUT * 0.6
 
 
 ## The floor taking the blow at `at` (world, on the floor), `strength` 0..1: a
@@ -1161,6 +1403,9 @@ func _strap(now: float) -> void:
 	_b_goal = Vector2.ZERO
 	_len_goal = ROOT_Y - (TOP + 2.4 + 0.35 * sin(_t * 9.0))
 	_hoist = 3.0
+	# Working at them: the fingers pick and close.
+	_open_goal = 0.15 + 0.2 * sin(_t * 9.0)
+	_open_rate = 10.0
 	if now >= _next_cut:
 		_next_cut = now + OPERATE_EVERY
 		_victim.call("take_damage", OPERATE_DAMAGE[level], Vector3.DOWN, self)
@@ -1247,6 +1492,10 @@ func _die_done() -> void:
 func take_damage(_amount: float, from_direction: Vector3 = Vector3.ZERO, _attacker: Node3D = null) -> void:
 	if state == State.DEAD:
 		return
+	# A parry turning its own blow back on it (player.gd `_on_guarded`): the
+	# knock (`_knocked`) is the answer to that.
+	if _striking:
+		return
 	var at := global_position + Vector3(0.0, TOP + 0.1, 0.0) - from_direction * 0.9
 	_ring_off(at, from_direction)
 
@@ -1326,6 +1575,9 @@ func _apply_pose(delta: float) -> void:
 			roll = 0.01 * sin(_t * 21.0) * clampf(1.0 - _t / 2.0, 0.0, 1.0)
 		State.DEAD:
 			power = 0.0
+		State.LIMP:
+			# The power knocked out of it, guttering.
+			power = 0.2 + 0.15 * absf(sin(_t * 17.0)) * absf(sin(_t * 5.3))
 	if now < _stun_until:
 		roll += 0.006 * sin(now * 40.0)
 	if state == State.STRAP:
@@ -1372,11 +1624,24 @@ func _pose_arm(delta: float) -> void:
 	var ref := Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT
 	var x := ref.cross(y).normalized()
 	var z := x.cross(y).normalized()
+	# The light shake before the drop (note 103): a quick tremble of the whole
+	# claw, the fingers shaking on their own.
 	var shudder := 0.0
-	if state == State.REAR and _flex >= 1.0:
-		shudder = 0.05 * sin(_now() * 63.0)
+	var wobble := Vector3.ZERO
+	if _shaking > 0.0:
+		var t := _now()
+		shudder = 0.025 * _shaking * sin(t * 47.0)
+		wobble = Vector3(sin(t * 53.0), 0.0, cos(t * 59.0)) * 0.018 * _shaking
 	var claw_basis := Basis(x, y, z) * Basis(Vector3.UP, _spin + shudder) * Basis(Vector3.RIGHT, shudder)
-	_claw.global_transform = rt * Transform3D(claw_basis, _w)
+	_claw.global_transform = rt * Transform3D(claw_basis, _w + wobble)
+	# The fingers.
+	if delta > 0.0:
+		_open = lerpf(_open, _open_goal, clampf(delta * _open_rate, 0.0, 1.0))
+	if state == State.LIMP:
+		# Swinging loose: they splay as it swings.
+		_pose_fingers(_open + clampf(_ov.length() * 0.08, 0.0, 0.25), 0.0)
+	else:
+		_pose_fingers(_open, _shaking)
 	# The arm: from the trolley straight down into the wrist, its segments as
 	# many as the length needs -- it telescopes.
 	var root := Vector3(_b.x, ROOT_Y + 0.35, _b.y)

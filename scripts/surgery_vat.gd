@@ -31,10 +31,11 @@ const HEIGHT := 1.85
 const STAND_OFF := 0.12
 ## Shoving: this long before it gives at all; then up to PUSH_SPEED (m/s) at
 ## ACCEL, braking at BRAKE once let go. Each heave a lurch HEAVE times a second,
-## its low ebb LURCH of full speed.
+## its low ebb LURCH of full speed. (Speed and acceleration 0.8 -> 1.1, note 103:
+## "move the vats a bit faster".)
 const BREAKAWAY := 0.55
-const PUSH_SPEED := 0.8
-const ACCEL := 0.8
+const PUSH_SPEED := 1.1
+const ACCEL := 1.1
 const BRAKE := 5.0
 const HEAVE := 1.3
 const LURCH := 0.35
