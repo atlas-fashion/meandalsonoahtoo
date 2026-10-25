@@ -545,6 +545,16 @@ booth and lift (`platform`, `boothwindow`, `boothdoorwall`, `door`,
 impact effects use `textures/surgery_fx_dust.png`, `surgery_fx_crack.png` and
 `surgery_fx_chip.png` (generated pictures).
 
+Note 102 adds four: `vat_bones` and `vat_gold` (the pushable vats; round tubs,
+fitted by their longest horizontal extent so the tub itself is ~2.3 m across),
+`crystal` (the powering room's, 2 m) and `hatch` (the trapdoor lid, hinges on
+its -X edge). Pass Tripo `face_limit` (100000 or less) when converting: note
+99's returns came at 1.4 M triangles. `-- --reduce [names]` welds and decimates
+a raw that is over RAW_MAX in place before it is committed. The powering room is
+furnished with note 98's machine pieces (`galvanic`, `pistons`, `column`,
+`leverbox`, `flywheel`, `gear`, `clampmount`, `cable`, `track`) -- no new build
+for those.
+
 # The surgeon (2026-10-22, Higgsfield / Meshy)
 
 ```

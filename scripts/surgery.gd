@@ -1,7 +1,8 @@
 extends "res://scripts/morgue.gd"
 
 ## The surgery (2026-10-21; refurnished after the user's reference picture,
-## note 95; an open medieval hall, note 96; rebuilt, note 98; REDONE, note 99):
+## note 95; an open medieval hall, note 96; rebuilt, note 98; redone, note 99;
+## its bookshelves turned to VATS and its power put under the floor, note 102):
 ## the hall where the dead prisoners were made into soldiers -- intake,
 ## assembly, dispatch. An enclosed hall (module_level `_make_surgery_hall`, the
 ## chest room nearest the boss, note 97; this extends morgue.gd for its torches
@@ -13,44 +14,43 @@ extends "res://scripts/morgue.gd"
 ## tools/build_surgery_kit.py into models/surgery/. Flat by nature: the plank
 ## ceiling and the effect textures (the claw's dust, chips and floor cracks).
 ##
-## THE WALLS (note 99, the user: "no skulls, and the brick texture should be the
-## same as the dungeon walls. The room's architecture looks great though"): the
-## dungeon's own brick wall piece carried up course on course to the roof
-## (`_raise_walls`, brick_level's "wall", the same stone as every corridor), and
-## in front of it an open gothic arcade frame on every cell -- colonettes,
-## lancet arches, a cornice, NO back panel, so the brick shows through every
-## arch -- with an open tracery frieze and a plain lintel over each way in. No
-## skulls, no carved faces anywhere on them.
+## THE WALLS (note 99): the dungeon's own brick carried up to the roof
+## (`_raise_walls`) behind an open gothic arcade frame on every cell, no skulls.
 ##
-## THE FLOOR, after the user's layout:
-## - INTAKE: the FREIGHT LIFT in one corner brings the remains up from the
-##   crypts; under the CONTROL ROOM beside it the tray carts are unloaded, and
-##   the numbered trays and the catalogue drawers stand among the shelves.
-## - THE BOOKSHELF MAZE fills the hall (`_carve_maze`, `_build_maze`): a
-##   9 x 9 grid of ~3 m cells walled by back-to-back bookcases (six kinds:
-##   ledgers, catalogue drawers, bone trays, scrolls, specimens, a ruined one),
-##   a random spanning tree with a few loops cut in, so the claw has to be lost
-##   in it. Its dead ends hold the anatomists' things -- a desk, a lectern, the
-##   armillary, candelabras.
-## - ASSEMBLY: a floor RAIL carries the trays from the intake into the open
-##   middle, where the surgical table stands over the DISPOSAL SHAFT's grating
-##   and the claw on its overhead gantry does the work.
-## - DISPATCH: the finished soldiers stand in the HOLDING PENS behind iron bars
-##   along the far wall, a portcullis between them and the middle.
+## THE FLOOR (note 102, the user: "Remove the bookshelves, the room should
+## instead be filled with large vats of pieces that the claw uses to make bionic
+## soldiers. The player should be able to push the vats around the room, but
+## they should be heavy and cumbersome"):
+## - THE VATS fill the hall in rows (`_lay_vats`): riveted iron tubs of bones
+##   and of gold prostheses (surgery_vat.gd), on a 3 m lattice with aisles
+##   carved between them like a maze's -- a random spanning tree with a few loops
+##   -- the middle round the table, the intake, the rail and the ways in left
+##   clear. Every one can be shoved, slowly (surgery_vat.gd). Some of the gold
+##   ones glow with the oil in them: the hall's light, carried where they go.
+## - ONE VAT stands over the HATCH to the POWERING ROOM under the hall
+##   (surgery_power.gd), and nothing marks which (asked: no hint). In the room,
+##   THE CRYSTAL that powers the machine: pulled out, the claw drops dead, and
+##   climbing back out the player finds the SURGEON gone from his booth.
+## - INTAKE under the CONTROL ROOM (the tray cart, crates, a casket); ASSEMBLY:
+##   a floor RAIL from there into the open middle, where the surgical table
+##   stands over the DISPOSAL SHAFT's grating and the claw on its overhead
+##   gantry does the work; DISPATCH: the finished soldiers in the HOLDING PENS
+##   behind iron bars along the far wall, a portcullis between them and the hall.
 ## - THE CONTROL ROOM (surgery_control.gd): up on its platform over the intake,
-##   leaded windows over the hall, the SURGEON at his console working the
-##   claw. The freight lift goes up to its door. Kick it in, kill him, throw
-##   the master lever: that, and only that, switches the machine off.
+##   leaded windows over the hall, the surgeon at his console working the claw.
+##   No way up to it any more (note 102).
 ##
-## The whole plan is laid out in its own frame (`_plan`, the lift's corner at
-## its -X -Z) turned to whichever of the four ways keeps the lift, the control
-## room and the pens off the hall's ways in (`_choose_plan`).
+## The whole plan is laid out in its own frame (`_plan`, the booth's wall at its
+## -X) turned to whichever of the four ways keeps the booth and the pens off the
+## hall's ways in and the hatch off the rail (`_choose_plan`).
 
 const Table := preload("res://scripts/surgical_table.gd")
 const ControlRoom := preload("res://scripts/surgery_control.gd")
+const Power := preload("res://scripts/surgery_power.gd")
+const Vat := preload("res://scripts/surgery_vat.gd")
 const ModuleMaze := preload("res://scripts/module_maze.gd")
 
-## The Higgsfield kit (notes 95, 96, 98, 99).
+## The Higgsfield kit (notes 95, 96, 98, 99, 102).
 const K := {
 	"jar": preload("res://models/surgery/jar.glb"),
 	"chest": preload("res://models/surgery/chest.glb"),
@@ -58,11 +58,6 @@ const K := {
 	"barrels": preload("res://models/surgery/barrels.glb"),
 	"beam": preload("res://models/surgery/beam.glb"),
 	"brace": preload("res://models/surgery/brace.glb"),
-	"desk": preload("res://models/surgery/desk.glb"),
-	"lectern": preload("res://models/surgery/lectern.glb"),
-	"globe": preload("res://models/surgery/globe.glb"),
-	"rug": preload("res://models/surgery/rug.glb"),
-	"books": preload("res://models/surgery/books.glb"),
 	"casket": preload("res://models/surgery/casket.glb"),
 	"crates": preload("res://models/surgery/crates.glb"),
 	"bundle": preload("res://models/surgery/bundle.glb"),
@@ -72,22 +67,17 @@ const K := {
 	"lintel2": preload("res://models/surgery/lintel2.glb"),
 	"frieze2": preload("res://models/surgery/frieze2.glb"),
 	"girder": preload("res://models/surgery/girder.glb"),
-	"shelf_ledgers": preload("res://models/surgery/shelf_ledgers.glb"),
-	"shelf_drawers": preload("res://models/surgery/shelf_drawers.glb"),
-	"shelf_trays": preload("res://models/surgery/shelf_trays.glb"),
-	"shelf_scrolls": preload("res://models/surgery/shelf_scrolls.glb"),
-	"shelf_specimens": preload("res://models/surgery/shelf_specimens.glb"),
-	"shelf_ruined": preload("res://models/surgery/shelf_ruined.glb"),
 	"floorrail": preload("res://models/surgery/floorrail.glb"),
 	"traycart": preload("res://models/surgery/traycart.glb"),
 	"portcullis": preload("res://models/surgery/portcullis.glb"),
 	"penbars": preload("res://models/surgery/penbars.glb"),
 	"shaftgrate": preload("res://models/surgery/shaftgrate.glb"),
+	"vat_bones": preload("res://models/surgery/vat_bones.glb"),
+	"vat_gold": preload("res://models/surgery/vat_gold.glb"),
 }
 const PLANKS := preload("res://textures/surgery_planks.png")
 ## How much each kit piece glows with its own picture (surgical_table.gd `glow`).
-const GLOWS := {"jar": 1.1, "candelabra": 1.2, "desk": 0.4, "books": 0.2, "shelf_specimens": 0.35,
-	"shelf_ledgers": 0.12, "shelf_drawers": 0.12, "shelf_trays": 0.15, "shelf_scrolls": 0.15, "shelf_ruined": 0.1}
+const GLOWS := {"jar": 1.1, "candelabra": 1.2, "vat_gold": 0.14, "vat_bones": 0.05}
 
 ## The walls: open frames BAY_DEPTH deep in front of the brick, CEIL tall.
 const BAY_DEPTH := 0.5
@@ -113,28 +103,35 @@ const RUNWAY_IN := 0.5
 const GIRDER_LEN := 4.4
 const GIRDER_H := 0.53
 
-## The maze: N x N cells across the hall; the bookcases' depth and height.
+## The layout's cells (note 99's maze grid, still the plan's measure for the
+## intake, the rail and the pens): N x N across the hall.
 const N := 9
-const SHELF_DEPTH := 0.42
-const SHELF_H := 3.9
-## The oak posts at the maze's joins (note 100).
-const POST_W := 0.88
-const SHELVES := ["shelf_ledgers", "shelf_ledgers", "shelf_drawers", "shelf_scrolls", "shelf_specimens",
-	"shelf_trays", "shelf_ruined"]
-## A share of the walls left standing after the maze is carved is cut open,
-## for loops (a maze with one path is a trap the claw can corner you in).
-const LOOPS := 0.13
-## Lights in the maze's dead ends at most (the candelabras').
-const DEAD_END_LIGHTS := 6
+
+## The vats (note 102): a lattice VAT_STEP apart -- the dungeon's flagstone
+## grid, so the hatch (cut where two flags meet) falls on one of its points --
+## no further out than VAT_REACH. Kept clear: the middle (CLEAR_MIDDLE either
+## way), CLEAR_RAIL either side of the rail, CLEAR_DOOR round each way in. A
+## share VAT_LOOPS of the walls left standing after the aisles are carved is
+## opened for loops. At most VAT_LIGHTS of the gold vats glow.
+const VAT_STEP := 3.0
+const VAT_REACH := 12.05
+const CLEAR_MIDDLE := 3.1
+const CLEAR_RAIL := 1.2
+const CLEAR_DOOR := 3.2
+const VAT_LOOPS := 0.15
+const VAT_LIGHTS := 6
+const VAT_OIL := Color(1.0, 0.62, 0.28)
 
 const CANDLE_COLOUR := Color(1.0, 0.68, 0.38)
 
 var table: CharacterBody3D
 var control: Node3D
+var power: Node3D
+var vats: Array[Node3D] = []
 
 var _wall := 13.9
 var _inner := 13.4
-## A maze cell.
+## A layout cell.
 var _c := 2.98
 ## The ways in: [point on the wall face, the way out], room frame.
 var _doorways: Array = []
@@ -143,10 +140,16 @@ var _posts: Array = []
 ## The plan's frame (see the header), and its turn in quarter turns.
 var _plan: Node3D
 var _turn := 0
-## The maze: which cells are what, and which walls between them are open.
-var _kind := {}
-var _open := {}
-var _cells: Array[Vector2i] = []
+## The hatch (module_level `_pick_surgery_hatch`): its hole, world, and the
+## middle of the dungeon cell it is in.
+var _hole := Vector3.ZERO
+var _hole_cell := Vector3.ZERO
+## The vats: their holder, the lattice's open slots, and which stands on the hatch.
+var _vat_holder: Node3D
+var _floor := {}
+var _hatch_vat: Node3D
+## The lattice's offset from the middle, plan frame (`_lattice_off`).
+var _off := Vector2.ZERO
 
 
 static func build_room(holder: Node3D, level, room_: Dictionary) -> Node3D:
@@ -178,6 +181,7 @@ func _dress() -> void:
 	_inner = _wall - BAY_DEPTH
 	_c = _inner * 2.0 / float(N)
 	_doorways = _find_doorways()
+	_find_hatch()
 
 	_raise_walls(h, cell)
 	_build_walls(h, cell)
@@ -186,13 +190,11 @@ func _dress() -> void:
 	_hang_wall_torches(h, cell)
 
 	_choose_plan()
-	_carve_maze()
-	_build_maze()
 	_build_intake()
 	_build_rail()
 	_build_dispatch()
 	_build_centre()
-	_furnish_dead_ends()
+	_lay_vats()
 
 	_spawn_table()
 	control = Node3D.new()
@@ -200,10 +202,11 @@ func _dress() -> void:
 	control.name = "ControlRoom"
 	_plan.add_child(control)
 	control.call("setup", self, table, _inner, _c)
+	_build_power()
 	_light_hall()
 	_limit_view(_wall)
-	print("[surgery] the surgical table asleep under its gantry; a %dx%d bookshelf maze (%d open walls), the plan turned %d; %d bodies laid out"
-		% [N, N, _open.size(), _turn * 90, _corpse_count])
+	print("[surgery] the surgical table asleep under its gantry; %d vats, one over the hatch at %s; the plan turned %d; %d bodies laid out"
+		% [vats.size(), to_local(_hole).snapped(Vector3.ONE * 0.1), _turn * 90, _corpse_count])
 
 
 ## A node of the plan's frame at `at`, turned `yaw`.
@@ -453,26 +456,40 @@ func _post_near(at: Vector3, d: Vector3) -> Vector3:
 	return best
 
 
-# --- The plan (note 99) ------------------------------------------------------------
+# --- The plan (notes 99, 102) --------------------------------------------------------
 
-## The plan's turn: the first quarter turn that keeps the lift's corner, the
-## wall under the control room and the pens' wall clear of every way in (or
-## the one that clears most).
+## The hatch's hole: where module_level cut it in the floor, or (a level built
+## without it) a point on the flagstone grid the same way out from the middle.
+func _find_hatch() -> void:
+	var meta: Dictionary = built.get_meta("surgery_hatch", {})
+	if not meta.is_empty():
+		_hole = meta["world"]
+		_hole_cell = meta["world"] - (meta["along"] as Vector3) * 1.5
+		return
+	_hole = to_global(Vector3(6.0, 0.0, 4.5))
+	_hole_cell = to_global(Vector3(6.0, 0.0, 6.0))
+
+
+## The plan's turn: the first quarter turn that keeps the booth's wall and the
+## pens' wall clear of every way in and the hatch off the rail (or the one that
+## clears most).
 func _choose_plan() -> void:
 	var best := 0
 	var best_bad := 99
+	var hole := to_local(_hole)
 	for k in 4:
 		var b := Basis(Vector3.UP, float(k) * PI * 0.5)
 		var bad := 0
 		for d in _doorways:
 			var p: Vector3 = b.inverse() * (d[0] as Vector3)
 			var dir: Vector3 = (b.inverse() * (d[1] as Vector3)).round()
-			if dir.x < -0.5 and p.z < -_inner + 3.0 * _c + 2.2:
-				bad += 1
-			elif dir.z < -0.5 and p.x < -_inner + _c + 2.2:
+			if dir.x < -0.5 and p.z < -_inner + 3.0 * _c + 2.2 and p.z > -_inner + _c - 2.2:
 				bad += 1
 			elif dir.x > 0.5 and absf(p.z) < 1.5 * _c + 2.2:
 				bad += 1
+		var hp := b.inverse() * hole
+		if _rail_distance(hp, _lattice_off(hp)) < CLEAR_RAIL:
+			bad += 2
 		if bad < best_bad:
 			best_bad = bad
 			best = k
@@ -481,243 +498,254 @@ func _choose_plan() -> void:
 	_plan.name = "Plan"
 	add_child(_plan)
 	_plan.transform = Transform3D(Basis(Vector3.UP, float(_turn) * PI * 0.5), Vector3.ZERO)
+	_off = _lattice_off(_plan.transform.inverse() * hole)
 	if best_bad > 0:
-		push_warning("surgery: %d way(s) in fall on the lift, the control room or the pens" % best_bad)
+		push_warning("surgery: %d conflict(s) between the ways in, the booth, the pens, the hatch and the rail" % best_bad)
 
 
-## The middle of maze cell (i, j), plan frame, on the floor.
+## The middle of layout cell (i, j), plan frame, on the floor.
 func cell_at(i: int, j: int) -> Vector3:
 	return Vector3(-_inner + _c * (float(i) + 0.5), 0.0, -_inner + _c * (float(j) + 0.5))
 
 
-## What cell (i, j) is: "lift", "intake", "centre", "pen", or "maze".
-func _kind_of(i: int, j: int) -> StringName:
-	if i == 0 and j == 0:
-		return &"lift"
-	if i == 0 and (j == 1 or j == 2):
-		return &"intake"
-	if i >= 3 and i <= 5 and j >= 3 and j <= 5:
-		return &"centre"
-	if i == N - 1 and j >= 3 and j <= 5:
-		return &"pen"
-	return &"maze"
+## The vats' lattice for a hatch at `hole` (plan frame): it sits on a flag joint,
+## one coordinate a whole number of VAT_STEPs from the middle and the other half
+## a step out -- the lattice's offset from the middle in x and z.
+static func _lattice_off(hole: Vector3) -> Vector2:
+	var on_x := absf(hole.x / VAT_STEP - roundf(hole.x / VAT_STEP)) < 0.2
+	return Vector2(0.0 if on_x else VAT_STEP * 0.5, VAT_STEP * 0.5 if on_x else 0.0)
 
 
-static func _edge(a: Vector2i, b: Vector2i) -> Vector4i:
-	if a.x < b.x or (a.x == b.x and a.y < b.y):
-		return Vector4i(a.x, a.y, b.x, b.y)
-	return Vector4i(b.x, b.y, a.x, a.y)
+## The rail's run (plan frame): out from under the booth along a row of the
+## vats' lattice (`off`) -- one row kept clear for it, not two -- then down a
+## column of it into the middle.
+func _rail_points(off := _off) -> PackedVector3Array:
+	var z := roundf((-_inner + _c * 2.0 - off.y) / VAT_STEP) * VAT_STEP + off.y
+	var x := roundf(-off.x / VAT_STEP) * VAT_STEP + off.x
+	return PackedVector3Array([Vector3(-_inner + _c * 0.6, 0.0, z), Vector3(x, 0.0, z),
+		Vector3(x, 0.0, -CLEAR_MIDDLE)])
 
 
-var _uf := {}
+## How far `p` (plan frame) is from the rail, across the floor.
+func _rail_distance(p: Vector3, off := _off) -> float:
+	var pts := _rail_points(off)
+	var best := INF
+	for s in pts.size() - 1:
+		var a := Vector2(pts[s].x, pts[s].z)
+		var b := Vector2(pts[s + 1].x, pts[s + 1].z)
+		var q := Vector2(p.x, p.z)
+		var ab := b - a
+		var t := clampf((q - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+		best = minf(best, q.distance_to(a + ab * t))
+	return best
 
 
-func _find(a: Vector2i) -> Vector2i:
-	while _uf[a] != a:
-		_uf[a] = _uf[_uf[a]]
-		a = _uf[a]
-	return a
+# --- The vats (note 102) -----------------------------------------------------------
+
+## A lattice point kept clear of vats: the middle, the booth's intake under it,
+## the pens, the rail, the ways in.
+func _kept_clear(p: Vector3) -> bool:
+	if absf(p.x) <= CLEAR_MIDDLE and absf(p.z) <= CLEAR_MIDDLE:
+		return true
+	if p.x < -9.5 and p.z > -_inner + _c - 1.6 and p.z < -_inner + _c * 3.0 + 1.0:
+		return true
+	if p.x > -_inner + _c * float(N - 1) - 1.0 and absf(p.z) < 1.5 * _c + 1.1:
+		return true
+	if _rail_distance(p) < CLEAR_RAIL:
+		return true
+	return _door_distance(_plan.transform * p) < CLEAR_DOOR
 
 
-func _union(a: Vector2i, b: Vector2i) -> bool:
-	var ra := _find(a)
-	var rb := _find(b)
-	if ra == rb:
-		return false
-	_uf[ra] = rb
-	return true
+## The vats laid out on the lattice through the hatch: the lattice's points split
+## into junctions (both indices of one parity), the walls between them and the
+## pillars at the corners, as a maze's cells and walls; every junction open, a
+## random spanning tree of walls opened between them (Kruskal, the room's own
+## generator), VAT_LOOPS of the rest, then whatever is still cut off joined up.
+## A vat on every point left shut. The hatch is a wall between two junctions,
+## never opened: its vat can be shoved off it into the aisle either side.
+func _lay_vats() -> void:
+	_vat_holder = Node3D.new()
+	_vat_holder.name = "Vats"
+	add_child(_vat_holder)
+	var hole := _plan.transform.inverse() * to_local(_hole)
 
 
-## The maze: every cell but the pens joined by a random spanning tree (Kruskal)
-## over the walls between them, after the openings the layout needs -- inside
-## the middle, the intake, the rail's run from the intake to the middle, the
-## aisle from the middle to the pens' gate -- then LOOPS of the rest cut open.
-func _carve_maze() -> void:
-	_kind.clear()
-	_open.clear()
-	_cells.clear()
-	_uf.clear()
-	for i in N:
-		for j in N:
-			var c := Vector2i(i, j)
-			_kind[c] = _kind_of(i, j)
-			if _kind[c] != &"pen":
-				_cells.append(c)
-				_uf[c] = c
-	var forced: Array = [[Vector2i(0, 0), Vector2i(0, 1)], [Vector2i(0, 1), Vector2i(0, 2)],
-		[Vector2i(0, 1), Vector2i(1, 1)],
-		[Vector2i(0, 2), Vector2i(1, 2)], [Vector2i(1, 2), Vector2i(2, 2)], [Vector2i(2, 2), Vector2i(3, 2)],
-		[Vector2i(3, 2), Vector2i(4, 2)], [Vector2i(4, 2), Vector2i(4, 3)],
-		[Vector2i(5, 4), Vector2i(6, 4)], [Vector2i(6, 4), Vector2i(7, 4)]]
-	for i in range(3, 6):
-		for j in range(3, 6):
-			if i < 5:
-				forced.append([Vector2i(i, j), Vector2i(i + 1, j)])
-			if j < 5:
-				forced.append([Vector2i(i, j), Vector2i(i, j + 1)])
-	# The lift's cage stands against its side: never open there.
-	var shut := {_edge(Vector2i(0, 0), Vector2i(1, 0)): true}
-	for f in forced:
-		_open[_edge(f[0], f[1])] = true
-		_union(f[0], f[1])
+
+	var off := _off
+	var xs: Array[float] = []
+	var zs: Array[float] = []
+	var v := off.x - floorf((VAT_REACH + off.x) / VAT_STEP) * VAT_STEP
+	while v <= VAT_REACH:
+		xs.append(v)
+		v += VAT_STEP
+	v = off.y - floorf((VAT_REACH + off.y) / VAT_STEP) * VAT_STEP
+	while v <= VAT_REACH:
+		zs.append(v)
+		v += VAT_STEP
+	var hi := 0
+	var hj := 0
+	for i in xs.size():
+		if absf(xs[i] - hole.x) < absf(xs[hi] - hole.x):
+			hi = i
+	for j in zs.size():
+		if absf(zs[j] - hole.z) < absf(zs[hj] - hole.z):
+			hj = j
+	var hatch := Vector2i(hi, hj)
+	# Junction parity: the hatch a wall across X if it can be, else across Z.
+	var par := Vector2i((hi + 1) % 2, hj % 2)
+	if hi == 0 or hi == xs.size() - 1:
+		par = Vector2i(hi % 2, (hj + 1) % 2)
+	var at := func(s: Vector2i) -> Vector3: return Vector3(xs[s.x], 0.0, zs[s.y])
+	var inside := func(s: Vector2i) -> bool: return s.x >= 0 and s.y >= 0 and s.x < xs.size() and s.y < zs.size()
+	_floor.clear()
+	var junctions: Array[Vector2i] = []
 	var walls: Array = []
-	for c in _cells:
-		for step: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
-			var o: Vector2i = c + step
-			if o.x >= N or o.y >= N or _kind.get(o) == &"pen":
-				continue
-			var e := _edge(c, o)
-			if _open.has(e) or shut.has(e):
-				continue
-			walls.append([c, o])
-	# Shuffled with the room's own generator: the same seed, the same maze.
-	for i in range(walls.size() - 1, 0, -1):
-		var j := _rng.randi_range(0, i)
-		var t = walls[i]
-		walls[i] = walls[j]
-		walls[j] = t
-	var left: Array = []
+	for i in xs.size():
+		for j in zs.size():
+			var s := Vector2i(i, j)
+			var jx := i % 2 == par.x
+			var jz := j % 2 == par.y
+			var clear: bool = _kept_clear(at.call(s))
+			if jx and jz:
+				junctions.append(s)
+				_floor[s] = true
+			elif clear and s != hatch:
+				_floor[s] = true
+			if jx != jz:
+				# A wall: between the junctions either side of it.
+				var step := Vector2i(1, 0) if not jx else Vector2i(0, 1)
+				if inside.call(s - step) and inside.call(s + step):
+					walls.append([s, s - step, s + step])
+	# Kruskal over the junctions; the walls already open (kept clear) first.
+	var uf := {}
+	for s in junctions:
+		uf[s] = s
+	var find := func(a: Vector2i) -> Vector2i:
+		while uf[a] != a:
+			uf[a] = uf[uf[a]]
+			a = uf[a]
+		return a
+	var shut: Array = []
 	for w in walls:
-		if _union(w[0], w[1]):
-			_open[_edge(w[0], w[1])] = true
+		if _floor.has(w[0]):
+			var ra: Vector2i = find.call(w[1])
+			var rb: Vector2i = find.call(w[2])
+			uf[ra] = rb
+		elif w[0] != hatch:
+			shut.append(w)
+	for i in range(shut.size() - 1, 0, -1):
+		var k := _rng.randi_range(0, i)
+		var t = shut[i]
+		shut[i] = shut[k]
+		shut[k] = t
+	var left: Array = []
+	for w in shut:
+		var ra: Vector2i = find.call(w[1])
+		var rb: Vector2i = find.call(w[2])
+		if ra != rb:
+			uf[ra] = rb
+			_floor[w[0]] = true
 		else:
 			left.append(w)
 	for w in left:
-		if _rng.randf() < LOOPS:
-			_open[_edge(w[0], w[1])] = true
-
-
-## Two bookcases back to back on every wall of the maze left standing, one
-## facing each cell; one box of collision for the pair. Which kind, by where:
-## the trays and the catalogue drawers nearest the intake.
-func _build_maze() -> void:
-	var holder := _node("Maze", Vector3.ZERO)
-	var posts := {}
-	for c in _cells:
-		for step: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
-			var o: Vector2i = c + step
-			if o.x >= N or o.y >= N:
-				continue
-			if _kind.get(o) == &"pen":
-				continue
-			if _open.has(_edge(c, o)):
-				continue
-			var a := cell_at(c.x, c.y)
-			var b := cell_at(o.x, o.y)
-			var mid := (a + b) * 0.5
-			var normal := (b - a).normalized()
-			# The pair's wall runs across `normal`; each case stands on its own
-			# cell's side of the line, its back on the line, its front (+Z)
-			# out into its cell. (Note 99 had them the other way round: both
-			# fronts met inside the wall and only backs showed.)
-			var near_intake := c.x <= 2 and c.y <= 3
-			for facing: Vector3 in [normal, -normal]:
-				var name_: String = _pick_shelf(near_intake)
-				_kit(holder, name_, mid + facing * (SHELF_DEPTH * 0.5 + 0.005), atan2(facing.x, facing.z))
-			_solid(holder, Vector3(_c - 0.06, SHELF_H, SHELF_DEPTH * 2.0), mid + Vector3(0.0, SHELF_H * 0.5, 0.0),
-				atan2(normal.x, normal.z))
-			# Its two ends, and which way the wall runs from each (note 100).
-			var along := Vector3(-normal.z, 0.0, normal.x)
-			for s: float in [-1.0, 1.0]:
-				var v := mid + along * (_c * 0.5 * s)
-				var key := Vector2i(roundi(v.x * 10.0), roundi(v.z * 10.0))
-				if not posts.has(key):
-					posts[key] = [v, {}]
-				(posts[key][1] as Dictionary)[absf(along.x) > 0.5] = true
-	# A post where two walls meet at a corner, a T or a cross: there the cases of
-	# the one wall run into the other's, and the post covers the join. Where a
-	# wall runs straight on, or ends, the cases stand as they are.
-	for p in posts.values():
-		if (p[1] as Dictionary).size() > 1:
-			_maze_post(holder, p[0])
-
-
-## An oak post at a join in the maze: the kit's beam stood on end, wide enough
-## to cover both pairs' ends, its top under the cases' carved crests (which
-## carry on over it).
-func _maze_post(holder: Node3D, at: Vector3) -> void:
-	var h := SHELF_H - 0.45
-	var post := _kit(holder, "beam", at + Vector3(0.0, h * 0.5, 0.0))
-	post.basis = Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(h / 4.66, POST_W / 0.55, POST_W / 0.75))
-	_solid(holder, Vector3(POST_W, h, POST_W), at + Vector3(0.0, h * 0.5, 0.0))
-
-
-func _pick_shelf(near_intake: bool) -> String:
-	if near_intake and _rng.randf() < 0.6:
-		return "shelf_trays" if _rng.randf() < 0.6 else "shelf_drawers"
-	return SHELVES[_rng.randi_range(0, SHELVES.size() - 1)]
-
-
-## The cells off the maze's paths with only one way in.
-func _dead_ends() -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
-	for c in _cells:
-		if _kind[c] != &"maze":
-			continue
-		var ways := 0
-		for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			if _open.has(_edge(c, c + step)):
-				ways += 1
-		if ways == 1:
-			out.append(c)
-	return out
-
-
-## The anatomists' things in the dead ends -- a desk on a rug, a lectern with
-## its book, the armillary sphere, piles of books, a specimen jar, a chest --
-## and a candelabra in some, the maze's only light but the claw's.
-func _furnish_dead_ends() -> void:
-	var ends := _dead_ends()
-	for i in range(ends.size() - 1, 0, -1):
-		var j := _rng.randi_range(0, i)
-		var t := ends[i]
-		ends[i] = ends[j]
-		ends[j] = t
-	var things := ["desk", "lectern", "globe", "books", "jar", "chest", "books", "jar"]
+		if _rng.randf() < VAT_LOOPS:
+			_floor[w[0]] = true
+	_join_up(xs.size(), zs.size(), hatch)
+	# The vats: one on every point left shut, the hatch's among them.
+	var n := 0
 	var lights := 0
-	for k in ends.size():
-		var c: Vector2i = ends[k]
-		var at := cell_at(c.x, c.y)
-		# Back against the wall opposite the way in.
-		var way := Vector3.ZERO
-		for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			if _open.has(_edge(c, c + step)):
-				way = Vector3(float(step.x), 0.0, float(step.y))
-		var back := at - way * (_c * 0.5 - SHELF_DEPTH - 0.45)
-		var yaw := atan2(way.x, way.z)
-		var thing: String = things[k % things.size()]
-		match thing:
-			"desk":
-				_kit(_plan, "rug", at, yaw)
-				_kit(_plan, "desk", back + way * 0.2, yaw, Vector3(1.9, 1.2, 0.9))
-			"lectern":
-				_kit(_plan, "lectern", back, yaw, Vector3(0.6, 1.4, 0.6))
-			"globe":
-				_kit(_plan, "globe", back, yaw, Vector3(0.9, 1.6, 0.9))
-			"books":
-				_kit(_plan, "books", back, yaw + _rng.randf_range(-0.4, 0.4))
-			"jar":
-				_kit(_plan, "jar", back, yaw, Vector3(0.8, 2.0, 0.8))
-			"chest":
-				_kit(_plan, "chest", back, yaw, Vector3(1.1, 0.8, 0.7))
-		if lights < DEAD_END_LIGHTS and k % 2 == 0:
-			lights += 1
-			var side := Vector3(way.z, 0.0, -way.x) * 0.8
-			var cand := _kit(_plan, "candelabra", back + side, yaw)
-			_candle_light(cand)
+	for i in xs.size():
+		for j in zs.size():
+			var s := Vector2i(i, j)
+			if _floor.has(s):
+				continue
+			var kind := "vat_gold" if _rng.randf() < 0.45 else "vat_bones"
+			var glow := kind == "vat_gold" and lights < VAT_LIGHTS and _rng.randf() < 0.5
+			if glow:
+				lights += 1
+			var vat := _vat(at.call(s), kind, glow, n)
+			if s == hatch:
+				_hatch_vat = vat
+			n += 1
 
 
-func _candle_light(n: Node3D) -> void:
-	var light := OmniLight3D.new()
-	light.name = "Candles"
-	light.light_color = CANDLE_COLOUR
-	light.light_energy = 1.6
-	light.omni_range = 6.5
-	light.omni_attenuation = 1.1
-	light.light_specular = 0.2
-	light.shadow_enabled = false
-	light.position = Vector3(0.0, 2.0, 0.0)
-	n.add_child(light)
+## Every open point reachable from the middle: a cut-off pocket is joined to the
+## rest along the shortest run of points (never through the hatch's).
+func _join_up(nx: int, nz: int, hatch: Vector2i) -> void:
+	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	var start := Vector2i(-1, -1)
+	var best := INF
+	for s: Vector2i in _floor:
+		var d := Vector2(s.x - (nx - 1) * 0.5, s.y - (nz - 1) * 0.5).length()
+		if d < best:
+			best = d
+			start = s
+	if start.x < 0:
+		return
+	for guard in 40:
+		var seen := {start: true}
+		var queue: Array[Vector2i] = [start]
+		while not queue.is_empty():
+			var c: Vector2i = queue.pop_front()
+			for d in dirs:
+				var o: Vector2i = c + d
+				if _floor.has(o) and not seen.has(o):
+					seen[o] = true
+					queue.append(o)
+		var lost := Vector2i(-1, -1)
+		for s: Vector2i in _floor:
+			if not seen.has(s):
+				lost = s
+				break
+		if lost.x < 0:
+			return
+		# From the lost pocket to anything reached, over any point but the hatch.
+		var from := {lost: lost}
+		var q2: Array[Vector2i] = [lost]
+		var hit := Vector2i(-1, -1)
+		while not q2.is_empty() and hit.x < 0:
+			var c: Vector2i = q2.pop_front()
+			for d in dirs:
+				var o: Vector2i = c + d
+				if o.x < 0 or o.y < 0 or o.x >= nx or o.y >= nz or o == hatch or from.has(o):
+					continue
+				from[o] = c
+				if seen.has(o):
+					hit = o
+					break
+				q2.append(o)
+		if hit.x < 0:
+			return
+		var c: Vector2i = from[hit]
+		while c != lost:
+			_floor[c] = true
+			c = from[c]
+
+
+## A vat at `at` (plan frame), turned at random: the tub, its collision and its
+## shove (surgery_vat.gd); some of the gold ones with the oil's glow.
+func _vat(at: Vector3, kind: String, glow: bool, i: int) -> Node3D:
+	var vat := CharacterBody3D.new()
+	vat.set_script(Vat)
+	vat.name = "Vat%d" % i
+	_vat_holder.add_child(vat)
+	vat.transform = Transform3D(Basis(Vector3.UP, _rng.randf() * TAU), _plan.transform * at)
+	var model := _kit(vat, kind, Vector3.ZERO)
+	vat.set("model", model)
+	vat.set("home", vat.transform)
+	if glow:
+		var oil := OmniLight3D.new()
+		oil.name = "Oil"
+		oil.light_color = VAT_OIL
+		oil.light_energy = 0.9
+		oil.omni_range = 5.5
+		oil.omni_attenuation = 1.2
+		oil.light_specular = 0.15
+		oil.shadow_enabled = false
+		oil.position = Vector3(0.0, 2.0, 0.0)
+		vat.add_child(oil)
+	vats.append(vat)
+	return vat
 
 
 # --- Intake, assembly, dispatch --------------------------------------------------------
@@ -727,7 +755,7 @@ func _candle_light(n: Node3D) -> void:
 func _build_intake() -> void:
 	var a := cell_at(0, 1)
 	var b := cell_at(0, 2)
-	_kit(_plan, "traycart", a + Vector3(-0.35, 0.0, 0.0), 0.0, Vector3(0.9, 0.7, 2.2))
+	_kit(_plan, "traycart", a + Vector3(-0.35, 0.0, -0.45), 0.0, Vector3(0.9, 0.7, 2.2))
 	_kit(_plan, "crates", b + Vector3(-0.7, 0.0, 0.5), PI * 0.5, Vector3(1.2, 1.6, 1.2))
 	_kit(_plan, "casket", a + Vector3(-1.0, 0.0, -1.1), PI * 0.5, Vector3(0.9, 2.2, 0.6))
 	var lamp := OmniLight3D.new()
@@ -741,18 +769,15 @@ func _build_intake() -> void:
 	lamp.position = (a + b) * 0.5 + Vector3(0.6, 2.8, 0.0)
 
 
-## ASSEMBLY: the floor rail from the intake to the middle (along row 2, then up
-## into the middle), and a tray cart that runs it.
+## ASSEMBLY: the floor rail from the intake to the middle (along a row of the
+## vats' lattice, then down a column of it), and a tray cart that runs it.
 var _rail: PackedVector3Array
 var _cart: Node3D
 var _cart_t := 0.0
 
 
 func _build_rail() -> void:
-	var start := cell_at(0, 2) + Vector3(0.6, 0.0, 0.0)
-	var corner := cell_at(4, 2)
-	var end := cell_at(4, 3) + Vector3(0.0, 0.0, -0.4)
-	_rail = PackedVector3Array([start, corner, end])
+	_rail = _rail_points()
 	var holder := _node("Rail", Vector3.ZERO)
 	for s in 2:
 		var a := _rail[s]
@@ -764,7 +789,8 @@ func _build_rail() -> void:
 			var at := a + dir * (length * (float(i) + 0.5) / float(count))
 			var piece := _kit(holder, "floorrail", at, atan2(dir.x, dir.z))
 			piece.scale = Vector3(1.0, 1.0, length / float(count) / 3.0)
-	_cart = _kit(holder, "traycart", start, atan2(1.0, 0.0))
+	_cart = _kit(holder, "traycart", _rail[0], atan2(1.0, 0.0))
+
 
 
 func _run_cart(delta: float) -> void:
@@ -774,6 +800,7 @@ func _run_cart(delta: float) -> void:
 	# power; stopped where it is once it has none.
 	if bool(table.call("is_depowered")) or table.get("state") == Table.State.DORMANT:
 		return
+	var was := _cart_t
 	_cart_t = fmod(_cart_t + delta, 36.0)
 	var total := _rail[0].distance_to(_rail[1]) + _rail[1].distance_to(_rail[2])
 	var u := 0.0
@@ -795,8 +822,16 @@ func _run_cart(delta: float) -> void:
 	else:
 		dir = (_rail[2] - _rail[1]).normalized()
 		at = _rail[1] + dir * (d - leg)
+	# A vat shoved onto the rail stops it (note 102): it waits behind it.
+	var world := _plan.global_transform * at
+	for v in vats:
+		var to := v.global_position - world
+		if Vector2(to.x, to.z).length() < Vat.RADIUS + 0.75:
+			_cart_t = was
+			return
 	_cart.position = at
 	_cart.rotation.y = lerp_angle(_cart.rotation.y, atan2(dir.x, dir.z), clampf(delta * 3.0, 0.0, 1.0))
+
 
 
 ## DISPATCH: the holding pens along the far wall behind iron bars, the portcullis
@@ -871,8 +906,8 @@ static func attach_prosthetic(att: Node3D) -> void:
 	arm.scale = Vector3.ONE * 1.2
 
 
-## A dim warm fill high in the middle: the roof and the shelves' tops would be
-## black otherwise (the claw's lamp and the candles light only below them).
+## A dim warm fill high in the middle: the roof and the vats' rims would be
+## black otherwise (the claw's lamp and the glowing vats light only below them).
 func _light_hall() -> void:
 	var fill := OmniLight3D.new()
 	fill.name = "RoofFill"
@@ -901,6 +936,26 @@ func _spawn_table() -> void:
 	add_child(table)
 
 
+# --- The powering room (note 102) ------------------------------------------------------
+
+## The hatch and the room under it (surgery_power.gd), in a frame at the hole:
+## +Z the way toward the hall's middle (squared to the hall), so the room runs
+## in under the hall from its ladder.
+func _build_power() -> void:
+	var hole := to_local(_hole)
+	hole.y = 0.0
+	var toward := -hole
+	toward = Vector3(signf(toward.x), 0.0, 0.0) if absf(toward.x) > absf(toward.z) else Vector3(0.0, 0.0, signf(toward.z))
+	if toward == Vector3.ZERO:
+		toward = Vector3(0.0, 0.0, 1.0)
+	power = Node3D.new()
+	power.set_script(Power)
+	power.name = "PoweringRoom"
+	add_child(power)
+	power.transform = Transform3D(Basis.looking_at(-toward, Vector3.UP), hole)
+	power.call("setup", self, table, control, _hole_cell)
+
+
 # --- Each frame -----------------------------------------------------------------------
 
 func _process(delta: float) -> void:
@@ -909,30 +964,76 @@ func _process(delta: float) -> void:
 
 # --- Saving and resetting ----------------------------------------------------------------
 
+## The machine (off, and where the claw lies), where every vat stands, the hatch,
+## the crystal, the surgeon.
 func save_state() -> Dictionary:
-	if table == null or not bool(table.call("is_depowered")):
-		return {"down": false}
-	var p: Vector3 = table.call("rest_point")
-	return {"down": true, "at": [p.x, p.y, p.z]}
+	var out := {"down": false}
+	if table != null and bool(table.call("is_depowered")):
+		var p: Vector3 = table.call("rest_point")
+		out = {"down": true, "at": [p.x, p.y, p.z]}
+	var places: Array = []
+	for v in vats:
+		var at := to_local(v.global_position)
+		places.append([at.x, at.z, v.global_rotation.y - global_rotation.y])
+	out["vats"] = places
+	if power != null:
+		out["hatch"] = bool(power.get("hatch_open"))
+		out["crystal"] = bool(power.get("crystal_gone"))
+		out["gone"] = bool(power.get("surgeon_gone"))
+	return out
 
 
 func restore_state(data: Dictionary) -> void:
+	var places: Array = data.get("vats", [])
+	if places.size() == vats.size():
+		for i in vats.size():
+			var p: Array = places[i]
+			vats[i].call("place", to_global(Vector3(float(p[0]), 0.0, float(p[1]))), global_rotation.y + float(p[2]))
+	if power != null and bool(data.get("hatch", false)):
+		power.call("set_open_now")
 	if table == null or not bool(data.get("down", false)):
 		return
 	var at: Array = data.get("at", [])
 	var p := table.global_position if at.size() < 3 else Vector3(float(at[0]), float(at[1]), float(at[2]))
 	table.call("set_dead_now", p, 0.0)
-	if control != null:
-		control.call("set_finished")
+	if power != null:
+		# A save from before note 102 had it off by the control room's lever:
+		# the crystal out and the surgeon gone, as if it had been pulled.
+		var old := not data.has("crystal")
+		power.call("set_taken_now", old or bool(data.get("gone", false)))
 
 
-## Everyone died: with the table still running, all of it back as it was.
+## Everyone died: with the table still running, all of it back as it was --
+## the vats where they stood (but one already shoved off an open hatch, and
+## any whose place it now stands in).
 func on_world_reset() -> void:
 	if table == null or bool(table.call("is_depowered")):
 		return
 	table.call("reset_to_sleep")
-	if control != null:
-		control.call("reset")
+	var stay: Array[Node3D] = []
+	if power != null and bool(power.get("hatch_open")):
+		for v in vats:
+			var home: Transform3D = global_transform * (v.get("home") as Transform3D)
+			if Vector2(home.origin.x - _hole.x, home.origin.z - _hole.z).length() < Power.COVERED:
+				stay.append(v)
+	for v in vats:
+		if stay.has(v):
+			continue
+		var home: Transform3D = global_transform * (v.get("home") as Transform3D)
+		var blocked := false
+		for s in stay:
+			if Vector2(home.origin.x - s.global_position.x, home.origin.z - s.global_position.z).length() < Vat.RADIUS * 2.0:
+				blocked = true
+		if not blocked:
+			v.call("go_home", self)
+
+
+## Down in the powering room, a step off the ladder's foot, facing the crystal:
+## [position, yaw] (sandbox teleport).
+func powering_room_point() -> Array:
+	var at: Vector3 = power.global_transform * Vector3(0.0, Power.FLOOR_Y + 0.3, 1.2)
+	var ahead: Vector3 = power.global_basis * Vector3(0.0, 0.0, 1.0)
+	return [at, atan2(-ahead.x, -ahead.z)]
 
 
 ## Just inside the way in, facing the table: [position, yaw] (sandbox teleport).

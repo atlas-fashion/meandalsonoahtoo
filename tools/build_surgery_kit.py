@@ -135,6 +135,14 @@ PIECES = {
     "portcullis": ("fit", (2.9, 0.6, 3.6), "bottom", -90.0, 7000, 1024, 0.4),
     "penbars": ("fit", (2.97, 0.35, 2.4), "bottom", -90.0, 5000, 512, 0.45),
     "shaftgrate": ("long", 3.6, "top", 0.0, 6000, 1024, 0.45),
+    # Note 102: the vats that fill the hall (round riveted tubs, ~2.3 m across
+    # the tub, the valves / rings standing out past it), the crystal that powers
+    # the machine, and the hatch lid over the way down (hinges on its -X edge,
+    # the ring on +X).
+    "vat_bones": ("long", 2.8, "bottom", 0.0, 10000, 1024, 0.35),
+    "vat_gold": ("long", 2.5, "bottom", 0.0, 10000, 1024, 0.45),
+    "crystal": ("z", 2.0, "bottom", 0.0, 6000, 1024, 0.0),
+    "hatch": ("long", 1.35, "bottom", 0.0, 3000, 1024, 0.4),
 }
 
 # Pieces whose see-through part is split off into its own mesh named "Glass"

@@ -482,6 +482,49 @@ static func _make_surgery_hall(out: Built, enclose: bool) -> void:
 		for dy in range(-h, h + 1):
 			open[c + Vector2i(dx, dy)] = true
 	out.set_meta("open_roof", open)
+	_pick_surgery_hatch(out, best)
+
+
+## The hatch down to the surgery's powering room (note 102, surgery_power.gd):
+## a hole in the hall's floor made as a manhole's is -- where two of the kit's
+## notched flagstones meet, MANHOLE_ALONG from a cell's centre (brick_level) --
+## SURGERY_HATCH_RING from the hall's middle (clear of the table's open middle
+## and of the booth and the pens along the walls), at least
+## SURGERY_HATCH_CLEAR_DOOR from any way in. Chosen from the room's own cell,
+## so the same level puts it in the same place. Recorded as the out's meta
+## "surgery_hatch": {cell, along, world}.
+const SURGERY_HATCH_RING := Vector2(5.9, 9.1)
+const SURGERY_HATCH_CLEAR_DOOR := 6.0
+
+
+static func _pick_surgery_hatch(out: Built, room: Dictionary) -> void:
+	var c: Vector2i = room["centre"]
+	var h: int = room["half"]
+	var mid: Vector3 = out.room_world(room)
+	var doors: Array[Vector3] = []
+	for way in room.get("entrances", []):
+		doors.append(out.to_world(way["cell"]))
+	var options: Array = []
+	for dx in range(-h, h + 1):
+		for dy in range(-h, h + 1):
+			var pos := c + Vector2i(dx, dy)
+			for along: Vector3 in [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]:
+				var at: Vector3 = out.to_world(pos) + along * MANHOLE_ALONG
+				var off := at - mid
+				var ring := maxf(absf(off.x), absf(off.z))
+				if ring < SURGERY_HATCH_RING.x or ring > SURGERY_HATCH_RING.y:
+					continue
+				var near_door := false
+				for d in doors:
+					if Vector2(at.x - d.x, at.z - d.z).length() < SURGERY_HATCH_CLEAR_DOOR:
+						near_door = true
+				if not near_door:
+					options.append({"cell": pos, "along": along, "world": at})
+	if options.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(c) ^ 0x68617463
+	out.set_meta("surgery_hatch", options[rng.randi_range(0, options.size() - 1)])
 
 
 ## Turns a room's whole block into `hall` cells: every cell an ordinary vaulted

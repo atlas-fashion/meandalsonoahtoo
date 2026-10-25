@@ -306,6 +306,11 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 			# (its +X edge) faces the hole -- together, a round hole. The bed
 			# under the cell is manhole.gd's, with a hole in it.
 			var manhole: Dictionary = out.manholes.get(cell.pos, {})
+			# The surgery's hatch (note 102, module_level `_pick_surgery_hatch`):
+			# the same hole, its bed surgery_power.gd's.
+			var hatch: Dictionary = out.get_meta("surgery_hatch", {})
+			if manhole.is_empty() and not hatch.is_empty() and hatch["cell"] == cell.pos:
+				manhole = hatch
 			for fx: float in [-1.0, 1.0]:
 				for fz: float in [-1.0, 1.0]:
 					var b := Basis(Vector3.UP, float(rng.randi_range(0, 3)) * PI * 0.5)

@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 101), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 102), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -291,7 +291,7 @@ decrepits, sewer lizards, rats (own `_rat_rng`), chests.
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
   (`zone_gate.gd`), anchors (`respawn_anchor.gd`), hiding spots
-  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_beam_claw.gd` + `surgery_control.gd`, notes 94-101; the chest room nearest the boss; every piece a Higgsfield model; a shelf maze, two claws on one gantry -- one grabs, one beams -- the surgeon's booth), chest rooms
+  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd`, notes 94-102; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
 
@@ -485,6 +485,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 99 | 2026-10-22 | The surgery redone: a maze of shelves, a gantry claw that slams late, the surgeon in his booth (a cutscene ends it) | [docs/notes/99-the-surgery-a-shelf-maze-a-gantry-claw-the-surgeon-in-his-booth.md](docs/notes/99-the-surgery-a-shelf-maze-a-gantry-claw-the-surgeon-in-his-booth.md) |
 | 100 | 2026-10-23 | The shelves face out and stand taller, the lift in its corner (it was on the table), one palette, slower slams | [docs/notes/100-shelves-face-out-the-lift-in-its-corner-one-palette.md](docs/notes/100-shelves-face-out-the-lift-in-its-corner-one-palette.md) |
 | 101 | 2026-10-23 | The surgery's torches on the colonettes, leaded glass in the booth, a second claw that beams (and stops before the slam) | [docs/notes/101-torches-on-the-colonettes-leaded-glass-the-beam-claw.md](docs/notes/101-torches-on-the-colonettes-leaded-glass-the-beam-claw.md) |
+| 102 | 2026-10-25 | The surgery's shelves turned to rows of pushable vats; its power a crystal in a room under the floor, through a hatch under one vat; the beam claw gone; the surgeon gone once it is pulled | [docs/notes/102-vats-a-hatch-the-powering-room-and-its-crystal.md](docs/notes/102-vats-a-hatch-the-powering-room-and-its-crystal.md) |
 
 ## Notes by source file
 
@@ -505,7 +506,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
-- `scripts/brick_level.gd`: 27, 96
+- `scripts/brick_level.gd`: 27, 96, 102
 - `scripts/chest.gd`: 18, 79
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
@@ -530,7 +531,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/hud.gd`: 6.19, 24, 79, 84
 - `scripts/interact.gd`: 6.18, 79
-- `scripts/inventory.gd`: 6.19, 25, 77, 83, 84
+- `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102
 - `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79
 - `scripts/item_icon.gd`: 6.19, 77, 84
@@ -540,7 +541,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
@@ -561,7 +562,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/save_system.gd`: 19, 60, 79
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84
-- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102
 - `scripts/settings_panel.gd`: 19, 46, 80
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79
 - `scripts/split_screen.gd`: 79, 80, 82
@@ -573,10 +574,12 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101
-- `scripts/surgery_beam_claw.gd`: 101
-- `scripts/surgery_control.gd`: 99, 100, 101
-- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101
+- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102
+- `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
+- `scripts/surgery_power.gd`: 102
+- `scripts/surgery_vat.gd`: 102
+- `scripts/surgery_control.gd`: 99, 100, 101, 102
+- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
@@ -609,7 +612,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18
 - `tools/build_sewer_kit.py`: 54, 55
-- `tools/build_surgery_kit.py`: 95, 96, 98, 99, 100
+- `tools/build_surgery_kit.py`: 95, 96, 98, 99, 100, 102
 - `tools/build_surgeon.py`: 99
 - `tools/build_vines.py`: 6.18
 - `tools/build_wood_texture.py`: 6.19

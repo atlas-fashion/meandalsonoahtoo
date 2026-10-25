@@ -313,6 +313,10 @@ func destinations() -> Array:
 		# Just inside its doorway, facing the table.
 		var entry: Array = surgery.call("entry_point")
 		out.append(["Surgery", entry[0], entry[1]])
+		# Down in its powering room, at the ladder's foot facing the crystal (note 102).
+		if surgery.has_method("powering_room_point"):
+			var down: Array = surgery.call("powering_room_point")
+			out.append(["Surgery: powering room", down[0], down[1]])
 	var hall_info: Dictionary = maze.get("_boss_hall")
 	if hall_info.has("zone_centre"):
 		# On its floor (the zone's centre is in the air).

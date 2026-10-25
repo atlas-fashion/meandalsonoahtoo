@@ -78,6 +78,12 @@ const ITEMS := {
 		"kind": "Material",
 		"desc": "A heavy red crystal pulled out of a prison generator. Every lock in the block let go when it came free.",
 		"quote": "The cells were never shut by iron."},
+	# The crystal that ran the surgery's machine (note 102, surgery_power.gd),
+	# pulled out of its clamps in the powering room under the hall.
+	&"power_crystal": {"name": "Power Crystal", "stack": 1, "color": Color(0.45, 0.8, 1.0),
+		"kind": "Relic",
+		"desc": "A long pale-blue crystal wrenched from the clamps under the surgery. The claw overhead fell the moment it came free.",
+		"quote": "Cold now. It was the only warm thing down there."},
 	# The chest rooms' shards (dungeon_room.gd), one per room; the great door
 	# before the throne hall (shard_door.gd) wants every one.
 	&"shard_crimson": {"name": "Crimson Shard", "stack": 1, "color": Color(1.0, 0.2, 0.15),

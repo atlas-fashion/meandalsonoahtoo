@@ -4,9 +4,9 @@ extends CharacterBody3D
 ## claw a hunter that carries its victims to the table, note 96; on an overhead
 ## GANTRY that crosses the whole hall, note 99): the machine in the surgery
 ## (surgery.gd) that was to make the dead prisoners bionic. It cannot be killed
-## -- a blow on it only rings off the iron. It is switched off from the CONTROL
-## ROOM (surgery_control.gd: kick the door in, kill the surgeon, throw the
-## master lever), and only there (note 99: "control room only").
+## -- a blow on it only rings off the iron. It is switched off by pulling the
+## CRYSTAL that powers it, in the powering room under the hall (note 102,
+## surgery_power.gd), and only there.
 ##
 ## The table itself never moves: a riveted iron slab on a base of gears and
 ## pistons (models/surgery/table.glb), in the middle of the hall over the
@@ -27,7 +27,7 @@ extends CharacterBody3D
 ## settles, instead of sliding about rigidly.
 ##
 ## It FOLLOWS the nearest player (the trolley over them, the claw hanging above
-## the bookshelves) and SLAMS down to GRAB them. The slam (State.REAR) is made
+## the vats) and SLAMS down to GRAB them. The slam (State.REAR) is made
 ## hard to get away from (the user: "make it pause to drop much later"): it
 ## draws up (WIND), keeps following them the whole time it is drawn up
 ## (TRACK), and only at the very end locks on where they are (LOCK -- a brief
@@ -38,10 +38,8 @@ extends CharacterBody3D
 ## / `struggles`). Missed, the claw is stuck in the floor a moment and tears
 ## itself free in a spray of grit.
 ##
-## A SECOND CLAW rides the same bridge on a girder of its own (note 101,
-## surgery_beam_claw.gd, `beamer`): it holds whoever this one is after in the
-## enforcer's blue beam, slowing them so this one can catch up -- and is cut off
-## BEAM_CLEAR before each slam begins, so the slam can still be dodged.
+## Its power (note 102) is the CRYSTAL in the powering room under the hall
+## (surgery_power.gd): pulled from its cradle, the machine dies (`power_off`).
 
 signal depowered(cause: StringName)
 signal woke
@@ -60,7 +58,9 @@ const FX_CRACK := preload("res://textures/surgery_fx_crack.png")
 const FX_CHIP := preload("res://textures/surgery_fx_chip.png")
 
 ## (GRAB, SWEEP, CLAMPED and STALL are gone with the levers and the clamp; kept
-## so the numbering of the rest is what it was.)
+## so the numbering of the rest is what it was.) Note 101's second claw, the one
+## that fired the enforcer's beam, is gone too (note 102: "Remove the arm that
+## shoots the enforcer beam").
 enum State { DORMANT, WAKING, HUNT, GRAB, SWEEP, REAR, CLAMPED, STALL, DYING, DEAD, CARRY, STRAP }
 
 ## --- The table -------------------------------------------------------------------
@@ -85,8 +85,6 @@ const ROOT_Y := 6.25
 ## (endtruck.glb, 3 m along Z, its wheels on the runway at RUNWAY_TOP).
 const GIRDER_LEN := 4.4
 const RUNWAY_TOP := 6.75
-## The beam claw's girder beside the first (surgery_beam_claw.gd BEAM_RAIL_Z).
-const BEAM_GIRDER_Z := 1.4
 ## The drives: the trolley (along X) quicker than the heavy bridge (along Z).
 ## Top speed by anger (`level`), acceleration fixed.
 const TROLLEY_SPEED: Array[float] = [5.0, 5.6, 6.2, 6.8, 7.4]
@@ -111,9 +109,10 @@ const HOIST_SPEED := 3.2
 ## Asleep: the claw drawn right up under the trolley, over the table.
 const FOLD_LEN := 0.3
 ## Following: the wrist this high over the floor under it (the fingertips,
-## CLAW_LEN under it, clear the 3.9 m bookshelves -- note 100), the trolley this
+## CLAW_LEN under it, clear the 2.1 m vats -- note 102; 5.6 over note 100's
+## 3.9 m bookshelves), the trolley this
 ## far back toward the table from them.
-const HOVER_Y := 5.6
+const HOVER_Y := 4.8
 const HOVER_BACK := 0.8
 ## A little ahead of them: their velocity times this.
 const LEAD := 0.25
@@ -146,17 +145,13 @@ const GRAB_DAMAGE := 12.0
 ## Between one slam ending and the next beginning (note 100: was 2.6 .. 1.6 s,
 ## the user wanted more time between its attacks).
 const REAR_COOLDOWN: Array[float] = [5.0, 4.5, 4.0, 3.6, 3.2]
-## A slam begins only this long after the beam claw's beam last touched anyone
-## (note 101): with the beam's slow lingering 0.35 s and WIND 0.35 s, it is
-## gone this long before TRACK begins.
-const BEAM_CLEAR := 0.2
 
 ## --- Carried and strapped down ----------------------------------------------------
 const CARRY_SPEED := 5.0
 ## Carried with the wrist this high, held this far down the claw (`CARRY_GRIP`,
-## of CLAW_LEN): the body's feet then clear the 3.9 m shelves as the gantry
-## runs it over them (note 100; at 4.6 and 0.75 they swept through them).
-const CARRY_Y := 5.9
+## of CLAW_LEN): the body's feet then clear the 2.1 m vats as the gantry
+## runs it over them (note 102; 5.9 over note 100's 3.9 m shelves).
+const CARRY_Y := 5.2
 const CARRY_GRIP := 0.45
 ## The struggles it takes to break free: carried, and strapped down (more as it
 ## angers).
@@ -246,8 +241,6 @@ var _audio: AudioStreamPlayer3D
 var _playback: AudioStreamGeneratorPlayback
 var _phase := Vector3.ZERO
 var _decals: Array[Decal] = []
-## The second claw on the gantry, the beam claw (surgery_beam_claw.gd, note 101).
-var beamer: Node3D
 
 static var _mats := {}
 
@@ -280,11 +273,6 @@ func _ready() -> void:
 	_build_gantry()
 	_build_arm()
 	_build_audio()
-	beamer = Node3D.new()
-	beamer.set_script(load("res://scripts/surgery_beam_claw.gd"))
-	beamer.name = "BeamClaw"
-	add_child(beamer)
-	beamer.call("setup", self, _seg_mesh)
 	_strap_prompt = Interact.prompt("Struggle free", Vector3(0.0, TOP + 1.2, 0.0))
 	add_child(_strap_prompt)
 	_phase = Vector3(randf() * 10.0, randf() * 10.0, randf() * 10.0)
@@ -346,14 +334,6 @@ func _build_gantry() -> void:
 		g.position.x *= rail_x * 2.0 / span
 		_bridge.add_child(g)
 		_shadows(g)
-		# The second girder, the beam claw's (note 101): a double-girder crane,
-		# both ends on the same end carriages, a lighter section.
-		var g2: Node3D = GIRDER_MODEL.instantiate()
-		g2.position = Vector3(g.position.x, BRIDGE_Y - 0.05, BEAM_GIRDER_Z)
-		g2.rotation.y = PI * float((i + 1) % 2)
-		g2.scale = Vector3(g.scale.x, 0.78, 0.78)
-		_bridge.add_child(g2)
-		_shadows(g2)
 	for s: float in [-1.0, 1.0]:
 		var truck: Node3D = TRUCK_MODEL.instantiate()
 		truck.position = Vector3(s * rail_x, RUNWAY_TOP, 0.0)
@@ -609,8 +589,6 @@ func _sleep_pose() -> void:
 			_prisoner.get_parent().remove_child(_prisoner)
 			_body.add_child(_prisoner)
 		_prisoner.transform = _prisoner_rest
-	if beamer != null:
-		beamer.call("sleep")
 	_apply_pose(0.0)
 
 
@@ -645,8 +623,6 @@ func set_dead_now(at: Vector3, _yaw: float) -> void:
 	_len = ROOT_Y - CLAW_LEN * 0.95
 	_len_goal = _len
 	_update_wrist()
-	if beamer != null:
-		beamer.call("lie_dead")
 	_apply_pose(0.0)
 
 
@@ -663,8 +639,8 @@ func is_depowered() -> bool:
 	return state == State.DEAD or state == State.DYING
 
 
-## The master lever in the control room (surgery_control.gd): the power cut.
-func power_off(cause: StringName = &"control") -> void:
+## The crystal pulled from its cradle (surgery_power.gd): the power cut.
+func power_off(cause: StringName = &"crystal") -> void:
 	if state == State.DORMANT:
 		_enter(State.HUNT)
 	_shutdown(cause)
@@ -740,16 +716,13 @@ func _physics_process(delta: float) -> void:
 		_len = move_toward(_len, _len_goal, _hoist * delta)
 		_update_wrist()
 	_hold_victim()
-	beamer.call("tick", delta)
 
 
 ## The two drives: each axis toward its goal at its own top speed and
 ## acceleration, braking to arrive (a crane's motors, not a slide).
 func _drive(delta: float) -> void:
 	var lim := Vector2(rail_x - 0.4, bound - 0.6)
-	# Toward +Z the beam claw's girder, BEAM_GIRDER_Z out, must stay off the wall.
-	var hi_z := bound + 0.25 - BEAM_GIRDER_Z
-	_b_goal = Vector2(clampf(_b_goal.x, -lim.x, lim.x), clampf(_b_goal.y, -lim.y, minf(lim.y, hi_z)))
+	_b_goal = Vector2(clampf(_b_goal.x, -lim.x, lim.x), clampf(_b_goal.y, -lim.y, lim.y))
 	var vmax := Vector2(TROLLEY_SPEED[level], BRIDGE_SPEED[level]) * _b_speed
 	var acc := Vector2(TROLLEY_ACCEL, BRIDGE_ACCEL) * maxf(_b_speed, 0.6)
 	var before := _bv
@@ -788,7 +761,8 @@ func _update_wrist() -> void:
 
 
 ## The nearest standing player inside the hall (at any height: on the floor, in
-## the lift, on the landing), or null. Not one already held.
+## up in the booth), or null. Not one already held, nor one down in the powering
+## room (under the floor).
 func _intruder() -> Node3D:
 	if Sandbox.enemies_passive:
 		return null
@@ -811,7 +785,7 @@ func _intruder() -> Node3D:
 
 
 ## Following: the trolley over them, a little ahead of where they are going and
-## a little back toward the table, the claw hanging over the shelves; over them
+## a little back toward the table, the claw hanging over the vats; over them
 ## and ready, down it comes.
 func _hunt(now: float) -> void:
 	_target = _intruder()
@@ -827,19 +801,13 @@ func _hunt(now: float) -> void:
 	var flat := Vector2(p.x, p.z)
 	var back := flat.normalized() * HOVER_BACK if flat.length() > HOVER_BACK + 0.5 else Vector2.ZERO
 	_b_goal = flat - back
-	# Over a player up on the lift or the landing, it hangs over them there.
+	# Over a player up on something, it hangs over them there.
 	var floor_y := maxf(p.y, 0.0)
 	_len_goal = clampf(ROOT_Y - (floor_y + HOVER_Y), FOLD_LEN, ROOT_Y - 1.0)
 	var over := Vector2(_w.x - p.x, _w.z - p.z).length()
 	if over < SLAM_OVER and now >= _next_rear:
-		# The beam claw's beam goes off first, and the slam waits BEAM_CLEAR
-		# after it (note 101): the slow it leaves (player.gd BEAM_LINGER) is
-		# then gone before the slam stops following, so it can be dodged.
-		if beamer.call("is_firing"):
-			beamer.call("cut")
-		if now - float(beamer.get("last_fired")) >= BEAM_CLEAR:
-			_parried = false
-			_enter(State.REAR)
+		_parried = false
+		_enter(State.REAR)
 
 
 ## Where a player is (room frame), `lead` seconds ahead along their velocity.
