@@ -1377,6 +1377,9 @@ func restore_state(data: Dictionary) -> void:
 	intro_done = bool(data.get("intro", false))
 	if power != null and bool(data.get("hatch", false)):
 		power.call("set_open_now")
+	if control != null and bool(data.get("booth", false)) and not bool(data.get("down", false)):
+		# Kicked in but the lever not yet thrown (note 106).
+		control.call("set_kicked_now")
 	if table == null or not bool(data.get("down", false)):
 		return
 	var at: Array = data.get("at", [])

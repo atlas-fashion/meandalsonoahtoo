@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 105), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 106), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -489,6 +489,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 103 | 2026-10-25 | The claw opens and shakes before it drops; a block is caught, a parry knocks it limp 2 s; the vats a bit faster | [docs/notes/103-the-claw-opens-shakes-and-can-be-parried-limp.md](docs/notes/103-the-claw-opens-shakes-and-can-be-parried-limp.md) |
 | 104 | 2026-10-25 | The surgery: an entrance scene and bars; vat lids; real soldiers in the pens; the claw throws pieces and soldiers; the way up to the booth over the table and the vats | [docs/notes/104-entrance-scene-bars-lids-pen-soldiers-claw-moves-booth-route.md](docs/notes/104-entrance-scene-bars-lids-pen-soldiers-claw-moves-booth-route.md) |
 | 105 | 2026-10-25 | The booth lower, E at its door, the kick flings the surgeon out of the window, a lever you flip; the way in really blocked, its scene on the shove; pens in the sandbox; a bigger wind-up; the surgeon a boss (infrastructure) | [docs/notes/105-booth-lower-kick-lever-blocking-vat-surgeon-boss.md](docs/notes/105-booth-lower-kick-lever-blocking-vat-surgeon-boss.md) |
+| 106 | 2026-10-25 | Vats grabbed (E): pushed, pulled, turned slowly, no fighting meanwhile; the claw idle once the booth door is in; caught under the claw, not inside it | [docs/notes/106-grab-vats-claw-idles-when-unmanned-caught-under-the-claw.md](docs/notes/106-grab-vats-claw-idles-when-unmanned-caught-under-the-claw.md) |
 
 ## Notes by source file
 
@@ -551,7 +552,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93
 - `scripts/puzzle_room.gd`: 18, 22, 79
@@ -577,14 +578,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105
+- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102
-- `scripts/surgery_vat.gd`: 102, 103, 104, 105
+- `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106
 - `scripts/surgery_piece.gd`: 104
 - `scripts/surgeon_boss.gd`: 105
-- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105
-- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105
+- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106
+- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80

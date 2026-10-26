@@ -559,6 +559,9 @@ func _end_scene(p: Node3D, bars: CanvasLayer) -> void:
 ## The door gives: in pieces, into the booth, in a cloud.
 func _burst_door(into: Vector3) -> void:
 	door_broken = true
+	# No one at the console now: the claw stops hunting (note 106).
+	if table != null:
+		table.call("operator_gone")
 	_door_body.collision_layer = 0
 	var impact := _door.global_position + Vector3(0.0, 1.1, 0.0)
 	var pieces: Array = []
@@ -752,3 +755,20 @@ func reset_boss() -> void:
 		boss.call("wait_at", _boss_spot())
 	else:
 		boss.call("reset_wait")
+
+
+## A save made after the kick but before the lever: the door gone, the far
+## window broken, him lying in the hall, the claw idle (note 106).
+func set_kicked_now() -> void:
+	door_broken = true
+	surgeon_thrown = true
+	_door.visible = false
+	_door_body.collision_layer = 0
+	if _end_pane != null:
+		_end_pane.visible = false
+	_down_to_the_hall()
+	boss.global_transform = Transform3D(boss.global_basis, global_transform * _landing_spot())
+	boss.call("lie_down")
+	boss.call("hold_end", &"die")
+	if table != null:
+		table.call("operator_gone")

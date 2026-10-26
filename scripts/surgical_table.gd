@@ -214,11 +214,12 @@ const REAR_COOLDOWN: Array[float] = [5.0, 4.5, 4.0, 3.6, 3.2]
 
 ## --- Carried and strapped down ----------------------------------------------------
 const CARRY_SPEED := 5.0
-## Carried with the wrist this high, held this far down the claw (`CARRY_GRIP`,
-## of CLAW_LEN): the body's feet then clear the 2.1 m vats as the gantry
-## runs it over them (note 102; 5.9 over note 100's 3.9 m shelves).
-const CARRY_Y := 5.2
-const CARRY_GRIP := 0.45
+## Carried with the wrist this high, the body hanging under the fingertips --
+## HANG_UNDER from them to its feet, so its head (and the view) is just under
+## the shut claw, not inside it (note 106) -- its feet then clear the vats
+## (1.97) as the gantry runs it over them: 5.75 - 1.55 - 1.95 = 2.25.
+const CARRY_Y := 5.75
+const HANG_UNDER := 1.95
 ## The struggles it takes to break free: carried, and strapped down (more as it
 ## angers).
 const CARRY_BREAK := 8
@@ -1018,6 +1019,15 @@ func _intruder() -> Node3D:
 ## a little back toward the table, the claw hanging over the vats; over them
 ## and ready, down it comes.
 func _hunt(now: float) -> void:
+	if unmanned:
+		# No one at the console: idle over the table (note 106).
+		_target = null
+		_b_goal = Vector2.ZERO
+		_b_speed = 0.6
+		_len_goal = ROOT_Y - HOVER_Y - 0.4
+		_hoist = HOIST_SPEED
+		_open_goal = 0.1
+		return
 	_target = _intruder()
 	_hoist = HOIST_SPEED
 	_b_speed = 1.0
@@ -1159,6 +1169,25 @@ func _slam(now: float) -> void:
 		_swing_lock = 1.0
 		_flex = 0.4
 		_shaking = 0.0
+		# Onto someone under it (note 106: "Dont let the player be inside the
+		# claw when its closed, but rather under it"): it stops with its
+		# fingertips just over their head and shuts there -- the floor is not
+		# reached.
+		var under := _player_under()
+		if under != null:
+			# Set exactly over their head (a frame of the drop can carry the
+			# fingertips half a metre past it).
+			var ly: float = room.to_local(under.global_position).y
+			_len = ROOT_Y + _axis.y * CLAW_LEN * 0.95 - (ly + HANG_UNDER)
+			_len_goal = _len
+			_update_wrist()
+			_drop_len = _len
+			_hit_done = false
+			_open_goal = FINGER_SHUT
+			_open_rate = 30.0
+			_impact(now, true)
+			if state == State.REAR:
+				_t = land_at
 		return
 	if _hit_done:
 		_hit_done = false
@@ -1197,9 +1226,49 @@ func _slam(now: float) -> void:
 
 ## Where it lands: whoever is under it is grabbed, everyone near thrown down,
 ## and the floor takes the blow (`_impact_fx`).
-func _impact(now: float) -> void:
+## A player it is coming down on: within GRAB_RADIUS of under it, its
+## fingertips come down to HANG_UNDER over their feet -- just over their head.
+func _player_under() -> Node3D:
+	var tip := _w + _axis * CLAW_LEN * 0.95
+	for p in Coop.all():
+		var n := p as Node3D
+		if n == null or n.get("_dead") == true or n.get("in_cutscene") == true \
+				or (n.has_method("is_hidden") and n.is_hidden()) \
+				or (n.has_method("is_restrained") and n.is_restrained()):
+			continue
+		var l: Vector3 = room.to_local(n.global_position)
+		if Vector2(l.x - _w.x, l.z - _w.z).length() <= GRAB_RADIUS and tip.y <= l.y + HANG_UNDER \
+				and tip.y > l.y + 0.5:
+			return n
+	return null
+
+
+## The booth's door kicked in, the surgeon thrown out (note 106: "once the
+## player smashes the control room door, the arm should stop chasing the
+## player"): no one at the console. It lets go of whatever it holds and hangs
+## over its table, still lit, until the lever is thrown.
+var unmanned := false
+
+
+func operator_gone() -> void:
+	if unmanned or is_depowered():
+		return
+	unmanned = true
+	_drop_all()
+	if _victim != null:
+		_let_go(_now(), state == State.STRAP)
+	if state not in [State.DORMANT, State.DYING, State.DEAD]:
+		_enter(State.HUNT)
+
+
+## `on_player`: it came down on someone (note 106), stopping over their head --
+## no crack in the floor; sparks off the fingers instead.
+func _impact(now: float, on_player := false) -> void:
 	var at := room.to_global(Vector3(_to.x, _to.y, _to.z))
-	_impact_fx(at, 1.0)
+	if on_player:
+		_sparks(room.to_global(_w + _axis * CLAW_LEN), Color(1.0, 0.75, 0.45), 18)
+	else:
+		_impact_fx(at, 1.0)
 	var caught: Node3D = null
 	for p in Coop.all():
 		var n := p as Node3D
@@ -1941,8 +2010,8 @@ func _hold_victim() -> void:
 		return
 	match state:
 		State.CARRY:
-			var grip := room.to_global(_w + _axis * CLAW_LEN * CARRY_GRIP)
-			_victim.global_position = grip - Vector3(0.0, 1.05, 0.0)
+			var tip := room.to_global(_w + _axis * CLAW_LEN * 0.95)
+			_victim.global_position = tip - Vector3(0.0, HANG_UNDER, 0.0)
 			_victim.set("restrain_view", Vector3(0.0, -18.0, 12.0 * sin(_t * 5.0)))
 		State.STRAP:
 			_victim.global_position = global_transform * Vector3(0.0, TOP + 0.02, 0.25)

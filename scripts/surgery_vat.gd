@@ -11,13 +11,22 @@ extends CharacterBody3D
 ## hall, aisles between; one of them stands over the hatch to the powering room
 ## (surgery_power.gd), and nothing marks which.
 ##
-## PUSHING. A player walking into a vat (their own move_and_slide meets it) and
-## still pressing toward it shoves it. Nothing moves at first: it takes
-## BREAKAWAY s of steady shoving before the vat gives with a jolt; then it
-## creeps in lurches -- each heave a shove, the slurry slopping -- up to
-## PUSH_SPEED, and it stops dead within a stride once they let go. The way it
-## goes follows the shove only slowly (TURN), so it cannot be steered round a
-## corner. Two players shoving together move it faster (TEAM_BONUS each).
+## GRABBING (note 106, the user: "The player shouldnt be able to open the vats.
+## Instead the player should interact to grab a vat. he can pull or push it. the
+## player should also be able to turn them very slowly. The player should not be
+## allowed to block or attack while latched onto a vat."). E on a vat grabs it
+## (`grab`; player.gd `latch`): both hands on its side, GRIP_GAP out from it,
+## weapon away. Forward pushes it away, back pulls it toward them (PULL_SCALE of
+## the speed, and only if there is room behind them), left and right turn it
+## about its middle at TURN_SPEED -- they go round with it, so it is how a push
+## is aimed. E again lets go (so does anything that knocks them over, the claw,
+## a scene). Walking into a vat no longer moves it (note 102's shove).
+##
+## Pushed or pulled, nothing moves at first: it takes BREAKAWAY s of steady
+## heaving before the vat gives with a jolt; then it creeps in lurches -- each
+## heave a shove, the slurry slopping -- up to PUSH_SPEED, and it stops dead
+## within a stride once they stop. Two players on it heaving the same way move
+## it faster (TEAM_BONUS each).
 ## It stops against anything solid -- walls, the table, other vats, a player in
 ## its way -- scraping a little along it (GRAZE). It never moves itself; the
 ## claw ignores it.
@@ -44,15 +53,13 @@ const HEAVE := 1.3
 const LURCH := 0.35
 ## The share of the shove's direction taken each second once it moves.
 const TURN := 0.9
+## Note 106: a player on it stands GRIP_GAP out from its side; pulling goes at
+## PULL_SCALE of a push's speed; turning, TURN_SPEED radians a second.
+const GRIP_GAP := 0.5
+const PULL_SCALE := 0.7
+const TURN_SPEED := 0.3
 ## A second player shoving with the first adds this much speed.
 const TEAM_BONUS := 0.45
-## A player counts as shoving if their stick points within this of the vat.
-const SHOVE_DOT := 0.55
-## A player this near its side counts as pressing on it (their move_and_slide
-## does not meet it every tick once it gives), and a shove lapses only after
-## GRACE_MS without one.
-const TOUCH := 0.4 + 0.18
-const GRACE_MS := 220
 ## Running into something: what is left of the move slides along it this much.
 const GRAZE := 0.35
 ## What stops it besides the world: the open hatch's curb (surgery_power.gd).
@@ -60,10 +67,9 @@ const STOP_LAYER := 1 << 22
 
 const FX_DUST := preload("res://textures/surgery_fx_dust.png")
 ## THE LID (note 104, the user: "Give the vats removable lids"): the kit's riveted
-## `hatch` plate (a Higgsfield piece) laid over the tub, LID_SIZE across. A
-## player lifts it off with E and leans it against the tub's side, or puts it
-## back; the claw lifts it off to fish out a piece to throw (surgical_table.gd
-## FETCH) and leaves it off. It moves with its vat.
+## `hatch` plate (a Higgsfield piece) laid over the tub, LID_SIZE across. The claw
+## lifts it off to fish out a piece to throw (surgical_table.gd FETCH) and leaves
+## it off; players do not (note 106). It moves with its vat.
 const LID_MODEL := preload("res://models/surgery/hatch.glb")
 const LID_SIZE := 2.3
 const LID_TIME := 0.55
@@ -88,7 +94,10 @@ signal shove_started(player: Node3D)
 ## The lid on (a world reset puts it back on).
 var lid_on := true
 var _lid: Node3D
-var _lid_prompt: Interact.Prompt
+## The grab prompt; who holds it: [{"p": player, "b": their bearing round it,
+## in its own frame}].
+var _grab_prompt: Interact.Prompt
+var _holders: Array = []
 var _lid_busy := false
 
 var _push_t := 0.0
@@ -99,9 +108,6 @@ var _rock := 0.0
 var _rock_v := 0.0
 var _dust: CPUParticles3D
 var _jolted := false
-## How many players shoved it this tick (`_shove`).
-var _pushers := 0
-var _last_shove := -100000
 ## The last player to shove it.
 var _pusher: Node3D = null
 
@@ -125,6 +131,8 @@ func _ready() -> void:
 	add_child(cs)
 	_dust = _make_dust()
 	add_child(_dust)
+	_grab_prompt = Interact.prompt("E   Grab", Vector3(0.0, 1.1 * grow, 0.0))
+	add_child(_grab_prompt)
 
 
 ## The lid, on (surgery.gd calls it once `kind` is set), and its prompt.
@@ -135,8 +143,6 @@ func fit_lid() -> void:
 	load("res://scripts/surgical_table.gd").grade(_lid)
 	for g in _lid.find_children("*", "GeometryInstance3D", true, false):
 		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	_lid_prompt = Interact.prompt("E   Lift the lid", Vector3(0.0, rim(), 0.0))
-	add_child(_lid_prompt)
 	_lid.transform = _lid_pose(true)
 
 
@@ -175,27 +181,100 @@ func set_lid(on: bool, instant := false) -> void:
 	tw.tween_callback(func() -> void: _lid_busy = false)
 
 
+## "E Grab" for a player beside it looking at it (not on top, not already on a
+## vat); "E Let go" for one holding it.
 func _process(_delta: float) -> void:
-	if _lid_prompt == null:
+	if _grab_prompt == null:
 		return
-	if _lid_busy or not _anyone_near():
-		_lid_prompt.visible = false
+	if not _holders.is_empty():
+		_grab_prompt.visible = true
+		_grab_prompt.player = _holders[0]["p"]
+		_grab_prompt.text = "E   Let go"
 		return
-	var p := Interact.chooser(model if model != null else self, radius + 1.6, 2.4, 3.2, 0.1)
-	# Not from on top of it: a player standing on the lid cannot lift it.
-	if p != null and (p as Node3D).global_position.y > global_position.y + 1.0:
+	if not _anyone_near():
+		_grab_prompt.visible = false
+		return
+	var p := Interact.chooser(model if model != null else self, radius + 1.4, 1.2, 3.0, 0.1)
+	if p != null and (_on_top(p as Node3D) or p.get("latched_to") != null or not (p as CharacterBody3D).is_on_floor()):
 		p = null
-	_lid_prompt.visible = p != null
-	_lid_prompt.player = p
-	_lid_prompt.text = "E   Lift the lid" if lid_on else "E   Put the lid on"
+	_grab_prompt.visible = p != null
+	_grab_prompt.player = p
+	_grab_prompt.text = "E   Grab"
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _lid_prompt == null or not _lid_prompt.visible:
-		return
-	if Interact.pressed(event, _lid_prompt.player):
+	for h in _holders:
+		if Interact.pressed(event, h["p"]):
+			get_viewport().set_input_as_handled()
+			release(h["p"])
+			return
+	if _grab_prompt != null and _grab_prompt.visible and _holders.is_empty() \
+			and Interact.pressed(event, _grab_prompt.player):
 		get_viewport().set_input_as_handled()
-		set_lid(not lid_on)
+		grab(_grab_prompt.player as Node3D)
+
+
+## Both hands on it where they stand, facing it.
+func grab(p: Node3D) -> void:
+	if p == null or is_held_by(p):
+		return
+	var to := p.global_position - global_position
+	to.y = 0.0
+	if to.length_squared() < 0.0001:
+		to = Vector3.BACK
+	_holders.append({"p": p, "b": atan2(to.x, to.z) - global_rotation.y})
+	# They move with it now: it does not push them, nor they it (their room to
+	# back into is tested without it).
+	(p as PhysicsBody3D).add_collision_exception_with(self)
+	p.call("latch", self)
+	p.rotation.y = atan2(to.x, to.z)
+	_place_holders()
+
+
+## Let go of them (E, or player.gd `unlatch` -- which calls this).
+func release(p: Node3D) -> void:
+	for i in range(_holders.size() - 1, -1, -1):
+		if _holders[i]["p"] == p:
+			_holders.remove_at(i)
+	if is_instance_valid(p):
+		(p as PhysicsBody3D).remove_collision_exception_with(self)
+	if is_instance_valid(p) and p.get("latched_to") == self:
+		p.call("unlatch")
+
+
+func is_held_by(p: Node3D) -> bool:
+	for h in _holders:
+		if h["p"] == p:
+			return true
+	return false
+
+
+## Each holder where their grip is now: on their bearing round it (which turns
+## with it), GRIP_GAP out from its side, at their own height.
+func _place_holders() -> void:
+	for h in _holders:
+		var n: Node3D = h["p"]
+		var a: float = global_rotation.y + float(h["b"])
+		var at := global_position + Vector3(sin(a), 0.0, cos(a)) * (radius + GRIP_GAP)
+		n.global_position = Vector3(at.x, n.global_position.y, at.z)
+
+
+## Holders that can no longer hold it: dead, in a scene, held by the claw, on
+## another vat, or somewhere else entirely (a teleport).
+func _check_holders() -> void:
+	for i in range(_holders.size() - 1, -1, -1):
+		var n = _holders[i]["p"]
+		var gone: bool = not is_instance_valid(n) or n.get("_dead") == true or n.get("in_cutscene") == true \
+			or n.get("latched_to") != self or (n.has_method("is_restrained") and n.is_restrained())
+		if not gone:
+			var to: Vector3 = n.global_position - global_position
+			gone = Vector2(to.x, to.z).length() > radius + GRIP_GAP + 1.0 or absf(to.y) > 1.0
+		if gone:
+			_holders.remove_at(i)
+			if is_instance_valid(n):
+				(n as PhysicsBody3D).remove_collision_exception_with(self)
+			if is_instance_valid(n) and n.get("latched_to") == self:
+				n.call("unlatch")
 
 
 ## A player standing on it (on the lid or the rim), not beside it.
@@ -284,31 +363,58 @@ func _stop() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_check_holders()
 	# At rest with no one near it, nothing to do (twenty-odd of them in the hall).
-	if _speed <= 0.0 and absf(_rock) < 0.0005 and absf(_rock_v) < 0.0005 and not _anyone_near():
+	if _holders.is_empty() and _speed <= 0.0 and absf(_rock) < 0.0005 and absf(_rock_v) < 0.0005 \
+			and not _anyone_near():
 		if _push_t > 0.0:
 			_push_t = 0.0
 			_jolted = false
 		return
-	var shove := _shove()
-	var pushers := float(_pushers)
-	if pushers > 0.0 and shove.length_squared() > 0.01:
-		shove = shove.normalized()
-		_last_shove = Time.get_ticks_msec()
+	# What the holders' keys ask of it: forward pushes it away from them, back
+	# pulls it to them, the sides turn it.
+	var heave := Vector3.ZERO
+	var pushers := 0
+	var turn := 0.0
+	var scale := 0.0
+	for h in _holders:
+		var n: Node3D = h["p"]
+		var input: Vector2 = n.call("_move_input")
+		var toward := global_position - n.global_position
+		toward.y = 0.0
+		toward = toward.normalized()
+		var f := -input.y
+		if absf(f) > 0.25:
+			heave += toward * signf(f)
+			scale += 1.0 if f > 0.0 else PULL_SCALE
+			pushers += 1
+			_pusher = n
+		turn += input.x
+	_turn_by(turn, delta)
+	if pushers > 0 and heave.length_squared() > 0.01:
+		var want := heave.normalized()
 		if _push_t <= 0.0:
 			shove_started.emit(_pusher)
-		_push_t += delta
+		# Heaving the other way to how it is going: it has to stop first.
+		if _jolted and _dir != Vector3.ZERO and want.dot(_dir) < 0.3:
+			_speed = move_toward(_speed, 0.0, BRAKE * delta)
+			if _speed < 0.05:
+				_dir = want
+				_push_t = 0.0
+				_jolted = false
+		else:
+			_push_t += delta
 		if _push_t >= BREAKAWAY:
 			if not _jolted:
 				# It gives: a jolt, the tub rocking back on its skids.
 				_jolted = true
 				_rock_v -= 1.6
-				_dir = shove
-			_dir = _dir.lerp(shove, clampf(TURN * delta, 0.0, 1.0)).normalized()
-			var top := PUSH_SPEED * (1.0 + TEAM_BONUS * (pushers - 1.0))
+				_dir = want
+			_dir = _dir.lerp(want, clampf(TURN * delta, 0.0, 1.0)).normalized()
+			var top := PUSH_SPEED * (scale / float(pushers)) * (1.0 + TEAM_BONUS * float(pushers - 1))
 			_speed = move_toward(_speed, top, ACCEL * delta)
-	elif Time.get_ticks_msec() - _last_shove > GRACE_MS:
-		# Let go: it stays put, and the next shove has to break it loose again.
+	else:
+		# Let go: it stays put, and the next heave has to break it loose again.
 		_push_t = maxf(_push_t - delta * 2.5, 0.0)
 		if _push_t < BREAKAWAY * 0.5:
 			_jolted = false
@@ -317,20 +423,50 @@ func _physics_process(delta: float) -> void:
 		_speed = 0.0
 	if _speed > 0.001 and _dir != Vector3.ZERO:
 		_phase += delta * HEAVE
-		var heave := LURCH + (1.0 - LURCH) * pow(absf(sin(_phase * PI)), 1.5)
-		var hit := move_and_collide(_dir * _speed * heave * delta)
-		if hit != null:
-			var n := hit.get_normal()
-			n.y = 0.0
-			if n.length_squared() > 0.0001:
-				var rest := hit.get_remainder().slide(n.normalized()) * GRAZE
-				rest.y = 0.0
-				move_and_collide(rest)
-			if _speed > PUSH_SPEED * 0.5:
-				_rock_v += 1.2
-			_speed *= 0.4
+		var lurch := LURCH + (1.0 - LURCH) * pow(absf(sin(_phase * PI)), 1.5)
+		var step := _dir * _speed * lurch * delta
+		# Pulled back onto a holder with a wall behind them: no further.
+		for h in _holders:
+			var body := h["p"] as CharacterBody3D
+			if body != null and body.test_move(body.global_transform, Vector3(step.x, 0.0, step.z)):
+				step = Vector3.ZERO
+				_speed = 0.0
+				break
+		if step != Vector3.ZERO:
+			var hit := move_and_collide(step)
+			if hit != null:
+				var n := hit.get_normal()
+				n.y = 0.0
+				if n.length_squared() > 0.0001:
+					var rest := hit.get_remainder().slide(n.normalized()) * GRAZE
+					rest.y = 0.0
+					move_and_collide(rest)
+				if _speed > PUSH_SPEED * 0.5:
+					_rock_v += 1.2
+				_speed *= 0.4
+	_place_holders()
 	_dust.emitting = _speed > 0.15
 	_sway(delta)
+
+
+## Turned about its middle by the holders' sideways keys (`turn`, summed),
+## TURN_SPEED a second, them going round with it -- unless that would walk one
+## of them into something.
+func _turn_by(turn: float, delta: float) -> void:
+	if absf(turn) < 0.25 or _holders.is_empty():
+		return
+	var dyaw := signf(turn) * TURN_SPEED * delta
+	for h in _holders:
+		var body := h["p"] as CharacterBody3D
+		var a: float = global_rotation.y + float(h["b"])
+		var now := Vector3(sin(a), 0.0, cos(a)) * (radius + GRIP_GAP)
+		var then := Vector3(sin(a + dyaw), 0.0, cos(a + dyaw)) * (radius + GRIP_GAP)
+		if body != null and body.test_move(body.global_transform, then - now):
+			return
+	rotate_y(dyaw)
+	for h in _holders:
+		var n: Node3D = h["p"]
+		n.rotation.y += dyaw
 
 
 ## The tub rocks on its skids: back as it breaks loose and against each heave,
@@ -350,53 +486,11 @@ func _sway(delta: float) -> void:
 	model.transform = Transform3D(Basis(local_axis, _rock).scaled(Vector3.ONE * grow), model.transform.origin)
 
 
-## The shove on it this tick: the sum of the directions (from them to it) of
-## every player pressing into it; how many in `_pushers`.
-func _shove() -> Vector3:
-	var sum := Vector3.ZERO
-	_pushers = 0
-	for p in Coop.all():
-		var n := p as CharacterBody3D
-		if n == null or n.get("_dead") == true or n.get("in_cutscene") == true:
-			continue
-		if not n.is_on_floor() or (n.has_method("is_restrained") and n.is_restrained()):
-			continue
-		# Standing on it (note 104: the way up to the booth): no shove.
-		if _on_top(n):
-			continue
-		var touching := false
-		for i in n.get_slide_collision_count():
-			if n.get_slide_collision(i).get_collider() == self:
-				touching = true
-				break
-		if not touching:
-			var gap := n.global_position - global_position
-			gap.y = 0.0
-			touching = gap.length() < radius + TOUCH
-		if not touching:
-			continue
-		var input: Vector2 = n.call("_move_input")
-		if input == Vector2.ZERO:
-			continue
-		var wish := n.global_basis * Vector3(input.x, 0.0, input.y)
-		wish.y = 0.0
-		var to := global_position - n.global_position
-		to.y = 0.0
-		if wish.length_squared() < 0.0001 or to.length_squared() < 0.0001:
-			continue
-		if wish.normalized().dot(to.normalized()) < SHOVE_DOT:
-			continue
-		sum += to.normalized()
-		_pushers += 1
-		_pusher = n
-	return sum
-
-
 ## A player standing in its way (not one shoving it), close enough to be run into.
 func _player_ahead() -> bool:
 	for p in Coop.all():
 		var n := p as Node3D
-		if n == null or n.get("_dead") == true or _on_top(n):
+		if n == null or n.get("_dead") == true or _on_top(n) or is_held_by(n):
 			continue
 		var to := n.global_position - global_position
 		to.y = 0.0

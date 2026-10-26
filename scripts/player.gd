@@ -515,6 +515,7 @@ var restrain_view := Vector3.ZERO
 func restrain(by: Node3D) -> void:
 	if _dead:
 		return
+	unlatch()
 	begin_cutscene(true)
 	restrained_by = by
 	struggles = 0
@@ -534,9 +535,40 @@ func is_restrained() -> bool:
 	return restrained_by != null and is_instance_valid(restrained_by)
 
 
+## --- Latched onto a vat (2026-10-25, note 106) -------------------------------------
+##
+## E on a surgery vat grabs it (surgery_vat.gd `grab`): both hands on it, the
+## weapon put away (`hands_busy`), no attacking, guarding or jumping. The vat
+## moves them with it and reads their keys -- forward pushes, back pulls, the
+## sides turn it -- until E again, a blow that knocks them down, the claw, a
+## scene, or death lets go (`unlatch`).
+var latched_to: Node3D = null
+
+
+func latch(vat: Node3D) -> void:
+	if latched_to == vat:
+		return
+	unlatch()
+	latched_to = vat
+	hands_busy = true
+	_end_block()
+	velocity = Vector3.ZERO
+
+
+func unlatch() -> void:
+	if latched_to == null:
+		return
+	var v := latched_to
+	latched_to = null
+	hands_busy = false
+	if is_instance_valid(v) and v.has_method("release"):
+		v.call("release", self)
+
+
 ## `hurts`: the scene happens in the world rather than outside it, and blows
 ## still land (the bone cages); otherwise the player cannot be hurt in it.
 func begin_cutscene(hurts := false) -> void:
+	unlatch()
 	in_cutscene = true
 	_cutscene_hurts = hurts
 	_ghosting = false
@@ -747,6 +779,7 @@ func hidden_in() -> Node3D:
 
 
 func hide_in(spot: Node3D, at: Vector3, yaw: float) -> void:
+	unlatch()
 	_end_block()
 	_cancel_drink()
 	_ghosting = false
@@ -1729,6 +1762,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			deg_to_rad(min_pitch),
 			deg_to_rad(max_pitch),
 		)
+	elif latched_to != null:
+		# Both hands on a vat (note 106): no swinging, guarding, jumping or
+		# slamming -- only looking about (above); E lets go (the vat's own).
+		return
 	elif event.is_action_pressed("attack"):
 		_attack_key_spills_drink()
 		# While the mouse is free, a click is the player asking for it back
@@ -1801,6 +1838,11 @@ func _physics_process(delta: float) -> void:
 	if is_hidden() or climbing or restrained_by != null:
 		# Held: the holder places them every frame (note 96).
 		velocity = Vector3.ZERO
+		return
+	# On a surgery vat (note 106): the vat moves them with it, reading their keys.
+	if latched_to != null:
+		velocity = Vector3.ZERO
+		_check_block()
 		return
 	_check_block()
 	_hold_guard()
@@ -2233,7 +2275,7 @@ func _start_spin() -> void:
 ## every physics tick).
 
 func _start_block() -> void:
-	if _blocking or _dead or in_cutscene or ui_open or hands_busy or not Inventory.is_weapon(held_item()) \
+	if _blocking or _dead or in_cutscene or ui_open or hands_busy or latched_to != null or not Inventory.is_weapon(held_item()) \
 			or is_drinking() or _ghosting:
 		return
 	if _slamming or _now() < _slam_recover_until or _pose_kind in [&"haft", &"stab", &"raise", &"slam"]:
@@ -2392,7 +2434,7 @@ func _take_parry_cue(attacker: Node3D):
 
 ## Whether the press that just came would count toward a cued parry.
 func _note_block_press() -> void:
-	if _dead or in_cutscene or ui_open or not Inventory.is_weapon(held_item()) \
+	if _dead or in_cutscene or ui_open or latched_to != null or not Inventory.is_weapon(held_item()) \
 			or is_drinking() or _ghosting:
 		return
 	# Down on the floor (knocked down) or in a slam's recovery: no guard to raise.
@@ -4342,6 +4384,7 @@ func heal(amount: float, source_name := "") -> float:
 
 func _die() -> void:
 	_dead = true
+	unlatch()
 	# Whatever held them lets go of a corpse (note 96).
 	restrained_by = null
 	restrain_view = Vector3.ZERO
@@ -4619,6 +4662,7 @@ var _knock_side := 1.0
 func knock_down(dir: Vector3, push := 7.5) -> void:
 	if _dead or in_cutscene or is_hidden():
 		return
+	unlatch()
 	var away := Vector3(dir.x, 0.0, dir.z)
 	if away.length_squared() < 0.0001:
 		away = global_basis.z
