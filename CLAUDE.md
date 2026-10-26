@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 106), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 107), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -490,6 +490,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 104 | 2026-10-25 | The surgery: an entrance scene and bars; vat lids; real soldiers in the pens; the claw throws pieces and soldiers; the way up to the booth over the table and the vats | [docs/notes/104-entrance-scene-bars-lids-pen-soldiers-claw-moves-booth-route.md](docs/notes/104-entrance-scene-bars-lids-pen-soldiers-claw-moves-booth-route.md) |
 | 105 | 2026-10-25 | The booth lower, E at its door, the kick flings the surgeon out of the window, a lever you flip; the way in really blocked, its scene on the shove; pens in the sandbox; a bigger wind-up; the surgeon a boss (infrastructure) | [docs/notes/105-booth-lower-kick-lever-blocking-vat-surgeon-boss.md](docs/notes/105-booth-lower-kick-lever-blocking-vat-surgeon-boss.md) |
 | 106 | 2026-10-25 | Vats grabbed (E): pushed, pulled, turned slowly, no fighting meanwhile; the claw idle once the booth door is in; caught under the claw, not inside it | [docs/notes/106-grab-vats-claw-idles-when-unmanned-caught-under-the-claw.md](docs/notes/106-grab-vats-claw-idles-when-unmanned-caught-under-the-claw.md) |
+| 107 | 2026-10-25 | The surgery's vats in a checkerboard round a wide open circle, a vat always over the hatch | [docs/notes/107-vats-in-a-checkerboard-open-circle-round-the-middle.md](docs/notes/107-vats-in-a-checkerboard-open-circle-round-the-middle.md) |
 
 ## Notes by source file
 
@@ -578,7 +579,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106
+- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102
 - `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106

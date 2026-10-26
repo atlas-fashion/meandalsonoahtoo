@@ -21,12 +21,13 @@ extends "res://scripts/morgue.gd"
 ## instead be filled with large vats of pieces that the claw uses to make bionic
 ## soldiers. The player should be able to push the vats around the room, but
 ## they should be heavy and cumbersome"):
-## - THE VATS fill the hall in rows (`_lay_vats`): riveted iron tubs of bones
-##   and of gold prostheses (surgery_vat.gd), on a 3 m lattice with aisles
-##   carved between them like a maze's -- a random spanning tree with a few loops
-##   -- the middle round the table, the intake, the rail and the ways in left
-##   clear. Every one can be shoved, slowly (surgery_vat.gd). Some of the gold
-##   ones glow with the oil in them: the hall's light, carried where they go.
+## - THE VATS stand across the hall in a CHECKERBOARD (`_lay_vats`, note 107):
+##   riveted iron tubs of bones and of gold prostheses (surgery_vat.gd) on every
+##   other point of a 3 m lattice, meeting only at their corners, a wide open
+##   circle round the table in the middle, the intake, the rail and the ways in
+##   left clear. Every one can be grabbed and heaved, slowly (surgery_vat.gd).
+##   Some of the gold ones glow with the oil in them: the hall's light, carried
+##   where they go.
 ## - ONE VAT stands over the HATCH to the POWERING ROOM under the hall
 ##   (surgery_power.gd), and nothing marks which (asked: no hint). In the room,
 ##   THE CRYSTAL that powers the machine: pulled out, the claw drops dead, and
@@ -118,18 +119,18 @@ const GIRDER_H := 0.53
 ## intake, the rail and the pens): N x N across the hall.
 const N := 9
 
-## The vats (note 102): a lattice VAT_STEP apart -- the dungeon's flagstone
-## grid, so the hatch (cut where two flags meet) falls on one of its points --
-## no further out than VAT_REACH. Kept clear: the middle (CLEAR_MIDDLE either
-## way), CLEAR_RAIL either side of the rail, CLEAR_DOOR round each way in. A
-## share VAT_LOOPS of the walls left standing after the aisles are carved is
-## opened for loops. At most VAT_LIGHTS of the gold vats glow.
+## The vats (note 102; a checkerboard, note 107): a lattice VAT_STEP apart -- the
+## dungeon's flagstone grid, so the hatch (cut where two flags meet) falls on one
+## of its points -- no further out than VAT_REACH. Kept clear: an open circle
+## OPEN_RADIUS round the middle, CLEAR_RAIL either side of the rail, CLEAR_DOOR
+## round each way in. CLEAR_MIDDLE: where the rail ends, short of the table. At
+## most VAT_LIGHTS of the gold vats glow.
 const VAT_STEP := 3.0
 const VAT_REACH := 12.05
 const CLEAR_MIDDLE := 3.1
+const OPEN_RADIUS := 6.0
 const CLEAR_RAIL := 1.2
 const CLEAR_DOOR := 3.2
-const VAT_LOOPS := 0.15
 const VAT_LIGHTS := 6
 const VAT_OIL := Color(1.0, 0.62, 0.28)
 
@@ -170,9 +171,8 @@ var _turn := 0
 ## middle of the dungeon cell it is in.
 var _hole := Vector3.ZERO
 var _hole_cell := Vector3.ZERO
-## The vats: their holder, the lattice's open slots, and which stands on the hatch.
+## The vats: their holder, and which stands on the hatch.
 var _vat_holder: Node3D
-var _floor := {}
 var _hatch_vat: Node3D
 ## The lattice's offset from the middle, plan frame (`_lattice_off`).
 var _off := Vector2.ZERO
@@ -592,10 +592,10 @@ func _rail_distance(p: Vector3, off := _off) -> float:
 
 # --- The vats (note 102) -----------------------------------------------------------
 
-## A lattice point kept clear of vats: the middle, the booth's intake under it,
-## the pens, the rail, the ways in.
+## A lattice point kept clear of vats: the open circle round the middle, the
+## booth's intake under it, the pens, the rail, the ways in.
 func _kept_clear(p: Vector3) -> bool:
-	if absf(p.x) <= CLEAR_MIDDLE and absf(p.z) <= CLEAR_MIDDLE:
+	if Vector2(p.x, p.z).length() < OPEN_RADIUS:
 		return true
 	if p.x < -9.5 and p.z > -_inner + _c - 1.6 and p.z < -_inner + _c * 3.0 + 1.0:
 		return true
@@ -606,21 +606,22 @@ func _kept_clear(p: Vector3) -> bool:
 	return _door_distance(_plan.transform * p) < CLEAR_DOOR
 
 
-## The vats laid out on the lattice through the hatch: the lattice's points split
-## into junctions (both indices of one parity), the walls between them and the
-## pillars at the corners, as a maze's cells and walls; every junction open, a
-## random spanning tree of walls opened between them (Kruskal, the room's own
-## generator), VAT_LOOPS of the rest, then whatever is still cut off joined up.
-## A vat on every point left shut. The hatch is a wall between two junctions,
-## never opened: its vat can be shoved off it into the aisle either side.
+## The vats in a CHECKERBOARD (note 107, the user: "arange the vats in a
+## checkerboard pattern in the center of the floor, and have a wide circle area
+## around the middle that is open with no vats. The hatch should be under one of
+## them"): on the lattice through the hatch (VAT_STEP apart), every point whose
+## indices add up to the hatch's parity -- the dark squares -- so no two vats
+## stand side by side: they meet only at their corners, 4.2 m apart across the
+## diagonal, with the aisles running between them corner to corner. None within
+## OPEN_RADIUS of the middle -- the wide clearing round the table -- nor where
+## `_kept_clear` says. The hatch's point is one of the dark squares, so a vat
+## always stands over it, and with no vat beside it, it can be shoved off any
+## way.
 func _lay_vats() -> void:
 	_vat_holder = Node3D.new()
 	_vat_holder.name = "Vats"
 	add_child(_vat_holder)
 	var hole := _plan.transform.inverse() * to_local(_hole)
-
-
-
 	var off := _off
 	var xs: Array[float] = []
 	var zs: Array[float] = []
@@ -641,135 +642,25 @@ func _lay_vats() -> void:
 		if absf(zs[j] - hole.z) < absf(zs[hj] - hole.z):
 			hj = j
 	var hatch := Vector2i(hi, hj)
-	# Junction parity: the hatch a wall across X if it can be, else across Z.
-	var par := Vector2i((hi + 1) % 2, hj % 2)
-	if hi == 0 or hi == xs.size() - 1:
-		par = Vector2i(hi % 2, (hj + 1) % 2)
-	var at := func(s: Vector2i) -> Vector3: return Vector3(xs[s.x], 0.0, zs[s.y])
-	var inside := func(s: Vector2i) -> bool: return s.x >= 0 and s.y >= 0 and s.x < xs.size() and s.y < zs.size()
-	_floor.clear()
-	var junctions: Array[Vector2i] = []
-	var walls: Array = []
-	for i in xs.size():
-		for j in zs.size():
-			var s := Vector2i(i, j)
-			var jx := i % 2 == par.x
-			var jz := j % 2 == par.y
-			var clear: bool = _kept_clear(at.call(s))
-			if jx and jz:
-				junctions.append(s)
-				_floor[s] = true
-			elif clear and s != hatch:
-				_floor[s] = true
-			if jx != jz:
-				# A wall: between the junctions either side of it.
-				var step := Vector2i(1, 0) if not jx else Vector2i(0, 1)
-				if inside.call(s - step) and inside.call(s + step):
-					walls.append([s, s - step, s + step])
-	# Kruskal over the junctions; the walls already open (kept clear) first.
-	var uf := {}
-	for s in junctions:
-		uf[s] = s
-	var find := func(a: Vector2i) -> Vector2i:
-		while uf[a] != a:
-			uf[a] = uf[uf[a]]
-			a = uf[a]
-		return a
-	var shut: Array = []
-	for w in walls:
-		if _floor.has(w[0]):
-			var ra: Vector2i = find.call(w[1])
-			var rb: Vector2i = find.call(w[2])
-			uf[ra] = rb
-		elif w[0] != hatch:
-			shut.append(w)
-	for i in range(shut.size() - 1, 0, -1):
-		var k := _rng.randi_range(0, i)
-		var t = shut[i]
-		shut[i] = shut[k]
-		shut[k] = t
-	var left: Array = []
-	for w in shut:
-		var ra: Vector2i = find.call(w[1])
-		var rb: Vector2i = find.call(w[2])
-		if ra != rb:
-			uf[ra] = rb
-			_floor[w[0]] = true
-		else:
-			left.append(w)
-	for w in left:
-		if _rng.randf() < VAT_LOOPS:
-			_floor[w[0]] = true
-	_join_up(xs.size(), zs.size(), hatch)
-	# The vats: one on every point left shut, the hatch's among them.
+	var dark := (hi + hj) % 2
 	var n := 0
 	var lights := 0
 	for i in xs.size():
 		for j in zs.size():
 			var s := Vector2i(i, j)
-			if _floor.has(s):
+			if (i + j) % 2 != dark:
+				continue
+			var at := Vector3(xs[i], 0.0, zs[j])
+			if s != hatch and _kept_clear(at):
 				continue
 			var kind := "vat_gold" if _rng.randf() < 0.45 else "vat_bones"
 			var glow := kind == "vat_gold" and lights < VAT_LIGHTS and _rng.randf() < 0.5
 			if glow:
 				lights += 1
-			var vat := _vat(at.call(s), kind, glow, n)
+			var vat := _vat(at, kind, glow, n)
 			if s == hatch:
 				_hatch_vat = vat
 			n += 1
-
-
-## Every open point reachable from the middle: a cut-off pocket is joined to the
-## rest along the shortest run of points (never through the hatch's).
-func _join_up(nx: int, nz: int, hatch: Vector2i) -> void:
-	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-	var start := Vector2i(-1, -1)
-	var best := INF
-	for s: Vector2i in _floor:
-		var d := Vector2(s.x - (nx - 1) * 0.5, s.y - (nz - 1) * 0.5).length()
-		if d < best:
-			best = d
-			start = s
-	if start.x < 0:
-		return
-	for guard in 40:
-		var seen := {start: true}
-		var queue: Array[Vector2i] = [start]
-		while not queue.is_empty():
-			var c: Vector2i = queue.pop_front()
-			for d in dirs:
-				var o: Vector2i = c + d
-				if _floor.has(o) and not seen.has(o):
-					seen[o] = true
-					queue.append(o)
-		var lost := Vector2i(-1, -1)
-		for s: Vector2i in _floor:
-			if not seen.has(s):
-				lost = s
-				break
-		if lost.x < 0:
-			return
-		# From the lost pocket to anything reached, over any point but the hatch.
-		var from := {lost: lost}
-		var q2: Array[Vector2i] = [lost]
-		var hit := Vector2i(-1, -1)
-		while not q2.is_empty() and hit.x < 0:
-			var c: Vector2i = q2.pop_front()
-			for d in dirs:
-				var o: Vector2i = c + d
-				if o.x < 0 or o.y < 0 or o.x >= nx or o.y >= nz or o == hatch or from.has(o):
-					continue
-				from[o] = c
-				if seen.has(o):
-					hit = o
-					break
-				q2.append(o)
-		if hit.x < 0:
-			return
-		var c: Vector2i = from[hit]
-		while c != lost:
-			_floor[c] = true
-			c = from[c]
 
 
 ## A vat at `at` (plan frame), turned at random: the tub, its collision and its
