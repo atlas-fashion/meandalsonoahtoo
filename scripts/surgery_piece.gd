@@ -40,7 +40,7 @@ const BODY_LOW := 0.2
 const BODY_HIGH := 1.6
 const BODY_RADIUS := 0.5
 ## The claw, as a capsule round its wrist-to-fingertips.
-const CLAW_RADIUS := 0.85
+const CLAW_RADIUS := 1.1
 const KNOCK_PUSH := 7.0
 ## Parried within this many degrees of the claw, it goes into the claw.
 const ASSIST := 22.0

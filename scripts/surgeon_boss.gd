@@ -62,8 +62,12 @@ const HEIGHT := 1.85
 ## Between moves, a while (random in the range).
 const REST := Vector2(0.8, 1.6)
 
-const DASH_WIND := 0.65
-const DASH_TIME := 0.32
+## (Note 110: wind 0.65 -> 0.85 and the run 0.32 -> 0.4 s, so it is seen coming
+## and seen go; too close, he hops back DASH_BACK first.)
+const DASH_WIND := 0.85
+const DASH_TIME := 0.4
+const DASH_BACK := 2.6
+const DASH_CLOSE := 3.5
 const DASH_SPEED := 17.0
 const DASH_DAMAGE := 28.0
 const DASH_REACH := 0.9
@@ -149,6 +153,8 @@ var _want := {}
 var _rig_pos := Vector3.ZERO
 var _rig_rot := Vector3.ZERO
 var _back: Node3D
+var _needle: MeshInstance3D
+var _needle_light: OmniLight3D
 var _walk_ph := 0.0
 var _walking := 0.0
 var _pose_name := &"stand"
@@ -275,7 +281,14 @@ func _build_body() -> void:
 		_part(wr, _ball(0.05), "brass", Vector3.ZERO)
 		if k == &"r":
 			# The precision needle: a long tapering steel spike.
-			_part(wr, _cyl(0.0, 0.85, 0.035), "needle", Vector3(0.0, -0.44, 0.0))
+			_needle = _part(wr, _cyl(0.0, 0.85, 0.035), "needle", Vector3(0.0, -0.44, 0.0))
+			_needle_light = OmniLight3D.new()
+			_needle_light.light_color = Color(0.55, 0.85, 1.0)
+			_needle_light.omni_range = 2.5
+			_needle_light.light_energy = 0.0
+			_needle_light.shadow_enabled = false
+			wr.add_child(_needle_light)
+			_needle_light.position = Vector3(0.0, -0.86, 0.0)
 			_part(wr, _cyl(0.06, 0.06), "brass", Vector3(0.0, -0.03, 0.0))
 		else:
 			# A three-fingered clamp.
@@ -344,7 +357,7 @@ func _pose_angles(p: StringName) -> Dictionary:
 			a = {&"sh_l": Vector3(0.0, 0.0, 1.5), &"sh_r": Vector3(0.0, 0.0, -1.5),
 				&"el_l": Vector3.ZERO, &"el_r": Vector3.ZERO,
 				&"hp_l": Vector3(0.0, 0.0, 1.1), &"hp_r": Vector3(0.0, 0.0, -1.1)}
-			rig = [Vector3(0.0, 0.25, 0.0), Vector3.ZERO]
+			rig = [Vector3(0.0, 0.5, 0.0), Vector3.ZERO]
 		&"crouch":
 			a = {&"sh_l": Vector3(0.6, 0.0, 0.3), &"sh_r": Vector3(0.6, 0.0, -0.3),
 				&"hp_l": Vector3(-1.1, 0.0, 0.0), &"hp_r": Vector3(-1.1, 0.0, 0.0),
@@ -456,10 +469,12 @@ func has_claw() -> bool:
 func _claw_pose(mode: StringName) -> Transform3D:
 	match mode:
 		&"legs":
-			return Transform3D(Basis().scaled(Vector3.ONE * 1.1), Vector3(0.0, 0.0, -0.05))
+			# Its fingertips on the floor: the socket 1.92 up with him raised 0.5,
+			# the claw 2.21 long at full size (the bigger claw, note 110).
+			return Transform3D(Basis().scaled(Vector3.ONE * 0.87), Vector3(0.0, 0.0, -0.05))
 		&"back":
-			return Transform3D(Basis(Vector3.RIGHT, PI * 0.5).scaled(Vector3.ONE * 0.8), Vector3.ZERO)
-	return Transform3D(Basis(Vector3.RIGHT, PI - 0.45).scaled(Vector3.ONE * 0.7), Vector3(-0.08, 0.05, 0.0))
+			return Transform3D(Basis(Vector3.RIGHT, PI * 0.5).scaled(Vector3.ONE * 0.65), Vector3.ZERO)
+	return Transform3D(Basis(Vector3.RIGHT, PI - 0.45).scaled(Vector3.ONE * 0.6), Vector3(-0.08, 0.05, 0.0))
 
 
 func _pose_claw(delta: float) -> void:
@@ -644,7 +659,8 @@ func _fight(delta: float) -> void:
 	_next_move -= delta
 	if _next_move <= 0.0 and dist < 12.0:
 		_start_move(dist)
-		return
+		if move != Move.NONE:
+			return
 	var dir := Vector3.ZERO
 	if dist > STOP_AT:
 		if _t >= _replan_at or _path_i >= _path.size():
@@ -660,16 +676,38 @@ func _fight(delta: float) -> void:
 		pose(&"stand")
 
 
+## Note 110 ("I didnt see the spear dash"): he no longer picks by distance and
+## chance -- the needle came only at range, and rarely -- but deals his three
+## moves round in turn (a fresh shuffle each round, the needle first in the
+## fight). The spin waits until they are within SPIN_NEAR (or he has walked at
+## them DEAL_WAIT and gives up on it for the next); the needle, too close, backs
+## off first (`_dash`).
+var _deck: Array[Move] = []
+var _held := 0.0
+const SPIN_NEAR := 3.6
+const DEAL_WAIT := 3.0
+
+
 func _start_move(dist: float) -> void:
-	var r := randf()
-	var m := Move.SLAM
-	if dist > 4.5:
-		m = Move.DASH if r < 0.6 else Move.SLAM
-	elif dist < 3.0:
-		m = Move.SPIN if r < 0.55 else Move.SLAM
-	else:
-		m = [Move.DASH, Move.SPIN, Move.SLAM][randi() % 3]
+	if _deck.is_empty():
+		_deck = [Move.DASH, Move.SPIN, Move.SLAM]
+		_deck.shuffle()
+		if _first_round:
+			_first_round = false
+			_deck.erase(Move.DASH)
+			_deck.push_front(Move.DASH)
+	var m: Move = _deck[0]
+	if m == Move.SPIN and dist > SPIN_NEAR and _held < DEAL_WAIT:
+		# Closer first: on walking at them.
+		_held += get_physics_process_delta_time()
+		_next_move = 0.0
+		return
+	_deck.pop_front()
+	_held = 0.0
 	begin_move(m)
+
+
+var _first_round := true
 
 
 ## Into move `m` (the fight picks; a test may too).
@@ -684,6 +722,9 @@ func begin_move(m: Move) -> void:
 	match m:
 		Move.DASH:
 			pose(&"dash_wind")
+			if _target == null:
+				_target = Coop.nearest(global_position) as Node3D
+			_backing = _target != null and _target.global_position.distance_to(global_position) < DASH_CLOSE
 		Move.SPIN:
 			_claw_mode = &"legs"
 			pose(&"spin")
@@ -694,6 +735,9 @@ func begin_move(m: Move) -> void:
 
 
 func _end_move() -> void:
+	_needle_glow(0.6)
+	_streaked = false
+	_backing = false
 	move = Move.NONE
 	_claw_mode = &"carry"
 	_next_move = randf_range(REST.x, REST.y)
@@ -719,7 +763,22 @@ func _run_move(delta: float) -> void:
 
 ## The needle drawn back, then driven straight through where they were.
 func _dash(delta: float) -> void:
+	# The needle's glow: building through the wind-up, blazing on the run.
+	var glow := 0.6
 	if _mt < DASH_WIND:
+		glow = lerpf(0.6, 7.0, clampf(_mt / DASH_WIND, 0.0, 1.0))
+	elif _mt < DASH_WIND + DASH_TIME:
+		glow = 9.0
+	_needle_glow(glow)
+	if _mt < DASH_WIND:
+		# Too close for it: a hop back first (decided in begin_move), then the wind-up.
+		if _backing and _mt < 0.35:
+			var away := global_position - _target.global_position
+			away.y = 0.0
+			away = away.normalized() if away.length() > 0.01 else -global_basis.z
+			velocity = away * (DASH_BACK / 0.35)
+			velocity.y = 0.0
+			move_and_slide()
 		if _target != null:
 			var to := _target.global_position + (_target.get("velocity") as Vector3) * 0.2 - global_position
 			to.y = 0.0
@@ -732,6 +791,7 @@ func _dash(delta: float) -> void:
 	if _mt < DASH_WIND + DASH_TIME:
 		if _pose_name != &"dash":
 			pose(&"dash")
+			_dash_from = global_position
 		velocity = _move_dir * DASH_SPEED
 		var before := global_position
 		move_and_slide()
@@ -751,6 +811,9 @@ func _dash(delta: float) -> void:
 		if get_slide_collision_count() > 0 and (global_position - before).length() < DASH_SPEED * delta * 0.4:
 			_mt = DASH_WIND + DASH_TIME
 		return
+	if not _streaked:
+		_streaked = true
+		_streak(_dash_from, global_position)
 	velocity = Vector3.ZERO
 	pose(&"stand")
 	if _mt >= DASH_WIND + DASH_TIME + DASH_RECOVER:
@@ -906,6 +969,7 @@ func _hit(p: Node3D, amount: float, dir: Vector3) -> int:
 
 ## Thrown off a parry: staggered, open.
 func _stagger(away: Vector3) -> void:
+	_needle_glow(0.6)
 	move = Move.STAGGER
 	_mt = 0.0
 	_claw_mode = &"carry"
@@ -1072,6 +1136,7 @@ func apply_knockback(impulse: Vector3, _stun_time := 0.0) -> void:
 
 
 func _die() -> void:
+	_needle_glow(0.6)
 	_set_state(State.DEAD)
 	velocity = Vector3.ZERO
 	collision_layer = 0
@@ -1079,3 +1144,45 @@ func _die() -> void:
 	_claw_mode = &"carry"
 	pose(&"dead")
 	defeated.emit()
+
+
+# --- The needle's show (note 110) -----------------------------------------------------------
+
+var _backing := false
+var _streaked := false
+var _dash_from := Vector3.ZERO
+
+
+## The needle's glow and the light at its tip (`energy` 0.6 at rest).
+func _needle_glow(energy: float) -> void:
+	_mat("needle").emission_energy_multiplier = energy
+	if _needle_light != null:
+		_needle_light.light_energy = maxf(energy - 0.6, 0.0) * 0.5
+		_needle_light.visible = energy > 0.7
+
+
+## A streak of light along the run, from `a` to `b` (world), fading.
+func _streak(a: Vector3, b: Vector3) -> void:
+	var length := a.distance_to(b)
+	if length < 0.5 or surgery == null:
+		return
+	var mi := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.07, 0.07, length)
+	mi.mesh = box
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_color = Color(0.55, 0.85, 1.0, 0.8)
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	surgery.add_child(mi)
+	var mid := (a + b) * 0.5 + Vector3(0.0, 1.35, 0.0)
+	mi.global_transform = Transform3D(Basis.looking_at((b - a).normalized(), Vector3.UP), mid)
+	var t := mi.create_tween()
+	t.tween_property(m, "albedo_color:a", 0.0, 0.5)
+	t.tween_callback(mi.queue_free)
+	var table: Node = surgery.get("table")
+	if table != null:
+		table.call("_sparks", b + Vector3(0.0, 1.3, 0.0), Color(0.6, 0.85, 1.0), 14)

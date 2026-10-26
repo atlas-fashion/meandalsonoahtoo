@@ -795,12 +795,27 @@ func surgeon_rises(after := 0.0) -> void:
 	while table != null and table.get("state") != Table.State.DEAD and t < 8.0:
 		await get_tree().process_frame
 		t += get_process_delta_time()
-	var p := Coop.nearest(boss.global_position) as Node3D
-	if p != null:
-		_claim(p, false)
-	else:
-		_arm_him()
-		boss.call("begin_fight")
+	# Note 110 ("The cutscene shouldnt start for the player until he is out of
+	# the control room"): he lies there until someone is down off the booth
+	# and its landing -- on the floor, or on a vat -- and only then gets up.
+	var p: Node3D = null
+	while p == null:
+		if boss.call("is_dead") or boss.get("state") != BOSS.State.DOWN:
+			return
+		for q in Coop.all():
+			var n := q as Node3D
+			if n != null and n.get("_dead") != true and n.get("in_cutscene") != true and _out_of_booth(n):
+				p = n
+				break
+		if p == null:
+			await get_tree().process_frame
+	_claim(p, false)
+
+
+## Down off the booth and its landing: in the hall, under the booth's floor.
+func _out_of_booth(n: Node3D) -> bool:
+	var l := to_local(n.global_position)
+	return l.y < BOOTH_FLOOR - 0.6 and bool(surgery.call("in_hall", n.global_position))
 
 
 # --- Saving and resetting ---------------------------------------------------------
@@ -983,14 +998,11 @@ func _claim(p: Node3D, knocked: bool) -> void:
 	to.y = 0.0
 	to = to.normalized() if to.length() > 0.01 else across
 	await boss.call("hop_to", tb + to * 1.9, 0.45)
-	var stop := p.global_position - to * (1.5 if knocked else 3.2)
+	# Up to them: over them where they lie, or face to face (note 110: the
+	# booth route now waits until they are down in the hall).
+	var stop := p.global_position - to * (1.5 if knocked else 2.2)
 	stop.y = tb.y
-	if knocked:
-		await boss.call("walk_to", stop)
-	else:
-		# Under the booth's window, looking up at them.
-		var under := Vector3(p.global_position.x, tb.y, p.global_position.z)
-		await boss.call("walk_to", under - to * 2.4)
+	await boss.call("walk_to", stop)
 	boss.call("face", p.global_position)
 	boss.call("pose", &"loom" if knocked else &"alert")
 	await _wait(0.6)

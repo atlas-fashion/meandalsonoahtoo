@@ -95,7 +95,8 @@ const EYE_COLOUR := Color(1.0, 0.32, 0.12)
 const BRIDGE_Y := 7.2
 const TROLLEY_TOP := 6.95
 const TROLLEY_SCALE := 0.5
-const ROOT_Y := 6.25
+## (6.25 -> 6.4, note 110: the bigger claw carried high enough to clear the vats.)
+const ROOT_Y := 6.4
 ## Bridge girder sections (girder.glb is 4.4 m) and the end carriages
 ## (endtruck.glb, 3 m along Z, its wheels on the runway at RUNWAY_TOP).
 const GIRDER_LEN := 4.4
@@ -117,8 +118,9 @@ const SEG_LEN := 0.9
 const SEG_MAX := 10
 const SEG_THICK := 2.4
 ## The claw: wrist to fingertips, and its scale.
-const CLAW_LEN := 1.55
-const CLAW_SCALE := 0.95
+## (Note 110, the user: "Make the claw bigger": 0.95 -> 1.3, its length with it.)
+const CLAW_LEN := 2.12
+const CLAW_SCALE := 1.3
 ## Hoisting and paying out the arm (m/s).
 const HOIST_SPEED := 3.2
 ## Asleep: the claw drawn right up under the trolley, over the table.
@@ -205,8 +207,8 @@ const FINGER_OPEN := 0.75
 const FINGER_SHUT := -0.3
 ## A player this near where it lands is GRABBED; nearer than SHAKE_RADIUS is
 ## thrown down by the blow.
-const GRAB_RADIUS := 1.3
-const SHAKE_RADIUS := 2.6
+const GRAB_RADIUS := 1.45
+const SHAKE_RADIUS := 2.9
 const GRAB_DAMAGE := 12.0
 ## Between one slam ending and the next beginning (note 100: was 2.6 .. 1.6 s,
 ## the user wanted more time between its attacks).
@@ -217,8 +219,8 @@ const CARRY_SPEED := 5.0
 ## Carried with the wrist this high, the body hanging under the fingertips --
 ## HANG_UNDER from them to its feet, so its head (and the view) is just under
 ## the shut claw, not inside it (note 106) -- its feet then clear the vats
-## (1.97) as the gantry runs it over them: 5.75 - 1.55 - 1.95 = 2.25.
-const CARRY_Y := 5.75
+## (1.97) as the gantry runs it over them: 6.1 - 2.01 - 1.95 = 2.14 (note 110).
+const CARRY_Y := 6.1
 const HANG_UNDER := 1.95
 ## The struggles it takes to break free: carried, and strapped down (more as it
 ## angers).
@@ -507,11 +509,11 @@ func _build_arm() -> void:
 	_claw_box.set("table", self)
 	_claw_box.collision_layer = 4
 	_claw_box.collision_mask = 0
-	_claw_box.position = Vector3(0.0, -1.05, 0.0)
+	_claw_box.position = Vector3(0.0, -1.05 * CLAW_SCALE / 0.95, 0.0)
 	_claw.add_child(_claw_box)
 	var kshape := CollisionShape3D.new()
 	var kbox := BoxShape3D.new()
-	kbox.size = Vector3(0.8, 1.0, 0.8)
+	kbox.size = Vector3(0.8, 1.0, 0.8) * CLAW_SCALE / 0.95
 	kshape.shape = kbox
 	_claw_box.add_child(kshape)
 
@@ -1755,7 +1757,7 @@ func begin_work() -> void:
 
 func _work(now: float) -> void:
 	_b_goal = Vector2.ZERO
-	_len_goal = ROOT_Y - (TOP + 2.4 + 0.35 * sin(_t * 9.0))
+	_len_goal = ROOT_Y - (TOP + CLAW_LEN + 0.85 + 0.35 * sin(_t * 9.0))
 	_hoist = 3.0
 	_open_goal = 0.15 + 0.2 * sin(_t * 9.0)
 	_open_rate = 10.0
@@ -1994,7 +1996,7 @@ func _strap(now: float) -> void:
 		_anger()
 		return
 	_b_goal = Vector2.ZERO
-	_len_goal = ROOT_Y - (TOP + 2.4 + 0.35 * sin(_t * 9.0))
+	_len_goal = ROOT_Y - (TOP + CLAW_LEN + 0.85 + 0.35 * sin(_t * 9.0))
 	_hoist = 3.0
 	# Working at them: the fingers pick and close.
 	_open_goal = 0.15 + 0.2 * sin(_t * 9.0)
