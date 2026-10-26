@@ -22,6 +22,9 @@ extends CharacterBody3D
 ## its way -- scraping a little along it (GRAZE). It never moves itself; the
 ## claw ignores it.
 ##
+## A player can stand on it (note 104: the way across to the booth): standing
+## on it they never shove it.
+##
 ## Floating (no gravity) with its collision a cylinder from STAND_OFF up, clear
 ## of the flags: the floor's slab is on the walls' layer, which it does collide
 ## with.
@@ -56,11 +59,28 @@ const GRAZE := 0.35
 const STOP_LAYER := 1 << 22
 
 const FX_DUST := preload("res://textures/surgery_fx_dust.png")
+## THE LID (note 104, the user: "Give the vats removable lids"): the kit's riveted
+## `hatch` plate (a Higgsfield piece) laid over the tub, LID_SIZE across. A
+## player lifts it off with E and leans it against the tub's side, or puts it
+## back; the claw lifts it off to fish out a piece to throw (surgical_table.gd
+## FETCH) and leaves it off. It moves with its vat.
+const LID_MODEL := preload("res://models/surgery/hatch.glb")
+const LID_SIZE := 2.3
+const LID_TIME := 0.55
+## The tub's rim, by kind (the models' heights).
+const RIM := {"vat_bones": 1.89, "vat_gold": 1.83}
 
 ## The model under it (surgery.gd hands it over).
 var model: Node3D
 ## Where it started (room frame of the surgery): a world reset puts it back.
 var home := Transform3D.IDENTITY
+## Which tub ("vat_gold": the prostheses the claw throws; "vat_bones").
+var kind := "vat_bones"
+## The lid on (a world reset puts it back on).
+var lid_on := true
+var _lid: Node3D
+var _lid_prompt: Interact.Prompt
+var _lid_busy := false
 
 var _push_t := 0.0
 var _speed := 0.0
@@ -92,6 +112,101 @@ func _ready() -> void:
 	add_child(cs)
 	_dust = _make_dust()
 	add_child(_dust)
+
+
+## The lid, on (surgery.gd calls it once `kind` is set), and its prompt.
+func fit_lid() -> void:
+	_lid = LID_MODEL.instantiate()
+	_lid.name = "Lid"
+	add_child(_lid)
+	load("res://scripts/surgical_table.gd").grade(_lid)
+	for g in _lid.find_children("*", "GeometryInstance3D", true, false):
+		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_lid_prompt = Interact.prompt("E   Lift the lid", Vector3(0.0, RIM.get(kind, 1.85), 0.0))
+	add_child(_lid_prompt)
+	_lid.transform = _lid_pose(true)
+
+
+## The lid's place on the vat: `on` laid across the rim (a little turned, so
+## the plate's corners do not line up with the hoops), else stood on its edge
+## against the tub's side, leaning in.
+func _lid_pose(on: bool) -> Transform3D:
+	var size := Vector3(LID_SIZE / 1.35, 0.7, LID_SIZE / 1.164)
+	var rim: float = RIM.get(kind, 1.85)
+	if on:
+		return Transform3D(Basis(Vector3.UP, 0.4).scaled(size), Vector3(0.0, rim - 0.02, 0.0))
+	# On its edge on the floor, leaning back against the tub (+X of the vat).
+	var b := Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.RIGHT, PI * 0.5 - 0.2)
+	return Transform3D(b.scaled(size), Vector3(RADIUS + 0.28, LID_SIZE * 0.5 - 0.05, 0.0))
+
+
+## Lifts the lid off (`on` false) or puts it back, over LID_TIME: up off the
+## rim, over, and down onto its edge (or the other way). `instant`: a save.
+func set_lid(on: bool, instant := false) -> void:
+	if _lid == null or (on == lid_on and not instant):
+		return
+	lid_on = on
+	if instant:
+		_lid.transform = _lid_pose(on)
+		return
+	_lid_busy = true
+	var from := _lid.transform
+	var to := _lid_pose(on)
+	var lift := Vector3(0.0, 0.7, 0.0)
+	var tw := create_tween()
+	tw.tween_method(func(k: float) -> void:
+		var e := k * k * (3.0 - 2.0 * k)
+		var t := from.interpolate_with(to, e)
+		t.origin += lift * sin(e * PI)
+		_lid.transform = t, 0.0, 1.0, LID_TIME)
+	tw.tween_callback(func() -> void: _lid_busy = false)
+
+
+func _process(_delta: float) -> void:
+	if _lid_prompt == null:
+		return
+	if _lid_busy or not _anyone_near():
+		_lid_prompt.visible = false
+		return
+	var p := Interact.chooser(model if model != null else self, RADIUS + 1.6, 2.4, 3.2, 0.1)
+	# Not from on top of it: a player standing on the lid cannot lift it.
+	if p != null and (p as Node3D).global_position.y > global_position.y + 1.0:
+		p = null
+	_lid_prompt.visible = p != null
+	_lid_prompt.player = p
+	_lid_prompt.text = "E   Lift the lid" if lid_on else "E   Put the lid on"
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _lid_prompt == null or not _lid_prompt.visible:
+		return
+	if Interact.pressed(event, _lid_prompt.player):
+		get_viewport().set_input_as_handled()
+		set_lid(not lid_on)
+
+
+## A player standing on it (on the lid or the rim), not beside it.
+func _on_top(n: Node3D) -> bool:
+	return n.global_position.y > global_position.y + HEIGHT * 0.6
+
+
+## Shoved by a scene (surgery.gd's entrance): slid to `to` (world, on the
+## floor) over `time`, lurching and scraping as a shove does.
+func scripted_push(to: Vector3, time: float) -> void:
+	var from := global_position
+	_dir = Vector3(to.x - from.x, 0.0, to.z - from.z).normalized()
+	_rock_v -= 1.6
+	_dust.emitting = true
+	var tw := create_tween()
+	tw.tween_method(func(k: float) -> void:
+		var e := k - sin(k * TAU * 2.0) / (TAU * 2.0) * 0.6
+		global_position = from.lerp(to, clampf(e, 0.0, 1.0))
+		_phase = k * 4.0
+		_speed = PUSH_SPEED * 0.8
+		_sway(get_physics_process_delta_time()), 0.0, 1.0, time)
+	tw.tween_callback(func() -> void:
+		_speed = 0.0
+		_dust.emitting = false)
 
 
 ## Grit kicked up round its foot while it scrapes along.
@@ -136,6 +251,7 @@ func is_moving() -> bool:
 ## Back where it started (a world reset), at rest.
 func go_home(room: Node3D) -> void:
 	global_transform = room.global_transform * home
+	set_lid(true, true)
 	_stop()
 
 
@@ -230,6 +346,9 @@ func _shove() -> Vector3:
 			continue
 		if not n.is_on_floor() or (n.has_method("is_restrained") and n.is_restrained()):
 			continue
+		# Standing on it (note 104: the way up to the booth): no shove.
+		if _on_top(n):
+			continue
 		var touching := false
 		for i in n.get_slide_collision_count():
 			if n.get_slide_collision(i).get_collider() == self:
@@ -261,7 +380,7 @@ func _shove() -> Vector3:
 func _player_ahead() -> bool:
 	for p in Coop.all():
 		var n := p as Node3D
-		if n == null or n.get("_dead") == true:
+		if n == null or n.get("_dead") == true or _on_top(n):
 			continue
 		var to := n.global_position - global_position
 		to.y = 0.0
@@ -279,3 +398,8 @@ func _anyone_near() -> bool:
 		if absf(to.y) < 3.0 and Vector2(to.x, to.z).length() < RADIUS + 1.5:
 			return true
 	return false
+
+
+## The tub's rim over the floor (its kind's).
+func rim() -> float:
+	return RIM.get(kind, 1.85)

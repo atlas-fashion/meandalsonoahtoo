@@ -38,7 +38,16 @@ extends "res://scripts/morgue.gd"
 ##   behind iron bars along the far wall, a portcullis between them and the hall.
 ## - THE CONTROL ROOM (surgery_control.gd): up on its platform over the intake,
 ##   leaded windows over the hall, the surgeon at his console working the claw.
-##   No way up to it any more (note 102).
+##   The other way to beat the room (note 104): up onto the table, across the
+##   vats, one shoved up beside the booth, onto its landing -- the door kicked
+##   in, the surgeon thrown out of the window, the machine switched off there.
+## - NOTE 104: a vat across each way in and, the first time a player comes up
+##   to one, THE ENTRANCE SCENE (`_intro`): they shove it aside and walk in on
+##   the claw at work, it drops its soldier in the pens, turns on them, and the
+##   BARS come up out of the floor at every way in (`raise_bars`; down when the
+##   machine is off, or on a world reset). The pens' soldiers are real
+##   skeletons, thrown into the hall by the claw (`turn_loose`); every vat has
+##   a removable lid (surgery_vat.gd).
 ##
 ## The whole plan is laid out in its own frame (`_plan`, the booth's wall at its
 ## -X) turned to whichever of the four ways keeps the booth and the pens off the
@@ -49,6 +58,8 @@ const ControlRoom := preload("res://scripts/surgery_control.gd")
 const Power := preload("res://scripts/surgery_power.gd")
 const Vat := preload("res://scripts/surgery_vat.gd")
 const ModuleMaze := preload("res://scripts/module_maze.gd")
+const PROSTHETIC := preload("res://scripts/prosthetic.gd")
+const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 
 ## The Higgsfield kit (notes 95, 96, 98, 99, 102).
 const K := {
@@ -124,6 +135,19 @@ const VAT_OIL := Color(1.0, 0.62, 0.28)
 
 const CANDLE_COLOUR := Color(1.0, 0.68, 0.38)
 
+## --- Note 104 --------------------------------------------------------------------------
+## The finished soldiers in the pens are real skeletons (prosthetic.gd), rooted
+## and blind there until the claw throws one into the hall (surgical_table.gd
+## FERRY, `turn_loose`); these hands, in turn.
+const PEN_HANDS: Array[StringName] = [&"blade", &"hammer", &"drill", &"blade", &"shield", &"hammer"]
+## The entrance scene starts with a player this near a way in, outside.
+const INTRO_REACH := 5.0
+## The bars at the ways in (the kit's pen bars): sunk this far under the
+## floor, raised over BARS_TIME; they wait for anyone standing in the way.
+const BARS_DOWN := -3.9
+const BARS_TIME := 0.9
+const BARS_H := 3.7
+
 var table: CharacterBody3D
 var control: Node3D
 var power: Node3D
@@ -150,6 +174,21 @@ var _floor := {}
 var _hatch_vat: Node3D
 ## The lattice's offset from the middle, plan frame (`_lattice_off`).
 var _off := Vector2.ZERO
+
+## Note 104: the entrance scene played (it plays once; saved), the bars up,
+## the pens' soldiers and the ones thrown loose, where the pens' soldiers stand
+## ([plan-frame point, yaw]), the vat across each way in, the bars.
+var intro_done := false
+var bars_up := false
+var _want_bars := false
+var _pen_spots: Array = []
+var _pen: Array[Node3D] = []
+var _loose: Array[Node3D] = []
+var _entry_vats: Array = []
+var _entry_bars: Array[Node3D] = []
+var _entry_bar_bodies: Array[StaticBody3D] = []
+var _intro_running := false
+var _ferried_at = null
 
 
 static func build_room(holder: Node3D, level, room_: Dictionary) -> Node3D:
@@ -195,6 +234,7 @@ func _dress() -> void:
 	_build_dispatch()
 	_build_centre()
 	_lay_vats()
+	_block_entrances()
 
 	_spawn_table()
 	control = Node3D.new()
@@ -203,6 +243,10 @@ func _dress() -> void:
 	_plan.add_child(control)
 	control.call("setup", self, table, _inner, _c)
 	_build_power()
+	_build_bars()
+	table.connect("depowered", _on_depowered)
+	table.connect("woke", _on_woke)
+	table.connect("ferried", func(at: Vector3) -> void: _ferried_at = at)
 	_light_hall()
 	_limit_view(_wall)
 	print("[surgery] the surgical table asleep under its gantry; %d vats, one over the hatch at %s; the plan turned %d; %d bodies laid out"
@@ -733,6 +777,8 @@ func _vat(at: Vector3, kind: String, glow: bool, i: int) -> Node3D:
 	var model := _kit(vat, kind, Vector3.ZERO)
 	vat.set("model", model)
 	vat.set("home", vat.transform)
+	vat.set("kind", kind)
+	vat.call("fit_lid")
 	if glow:
 		var oil := OmniLight3D.new()
 		oil.name = "Oil"
@@ -852,12 +898,13 @@ func _build_dispatch() -> void:
 		var at := Vector3(cell_at(N - 1, 0).x, 0.0, -_inner + _c * float(j))
 		_kit(holder, "penbars", at, 0.0 if j == 3 else PI)
 		_solid(holder, Vector3(_c, 2.4, 0.35), at + Vector3(0.0, 1.2, 0.0))
-	# The soldiers, in two ranks, and their shipping caskets.
+	# Where the soldiers stand, in two ranks (real ones, note 104: `stock_pens`),
+	# and their shipping caskets.
 	for k in 6:
 		var j := 3 + k % 3
 		var row := float(k / 3)
 		var at := cell_at(N - 1, j) + Vector3(-0.55 + row * 0.9, 0.0, _rng.randf_range(-0.5, 0.5))
-		_soldier(holder, at, -PI * 0.5 + _rng.randf_range(-0.25, 0.25))
+		_pen_spots.append([at, -PI * 0.5 + _rng.randf_range(-0.25, 0.25)])
 	_kit(holder, "casket", cell_at(N - 1, 3) + Vector3(0.9, 0.0, -1.0), -PI * 0.5, Vector3(0.6, 2.2, 0.9))
 	_kit(holder, "casket", cell_at(N - 1, 5) + Vector3(0.9, 0.0, 1.0), -PI * 0.5, Vector3(0.6, 2.2, 0.9))
 	var light := OmniLight3D.new()
@@ -868,26 +915,6 @@ func _build_dispatch() -> void:
 	light.shadow_enabled = false
 	holder.add_child(light)
 	light.position = cell_at(N - 1, 4) + Vector3(0.4, 3.0, 0.0)
-
-
-## A finished soldier: a prisoner's skeleton on its feet, its forearm replaced by
-## the mechanical arm.
-func _soldier(holder: Node3D, at: Vector3, yaw: float) -> void:
-	var n := _node("Soldier", at, yaw, holder)
-	var model: Node3D = SKELETON.instantiate()
-	model.scale = Vector3(-0.92, 0.92, -0.92)
-	n.add_child(model)
-	var found := model.find_children("*", "Skeleton3D", true, false)
-	if found.is_empty():
-		return
-	var sk := found[0] as Skeleton3D
-	var fore := sk.find_bone(&"forearm.R")
-	if fore >= 0:
-		sk.set_bone_pose_scale(fore, Vector3.ONE * 0.001)
-		var att := BoneAttachment3D.new()
-		att.bone_name = "upper_arm.R"
-		sk.add_child(att)
-		attach_prosthetic(att)
 
 
 ## The middle: the disposal shaft's grating under the table.
@@ -956,10 +983,325 @@ func _build_power() -> void:
 	power.call("setup", self, table, control, _hole_cell)
 
 
+# --- The ways in: a vat across each, and the bars (note 104) ----------------------------
+
+## A vat across each way in, just inside it (the user: the player "pushes a vat
+## out of the way of the entrance, so the player knows vats are pushable").
+func _block_entrances() -> void:
+	_entry_vats.clear()
+	for k in _doorways.size():
+		var d: Array = _doorways[k]
+		var at: Vector3 = (d[0] as Vector3) - (d[1] as Vector3) * (Vat.RADIUS + 0.6)
+		at.y = 0.0
+		var kind := "vat_bones" if k % 2 == 0 else "vat_gold"
+		_entry_vats.append(_vat(_plan.transform.inverse() * at, kind, false, vats.size()))
+
+
+## The kit's pen bars in each way in, sunk under the floor until the claw
+## shuts them in (`raise_bars`), with its collision off till then.
+func _build_bars() -> void:
+	# The ways in are about this wide (the level's corridors; its cells are 6 m).
+	var opening := 3.2
+	for d in _doorways:
+		var dir: Vector3 = d[1]
+		var holder := Node3D.new()
+		holder.name = "EntranceBars"
+		add_child(holder)
+		holder.position = Vector3((d[0] as Vector3).x, BARS_DOWN, (d[0] as Vector3).z)
+		holder.rotation.y = atan2(dir.x, dir.z)
+		# The pens' spiked bars (the kit's portcullis is a solid riveted plate: it
+		# read as a door), stretched up to the arch.
+		var bars := _kit(holder, "penbars", Vector3.ZERO, 0.0)
+		bars.scale = Vector3(opening / 2.97, BARS_H / 2.4, 1.0)
+		var body := _solid(holder, Vector3(opening + 0.4, BARS_H, 0.5), Vector3(0.0, BARS_H * 0.5, 0.0))
+		body.collision_layer = 0
+		holder.visible = false
+		_entry_bars.append(holder)
+		_entry_bar_bodies.append(body)
+
+
+## Shut in: the bars come up out of the floor at every way in. `now`: at once.
+func raise_bars(now := false) -> void:
+	_want_bars = false
+	if bars_up:
+		return
+	bars_up = true
+	for i in _entry_bars.size():
+		var b := _entry_bars[i]
+		b.visible = true
+		_entry_bar_bodies[i].collision_layer = 1 | 2
+		if now:
+			b.position.y = 0.0
+			continue
+		var tw := b.create_tween()
+		tw.tween_property(b, "position:y", 0.0, BARS_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		if table != null:
+			table.call("_impact_fx", b.global_position, 0.35)
+	for p in Coop.all():
+		var n := p as Node3D
+		if n != null and n.get("_shake") != null:
+			n.set("_shake", maxf(float(n.get("_shake")), 0.35))
+
+
+## The bars back down into the floor (the machine off; a world reset).
+func lower_bars(now := false) -> void:
+	_want_bars = false
+	if not bars_up:
+		return
+	bars_up = false
+	for i in _entry_bars.size():
+		var b := _entry_bars[i]
+		_entry_bar_bodies[i].collision_layer = 0
+		if now:
+			b.position.y = BARS_DOWN
+			b.visible = false
+			continue
+		var tw := b.create_tween()
+		tw.tween_property(b, "position:y", BARS_DOWN, BARS_TIME * 1.6).set_trans(Tween.TRANS_SINE)
+		tw.tween_callback(func() -> void: b.visible = false)
+
+
+## Anyone standing in a way in (the bars wait for them to step through).
+func _someone_in_doorway() -> bool:
+	for p in Coop.all():
+		var l := to_local((p as Node3D).global_position)
+		for d in _doorways:
+			if Vector2(l.x - (d[0] as Vector3).x, l.z - (d[0] as Vector3).z).length() < 1.3:
+				return true
+	return false
+
+
+func _on_woke() -> void:
+	if _intro_running:
+		return
+	# Woken without the scene (a world reset, the sandbox's teleport): no scene
+	# now, but they are shut in all the same.
+	intro_done = true
+	_want_bars = true
+
+
+func _on_depowered(_cause: StringName) -> void:
+	lower_bars()
+
+
+# --- The pens' soldiers (note 104) ----------------------------------------------------
+
+## The pens filled: a soldier on every spot, rooted and blind (as the maze's jail
+## cells keep theirs) until the claw throws it out.
+func stock_pens() -> void:
+	for e in _pen + _loose:
+		if is_instance_valid(e):
+			e.free()
+	_pen.clear()
+	_loose.clear()
+	for k in _pen_spots.size():
+		var spot: Array = _pen_spots[k]
+		_pen_soldier(_plan.global_transform * (spot[0] as Vector3), _plan.global_rotation.y + float(spot[1]), PEN_HANDS[k % PEN_HANDS.size()])
+
+
+func _pen_soldier(at: Vector3, yaw: float, hand: StringName) -> Node3D:
+	var e := PROSTHETIC.make(ENEMY_SCENE, hand) as CharacterBody3D
+	e.name = "PenSoldier"
+	add_child(e)
+	e.global_position = at + Vector3(0.0, 0.05, 0.0)
+	e.global_rotation = Vector3(0.0, yaw, 0.0)
+	e.set("wanders", false)
+	e.set("aggro_range", 0.5)
+	_pen.append(e)
+	return e
+
+
+## The pen soldier nearest `at` (world), or null.
+func pen_soldier_for(at: Vector3) -> Node3D:
+	var best: Node3D = null
+	var best_d := INF
+	for e in _pen:
+		if not is_instance_valid(e) or e.get("_dying") == true:
+			continue
+		var d := e.global_position.distance_squared_to(at)
+		if d < best_d:
+			best_d = d
+			best = e
+	return best
+
+
+## In the claw's grip: no longer one of the pens'.
+func soldier_taken(e: Node3D) -> void:
+	_pen.erase(e)
+
+
+## Thrown into the hall: an ordinary enemy, off its leash, after the players
+## (maze.gd `_turn_loose`).
+func turn_loose(e: Node3D) -> void:
+	_pen.erase(e)
+	if not _loose.has(e):
+		_loose.append(e)
+	e.set("wanders", false)
+	e.set("wander_spots", [] as Array[Vector3])
+	e.set("aggro_range", 70.0)
+	e.set("vision_cone_degrees", 0.0)
+	e.set("sight_needs_line_of_sight", false)
+	e.set("_dormant", false)
+	e.set("_seen_until", Time.get_ticks_msec() / 1000.0 + 9999.0)
+
+
+## Thrown soldiers still up.
+func loose_count() -> int:
+	var n := 0
+	for e in _loose:
+		if is_instance_valid(e) and e.get("_dying") != true:
+			n += 1
+	return n
+
+
+## Where the entrance scene's prisoner is set down: the middle pen (world).
+func pen_drop_point() -> Vector3:
+	return _plan.global_transform * (cell_at(N - 1, 4) + Vector3(0.3, 0.0, 0.0))
+
+
+# --- The entrance scene (note 104) -----------------------------------------------------
+
+## A player come up to a way in from outside, the claw asleep: the scene.
+func _check_intro() -> void:
+	if intro_done or _intro_running or table == null or bool(table.call("is_depowered")) \
+			or table.get("state") != Table.State.DORMANT:
+		return
+	for p in Coop.all():
+		var n := p as Node3D
+		if n == null or n.get("_dead") == true or n.get("in_cutscene") == true:
+			continue
+		var l := to_local(n.global_position)
+		if absf(l.y) > 2.0:
+			continue
+		for k in _doorways.size():
+			var d: Array = _doorways[k]
+			var at: Vector3 = d[0]
+			var out_: Vector3 = d[1]
+			var from := Vector2(l.x - at.x, l.z - at.z)
+			# Outside the wall, coming up to this way in.
+			if from.length() < INTRO_REACH and from.dot(Vector2(out_.x, out_.z)) > 0.2:
+				_intro(n, k)
+				return
+
+
+func _wait(t: float) -> void:
+	await get_tree().create_timer(t, true, false, true).timeout
+
+
+## The user: "When the player walks up to the door of the surgery room, a
+## cutscene should start where the player pushes a vat out of the way of the
+## entrance ..., walks into the room as the claw is working on making a
+## soldier, it dropping the soldier into the finished area, noticing the
+## player, and raising bars at the entrances, blocking the player from
+## escaping. Then, right as the claw starts targeting the player, give the
+## player control back."
+func _intro(p: Node3D, k: int) -> void:
+	_intro_running = true
+	intro_done = true
+	var everyone: Array[Node3D] = []
+	for q in Coop.all():
+		var n := q as Node3D
+		if n != null and n.get("_dead") != true and n.get("in_cutscene") != true:
+			everyone.append(n)
+			n.call("begin_cutscene")
+	var bars := WoodDoor.letterbox(self)
+	table.call("begin_work")
+	var door: Vector3 = to_global((_doorways[k][0] as Vector3))
+	var inward: Vector3 = -(global_basis * (_doorways[k][1] as Vector3)).normalized()
+	var side := Vector3.UP.cross(inward).normalized()
+	var vat: Node3D = _entry_vats[k] if k < _entry_vats.size() else null
+	var claw := func() -> Vector3:
+		var c := table.get_node_or_null("Claw") as Node3D
+		return c.global_position + Vector3(0.0, -0.8, 0.0) if c != null else table.global_position + Vector3(0.0, 2.0, 0.0)
+	for n in everyone:
+		if n != p:
+			n.call("scene_look_at", claw.call(), 3.0)
+
+	# 1. Up to the vat in the way, and shoulder into it.
+	if vat != null and is_instance_valid(vat):
+		var v := vat.global_position
+		# Shoved in and to whichever side has more room.
+		var lean := side if _room_to(v + side * 2.6) >= _room_to(v - side * 2.6) else -side
+		var to := v + inward * 1.0 + lean * 2.4
+		var push := (to - v).normalized()
+		var stand := v - push * (Vat.RADIUS + 0.55)
+		stand.y = p.global_position.y
+		p.call("scene_look_at", v + Vector3(0.0, 1.2, 0.0), 5.0)
+		p.call("scene_walk_to", stand, 4.0)
+		await Signal(p, &"scene_walk_finished")
+		p.call("scene_lean", Vector3(0.0, -0.15, -0.1), 6.0)
+		await _wait(0.3)
+		vat.call("scripted_push", to, 2.4)
+		var behind := to - push * (Vat.RADIUS + 0.55)
+		behind.y = p.global_position.y
+		p.call("scene_walk_to", behind, 2.6)
+		await Signal(p, &"scene_walk_finished")
+		p.call("scene_lean", Vector3.ZERO, 4.0)
+		# 2. In past it, the claw at its work beyond.
+		var inside := door + inward * 4.6 - lean * 1.2
+		inside.y = p.global_position.y
+		p.call("scene_look_at", claw.call(), 2.5)
+		p.call("scene_walk_to", inside, 4.0)
+		await Signal(p, &"scene_walk_finished")
+	await _wait(0.5)
+
+	# 3. Its work done: the soldier lifted off the table and dropped in the pens.
+	_ferried_at = null
+	table.call("ferry_prisoner", pen_drop_point())
+	var t := 0.0
+	while _ferried_at == null and t < 12.0:
+		for n in everyone:
+			n.call("scene_look_at", claw.call(), 4.0)
+		await get_tree().process_frame
+		t += get_process_delta_time()
+	if _ferried_at != null:
+		var at: Vector3 = _ferried_at
+		var e := _pen_soldier(Vector3(at.x, global_position.y + 0.6, at.z), _plan.global_rotation.y - PI * 0.5, &"blade")
+		table.call("_impact_fx", Vector3(at.x, global_position.y, at.z), 0.3)
+		e.velocity = Vector3.ZERO
+	await _wait(0.6)
+
+	# 4. It turns on them.
+	for n in everyone:
+		n.call("scene_look_at", claw.call(), 6.0)
+	table.call("notice")
+	await _wait(0.7)
+
+	# 5. The bars come up behind them.
+	for n in everyone:
+		n.call("scene_look_at", door + Vector3(0.0, 1.4, 0.0), 5.0)
+	await _wait(0.35)
+	raise_bars()
+	await _wait(1.1)
+
+	# 6. Back to it as it comes for them: control back.
+	for n in everyone:
+		n.call("scene_look_at", claw.call(), 6.0)
+	await _wait(0.5)
+	WoodDoor.letterbox_out(bars)
+	for n in everyone:
+		if is_instance_valid(n) and n.get("in_cutscene") == true:
+			n.call("scene_look_at", null)
+			n.call("end_cutscene")
+	_intro_running = false
+
+
+## How clear the floor is round `at` (world): the distance to the nearest vat.
+func _room_to(at: Vector3) -> float:
+	var best := INF
+	for v in vats:
+		var d := Vector2(v.global_position.x - at.x, v.global_position.z - at.z).length()
+		best = minf(best, d)
+	return best
+
+
 # --- Each frame -----------------------------------------------------------------------
 
 func _process(delta: float) -> void:
 	_run_cart(delta)
+	_check_intro()
+	if _want_bars and not _someone_in_doorway():
+		raise_bars()
 
 
 # --- Saving and resetting ----------------------------------------------------------------
@@ -976,6 +1318,14 @@ func save_state() -> Dictionary:
 		var at := to_local(v.global_position)
 		places.append([at.x, at.z, v.global_rotation.y - global_rotation.y])
 	out["vats"] = places
+	# Note 104: the lids, the entrance scene, the booth taken.
+	var lids: Array = []
+	for v in vats:
+		lids.append(bool(v.get("lid_on")))
+	out["lids"] = lids
+	out["intro"] = intro_done
+	if control != null:
+		out["booth"] = bool(control.get("surgeon_thrown"))
 	if power != null:
 		out["hatch"] = bool(power.get("hatch_open"))
 		out["crystal"] = bool(power.get("crystal_gone"))
@@ -989,6 +1339,11 @@ func restore_state(data: Dictionary) -> void:
 		for i in vats.size():
 			var p: Array = places[i]
 			vats[i].call("place", to_global(Vector3(float(p[0]), 0.0, float(p[1]))), global_rotation.y + float(p[2]))
+	var lids: Array = data.get("lids", [])
+	if lids.size() == vats.size():
+		for i in vats.size():
+			vats[i].call("set_lid", bool(lids[i]), true)
+	intro_done = bool(data.get("intro", false))
 	if power != null and bool(data.get("hatch", false)):
 		power.call("set_open_now")
 	if table == null or not bool(data.get("down", false)):
@@ -996,6 +1351,11 @@ func restore_state(data: Dictionary) -> void:
 	var at: Array = data.get("at", [])
 	var p := table.global_position if at.size() < 3 else Vector3(float(at[0]), float(at[1]), float(at[2]))
 	table.call("set_dead_now", p, 0.0)
+	lower_bars(true)
+	if control != null and bool(data.get("booth", false)):
+		# Taken from the booth (note 104): the door in, the surgeon thrown out.
+		control.call("set_thrown_now")
+		return
 	if power != null:
 		# A save from before note 102 had it off by the control room's lever:
 		# the crystal out and the surgeon gone, as if it had been pulled.
@@ -1007,9 +1367,13 @@ func restore_state(data: Dictionary) -> void:
 ## the vats where they stood (but one already shoved off an open hatch, and
 ## any whose place it now stands in).
 func on_world_reset() -> void:
+	# The pens full again, the thrown ones gone (note 104) -- the enemies are
+	# restored with everyone else's.
+	stock_pens()
 	if table == null or bool(table.call("is_depowered")):
 		return
 	table.call("reset_to_sleep")
+	lower_bars(true)
 	var stay: Array[Node3D] = []
 	if power != null and bool(power.get("hatch_open")):
 		for v in vats:
@@ -1044,5 +1408,7 @@ func entry_point() -> Array:
 	var d: Dictionary = doors[0]
 	var step: Vector2i = d["outward"]
 	var inward := -Vector3(float(step.x), 0.0, float(step.y))
-	var at: Vector3 = d["world"] + inward * 2.5 + Vector3(0.0, 0.3, 0.0)
+	# Inside and to one side: a vat stands across the way in (note 104).
+	var side := Vector3.UP.cross(inward).normalized()
+	var at: Vector3 = d["world"] + inward * 2.4 + side * 2.1 + Vector3(0.0, 0.3, 0.0)
 	return [at, atan2(-inward.x, -inward.z)]

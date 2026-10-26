@@ -44,6 +44,14 @@ extends CharacterBody3D
 ## The claw's fingers (note 103): claw.glb is one mesh, skinned here to a hub
 ## and three fingers (`_rig_claw`) that open and shut about their knuckles.
 ##
+## Its MOVES (note 104, the user: "Give the claw 3 moves"): the slam above, the
+## main one; FETCH -- to a vat, its lid lifted off, a piece fished out and
+## thrown at a player (surgery_piece.gd: knocked down for 30, blockable,
+## parried back off the blade -- into the claw, it is limp LIMP_PIECE); FERRY --
+## a finished soldier lifted out of the pens and thrown into the hall, an
+## ordinary enemy from then on. WORK and the prisoner carried to the pens are
+## the entrance scene's (surgery.gd `_intro`).
+##
 ## Its power (note 102) is the CRYSTAL in the powering room under the hall
 ## (surgery_power.gd): pulled from its cradle, the machine dies (`power_off`).
 
@@ -67,7 +75,8 @@ const FX_CHIP := preload("res://textures/surgery_fx_chip.png")
 ## so the numbering of the rest is what it was.) Note 101's second claw, the one
 ## that fired the enforcer's beam, is gone too (note 102: "Remove the arm that
 ## shoots the enforcer beam").
-enum State { DORMANT, WAKING, HUNT, GRAB, SWEEP, REAR, CLAMPED, STALL, DYING, DEAD, CARRY, STRAP, LIMP }
+## LIMP (note 103), FETCH, FERRY and WORK (note 104) after the old ones.
+enum State { DORMANT, WAKING, HUNT, GRAB, SWEEP, REAR, CLAMPED, STALL, DYING, DEAD, CARRY, STRAP, LIMP, FETCH, FERRY, WORK }
 
 ## --- The table -------------------------------------------------------------------
 ## The slab's top off the floor (the model is 3.0 long along Z, 1.48 wide).
@@ -152,6 +161,27 @@ const KNOCK_TIME := 0.25
 const KNOCK_RISE := 1.2
 const KNOCK_SWING := 4.0
 const LIMP_TIME := 2.0
+## Struck by its own piece, turned back off a parry (surgery_piece.gd): longer.
+const LIMP_PIECE := 4.0
+## --- Its other two moves (note 104) ---------------------------------------------------
+## Besides the slam, every SPECIAL_EVERY (by level), at a slam's turn, it may
+## (SPECIAL_CHANCE, or always with no one under it) FETCH -- a piece out of a vat,
+## its lid lifted off first, thrown at a player (surgery_piece.gd) -- or FERRY a
+## finished soldier out of the pens over their bars and throw it into the hall,
+## where it is an ordinary enemy (surgery.gd `turn_loose`); never more than
+## LOOSE_MAX of those up at once.
+const SPECIAL_EVERY: Array[float] = [9.0, 8.0, 7.0, 6.5, 6.0]
+const SPECIAL_CHANCE := 0.5
+const LOOSE_MAX := 2
+const PIECE := preload("res://scripts/surgery_piece.gd")
+## Throwing a soldier: it lets go this far short of the player, the body thrown
+## on at THROW_SOLDIER m/s.
+const THROW_SHORT := 3.5
+const THROW_SOLDIER := 6.0
+## A body in its grip hangs this far under the fingers (held by the shoulders).
+const CARGO_HANG := 1.65
+## Over the pens' bars (2.4 m) and the vats (1.9) its fingertips stay this high.
+const CLEAR_TIP := 3.0
 ## --- The fingers (note 103) ---------------------------------------------------------
 ## claw.glb is one mesh; `_rig_claw` skins it to a hub and its three fingers,
 ## each hinged at its knuckle and swung out (+) or in (-) about it, in radians.
@@ -259,6 +289,30 @@ var _open_rate := 6.0
 var _shaking := 0.0
 var _open := 0.0
 var _skel: Skeleton3D
+## Note 104: held asleep while the entrance scene plays (surgery.gd `_intro`).
+var hold := false
+## How long this limp lasts.
+var _limp_for := LIMP_TIME
+## When it may next FETCH or FERRY, and whether this turn it wants to.
+var _next_special := 0.0
+var _rolled_for := -1.0
+var _want_special := false
+## A move's steps.
+var _step := 0
+var _step_t := 0.0
+var _vat: Node3D = null
+var _lid_done := false
+var _held_piece: Node3D = null
+## What it carries in FERRY: a soldier (an enemy, its processing off) or, in the
+## entrance scene, the prisoner off the table (`_cargo_prop`); where it lets go
+## of it (room frame); whether it throws it (at the player) or sets it down.
+var _cargo: Node3D = null
+var _cargo_prop := false
+var _cargo_layers := Vector2i.ZERO
+var _drop_at := Vector3.ZERO
+var _throw_it := true
+
+signal ferried(at: Vector3)
 
 ## Nodes.
 var _body: Node3D
@@ -727,6 +781,10 @@ func reset_to_sleep() -> void:
 		return
 	if _victim != null:
 		_let_go(_now(), false)
+	_drop_all()
+	hold = false
+	if _prisoner != null:
+		_prisoner.visible = true
 	level = 0
 	_sleep_pose()
 
@@ -792,6 +850,7 @@ func _wake() -> void:
 func _shutdown(cause: StringName) -> void:
 	if is_depowered():
 		return
+	_drop_all()
 	if _victim != null:
 		_let_go(_now(), true)
 	_enter(State.DYING)
@@ -831,7 +890,7 @@ func _physics_process(delta: float) -> void:
 	_t += delta
 	match state:
 		State.DORMANT:
-			if _intruder() != null:
+			if _intruder() != null and not hold:
 				_wake()
 			_b_goal = Vector2.ZERO
 			_len_goal = FOLD_LEN
@@ -847,12 +906,19 @@ func _physics_process(delta: float) -> void:
 				_enter(State.HUNT)
 				# The first slam a while after it wakes (note 100).
 				_next_rear = now + 2.5
+				_next_special = now + 7.0
 		State.HUNT:
 			_hunt(now)
 		State.REAR:
 			_slam(now)
 		State.LIMP:
 			_limp(now)
+		State.FETCH:
+			_fetch(now, delta)
+		State.FERRY:
+			_ferry(now, delta)
+		State.WORK:
+			_work(now)
 		State.CARRY:
 			_carry(now)
 		State.STRAP:
@@ -869,6 +935,7 @@ func _physics_process(delta: float) -> void:
 		_len = move_toward(_len, _len_goal, _hoist * delta)
 		_update_wrist()
 	_hold_victim()
+	_hold_cargo()
 
 
 ## The two drives: each axis toward its goal at its own top speed and
@@ -960,7 +1027,16 @@ func _hunt(now: float) -> void:
 	var floor_y := maxf(p.y, 0.0)
 	_len_goal = clampf(ROOT_Y - (floor_y + HOVER_Y), FOLD_LEN, ROOT_Y - 1.0)
 	var over := Vector2(_w.x - p.x, _w.z - p.z).length()
-	if over < SLAM_OVER and now >= _next_rear:
+	if now < _next_rear:
+		return
+	# Its turn: once a turn it decides whether it would rather FETCH or FERRY
+	# (note 104) -- and it always would, with them well out from under it.
+	if _rolled_for != _next_rear:
+		_rolled_for = _next_rear
+		_want_special = randf() < SPECIAL_CHANCE
+	if now >= _next_special and (_want_special or over > SLAM_OVER * 3.0) and _start_special(now):
+		return
+	if over < SLAM_OVER:
 		_parried = false
 		_cued = false
 		_enter(State.REAR)
@@ -1151,7 +1227,10 @@ func _impact(now: float) -> void:
 
 ## PARRIED: the claw knocked up off the blade and away from whoever parried it,
 ## a purple burst off its fingers, and the power out of it (`_limp`).
-func _knocked(_now_: float) -> void:
+## `limp_for` long; `push` (world) the way it is knocked, else away from the
+## players near it.
+func _knocked(_now_: float, limp_for := LIMP_TIME, push := Vector3.ZERO) -> void:
+	_drop_all()
 	var tip := room.to_global(_w + _axis * CLAW_LEN * 0.8)
 	var colour := Color(0.66, 0.28, 1.0)
 	var away := Vector3.ZERO
@@ -1160,10 +1239,13 @@ func _knocked(_now_: float) -> void:
 		if n != null and n.get("parry_color") != null and n.global_position.distance_to(tip) < SHAKE_RADIUS + 1.5:
 			colour = n.get("parry_color")
 			away += tip - n.global_position
+	if push.length_squared() > 0.0001:
+		away = push
 	away = room.global_basis.inverse() * away
 	var flat := Vector2(away.x, away.z)
 	flat = flat.normalized() if flat.length_squared() > 0.0001 else Vector2(randf() - 0.5, randf() - 0.5).normalized()
 	_enter(State.LIMP)
+	_limp_for = limp_for
 	_ov += flat * KNOCK_SWING
 	_swing_lock = 0.0
 	_flex = 0.0
@@ -1191,11 +1273,427 @@ func _limp(now: float) -> void:
 	_hoist = 1.2
 	_open_goal = 0.35 + 0.1 * sin(_t * 2.1)
 	_open_rate = 2.0
-	if _t >= KNOCK_TIME + LIMP_TIME:
+	if _t >= KNOCK_TIME + _limp_for:
 		_next_rear = now + REAR_COOLDOWN[level]
 		_enter(State.HUNT)
 		# The jolt of the power coming back.
 		_open = FINGER_SHUT * 0.6
+
+
+# --- FETCH and FERRY (note 104) ---------------------------------------------------------
+
+## The wrist's length out for the fingertips at `tip_y` (room frame).
+func _len_for_tip(tip_y: float) -> float:
+	return clampf(ROOT_Y - (tip_y + CLAW_LEN * 0.95), FOLD_LEN, ROOT_Y - 1.0)
+
+
+## The flat distance from the claw's wrist to `p` (room frame).
+func _flat_to(p: Vector3) -> float:
+	return Vector2(_w.x - p.x, _w.z - p.z).length()
+
+
+## Starts a FETCH or a FERRY if it can; false if neither is to be had.
+func _start_special(now: float) -> bool:
+	if _target == null:
+		return false
+	var soldier: Node3D = null
+	if room.has_method("pen_soldier_for") and int(room.call("loose_count")) < LOOSE_MAX:
+		soldier = room.call("pen_soldier_for", room.to_global(_w))
+	var vat := _vat_to_fetch()
+	if soldier == null and vat == null:
+		return false
+	_step = 0
+	_step_t = 0.0
+	if soldier != null and (vat == null or randf() < 0.45):
+		_cargo = soldier
+		_cargo_prop = false
+		_throw_it = true
+		_enter(State.FERRY)
+	else:
+		_vat = vat
+		_lid_done = false
+		_enter(State.FETCH)
+	return true
+
+
+## A vat of pieces to fish one out of: the gold ones (the prostheses), from
+## those 4 to 14 m from the player, the nearest the claw; a bones vat if no gold
+## one will do. Not one a player stands on.
+func _vat_to_fetch() -> Node3D:
+	var best: Node3D = null
+	var best_d := INF
+	var player: Vector3 = room.to_local(_target.global_position)
+	for v in room.get("vats"):
+		var vat := v as Node3D
+		if vat == null or not is_instance_valid(vat):
+			continue
+		var at: Vector3 = room.to_local(vat.global_position)
+		var from_player := Vector2(at.x - player.x, at.z - player.z).length()
+		if from_player < 4.0 or from_player > 14.0 or _stood_on(vat):
+			continue
+		var d := _flat_to(at) + (0.0 if vat.get("kind") == "vat_gold" else 30.0)
+		if d < best_d:
+			best_d = d
+			best = vat
+	return best
+
+
+func _stood_on(vat: Node3D) -> bool:
+	for p in Coop.all():
+		var n := p as Node3D
+		var to := n.global_position - vat.global_position
+		if Vector2(to.x, to.z).length() < 1.4 and to.y > 1.0:
+			return true
+	return false
+
+
+## The move over: the next slam or move a while off.
+func _end_special(now: float) -> void:
+	_drop_all()
+	_next_rear = now + REAR_COOLDOWN[level] * 0.6
+	_next_special = now + SPECIAL_EVERY[level]
+	_vat = null
+	_enter(State.HUNT)
+
+
+## FETCH: over the vat; its lid lifted off (if on); down into it, a piece out;
+## drawn back, shaking, and thrown at the player (surgery_piece.gd).
+func _fetch(now: float, delta: float) -> void:
+	_step_t += delta
+	_target = _intruder()
+	if _vat == null or not is_instance_valid(_vat) or _target == null or _t > 9.0:
+		_end_special(now)
+		return
+	var v: Vector3 = room.to_local(_vat.global_position)
+	var rim: float = _vat.call("rim")
+	_b_goal = Vector2(v.x, v.z)
+	_b_speed = 1.0
+	_swing_lock = 0.3
+	var next := func(s: int) -> void:
+		_step = s
+		_step_t = 0.0
+	match _step:
+		0:
+			# Over it.
+			_len_goal = _len_for_tip(rim + 1.3)
+			_hoist = 4.0
+			_open_goal = 0.25
+			_open_rate = 4.0
+			if _flat_to(v) < 0.4 and absf(_len - _len_goal) < 0.2:
+				next.call(1 if bool(_vat.get("lid_on")) else 2)
+			elif _step_t > 5.0:
+				_end_special(now)
+		1:
+			# The lid: down onto it, gripped, lifted off and set by.
+			_len_goal = _len_for_tip(rim + 0.05) if _step_t < 0.6 else _len_for_tip(rim + 1.0)
+			_hoist = 3.5
+			_open_goal = FINGER_OPEN * 0.7 if _step_t < 0.4 else FINGER_SHUT * 0.5
+			_open_rate = 14.0
+			if _step_t > 0.6 and not _lid_done:
+				_lid_done = true
+				_vat.call("set_lid", false)
+			if _step_t > 1.1:
+				next.call(2)
+		2:
+			# Into the tub, a piece out of it.
+			_len_goal = _len_for_tip(rim - 0.7) if _step_t < 0.8 else _len_for_tip(CLEAR_TIP + 0.4)
+			_hoist = 4.0
+			_open_goal = FINGER_OPEN * 0.6 if _step_t < 0.6 else FINGER_SHUT
+			_open_rate = 20.0
+			if _step_t > 0.7 and _held_piece == null:
+				_take_piece()
+				_sparks(room.to_global(v + Vector3(0.0, rim, 0.0)), Color(1.0, 0.7, 0.35), 10)
+			if _step_t > 1.4:
+				next.call(3)
+		3:
+			# Drawn back away from them, shaking -- then thrown.
+			var p := _aim_point(_target, 0.3)
+			var away := Vector2(_w.x - p.x, _w.z - p.z)
+			away = away.normalized() if away.length() > 0.01 else Vector2.RIGHT
+			_b_goal = Vector2(v.x, v.z) + away * 0.9
+			_len_goal = _len_for_tip(CLEAR_TIP + 0.9)
+			_shaking = 1.0
+			_flex = clampf(_step_t / 0.5, 0.0, 1.0)
+			if _step_t > 0.55:
+				_shaking = 0.0
+				_throw_piece()
+				_ov -= away * 2.5
+				next.call(4)
+		4:
+			_open_goal = FINGER_OPEN * 0.8
+			_open_rate = 10.0
+			_flex = 0.0
+			if _step_t > 0.6:
+				_end_special(now)
+
+
+## A piece in its fingers (the kit's mechanical arm, a Higgsfield piece).
+func _take_piece() -> void:
+	_held_piece = (load("res://scripts/surgery.gd").K["prosthetic"] as PackedScene).instantiate()
+	grade(_held_piece)
+	_claw.add_child(_held_piece)
+	_held_piece.transform = Transform3D(Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3.ONE * PIECE.SCALE), Vector3(0.0, -1.3, 0.0))
+
+
+## Let fly at the player: from the fingers to where they will be.
+func _throw_piece() -> void:
+	if _held_piece == null or _target == null:
+		return
+	var from := _held_piece.global_position
+	_held_piece.queue_free()
+	_held_piece = null
+	var aim := _aim_point(_target, 0.55)
+	var at := room.to_global(Vector3(aim.x, aim.y, aim.z)) + Vector3(0.0, 1.1, 0.0)
+	PIECE.fire(get_parent(), from, at, self)
+
+
+## FERRY: over the body, down onto it, lifted by the shoulders, up over the bars
+## and the vats, carried across, and -- a soldier -- thrown at the player, or --
+## the entrance scene's prisoner -- set down in the pens.
+func _ferry(now: float, delta: float) -> void:
+	_step_t += delta
+	var next := func(s: int) -> void:
+		_step = s
+		_step_t = 0.0
+	if _cargo == null or not is_instance_valid(_cargo) or _t > 14.0:
+		_end_special(now)
+		return
+	if _throw_it:
+		_target = _intruder()
+		if _target == null and _step < 3:
+			_end_special(now)
+			return
+	var held := _step >= 2 and _step < 5
+	var c: Vector3 = room.to_local(_cargo.global_position)
+	_swing_lock = 0.4 if not held else 0.0
+	match _step:
+		0:
+			# Over it, fingertips over the bars.
+			_b_goal = Vector2(c.x, c.z)
+			_b_speed = 1.0
+			_len_goal = _len_for_tip(maxf(CLEAR_TIP, c.y + 2.6))
+			_hoist = 4.0
+			_open_goal = FINGER_OPEN * 0.7
+			_open_rate = 5.0
+			if _flat_to(c) < 0.35 and absf(_len - _len_goal) < 0.2:
+				next.call(1)
+			elif _step_t > 6.0:
+				_end_special(now)
+		1:
+			# Down onto its shoulders, the fingers shut on it.
+			_b_goal = Vector2(c.x, c.z)
+			# (The prisoner lies on the table: down onto its chest.)
+			_len_goal = _len_for_tip(c.y + (0.45 if _cargo_prop else CARGO_HANG + 0.15))
+			_hoist = 3.0
+			if _step_t > 0.55:
+				_open_goal = FINGER_SHUT * 0.7
+				_open_rate = 25.0
+			if _step_t > 0.7:
+				_take_cargo()
+				next.call(2)
+		2:
+			# Up, clear of everything.
+			_b_goal = _b
+			_len_goal = ROOT_Y - CARRY_Y
+			_hoist = 3.5
+			if absf(_len - _len_goal) < 0.25 or _step_t > 2.0:
+				next.call(3)
+		3:
+			# Across: to the pens, or short of the player.
+			var goal := _drop_at
+			if _throw_it and _target != null:
+				var p := _aim_point(_target, 0.2)
+				var from_p := Vector2(_w.x - p.x, _w.z - p.z)
+				from_p = from_p.normalized() if from_p.length() > 0.1 else Vector2.RIGHT
+				goal = Vector3(p.x + from_p.x * THROW_SHORT, 0.0, p.z + from_p.y * THROW_SHORT)
+				# Over clear floor, so it lands on the flags and not on a vat
+				# (stranded up there): nearer them, or round them, until it is.
+				for k in 8:
+					if _clear_floor(goal):
+						break
+					var turn := from_p.rotated(PI * 0.25 * float((k + 1) / 2) * (1.0 if k % 2 == 0 else -1.0))
+					goal = Vector3(p.x + turn.x * THROW_SHORT, 0.0, p.z + turn.y * THROW_SHORT)
+			_b_goal = Vector2(goal.x, goal.z)
+			_b_speed = CARRY_SPEED / TROLLEY_SPEED[level]
+			if _flat_to(goal) < 0.6 or _step_t > 6.0:
+				next.call(4)
+		4:
+			if _throw_it:
+				# Swung at them and let go.
+				_flex = 1.0
+				if _step_t > 0.25:
+					_let_cargo_go(true)
+					next.call(5)
+			else:
+				# Down to just over the bars and let go.
+				_b_goal = Vector2(_drop_at.x, _drop_at.z)
+				_len_goal = _len_for_tip(CLEAR_TIP)
+				_hoist = 3.0
+				if absf(_len - _len_goal) < 0.15 or _step_t > 1.6:
+					_let_cargo_go(false)
+					next.call(5)
+		5:
+			_flex = 0.0
+			_open_goal = FINGER_OPEN * 0.6
+			_open_rate = 12.0
+			_len_goal = _len_for_tip(CLEAR_TIP + 0.8)
+			if _step_t > 0.7:
+				if _throw_it:
+					_end_special(now)
+				else:
+					# The scene's turn (surgery.gd `_intro`): it waits over the pens.
+					_b_goal = _b
+
+
+## No vat at `at` (room frame) or where a body let go there lands (a stride on).
+func _clear_floor(at: Vector3) -> bool:
+	for v in room.get("vats"):
+		var l: Vector3 = room.to_local((v as Node3D).global_position)
+		if Vector2(l.x - at.x, l.z - at.z).length() < 1.15 + 1.6:
+			return false
+	return true
+
+
+## The body in its grip: a soldier stops being one while it hangs there.
+func _take_cargo() -> void:
+	if _cargo == null:
+		return
+	if _cargo_prop:
+		var from := _cargo.global_transform
+		if _cargo.get_parent() != get_parent():
+			_cargo.get_parent().remove_child(_cargo)
+			get_parent().add_child(_cargo)
+		_cargo.global_transform = from
+	else:
+		if room.has_method("soldier_taken"):
+			room.call("soldier_taken", _cargo)
+		var body := _cargo as CollisionObject3D
+		if body != null:
+			_cargo_layers = Vector2i(body.collision_layer, body.collision_mask)
+			body.collision_layer = 0
+			body.collision_mask = 0
+		_cargo.process_mode = Node.PROCESS_MODE_DISABLED
+	_sparks(_cargo.global_position + Vector3(0.0, CARGO_HANG, 0.0), Color(1.0, 0.8, 0.5), 10)
+
+
+## Held: hanging from the fingers, swinging with the claw.
+func _hold_cargo() -> void:
+	if _cargo == null or not is_instance_valid(_cargo) or state != State.FERRY or _step < 2 or _step >= 5:
+		return
+	var grip := room.to_global(_w + _axis * CLAW_LEN * 0.8)
+	var yaw := _cargo.global_rotation.y
+	var hang := Basis(Vector3.UP, yaw)
+	if _cargo_prop:
+		# The prisoner, upright, its feet trailing.
+		hang = hang * Basis(Vector3.RIGHT, 0.15 * sin(_t * 3.0))
+	_cargo.global_transform = Transform3D(hang.scaled(_cargo.global_basis.get_scale()), grip - Vector3(0.0, CARGO_HANG, 0.0))
+
+
+## Lets go of what it carries: thrown on toward the player (`thrown`), or set
+## down. A soldier wakes as an ordinary enemy (surgery.gd `turn_loose`); the
+## prisoner is gone, a soldier standing in the pens in its place (`ferried`).
+func _let_cargo_go(thrown: bool) -> void:
+	var c := _cargo
+	_cargo = null
+	if c == null or not is_instance_valid(c):
+		return
+	_open_goal = FINGER_OPEN * 0.8
+	_open_rate = 25.0
+	if _cargo_prop:
+		var at := c.global_position
+		c.visible = false
+		ferried.emit(at)
+		return
+	c.process_mode = Node.PROCESS_MODE_INHERIT
+	var body := c as CollisionObject3D
+	if body != null:
+		body.collision_layer = _cargo_layers.x
+		body.collision_mask = _cargo_layers.y
+	var push := Vector3.ZERO
+	if thrown and _target != null and is_instance_valid(_target):
+		push = _target.global_position - c.global_position
+		push.y = 0.0
+		push = push.normalized() * THROW_SOLDIER
+	if c is CharacterBody3D:
+		(c as CharacterBody3D).velocity = push + Vector3(0.0, 2.0, 0.0)
+	if c.has_method("apply_knockback") and push != Vector3.ZERO:
+		c.call("apply_knockback", push, 1.0)
+	if room.has_method("turn_loose"):
+		room.call("turn_loose", c)
+
+
+## Whatever it holds -- a player, a body, a piece -- let go of (knocked limp,
+## switched off, or a move broken off).
+func _drop_all() -> void:
+	if _held_piece != null and is_instance_valid(_held_piece):
+		_held_piece.queue_free()
+	_held_piece = null
+	if _cargo != null and is_instance_valid(_cargo) and state == State.FERRY and _step >= 2 and _step < 5:
+		_let_cargo_go(false)
+	_cargo = null
+
+
+## Hit by a piece of its own, turned back off a parry (surgery_piece.gd):
+## knocked back along `dir` and limp LIMP_PIECE.
+func struck_by_piece(_at: Vector3, dir: Vector3) -> void:
+	if state in [State.DORMANT, State.WAKING, State.DYING, State.DEAD, State.WORK]:
+		return
+	if _victim != null:
+		_let_go(_now(), false)
+	_knocked(_now(), LIMP_PIECE, dir)
+
+
+## The fingers' reach, for the piece: the wrist and the fingertips (world).
+func claw_segment() -> Array:
+	return [room.to_global(_w), room.to_global(_w + _axis * CLAW_LEN)]
+
+
+# --- The entrance scene (note 104; surgery.gd `_intro`) ----------------------------------
+
+## At work on the prisoner on the table as the player comes in.
+func begin_work() -> void:
+	if state != State.DORMANT:
+		return
+	hold = true
+	_enter(State.WORK)
+
+
+func _work(now: float) -> void:
+	_b_goal = Vector2.ZERO
+	_len_goal = ROOT_Y - (TOP + 2.4 + 0.35 * sin(_t * 9.0))
+	_hoist = 3.0
+	_open_goal = 0.15 + 0.2 * sin(_t * 9.0)
+	_open_rate = 10.0
+	if now >= _next_cut and _prisoner != null and _prisoner.visible:
+		_next_cut = now + OPERATE_EVERY
+		_sparks(_prisoner.global_position + Vector3(0.0, 0.25, 0.0), Color(1.0, 0.85, 0.6), 14)
+
+
+## Its work done: the prisoner lifted off the table and set down in the pens at
+## `at` (world, on the floor); `ferried` when it lets go.
+func ferry_prisoner(at: Vector3) -> void:
+	_cargo = _prisoner
+	_cargo_prop = true
+	_throw_it = false
+	_drop_at = room.to_local(at)
+	_step = 0
+	_step_t = 0.0
+	_enter(State.FERRY)
+
+
+## It sees them: a jolt through it, the eye flaring, and the hunt is on.
+func notice() -> void:
+	hold = false
+	_cargo = null
+	_enter(State.HUNT)
+	var now := _now()
+	_next_rear = now + 2.5
+	_next_special = now + 7.0
+	_open = FINGER_OPEN
+	_ov += Vector2(randf() - 0.5, randf() - 0.5) * 1.5
+	_flex = 1.0
+	var tw := create_tween()
+	tw.tween_property(self, "_flex", 0.0, 1.2)
 
 
 ## The floor taking the blow at `at` (world, on the floor), `strength` 0..1: a
@@ -1580,7 +2078,7 @@ func _apply_pose(delta: float) -> void:
 			power = 0.2 + 0.15 * absf(sin(_t * 17.0)) * absf(sin(_t * 5.3))
 	if now < _stun_until:
 		roll += 0.006 * sin(now * 40.0)
-	if state == State.STRAP:
+	if state == State.STRAP or state == State.WORK:
 		for c in _cuffs:
 			c.rotation.z = lerp_angle(c.rotation.z, 0.0, fast)
 	elif state not in [State.DORMANT, State.WAKING, State.DEAD, State.DYING]:
@@ -1600,7 +2098,7 @@ func _apply_pose(delta: float) -> void:
 	for pair in _power_mats:
 		(pair[0] as StandardMaterial3D).emission_energy_multiplier = float(pair[1]) * (0.3 + 0.7 * _power)
 	# The claw reddens as it locks on.
-	var hot := clampf(_flex, 0.0, 1.0) * _power if state == State.REAR else 0.0
+	var hot := clampf(_flex, 0.0, 1.0) * _power if state in [State.REAR, State.FETCH, State.FERRY, State.HUNT] else 0.0
 	for m in _claw_mats:
 		var mat: StandardMaterial3D = m
 		mat.emission = Color.WHITE.lerp(Color(1.0, 0.35, 0.15), hot)
@@ -1619,7 +2117,7 @@ func _pose_arm(delta: float) -> void:
 	# The claw: its -Y along the arm, turning slowly at the wrist (fast while it
 	# works on someone), its fingers trembling as it locks on.
 	if delta > 0.0 and _power > 0.05:
-		_spin += delta * (0.4 + (4.0 if state == State.STRAP else 0.0)) * _power
+		_spin += delta * (0.4 + (4.0 if state == State.STRAP or state == State.WORK else 0.0)) * _power
 	var y := -_axis.normalized()
 	var ref := Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT
 	var x := ref.cross(y).normalized()

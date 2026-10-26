@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 103), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 104), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -291,7 +291,7 @@ decrepits, sewer lizards, rats (own `_rat_rng`), chests.
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
   (`zone_gate.gd`), anchors (`respawn_anchor.gd`), hiding spots
-  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd`, notes 94-102; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
+  (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd`, notes 94-104; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
 
@@ -487,6 +487,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 101 | 2026-10-23 | The surgery's torches on the colonettes, leaded glass in the booth, a second claw that beams (and stops before the slam) | [docs/notes/101-torches-on-the-colonettes-leaded-glass-the-beam-claw.md](docs/notes/101-torches-on-the-colonettes-leaded-glass-the-beam-claw.md) |
 | 102 | 2026-10-25 | The surgery's shelves turned to rows of pushable vats; its power a crystal in a room under the floor, through a hatch under one vat; the beam claw gone; the surgeon gone once it is pulled | [docs/notes/102-vats-a-hatch-the-powering-room-and-its-crystal.md](docs/notes/102-vats-a-hatch-the-powering-room-and-its-crystal.md) |
 | 103 | 2026-10-25 | The claw opens and shakes before it drops; a block is caught, a parry knocks it limp 2 s; the vats a bit faster | [docs/notes/103-the-claw-opens-shakes-and-can-be-parried-limp.md](docs/notes/103-the-claw-opens-shakes-and-can-be-parried-limp.md) |
+| 104 | 2026-10-25 | The surgery: an entrance scene and bars; vat lids; real soldiers in the pens; the claw throws pieces and soldiers; the way up to the booth over the table and the vats | [docs/notes/104-entrance-scene-bars-lids-pen-soldiers-claw-moves-booth-route.md](docs/notes/104-entrance-scene-bars-lids-pen-soldiers-claw-moves-booth-route.md) |
 
 ## Notes by source file
 
@@ -575,12 +576,13 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102
+- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102
-- `scripts/surgery_vat.gd`: 102, 103
-- `scripts/surgery_control.gd`: 99, 100, 101, 102
-- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103
+- `scripts/surgery_vat.gd`: 102, 103, 104
+- `scripts/surgery_piece.gd`: 104
+- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104
+- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
