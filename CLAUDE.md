@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 108), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 109), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -492,6 +492,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 106 | 2026-10-25 | Vats grabbed (E): pushed, pulled, turned slowly, no fighting meanwhile; the claw idle once the booth door is in; caught under the claw, not inside it | [docs/notes/106-grab-vats-claw-idles-when-unmanned-caught-under-the-claw.md](docs/notes/106-grab-vats-claw-idles-when-unmanned-caught-under-the-claw.md) |
 | 107 | 2026-10-25 | The surgery's vats in a checkerboard round a wide open circle, a vat always over the hatch | [docs/notes/107-vats-in-a-checkerboard-open-circle-round-the-middle.md](docs/notes/107-vats-in-a-checkerboard-open-circle-round-the-middle.md) |
 | 108 | 2026-10-25 | The control room up to the roof (the gantry kept off it), its door the dungeon doors' size; the vats checkered close round the table, the floor open beyond | [docs/notes/108-booth-to-the-roof-dungeon-door-vats-close-round-the-table.md](docs/notes/108-booth-to-the-roof-dungeon-door-vats-close-round-the-table.md) |
+| 109 | 2026-10-25 | The claw home over the table when it dies; the surgeon takes it onto his back (an ambush at the hatch, or after the lever) and speaks; a stand-in body with iron limbs and a needle; his dash, spin and slam | [docs/notes/109-surgeon-takes-the-claw-two-openings-stand-in-body-three-moves.md](docs/notes/109-surgeon-takes-the-claw-two-openings-stand-in-body-three-moves.md) |
 
 ## Notes by source file
 
@@ -582,12 +583,13 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/spear.gd`: 14, 78, 79
 - `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
-- `scripts/surgery_power.gd`: 102
+- `scripts/surgery_power.gd`: 102, 109
 - `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106
 - `scripts/surgery_piece.gd`: 104
-- `scripts/surgeon_boss.gd`: 105
-- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108
-- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108
+- `scripts/subtitles.gd`: 109
+- `scripts/surgeon_boss.gd`: 105, 109
+- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109
+- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80

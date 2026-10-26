@@ -1,46 +1,97 @@
 extends CharacterBody3D
 
-## THE SURGEON as a boss (2026-10-25, note 105). The user: "the player should
-## have to fight the surgeon after the claw gets depowered. make infrastructure
-## for that, and ill give you details later." So this is the frame of the
-## fight -- who he is, when it starts, what ends it, the bar, the bars at the
-## ways in, saving and dying -- with a stand-in for how he fights (FIGHT: he
-## turns to the nearest player and walks at them; no attacks yet).
+## THE SURGEON as a boss (2026-10-25; the frame of the fight note 105; his body,
+## the claw on his back and his three moves note 109).
 ##
-## His body is the Meshy-rigged surgeon (models/surgery/surgeon.glb; clips
-## "work", "alert", "die" only -- a walk, his attacks, a hit and a rise will need
-## clips of their own), built and placed by surgery_control.gd.
+## The user (note 109): "The surgeon should not be the model that was created.
+## Make a temporary model. It should have robotic arms and legs. Its attacks
+## should be a 'spear dash' with a precision needle bionic hand, a fast spin
+## using all 4 appendages, while the surgeon uses the claw on his back as legs,
+## and a delayed jump onto his back, slamming the claw into the ground."
+##
+## HIS BODY (`_build_body`): a STAND-IN made of primitives until a real model --
+## a coated, bald man in red-lensed goggles whose arms and legs are iron: brass
+## ball joints, steel shafts, a three-fingered clamp for a left hand and for a
+## right a long precision NEEDLE. Posed every frame from joint angles (`_pose`,
+## `_animate`): standing, walking, at work, reaching, striking, the three moves,
+## lying. Facing his +Z.
+##
+## THE CLAW (`mount_claw`): taken off the dead machine's arm (surgical_table.gd
+## `take_claw`) and worn on his back -- folded up over his shoulder; let down
+## and lengthened under him as a second pair of legs for the spin; out of his
+## back for the slam. Its fingers open and shut as the table's did.
 ##
 ## STATES:
-##   AT_WORK  at his console in the booth (the machine running); untouchable.
-##   FLUNG    in the air, out of the booth (the kick, surgery_control.gd); the
-##            control room moves him.
-##   DOWN     lying where he landed in the hall, out cold, until the machine is
-##            off (the lever, or the crystal).
-##   WAITING  on his feet in the hall, the machine off: the fight starts the
-##            moment a player is in the hall (a save, a world reset, the
-##            crystal route).
-##   RISING   getting up -- RISE_TIME -- and the fight is on.
-##   FIGHT    `engaged`: the HUD's boss bar (hud.gd `_engaged_champion`: group
-##            "boss"); he can be hurt; the bars at the ways in are up.
-##   DEAD     `defeated`: the bars come down (surgery.gd).
+##   AT_WORK   at his console in the booth (the machine running); untouchable.
+##   FLUNG     in the air, out of the booth (the kick, surgery_control.gd).
+##   DOWN      lying where he landed in the hall, out cold.
+##   SCRIPTED  in a scene (surgery_control.gd): walked, hopped and posed by it.
+##   WAITING   on his feet in the hall: the fight starts the moment a player is
+##             in the hall (a save, a world reset).
+##   RISING    RISE_TIME, then the fight.
+##   FIGHT     `engaged` (the HUD's boss bar); he can be hurt; the bars at the
+##             ways in are up (surgery.gd). Between moves he walks at them round
+##             the vats (his own grid, below); then one of:
+##     DASH   the needle drawn back (DASH_WIND, the parry cue), then driven
+##            straight through where they were, DASH_SPEED for DASH_TIME.
+##     SPIN   up on the claw's fingers (SPIN_RISE), arms and legs flung out,
+##            spinning (SPIN_TIME) -- anyone within SPIN_REACH cut every
+##            SPIN_EVERY -- down, and dizzy a moment.
+##     SLAM   a crouch, a leap SLAM_HEIGHT up, a hang at the top as he turns
+##            onto his back (SLAM_HANG -- the parry cue), and down claw-first on
+##            where they stood: SLAM_DAMAGE close, thrown down out to SLAM_KNOCK;
+##            then on his back a while (SLAM_LIE), hurt the more for it.
+##   A parry off the needle or the spin staggers him (STAGGER_TIME).
+##   DEAD      `defeated`: the bars come down.
 ##
-## A world reset during the fight (everyone died): full health, back where he
-## waits (`wait_at`), WAITING.
+## Its numbers are first guesses, all here.
 
 signal fight_started
 signal defeated
 
-enum State { AT_WORK, FLUNG, DOWN, WAITING, RISING, FIGHT, DEAD }
+enum State { AT_WORK, FLUNG, DOWN, WAITING, RISING, FIGHT, DEAD, SCRIPTED }
+enum Move { NONE, DASH, SPIN, SLAM, STAGGER }
 
-## Placeholder numbers until the fight is designed.
 const MAX_HEALTH := 600.0
-const RISE_TIME := 1.6
-const WALK_SPEED := 1.6
-const STOP_AT := 1.8
-const TURN_RATE := 5.0
+const RISE_TIME := 1.2
+const WALK_SPEED := 2.2
+const STOP_AT := 2.0
+const TURN_RATE := 6.0
 const RADIUS := 0.38
 const HEIGHT := 1.85
+## Between moves, a while (random in the range).
+const REST := Vector2(0.8, 1.6)
+
+const DASH_WIND := 0.65
+const DASH_TIME := 0.32
+const DASH_SPEED := 17.0
+const DASH_DAMAGE := 28.0
+const DASH_REACH := 0.9
+const DASH_RECOVER := 0.6
+
+const SPIN_RISE := 0.45
+const SPIN_TIME := 1.3
+const SPIN_RATE := 15.0
+const SPIN_REACH := 2.5
+const SPIN_DAMAGE := 12.0
+const SPIN_EVERY := 0.3
+const SPIN_DOWN := 0.4
+const SPIN_DIZZY := 0.7
+
+const SLAM_CROUCH := 0.35
+const SLAM_RISE := 0.45
+const SLAM_HANG := 0.55
+const SLAM_DROP := 0.22
+const SLAM_HEIGHT := 3.4
+const SLAM_DAMAGE := 34.0
+const SLAM_HIT := 2.0
+const SLAM_KNOCK := 3.8
+const SLAM_LIE := 1.4
+const SLAM_UP := 0.6
+## On his back after the slam, blows land this much harder.
+const SLAM_EXPOSED := 1.5
+
+const STAGGER_TIME := 1.4
 
 @export var display_name := "THE SURGEON"
 var max_health := MAX_HEALTH
@@ -48,13 +99,20 @@ var health := MAX_HEALTH
 ## Read by the HUD for the boss bar.
 var engaged := false
 var state: State = State.AT_WORK
-## The hall (surgery.gd): `in_hall(world)`, its table for sparks.
+var move: Move = Move.NONE
+## The hall (surgery.gd): `in_hall(world)`, its table for sparks and dust.
 var surgery: Node3D
-## The model (its AnimationPlayer found below) and where he waits (world).
-var model: Node3D
-var _anim: AnimationPlayer
 var _wait_at := Transform3D.IDENTITY
 var _t := 0.0
+var _mt := 0.0
+var _next_move := 0.0
+var _move_dir := Vector3.FORWARD
+var _move_at := Vector3.ZERO
+var _move_from := Vector3.ZERO
+var _hit_once := {}
+var _spin_yaw := 0.0
+var _cued := false
+var _target: Node3D = null
 
 
 func _ready() -> void:
@@ -71,58 +129,438 @@ func _ready() -> void:
 	cs.shape = shape
 	cs.position = Vector3(0.0, HEIGHT * 0.5, 0.0)
 	add_child(cs)
-
-
-## The model under him (surgery_control.gd hands it over).
-func take_model(m: Node3D) -> void:
-	model = m
-	var found := m.find_children("*", "AnimationPlayer", true, false)
-	_anim = found[0] as AnimationPlayer if not found.is_empty() else null
-
-
-## The clip whose name has `key` in it.
-func clip(key: StringName) -> StringName:
-	if _anim == null:
-		return &""
-	for n in _anim.get_animation_list():
-		if String(n).to_lower().contains(String(key)):
-			return n
-	return &""
-
-
-func play(key: StringName, blend := 0.2, speed := 1.0, loop := false) -> void:
-	var c := clip(key)
-	if c == &"":
-		return
-	_anim.get_animation(c).loop_mode = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
-	_anim.play(c, blend, speed)
-
-
-## Held at the end of `key` (a save: lying, dead).
-func hold_end(key: StringName) -> void:
-	var c := clip(key)
-	if c == &"":
-		return
-	_anim.play(c)
-	_anim.seek(_anim.get_animation(c).length - 0.01, true)
+	_build_body()
+	pose(&"work")
 
 
 func _set_state(s: State) -> void:
 	state = s
 	_t = 0.0
 	engaged = s == State.FIGHT
+	if s != State.FIGHT:
+		move = Move.NONE
 
 
-# --- Moments ---------------------------------------------------------------------------
+# --- His body (a stand-in: primitives) -------------------------------------------------
+
+var _rig: Node3D
+var _j := {}
+var _want := {}
+var _rig_pos := Vector3.ZERO
+var _rig_rot := Vector3.ZERO
+var _back: Node3D
+var _walk_ph := 0.0
+var _walking := 0.0
+var _pose_name := &"stand"
+
+static var _mats := {}
+
+
+static func _mat(key: String) -> StandardMaterial3D:
+	if _mats.has(key):
+		return _mats[key]
+	var m := StandardMaterial3D.new()
+	match key:
+		"coat":
+			m.albedo_color = Color(0.17, 0.14, 0.12)
+			m.roughness = 0.92
+		"apron":
+			m.albedo_color = Color(0.3, 0.2, 0.14)
+			m.roughness = 0.75
+		"skin":
+			m.albedo_color = Color(0.74, 0.64, 0.58)
+			m.roughness = 0.6
+		"steel":
+			# Not too metallic: in the hall's dark, a mirror-steel reads black.
+			m.albedo_color = Color(0.56, 0.57, 0.62)
+			m.metallic = 0.5
+			m.roughness = 0.4
+		"brass":
+			m.albedo_color = Color(0.7, 0.52, 0.24)
+			m.metallic = 0.6
+			m.roughness = 0.35
+			m.emission_enabled = true
+			m.emission = Color(1.0, 0.6, 0.25)
+			m.emission_energy_multiplier = 0.25
+		"lens":
+			m.albedo_color = Color(0.3, 0.02, 0.0)
+			m.emission_enabled = true
+			m.emission = Color(1.0, 0.2, 0.08)
+			m.emission_energy_multiplier = 3.0
+		"needle":
+			m.albedo_color = Color(0.8, 0.84, 0.88)
+			m.metallic = 1.0
+			m.roughness = 0.1
+			m.emission_enabled = true
+			m.emission = Color(0.55, 0.85, 1.0)
+			m.emission_energy_multiplier = 0.6
+	_mats[key] = m
+	return m
+
+
+func _part(parent: Node3D, mesh: Mesh, mat: String, at: Vector3, rot := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = _mat(mat)
+	parent.add_child(mi)
+	mi.position = at
+	mi.rotation = rot
+	return mi
+
+
+func _joint(parent: Node3D, key: StringName, at: Vector3) -> Node3D:
+	var n := Node3D.new()
+	n.name = String(key)
+	parent.add_child(n)
+	n.position = at
+	_j[key] = n
+	_want[key] = Vector3.ZERO
+	return n
+
+
+static func _cyl(r: float, h: float, top := -1.0) -> CylinderMesh:
+	var c := CylinderMesh.new()
+	c.top_radius = r if top < 0.0 else top
+	c.bottom_radius = r
+	c.height = h
+	c.radial_segments = 12
+	c.rings = 1
+	return c
+
+
+static func _ball(r: float) -> SphereMesh:
+	var s := SphereMesh.new()
+	s.radius = r
+	s.height = r * 2.0
+	s.radial_segments = 12
+	s.rings = 6
+	return s
+
+
+static func _boxm(size: Vector3) -> BoxMesh:
+	var b := BoxMesh.new()
+	b.size = size
+	return b
+
+
+func _build_body() -> void:
+	_rig = Node3D.new()
+	_rig.name = "Rig"
+	add_child(_rig)
+	var pelvis := _joint(_rig, &"pelvis", Vector3(0.0, 1.0, 0.0))
+	# The man: a long dark coat, a leather apron, a bald head, goggles.
+	_part(pelvis, _boxm(Vector3(0.46, 0.66, 0.28)), "coat", Vector3(0.0, 0.36, 0.0))
+	_part(pelvis, _cyl(0.36, 0.62, 0.25), "coat", Vector3(0.0, -0.15, 0.0))
+	_part(pelvis, _boxm(Vector3(0.34, 0.8, 0.03)), "apron", Vector3(0.0, 0.05, 0.15))
+	_part(pelvis, _boxm(Vector3(0.48, 0.05, 0.3)), "brass", Vector3(0.0, 0.45, 0.0))
+	_part(pelvis, _boxm(Vector3(0.48, 0.06, 0.3)), "brass", Vector3(0.0, 0.02, 0.0))
+	var neck := _joint(pelvis, &"neck", Vector3(0.0, 0.7, 0.0))
+	_part(neck, _cyl(0.06, 0.1), "skin", Vector3(0.0, 0.03, 0.0))
+	_part(neck, _ball(0.14), "skin", Vector3(0.0, 0.18, 0.01))
+	_part(neck, _boxm(Vector3(0.17, 0.07, 0.1)), "steel", Vector3(0.0, 0.1, 0.08))
+	for s: float in [-1.0, 1.0]:
+		_part(neck, _cyl(0.038, 0.04), "lens", Vector3(0.055 * s, 0.2, 0.13), Vector3(PI * 0.5, 0.0, 0.0))
+	_part(neck, _boxm(Vector3(0.3, 0.025, 0.02)), "brass", Vector3(0.0, 0.2, 0.115))
+	# Iron arms: brass shoulders, steel shafts. His right (-X) ends in the needle.
+	for side in [[&"l", 1.0], [&"r", -1.0]]:
+		var k: StringName = side[0]
+		var s: float = side[1]
+		var sh := _joint(pelvis, StringName("sh_" + k), Vector3(0.3 * s, 0.6, 0.0))
+		_part(sh, _ball(0.085), "brass", Vector3.ZERO)
+		_part(sh, _cyl(0.055, 0.32), "steel", Vector3(0.0, -0.16, 0.0))
+		var el := _joint(sh, StringName("el_" + k), Vector3(0.0, -0.32, 0.0))
+		_part(el, _ball(0.065), "brass", Vector3.ZERO)
+		_part(el, _cyl(0.048, 0.3), "steel", Vector3(0.0, -0.15, 0.0))
+		var wr := _joint(el, StringName("wr_" + k), Vector3(0.0, -0.3, 0.0))
+		_part(wr, _ball(0.05), "brass", Vector3.ZERO)
+		if k == &"r":
+			# The precision needle: a long tapering steel spike.
+			_part(wr, _cyl(0.0, 0.85, 0.035), "needle", Vector3(0.0, -0.44, 0.0))
+			_part(wr, _cyl(0.06, 0.06), "brass", Vector3(0.0, -0.03, 0.0))
+		else:
+			# A three-fingered clamp.
+			for f in 3:
+				var a := float(f) * TAU / 3.0
+				_part(wr, _boxm(Vector3(0.025, 0.14, 0.025)), "steel", Vector3(cos(a) * 0.04, -0.09, sin(a) * 0.04), Vector3(sin(a) * 0.3, 0.0, -cos(a) * 0.3))
+		# Iron legs.
+		var hp := _joint(pelvis, StringName("hp_" + k), Vector3(0.13 * s, -0.05, 0.0))
+		_part(hp, _ball(0.08), "brass", Vector3.ZERO)
+		_part(hp, _cyl(0.068, 0.45), "steel", Vector3(0.0, -0.225, 0.0))
+		var kn := _joint(hp, StringName("kn_" + k), Vector3(0.0, -0.45, 0.0))
+		_part(kn, _ball(0.072), "brass", Vector3.ZERO)
+		_part(kn, _cyl(0.058, 0.42), "steel", Vector3(0.0, -0.21, 0.0))
+		var an := _joint(kn, StringName("an_" + k), Vector3(0.0, -0.42, 0.0))
+		_part(an, _ball(0.055), "brass", Vector3.ZERO)
+		_part(an, _boxm(Vector3(0.12, 0.07, 0.27)), "steel", Vector3(0.0, -0.04, 0.06))
+	# Where the claw rides: high on his back.
+	_back = Node3D.new()
+	_back.name = "Back"
+	pelvis.add_child(_back)
+	_back.position = Vector3(0.0, 0.42, -0.2)
+	for mi in _rig.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
+
+## A named pose's joint angles (Euler, radians) and the rig's offset and turn.
+## (An arm hangs down its -Y: -x lifts it forward, +-z out to the side.)
+func _pose_angles(p: StringName) -> Dictionary:
+	var a := {}
+	var rig := [Vector3.ZERO, Vector3.ZERO]
+	match p:
+		&"stand":
+			a = {&"sh_l": Vector3(0.05, 0.0, 0.14), &"sh_r": Vector3(0.05, 0.0, -0.14),
+				&"el_l": Vector3(-0.3, 0.0, 0.0), &"el_r": Vector3(-0.2, 0.0, 0.0)}
+		&"work":
+			a = {&"sh_l": Vector3(-0.9, 0.0, 0.1), &"sh_r": Vector3(-0.9, 0.0, -0.1),
+				&"el_l": Vector3(-0.8, 0.0, 0.0), &"el_r": Vector3(-0.8, 0.0, 0.0), &"neck": Vector3(0.35, 0.0, 0.0)}
+		&"alert":
+			a = {&"sh_l": Vector3(-0.5, 0.0, 0.35), &"sh_r": Vector3(-0.6, 0.0, -0.35),
+				&"el_l": Vector3(-1.1, 0.0, 0.0), &"el_r": Vector3(-0.6, 0.0, 0.0)}
+		&"reach":
+			a = {&"sh_l": Vector3(-2.9, 0.0, 0.15), &"sh_r": Vector3(-2.9, 0.0, -0.15),
+				&"el_l": Vector3(-0.2, 0.0, 0.0), &"el_r": Vector3(-0.2, 0.0, 0.0), &"neck": Vector3(-0.5, 0.0, 0.0)}
+		&"strike":
+			a = {&"sh_l": Vector3(-1.5, 0.0, 0.9), &"sh_r": Vector3(-0.3, 0.0, -0.2),
+				&"el_l": Vector3(-0.1, 0.0, 0.0), &"el_r": Vector3(-0.3, 0.0, 0.0)}
+		&"loom":
+			# Over someone on the floor, looking down at them.
+			a = {&"sh_l": Vector3(0.1, 0.0, 0.25), &"sh_r": Vector3(-0.35, 0.0, -0.2),
+				&"el_l": Vector3(-0.4, 0.0, 0.0), &"el_r": Vector3(-0.2, 0.0, 0.0), &"neck": Vector3(0.6, 0.0, 0.0)}
+			rig = [Vector3.ZERO, Vector3(0.18, 0.0, 0.0)]
+		&"dash_wind":
+			a = {&"sh_l": Vector3(-0.9, 0.0, 0.4), &"sh_r": Vector3(1.1, 0.0, -0.25),
+				&"el_l": Vector3(-0.5, 0.0, 0.0), &"el_r": Vector3(0.35, 0.0, 0.0),
+				&"hp_l": Vector3(-0.7, 0.0, 0.0), &"kn_l": Vector3(1.0, 0.0, 0.0),
+				&"hp_r": Vector3(0.3, 0.0, 0.0), &"kn_r": Vector3(0.6, 0.0, 0.0)}
+			rig = [Vector3(0.0, -0.22, 0.0), Vector3(0.15, 0.0, 0.0)]
+		&"dash":
+			a = {&"sh_l": Vector3(0.6, 0.0, 0.5), &"sh_r": Vector3(-1.57, 0.0, 0.0),
+				&"el_l": Vector3(-0.3, 0.0, 0.0), &"el_r": Vector3(0.0, 0.0, 0.0),
+				&"hp_l": Vector3(-0.8, 0.0, 0.0), &"kn_l": Vector3(0.5, 0.0, 0.0),
+				&"hp_r": Vector3(0.6, 0.0, 0.0), &"kn_r": Vector3(0.2, 0.0, 0.0)}
+			rig = [Vector3(0.0, -0.15, 0.0), Vector3(0.45, 0.0, 0.0)]
+		&"spin":
+			# Arms and legs flung out, up on the claw's fingers.
+			a = {&"sh_l": Vector3(0.0, 0.0, 1.5), &"sh_r": Vector3(0.0, 0.0, -1.5),
+				&"el_l": Vector3.ZERO, &"el_r": Vector3.ZERO,
+				&"hp_l": Vector3(0.0, 0.0, 1.1), &"hp_r": Vector3(0.0, 0.0, -1.1)}
+			rig = [Vector3(0.0, 0.25, 0.0), Vector3.ZERO]
+		&"crouch":
+			a = {&"sh_l": Vector3(0.6, 0.0, 0.3), &"sh_r": Vector3(0.6, 0.0, -0.3),
+				&"hp_l": Vector3(-1.1, 0.0, 0.0), &"hp_r": Vector3(-1.1, 0.0, 0.0),
+				&"kn_l": Vector3(2.0, 0.0, 0.0), &"kn_r": Vector3(2.0, 0.0, 0.0)}
+			rig = [Vector3(0.0, -0.45, 0.0), Vector3(0.3, 0.0, 0.0)]
+		&"tuck":
+			a = {&"sh_l": Vector3(-1.2, 0.0, 0.5), &"sh_r": Vector3(-1.2, 0.0, -0.5),
+				&"el_l": Vector3(-1.2, 0.0, 0.0), &"el_r": Vector3(-1.2, 0.0, 0.0),
+				&"hp_l": Vector3(-1.5, 0.0, 0.0), &"hp_r": Vector3(-1.5, 0.0, 0.0),
+				&"kn_l": Vector3(2.0, 0.0, 0.0), &"kn_r": Vector3(2.0, 0.0, 0.0)}
+		&"back":
+			# On his back, arms and legs up and out (the slam, after it).
+			a = {&"sh_l": Vector3(-1.2, 0.0, 0.9), &"sh_r": Vector3(-1.2, 0.0, -0.9),
+				&"hp_l": Vector3(-0.9, 0.0, 0.4), &"hp_r": Vector3(-0.9, 0.0, -0.4),
+				&"kn_l": Vector3(0.8, 0.0, 0.0), &"kn_r": Vector3(0.8, 0.0, 0.0)}
+			rig = [Vector3(0.0, 1.0, -0.3), Vector3(-PI * 0.5, 0.0, 0.0)]
+		&"down", &"dead":
+			# Flat on the floor, on his back.
+			a = {&"sh_l": Vector3(-0.3, 0.0, 1.0), &"sh_r": Vector3(-0.2, 0.0, -0.8),
+				&"hp_l": Vector3(0.0, 0.0, 0.2), &"hp_r": Vector3(0.0, 0.0, -0.15),
+				&"el_l": Vector3(-0.4, 0.0, 0.0), &"neck": Vector3(-0.3, 0.3, 0.0)}
+			rig = [Vector3(0.0, 0.2, -0.95), Vector3(-PI * 0.5, 0.0, 0.0)]
+		&"dizzy":
+			a = {&"sh_l": Vector3(0.2, 0.0, 0.5), &"sh_r": Vector3(0.2, 0.0, -0.5),
+				&"neck": Vector3(0.3, 0.0, 0.3), &"kn_l": Vector3(0.3, 0.0, 0.0), &"kn_r": Vector3(0.3, 0.0, 0.0)}
+			rig = [Vector3(0.0, -0.08, 0.0), Vector3(0.1, 0.0, 0.15)]
+	return {"joints": a, "rig": rig}
+
+
+## Holds pose `p` (joints not named in it go back to rest).
+func pose(p: StringName) -> void:
+	_pose_name = p
+	var d := _pose_angles(p)
+	for k in _want:
+		_want[k] = Vector3.ZERO
+	for k in d["joints"]:
+		_want[k] = d["joints"][k]
+	_rig_pos = d["rig"][0]
+	_rig_rot = d["rig"][1]
+
+
+## The joints eased toward their pose (snapped with `rate` 0); walking swings
+## the legs and arms on top of it.
+func _animate(delta: float, rate := 12.0) -> void:
+	var k := 1.0 if rate <= 0.0 else clampf(rate * delta, 0.0, 1.0)
+	var swing := sin(_walk_ph) * _walking
+	for key in _want:
+		var w: Vector3 = _want[key]
+		match key:
+			&"hp_l":
+				w.x += -swing * 0.55
+			&"hp_r":
+				w.x += swing * 0.55
+			&"kn_l":
+				w.x += maxf(0.0, swing) * 0.9
+			&"kn_r":
+				w.x += maxf(0.0, -swing) * 0.9
+			&"sh_l":
+				w.x += swing * 0.35
+		var j: Node3D = _j[key]
+		j.rotation = j.rotation.lerp(w, k)
+	_rig.position = _rig.position.lerp(_rig_pos + Vector3(0.0, absf(swing) * 0.04, 0.0), k)
+	var spin := Vector3(0.0, _spin_yaw, 0.0) if move == Move.SPIN else Vector3.ZERO
+	_rig.rotation = _rig.rotation.lerp(_rig_rot + spin, k) if move != Move.SPIN else _rig_rot + spin
+	_pose_claw(delta)
+
+
+func _process(delta: float) -> void:
+	_animate(delta)
+
+
+# --- The claw on his back -------------------------------------------------------------------
+
+var _claw: Node3D
+var _claw_skel: Skeleton3D
+var _claw_open := -0.2
+var _claw_mode := &"carry"
+const CLAW_FINGERS: Array[float] = [30.0, 150.0, 270.0]
+
+
+## The claw off the machine's arm (surgical_table.gd `take_claw`) onto his back.
+func mount_claw(claw: Node3D) -> void:
+	if claw == null:
+		return
+	_claw = claw
+	if claw.get_parent() != null:
+		claw.get_parent().remove_child(claw)
+	_back.add_child(claw)
+	claw.top_level = false
+	var found := claw.find_children("*", "Skeleton3D", true, false)
+	_claw_skel = found[0] as Skeleton3D if not found.is_empty() else null
+	# Its old hitbox (a blow rang off the machine) is no longer anything.
+	for b in claw.find_children("*", "StaticBody3D", true, false):
+		(b as StaticBody3D).collision_layer = 0
+	var eye := claw.get_node_or_null("EyeLight") as OmniLight3D
+	if eye != null:
+		eye.visible = true
+		eye.light_energy = 1.0
+	_claw_mode = &"carry"
+	claw.transform = _claw_pose(&"carry")
+
+
+func has_claw() -> bool:
+	return _claw != null
+
+
+## The claw on his back by mode: folded up over his shoulder; let down and
+## lengthened under him as legs; out of his back, fingers first.
+func _claw_pose(mode: StringName) -> Transform3D:
+	match mode:
+		&"legs":
+			return Transform3D(Basis().scaled(Vector3.ONE * 1.1), Vector3(0.0, 0.0, -0.05))
+		&"back":
+			return Transform3D(Basis(Vector3.RIGHT, PI * 0.5).scaled(Vector3.ONE * 0.8), Vector3.ZERO)
+	return Transform3D(Basis(Vector3.RIGHT, PI - 0.45).scaled(Vector3.ONE * 0.7), Vector3(-0.08, 0.05, 0.0))
+
+
+func _pose_claw(delta: float) -> void:
+	if _claw == null:
+		return
+	var want := _claw_pose(_claw_mode)
+	_claw.transform = _claw.transform.interpolate_with(want, clampf(delta * 10.0, 0.0, 1.0))
+	if _claw_skel != null:
+		var goal := -0.2
+		match _claw_mode:
+			&"legs":
+				goal = 0.6
+			&"back":
+				goal = 0.75 if move == Move.SLAM and _mt < SLAM_CROUCH + SLAM_RISE + SLAM_HANG + SLAM_DROP else -0.3
+		_claw_open = lerpf(_claw_open, goal, clampf(delta * 8.0, 0.0, 1.0))
+		for f in CLAW_FINGERS.size():
+			var a := deg_to_rad(CLAW_FINGERS[f])
+			_claw_skel.set_bone_pose_rotation(f + 1, Quaternion(Vector3(-sin(a), 0.0, cos(a)), _claw_open))
+
+
+# --- Moments (the scenes, surgery_control.gd) -----------------------------------------------
 
 ## Lying in the hall where the kick put him, out cold.
 func lie_down() -> void:
 	_set_state(State.DOWN)
 	velocity = Vector3.ZERO
+	pose(&"down")
 
 
-## Where he waits for the fight (world), and that he is waiting there, on his
-## feet. `now`: placed at once.
+## Kept for surgery_control.gd: the old clips' names as poses.
+func play(key: StringName, _blend := 0.2, _speed := 1.0, _loop := false) -> void:
+	match key:
+		&"die":
+			pose(&"down")
+		&"alert":
+			pose(&"alert")
+		&"work":
+			pose(&"work")
+		_:
+			pose(key)
+
+
+func hold_end(key: StringName) -> void:
+	play(key)
+	_animate(1.0, 0.0)
+
+
+## In a scene: walked and posed by it.
+func script_on() -> void:
+	_set_state(State.SCRIPTED)
+	velocity = Vector3.ZERO
+
+
+## Turns to face `at` (world) at once.
+func face(at: Vector3) -> void:
+	var to := at - global_position
+	if Vector2(to.x, to.z).length() > 0.01:
+		rotation.y = atan2(to.x, to.z)
+
+
+## Walks (a scene) to `target` (world) round the vats, at WALK_SPEED; returns
+## when he is there (or after `timeout`).
+func walk_to(target: Vector3, timeout := 14.0) -> void:
+	pose(&"stand")
+	_replan(target)
+	var t0 := Time.get_ticks_msec() / 1000.0
+	while Time.get_ticks_msec() / 1000.0 - t0 < timeout:
+		var to := target - global_position
+		to.y = 0.0
+		if to.length() < 0.25:
+			break
+		var dir := _steer(to)
+		var delta := get_physics_process_delta_time()
+		global_position += dir * minf(WALK_SPEED * delta, to.length())
+		rotation.y = lerp_angle(rotation.y, atan2(dir.x, dir.z), 1.0 - exp(-TURN_RATE * delta))
+		_walking = 1.0
+		_walk_ph += delta * WALK_SPEED * 3.2
+		if _path_i >= _path.size():
+			_replan(target)
+		await get_tree().physics_frame
+	_walking = 0.0
+
+
+## Up (or down) onto `to` (world) in a hop over `time`.
+func hop_to(to: Vector3, time := 0.5) -> void:
+	var from := global_position
+	pose(&"crouch")
+	await get_tree().create_timer(0.2, true, false, true).timeout
+	pose(&"tuck")
+	var t := create_tween()
+	t.tween_method(func(k: float) -> void:
+		var p := from.lerp(to, k)
+		p.y += sin(k * PI) * 0.7
+		global_position = p, 0.0, 1.0, time)
+	await t.finished
+	pose(&"stand")
+
+
+# --- Moments (saves, resets) -------------------------------------------------------------------
+
+## Where he waits for the fight (world), on his feet.
 func wait_at(at: Transform3D) -> void:
 	_wait_at = at
 	global_transform = at
@@ -131,24 +569,30 @@ func wait_at(at: Transform3D) -> void:
 	visible = true
 	collision_layer = 1 | 4
 	_set_state(State.WAITING)
-	play(&"alert", 0.0, 0.0)
+	pose(&"alert")
 
 
-## Up, and the fight is on (the machine just died with him lying in the hall,
-## or a player came in to find him waiting).
-func begin_fight() -> void:
+## The fight is on (after the scene that gives him the claw, or a player come
+## in to find him waiting). `now`: straight into it, no getting up.
+func begin_fight(now := false) -> void:
 	if state in [State.RISING, State.FIGHT, State.DEAD]:
 		return
-	if state == State.DOWN or state == State.FLUNG:
-		_wait_at = global_transform
+	_wait_at = global_transform
+	if now:
+		_set_state(State.FIGHT)
+		_next_move = 0.6
+		pose(&"stand")
+		fight_started.emit()
+		return
 	_set_state(State.RISING)
-	play(&"alert", 0.3)
+	pose(&"alert")
 
 
 ## A world reset with him still up: whole again, back where he waits.
 func reset_wait() -> void:
 	if state == State.DEAD:
 		return
+	_claw_mode = &"carry"
 	wait_at(_wait_at if _wait_at != Transform3D.IDENTITY else global_transform)
 
 
@@ -158,7 +602,11 @@ func set_dead_now(at: Transform3D) -> void:
 	health = 0.0
 	collision_layer = 0
 	_set_state(State.DEAD)
-	hold_end(&"die")
+	hold_end(&"dead")
+
+
+func is_dead() -> bool:
+	return state == State.DEAD
 
 
 # --- Each tick ---------------------------------------------------------------------------
@@ -172,35 +620,298 @@ func _physics_process(delta: float) -> void:
 		State.RISING:
 			if _t >= RISE_TIME:
 				_set_state(State.FIGHT)
+				_next_move = 0.5
+				pose(&"stand")
 				fight_started.emit()
 		State.FIGHT:
 			_fight(delta)
 
 
-## The fight, for now: face the nearest player and walk at them, stopping
-## STOP_AT short. (His moves are to come.)
+## The fight: between moves he walks at the nearest player round the vats; when
+## his rest is up he picks a move by how far they are.
 func _fight(delta: float) -> void:
-	var p := Coop.nearest(global_position) as Node3D
-	if p == null:
+	_target = Coop.nearest(global_position) as Node3D
+	if move != Move.NONE:
+		_run_move(delta)
 		return
-	var to := p.global_position - global_position
+	if _target == null:
+		return
+	var to := _target.global_position - global_position
 	to.y = 0.0
-	if to.length() > 0.01:
-		# (The model faces its +Z.)
-		var want := atan2(to.x, to.z)
-		rotation.y = lerp_angle(rotation.y, want, 1.0 - exp(-TURN_RATE * delta))
+	var dist := to.length()
+	if dist > 0.01:
+		rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), 1.0 - exp(-TURN_RATE * delta))
+	_next_move -= delta
+	if _next_move <= 0.0 and dist < 12.0:
+		_start_move(dist)
+		return
 	var dir := Vector3.ZERO
-	if to.length() > STOP_AT:
+	if dist > STOP_AT:
 		if _t >= _replan_at or _path_i >= _path.size():
-			_replan(p.global_position)
+			_replan(_target.global_position)
 		dir = _steer(to)
 	velocity.x = dir.x * WALK_SPEED
 	velocity.z = dir.z * WALK_SPEED
-	if not is_on_floor():
-		velocity.y -= 9.8 * delta
-	else:
-		velocity.y = 0.0
+	velocity.y = 0.0 if is_on_floor() else velocity.y - 9.8 * delta
 	move_and_slide()
+	_walking = 1.0 if dir != Vector3.ZERO else 0.0
+	_walk_ph += delta * WALK_SPEED * 3.2 * _walking
+	if _pose_name != &"stand":
+		pose(&"stand")
+
+
+func _start_move(dist: float) -> void:
+	var r := randf()
+	var m := Move.SLAM
+	if dist > 4.5:
+		m = Move.DASH if r < 0.6 else Move.SLAM
+	elif dist < 3.0:
+		m = Move.SPIN if r < 0.55 else Move.SLAM
+	else:
+		m = [Move.DASH, Move.SPIN, Move.SLAM][randi() % 3]
+	begin_move(m)
+
+
+## Into move `m` (the fight picks; a test may too).
+func begin_move(m: Move) -> void:
+	move = m
+	_mt = 0.0
+	_cued = false
+	_hit_once.clear()
+	_walking = 0.0
+	_move_from = global_position
+	velocity = Vector3.ZERO
+	match m:
+		Move.DASH:
+			pose(&"dash_wind")
+		Move.SPIN:
+			_claw_mode = &"legs"
+			pose(&"spin")
+			_spin_yaw = 0.0
+		Move.SLAM:
+			pose(&"crouch")
+			_claw_mode = &"back"
+
+
+func _end_move() -> void:
+	move = Move.NONE
+	_claw_mode = &"carry"
+	_next_move = randf_range(REST.x, REST.y)
+	_spin_yaw = 0.0
+	pose(&"stand")
+
+
+func _run_move(delta: float) -> void:
+	_mt += delta
+	match move:
+		Move.DASH:
+			_dash(delta)
+		Move.SPIN:
+			_spin(delta)
+		Move.SLAM:
+			_slam(delta)
+		Move.STAGGER:
+			velocity = velocity.move_toward(Vector3.ZERO, 12.0 * delta)
+			move_and_slide()
+			if _mt >= STAGGER_TIME:
+				_end_move()
+
+
+## The needle drawn back, then driven straight through where they were.
+func _dash(delta: float) -> void:
+	if _mt < DASH_WIND:
+		if _target != null:
+			var to := _target.global_position + (_target.get("velocity") as Vector3) * 0.2 - global_position
+			to.y = 0.0
+			if to.length() > 0.01:
+				_move_dir = to.normalized()
+				rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), 1.0 - exp(-14.0 * delta))
+		if not _cued and _mt >= DASH_WIND - 0.3:
+			_cue(0.3 + DASH_TIME)
+		return
+	if _mt < DASH_WIND + DASH_TIME:
+		if _pose_name != &"dash":
+			pose(&"dash")
+		velocity = _move_dir * DASH_SPEED
+		var before := global_position
+		move_and_slide()
+		var tip := global_position + Vector3(0.0, 1.35, 0.0) + _move_dir * 1.2
+		for p in Coop.all():
+			var n := p as Node3D
+			if _hit_once.has(n) or n.get("_dead") == true:
+				continue
+			var mid := n.global_position + Vector3(0.0, 1.0, 0.0)
+			var seg := Geometry3D.get_closest_point_to_segment(mid, before + Vector3(0.0, 1.35, 0.0), tip)
+			if seg.distance_to(mid) < DASH_REACH:
+				_hit_once[n] = true
+				_hit(n, DASH_DAMAGE, _move_dir)
+				if move != Move.DASH:
+					return
+		# Stopped by stone, a vat: the dash is over.
+		if get_slide_collision_count() > 0 and (global_position - before).length() < DASH_SPEED * delta * 0.4:
+			_mt = DASH_WIND + DASH_TIME
+		return
+	velocity = Vector3.ZERO
+	pose(&"stand")
+	if _mt >= DASH_WIND + DASH_TIME + DASH_RECOVER:
+		_end_move()
+
+
+## Up on the claw, arms and legs out, spinning; anyone in reach cut.
+func _spin(delta: float) -> void:
+	if _mt < SPIN_RISE:
+		if not _cued and _mt >= SPIN_RISE - 0.25:
+			for p in Coop.all():
+				if (p as Node3D).global_position.distance_to(global_position) < SPIN_REACH + 2.0:
+					_cue_one(p, 0.6)
+			_cued = true
+		return
+	if _mt < SPIN_RISE + SPIN_TIME:
+		_spin_yaw += SPIN_RATE * delta
+		# Drifting after them as it spins.
+		if _target != null:
+			var to := _target.global_position - global_position
+			to.y = 0.0
+			velocity = to.normalized() * 1.6 if to.length() > 1.0 else Vector3.ZERO
+			move_and_slide()
+		for p in Coop.all():
+			var n := p as Node3D
+			if n.get("_dead") == true:
+				continue
+			var gap := Vector2(n.global_position.x - global_position.x, n.global_position.z - global_position.z).length()
+			var due: float = _hit_once.get(n, -1.0)
+			if gap < SPIN_REACH and _mt >= due:
+				_hit_once[n] = _mt + SPIN_EVERY
+				var dir := (n.global_position - global_position)
+				dir.y = 0.0
+				_hit(n, SPIN_DAMAGE, dir.normalized())
+				if move != Move.SPIN:
+					return
+		return
+	if _mt < SPIN_RISE + SPIN_TIME + SPIN_DOWN:
+		_spin_yaw = lerpf(_spin_yaw, roundf(_spin_yaw / TAU) * TAU, 0.3)
+		_claw_mode = &"carry"
+		pose(&"dizzy")
+		return
+	if _mt >= SPIN_RISE + SPIN_TIME + SPIN_DOWN + SPIN_DIZZY:
+		_end_move()
+
+
+## A crouch, a leap, a hang at the top turning onto his back, and down
+## claw-first on where they stood; then on his back a while.
+func _slam(delta: float) -> void:
+	var rise_at := SLAM_CROUCH
+	var hang_at := rise_at + SLAM_RISE
+	var drop_at := hang_at + SLAM_HANG
+	var land_at := drop_at + SLAM_DROP
+	var floor_y := _move_from.y
+	if _mt < rise_at:
+		if _target != null:
+			_move_at = _target.global_position
+		return
+	if _mt < hang_at:
+		pose(&"tuck")
+		var k := (_mt - rise_at) / SLAM_RISE
+		var flat := _move_from.lerp(_move_at, k * 0.6)
+		global_position = Vector3(flat.x, floor_y + SLAM_HEIGHT * sin(k * PI * 0.5), flat.z)
+		return
+	if _mt < drop_at:
+		# The hang: turning over onto his back, still following them a little.
+		pose(&"back")
+		if _target != null:
+			_move_at = _move_at.lerp(_target.global_position, clampf(delta * 2.0, 0.0, 1.0))
+		if not _cued:
+			_cued = true
+			for p in Coop.all():
+				_cue_one(p, SLAM_HANG + SLAM_DROP)
+		var top := _move_from.lerp(_move_at, 0.6)
+		global_position = Vector3(top.x, floor_y + SLAM_HEIGHT + 0.15 * sin(_mt * 9.0), top.z)
+		return
+	if _mt < land_at:
+		var k := (_mt - drop_at) / SLAM_DROP
+		var top := _move_from.lerp(_move_at, 0.6)
+		var p := top.lerp(_move_at, k)
+		global_position = Vector3(p.x, floor_y + SLAM_HEIGHT * (1.0 - k * k), p.z)
+		return
+	if not _cued_land:
+		_cued_land = true
+		global_position = Vector3(_move_at.x, floor_y, _move_at.z)
+		_land()
+	if _mt >= land_at + SLAM_LIE:
+		pose(&"stand")
+		_claw_mode = &"carry"
+	if _mt >= land_at + SLAM_LIE + SLAM_UP:
+		_cued_land = false
+		_end_move()
+
+
+var _cued_land := false
+
+
+## Down claw-first: the floor cracks; close by, a heavy blow; further, thrown
+## down.
+func _land() -> void:
+	var table: Node = surgery.get("table") if surgery != null else null
+	if table != null:
+		table.call("_impact_fx", global_position, 1.0)
+	for p in Coop.all():
+		var n := p as Node3D
+		if n.get("_dead") == true:
+			continue
+		var to := n.global_position - global_position
+		to.y = 0.0
+		var d := to.length()
+		if n.get("_shake") != null:
+			n.set("_shake", maxf(float(n.get("_shake")), 0.7 * clampf(1.0 - d / 12.0, 0.0, 1.0)))
+		if d > SLAM_KNOCK:
+			continue
+		var dir := to.normalized() if d > 0.01 else Vector3.FORWARD
+		var guard := 0
+		if d < SLAM_HIT:
+			guard = _hit(n, SLAM_DAMAGE, dir)
+		if guard == 0 and n.has_method("knock_down"):
+			n.call("knock_down", dir, 6.5)
+
+
+# --- Hitting them ------------------------------------------------------------------------
+
+## The parry cue for everyone near (player.gd `parry_cue`).
+func _cue(listen: float) -> void:
+	_cued = true
+	for p in Coop.all():
+		_cue_one(p, listen)
+
+
+func _cue_one(p: Node, listen: float) -> void:
+	if p.has_method("parry_cue"):
+		p.call("parry_cue", self, listen)
+
+
+## A blow on `p`: 0 it landed, 1 blocked, 2 parried (and he is staggered).
+func _hit(p: Node3D, amount: float, dir: Vector3) -> int:
+	var got := [0]
+	var watch := func(parry: bool, attacker: Node3D) -> void:
+		if attacker == self:
+			got[0] = 2 if parry else 1
+	if p.has_signal("guarded"):
+		p.connect("guarded", watch)
+	if p.has_method("take_damage"):
+		p.call("take_damage", amount, dir, self)
+	if p.has_signal("guarded") and p.is_connected("guarded", watch):
+		p.disconnect("guarded", watch)
+	if got[0] == 2 and move in [Move.DASH, Move.SPIN]:
+		_stagger(-dir)
+	return got[0]
+
+
+## Thrown off a parry: staggered, open.
+func _stagger(away: Vector3) -> void:
+	move = Move.STAGGER
+	_mt = 0.0
+	_claw_mode = &"carry"
+	_spin_yaw = 0.0
+	velocity = Vector3(away.x, 0.0, away.z) * 5.0
+	pose(&"dizzy")
 
 
 # --- Finding his way round the vats ------------------------------------------------------
@@ -331,9 +1042,15 @@ func _player_in_hall() -> Node3D:
 
 # --- Being hit ---------------------------------------------------------------------------
 
+
+# --- Being hit ---------------------------------------------------------------------------
+
 func take_damage(amount: float, from_direction: Vector3 = Vector3.ZERO, _attacker: Node3D = null) -> void:
 	if state != State.FIGHT:
 		return
+	# On his back after the slam, open.
+	if move == Move.SLAM and _cued_land:
+		amount *= SLAM_EXPOSED
 	health = maxf(health - amount, 0.0)
 	var table: Node = surgery.get("table") if surgery != null else null
 	if table != null:
@@ -342,19 +1059,23 @@ func take_damage(amount: float, from_direction: Vector3 = Vector3.ZERO, _attacke
 		_die()
 
 
+## A parry's shove (player.gd `_on_guarded`): staggers him out of the needle or
+## the spin; otherwise a small push.
 func apply_knockback(impulse: Vector3, _stun_time := 0.0) -> void:
 	if state != State.FIGHT:
 		return
-	velocity += Vector3(impulse.x, 0.0, impulse.z) * 0.25
+	if move in [Move.DASH, Move.SPIN]:
+		_stagger(impulse.normalized())
+		return
+	if move == Move.NONE:
+		velocity += Vector3(impulse.x, 0.0, impulse.z) * 0.25
 
 
 func _die() -> void:
 	_set_state(State.DEAD)
 	velocity = Vector3.ZERO
 	collision_layer = 0
-	play(&"die", 0.1)
+	_spin_yaw = 0.0
+	_claw_mode = &"carry"
+	pose(&"dead")
 	defeated.emit()
-
-
-func is_dead() -> bool:
-	return state == State.DEAD

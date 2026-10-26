@@ -26,7 +26,6 @@ const KIT := {
 	"door": preload("res://models/surgery/door.glb"),
 	"console": preload("res://models/surgery/console.glb"),
 	"beam": preload("res://models/surgery/beam.glb"),
-	"surgeon": preload("res://models/surgery/surgeon.glb"),
 	"leverbox": preload("res://models/surgery/leverbox.glb"),
 	"handle": preload("res://models/surgery/handle.glb"),
 }
@@ -76,7 +75,6 @@ var _door: Node3D
 var _door_body: StaticBody3D
 var _console: Node3D
 var _surgeon: Node3D
-var _anim: AnimationPlayer
 var _booth_light: OmniLight3D
 var _console_mats: Array = []
 
@@ -381,25 +379,9 @@ func _build_surgeon() -> void:
 	_booth.add_child(boss)
 	boss.position = Vector3(-_inner + 1.25, BOOTH_FLOOR, mid.z)
 	boss.rotation.y = PI * 0.5
-	_surgeon = _piece("surgeon", boss, Vector3.ZERO, 0.0)
-	boss.call("take_model", _surgeon)
-	var found := _surgeon.find_children("*", "AnimationPlayer", true, false)
-	if not found.is_empty():
-		_anim = found[0] as AnimationPlayer
-		var work := _clip(&"work")
-		if work != &"":
-			_anim.get_animation(work).loop_mode = Animation.LOOP_LINEAR
-			_anim.play(work)
-
-
-## The clip whose name has `key` in it ("work", "alert", "die").
-func _clip(key: StringName) -> StringName:
-	if _anim == null:
-		return &""
-	for n in _anim.get_animation_list():
-		if String(n).to_lower().contains(String(key)):
-			return n
-	return &""
+	# His body is his own now (note 109: a stand-in, surgeon_boss.gd), at work.
+	_surgeon = boss
+	boss.call("pose", &"work")
 
 
 ## Where he stands to fight, in the hall below the booth's far window, facing
@@ -430,27 +412,32 @@ func power_cut(now := false) -> void:
 		for k in 4:
 			lt.tween_property(_booth_light, "light_energy", 0.2 if k % 2 == 0 else 1.2, 0.08)
 		lt.tween_property(_booth_light, "light_energy", 0.35, 0.4)
-	if _anim != null and not surgeon_thrown:
-		var alert := _clip(&"alert")
-		if alert != &"" and not now:
-			_anim.get_animation(alert).loop_mode = Animation.LOOP_NONE
-			_anim.play(alert, 0.3)
-		else:
-			_anim.pause()
+	if not surgeon_thrown:
+		boss.call("pose", &"alert")
 
 
 ## The crystal route (the player climbing out of the powering room, the screen
 ## black): he has come down out of his booth -- the door left standing open
 ## behind him -- and waits in the hall to fight (note 105; note 102 had him
 ## simply gone).
-func leave() -> void:
+## `at` (world; note 109): where he waits for them -- beside the hatch, for the
+## ambush (`ambush`) as they climb out; none: at his spot, to fight. True if he
+## did come down.
+func leave(at := Transform3D.IDENTITY) -> bool:
 	if surgeon_thrown or surgeon_gone:
-		return
+		return false
 	surgeon_gone = true
 	power_cut(true)
 	_swing_door_open()
 	_down_to_the_hall()
-	boss.call("wait_at", _boss_spot())
+	if at == Transform3D.IDENTITY:
+		_arm_him()
+		boss.call("wait_at", _boss_spot())
+	else:
+		boss.call("script_on")
+		boss.global_transform = at
+		boss.call("pose", &"stand")
+	return true
 
 
 func _swing_door_open() -> void:
@@ -534,6 +521,8 @@ func _build_lever() -> void:
 
 
 func _process(_delta: float) -> void:
+	if not _looking.is_empty():
+		_process_look()
 	var down := table == null or bool(table.call("is_depowered"))
 	var kicker: Node = null
 	if not _busy and not door_broken and not down and not surgeon_gone:
@@ -794,11 +783,24 @@ func _throw_lever() -> void:
 
 ## The machine has just died: lying in the hall, he gets up (a beat later) and
 ## the fight is on.
-func surgeon_rises(after := 2.0) -> void:
+## The machine has just died from the booth: once the claw has come home over
+## the table, the scene -- he gets up, goes and takes it, and turns on them
+## (`_claim`).
+func surgeon_rises(after := 0.0) -> void:
 	if boss == null or boss.call("is_dead") or boss.get("state") != BOSS.State.DOWN:
 		return
-	await _wait(after)
-	boss.call("begin_fight")
+	if after > 0.0:
+		await _wait(after)
+	var t := 0.0
+	while table != null and table.get("state") != Table.State.DEAD and t < 8.0:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+	var p := Coop.nearest(boss.global_position) as Node3D
+	if p != null:
+		_claim(p, false)
+	else:
+		_arm_him()
+		boss.call("begin_fight")
 
 
 # --- Saving and resetting ---------------------------------------------------------
@@ -824,6 +826,7 @@ func set_thrown_now() -> void:
 
 ## A save with the machine off: him dead where he fell (`at`), or waiting.
 func restore_boss(dead: bool, at: Transform3D) -> void:
+	_arm_him()
 	if not dead:
 		return
 	_down_to_the_hall()
@@ -840,7 +843,8 @@ func reset_boss() -> void:
 		# down all the same.
 		leave()
 		return
-	if s == BOSS.State.DOWN:
+	_arm_him()
+	if s == BOSS.State.DOWN or s == BOSS.State.SCRIPTED:
 		boss.call("wait_at", _boss_spot())
 	else:
 		boss.call("reset_wait")
@@ -861,3 +865,152 @@ func set_kicked_now() -> void:
 	boss.call("hold_end", &"die")
 	if table != null:
 		table.call("operator_gone")
+
+
+# --- The claw taken, and the words before the fight (note 109) ----------------------
+##
+## The user: "There should then be 2 ways that the surgeon fight starts. The first
+## should be an add on to the climb out of the underground part. The surgeon
+## should knock the player down as hes climbing out of the powering room, and the
+## surgeon should walk over to the table, stand on it, and take the claw off of
+## the robot arm and put it on his back. The cutscene should be dramatic as the
+## surgeon walks up to the player after the player was knocked down, and saying
+## 'who are you' very slowly. The player should then quizically ask who the
+## surgeon is, and the surgeon should say 'No matter, you will die for what
+## you've done'. then starting the battle."
+##
+## The crystal route: `ambush` (surgery_power.gd, as they step off the ladder).
+## The booth route: `surgeon_rises` (after the lever, the claw home). Both go on
+## into `_claim`.
+
+const SUBTITLES := preload("res://scripts/subtitles.gd")
+
+## Everyone's view following him through a scene (`_follow_look`).
+var _looking: Array[Node3D] = []
+
+
+## The claw off the dead machine's arm and on his back -- at once (a save, a
+## reset, a fight begun without the scene).
+func _arm_him() -> void:
+	if boss == null or bool(boss.call("has_claw")) or table == null:
+		return
+	var claw: Node3D = table.call("take_claw")
+	if claw != null:
+		boss.call("mount_claw", claw)
+
+
+func _surgeon_eyes() -> Vector3:
+	return boss.global_position + Vector3(0.0, 1.75, 0.0)
+
+
+func _process_look() -> void:
+	for n in _looking:
+		if is_instance_valid(n):
+			n.call("scene_look_at", _surgeon_eyes(), 4.0)
+
+
+## The crystal route: as `p` steps off the ladder he is on them -- a backhand
+## that puts them on the floor -- and the scene goes on (`_claim`).
+func ambush(p: Node3D) -> void:
+	if boss == null or boss.call("is_dead") or boss.get("state") != BOSS.State.SCRIPTED or _busy:
+		return
+	_busy = true
+	p.call("begin_cutscene")
+	boss.call("face", p.global_position)
+	boss.call("pose", &"strike")
+	await _wait(0.18)
+	if table != null:
+		table.call("_sparks", p.global_position + Vector3(0.0, 1.5, 0.0), Color(1.0, 0.8, 0.55), 18)
+	p.set("_shake", 0.8)
+	# Down: thrown back a stride, the view on the floor, rolled over.
+	var back := p.global_position - boss.global_position
+	back.y = 0.0
+	back = back.normalized() if back.length() > 0.01 else -p.global_basis.z
+	var t := create_tween().set_ignore_time_scale(true)
+	t.tween_property(p, "global_position", p.global_position + back * 1.1, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	p.call("scene_lean", Vector3(0.0, -1.3, 0.35), 9.0)
+	p.call("scene_frame", 0.0, 24.0, 6.0)
+	p.call("scene_look_at", _surgeon_eyes(), 5.0)
+	boss.call("pose", &"stand")
+	await _wait(1.1)
+	_busy = false
+	_claim(p, true)
+
+
+## He goes to the table, up onto it, takes the claw off the arm and onto his
+## back, comes for them -- `knocked`: over them where they lie -- and speaks;
+## then the fight.
+func _claim(p: Node3D, knocked: bool) -> void:
+	if _busy:
+		return
+	_busy = true
+	var everyone: Array[Node3D] = []
+	for q in Coop.all():
+		var n := q as Node3D
+		if n != null and n.get("_dead") != true:
+			everyone.append(n)
+			if n.get("in_cutscene") != true:
+				n.call("begin_cutscene")
+	var bars := WOOD_DOOR.letterbox(self)
+	boss.call("script_on")
+	_looking = everyone
+	# Up off the floor (the booth route: he was out cold).
+	if not knocked:
+		boss.call("pose", &"crouch")
+		await _wait(0.7)
+		boss.call("pose", &"stand")
+		await _wait(0.4)
+	# To the table, the side nearer him, and up onto it.
+	var tb := table.global_position
+	var across: Vector3 = table.global_basis.x.normalized()
+	var side := 1.0 if (boss.global_position - tb).dot(across) > 0.0 else -1.0
+	await boss.call("walk_to", tb + across * side * 1.45)
+	boss.call("face", tb)
+	await boss.call("hop_to", tb + Vector3(0.0, float(Table.TOP), 0.0), 0.5)
+	# The claw off the arm, onto his back.
+	boss.call("pose", &"reach")
+	await _wait(0.7)
+	var claw: Node3D = table.call("take_claw")
+	if claw != null:
+		boss.call("mount_claw", claw)
+	for n in everyone:
+		n.set("_shake", maxf(float(n.get("_shake")), 0.25))
+	await _wait(0.6)
+	boss.call("pose", &"stand")
+	await _wait(0.3)
+	# Down, toward them.
+	var to := p.global_position - tb
+	to.y = 0.0
+	to = to.normalized() if to.length() > 0.01 else across
+	await boss.call("hop_to", tb + to * 1.9, 0.45)
+	var stop := p.global_position - to * (1.5 if knocked else 3.2)
+	stop.y = tb.y
+	if knocked:
+		await boss.call("walk_to", stop)
+	else:
+		# Under the booth's window, looking up at them.
+		var under := Vector3(p.global_position.x, tb.y, p.global_position.z)
+		await boss.call("walk_to", under - to * 2.4)
+	boss.call("face", p.global_position)
+	boss.call("pose", &"loom" if knocked else &"alert")
+	await _wait(0.6)
+	# The words.
+	var sub := SUBTITLES.open(self)
+	await sub.say("THE SURGEON", "Who...   are...   you...", 0.15, 1.0)
+	await sub.say("YOU", "...Who are you?", 0.06, 0.9)
+	await sub.say("THE SURGEON", "No matter. You will die for what you've done.", 0.055, 1.2)
+	sub.close()
+	_looking = []
+	# Up (they were on the floor), and it begins.
+	if knocked:
+		p.call("scene_lean", Vector3.ZERO, 3.0)
+		p.call("scene_frame", 0.0, 0.0, 3.0)
+		await _wait(0.6)
+	WOOD_DOOR.letterbox_out(bars)
+	for n in everyone:
+		if is_instance_valid(n):
+			n.call("scene_look_at", null)
+			if n.get("in_cutscene") == true:
+				n.call("end_cutscene")
+	boss.call("begin_fight", true)
+	_busy = false

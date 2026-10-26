@@ -591,7 +591,7 @@ static func _knuckle(f: int) -> Vector3:
 ## Each finger swung `open` radians out about its knuckle (in, below 0), and
 ## trembling by `shake`.
 func _pose_fingers(open: float, shake: float) -> void:
-	if _skel == null:
+	if _skel == null or claw_taken:
 		return
 	var now := _now()
 	for f in FINGER_AT.size():
@@ -809,17 +809,15 @@ func set_dead_now(at: Vector3, _yaw: float) -> void:
 	_throw_prisoner(true)
 	for c in _cuffs:
 		c.rotation.z = 1.9 * signf(c.position.x)
-	var local: Vector3 = room.to_local(at) if room != null else Vector3.ZERO
-	if Vector2(local.x, local.z).length() < 2.0:
-		local = Vector3(2.6, 0.0, 1.0)
-	_b = Vector2(local.x, local.z)
+	# Over the table (note 109), wherever an old save had it lie.
+	_b = Vector2.ZERO
 	_bv = Vector2.ZERO
 	_b_goal = _b
-	_o = Vector2(0.35, 0.2)
+	_o = Vector2.ZERO
 	_open = 0.4
 	_open_goal = 0.4
 	_shaking = 0.0
-	_len = ROOT_Y - CLAW_LEN * 0.95
+	_len = _dead_len()
 	_len_goal = _len
 	_update_wrist()
 	_apply_pose(0.0)
@@ -2050,24 +2048,38 @@ func _let_go(now: float, thrown: bool) -> void:
 
 ## The power gone: the drives coast to a stop, the hoist runs slack -- the claw
 ## falls, swinging, and crashes into the floor -- and every light dies.
+## Note 109 ("The Claw should revert to over the table when powered off"): the
+## power going, it runs home -- the gantry back over the table on what is left,
+## slowing -- and the arm pays out until the claw hangs just over the table
+## (DEAD_TIP over its top), where the surgeon comes for it. Its lights fade as
+## it goes.
+const DEAD_TIP := 0.55
+const DEAD_TIME := 4.5
+
+
+func _dead_len() -> float:
+	return ROOT_Y - (TOP + DEAD_TIP + CLAW_LEN * 0.95)
+
+
 func _die_out(delta: float) -> void:
-	_b_goal = _b + _bv * 0.6
-	_b_speed = 0.4
+	_b_goal = Vector2.ZERO
+	_b_speed = 0.35
 	_swing_lock = 0.0
-	var fall := clampf((_t - 0.6) / 0.7, 0.0, 1.0)
-	var floor_len := ROOT_Y - CLAW_LEN * 0.95
-	if _t > 0.6:
-		_hoist = 2.0 + 14.0 * fall
-		_len_goal = floor_len
-	if not _hit_done and _t > 0.6 and _len >= floor_len - 0.05:
+	_open_goal = 0.4
+	var home_ := _b.length() < 0.25
+	if home_ or _t > 2.6:
+		_len_goal = _dead_len()
+		_hoist = 1.4
+	else:
+		_len_goal = ROOT_Y - HOVER_Y - 0.4
+		_hoist = 2.0
+	if not _hit_done and home_ and absf(_len - _dead_len()) < 0.05:
 		_hit_done = true
-		_impact_fx(room.to_global(Vector3(_w.x, 0.0, _w.z)), 1.0)
-		for p in Coop.all():
-			var n := p as Node3D
-			if n != null and n.get("_shake") != null and n.global_position.distance_to(room.to_global(_w)) < 16.0:
-				n.set("_shake", maxf(float(n.get("_shake")), 0.6))
-	_o += Vector2(sin(_t * 3.0), cos(_t * 2.3)) * 0.12 * delta * (1.0 - fall)
-	if _t >= 3.2:
+		_sparks(room.to_global(_w + _axis * CLAW_LEN), Color(1.0, 0.75, 0.45), 8)
+	_o += Vector2(sin(_t * 3.0), cos(_t * 2.3)) * 0.05 * delta
+	if _t >= DEAD_TIME and _hit_done:
+		_die_done()
+	elif _t >= DEAD_TIME + 3.0:
 		_die_done()
 
 
@@ -2166,7 +2178,7 @@ func _apply_pose(delta: float) -> void:
 			if _t >= 1.25 and _prisoner.get_parent() == _body:
 				_throw_prisoner(false)
 		State.DYING:
-			power = clampf(1.0 - _t / 2.6, 0.0, 1.0) * (0.5 + 0.5 * absf(sin(_t * 31.0)))
+			power = clampf(1.0 - _t / 4.0, 0.0, 1.0) * (0.5 + 0.5 * absf(sin(_t * 31.0)))
 			roll = 0.01 * sin(_t * 21.0) * clampf(1.0 - _t / 2.0, 0.0, 1.0)
 		State.DEAD:
 			power = 0.0
@@ -2188,8 +2200,9 @@ func _apply_pose(delta: float) -> void:
 	core_glow = _power * beat
 	_core_light.light_energy = 1.6 * core_glow
 	_core_light.visible = core_glow > 0.02
-	_eye_light.light_energy = (1.4 + 0.4 * float(level) / LEVEL_MAX) * _power * (1.0 + 0.8 * _flex)
-	_eye_light.visible = _power > 0.03
+	if not claw_taken:
+		_eye_light.light_energy = (1.4 + 0.4 * float(level) / LEVEL_MAX) * _power * (1.0 + 0.8 * _flex)
+		_eye_light.visible = _power > 0.03
 	_lamp.light_energy = 2.2 * _power
 	_lamp.visible = _power > 0.03
 	for pair in _power_mats:
@@ -2198,6 +2211,11 @@ func _apply_pose(delta: float) -> void:
 	var hot := clampf(_flex, 0.0, 1.0) * _power if state in [State.REAR, State.FETCH, State.FERRY, State.HUNT] else 0.0
 	for m in _claw_mats:
 		var mat: StandardMaterial3D = m
+		if claw_taken:
+			# His now: lit as he keeps it (surgeon_boss.gd).
+			mat.emission = Color(1.0, 0.35, 0.15)
+			mat.emission_energy_multiplier = 0.6
+			continue
 		mat.emission = Color.WHITE.lerp(Color(1.0, 0.35, 0.15), hot)
 		mat.emission_energy_multiplier = 0.3 * (0.3 + 0.7 * _power) + 1.2 * hot
 	_pose_arm(delta)
@@ -2228,7 +2246,11 @@ func _pose_arm(delta: float) -> void:
 		shudder = 0.025 * _shaking * sin(t * 47.0)
 		wobble = Vector3(sin(t * 53.0), 0.0, cos(t * 59.0)) * 0.018 * _shaking
 	var claw_basis := Basis(x, y, z) * Basis(Vector3.UP, _spin + shudder) * Basis(Vector3.RIGHT, shudder)
-	_claw.global_transform = rt * Transform3D(claw_basis, _w + wobble)
+	# Taken off the arm by the surgeon (note 109): his now.
+	if claw_taken:
+		pass
+	else:
+		_claw.global_transform = rt * Transform3D(claw_basis, _w + wobble)
 	# The fingers.
 	if delta > 0.0:
 		_open = lerpf(_open, _open_goal, clampf(delta * _open_rate, 0.0, 1.0))
@@ -2320,3 +2342,19 @@ func _feed_audio() -> void:
 
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
+
+
+# --- The claw taken (note 109) ----------------------------------------------------------
+
+## The surgeon has it off the arm (surgeon_boss.gd `mount_claw`): it is no longer
+## posed here; the arm ends empty at its wrist.
+var claw_taken := false
+
+
+## Unhooked from the arm and handed over (only once the machine is dead).
+func take_claw() -> Node3D:
+	if claw_taken or not is_depowered():
+		return null
+	claw_taken = true
+	_sparks(room.to_global(_w), Color(1.0, 0.8, 0.5), 16)
+	return _claw

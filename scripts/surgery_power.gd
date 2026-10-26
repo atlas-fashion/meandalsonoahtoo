@@ -752,9 +752,11 @@ func _climb_up() -> void:
 	if not _ok():
 		_abort()
 		return
-	# Black: while no one can see, the booth is emptied if the crystal is out.
+	# Black: while no one can see, the booth is emptied if the crystal is out --
+	# and he waits for them beside the hatch (note 109: `ambush`, below).
+	var ambush := false
 	if crystal_gone and not surgeon_gone:
-		_surgeon_leaves()
+		ambush = _surgeon_leaves(true)
 	var top := global_position
 	var under := Vector3(top.x, top.y - 0.6 - DARK_STRETCH, top.z)
 	_player.global_position = under
@@ -770,13 +772,25 @@ func _climb_up() -> void:
 		return
 	_player.call("end_climb")
 	_busy = false
+	if ambush and control != null:
+		control.call("ambush", _player)
 
 
-func _surgeon_leaves() -> void:
+## `by_hatch` (note 109): he waits beside it, for the ambush, facing it.
+func _surgeon_leaves(by_hatch := false) -> bool:
 	surgeon_gone = true
+	var came := false
 	if control != null:
-		control.call("leave")
+		if by_hatch:
+			var along := _along()
+			var at := global_position + along * (HOLE_R + 0.62 + 1.7)
+			at.y = global_position.y
+			var facing := Basis(Vector3.UP, atan2(-along.x, -along.z))
+			came = bool(control.call("leave", Transform3D(facing, at)))
+		else:
+			came = bool(control.call("leave"))
 	surgeon_left.emit()
+	return came
 
 
 # --- The crystal --------------------------------------------------------------------

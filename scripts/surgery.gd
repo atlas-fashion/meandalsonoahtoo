@@ -1313,7 +1313,11 @@ func restore_state(data: Dictionary) -> void:
 ## waiting in the hall to fight.
 func _restore_surgeon(data: Dictionary) -> void:
 	var dead: Array = data.get("surgeon_dead", [])
-	if control == null or dead.size() < 4:
+	if control == null:
+		return
+	if dead.size() < 4:
+		# Alive: the claw is on his back all the same (note 109).
+		control.call("restore_boss", false, Transform3D.IDENTITY)
 		return
 	var at := Transform3D(Basis(Vector3.UP, global_rotation.y + float(dead[3])), to_global(Vector3(float(dead[0]), float(dead[1]), float(dead[2]))))
 	control.call("restore_boss", true, at)
