@@ -182,6 +182,14 @@ const THROW_SOLDIER := 6.0
 const CARGO_HANG := 1.65
 ## Over the pens' bars (2.4 m) and the vats (1.9) its fingertips stay this high.
 const CLEAR_TIP := 3.0
+## FETCH's throw (note 105): the wind-up -- the trolley hauled FETCH_HAUL back,
+## the arm swung FETCH_SWING back on its hinge (the wrist out from under the
+## trolley) over FETCH_WIND -- and the whip through, FETCH_WHIP, let go of half
+## way.
+const FETCH_WIND := 0.85
+const FETCH_HAUL := 1.6
+const FETCH_SWING := 1.15
+const FETCH_WHIP := 0.22
 ## --- The fingers (note 103) ---------------------------------------------------------
 ## claw.glb is one mesh; `_rig_claw` skins it to a hub and its three fingers,
 ## each hinged at its knuckle and swung out (+) or in (-) about it, in radians.
@@ -1329,7 +1337,7 @@ func _vat_to_fetch() -> Node3D:
 			continue
 		var at: Vector3 = room.to_local(vat.global_position)
 		var from_player := Vector2(at.x - player.x, at.z - player.z).length()
-		if from_player < 4.0 or from_player > 14.0 or _stood_on(vat):
+		if from_player < 4.0 or from_player > 14.0 or _stood_on(vat) or vat.get("entry") == true:
 			continue
 		var d := _flat_to(at) + (0.0 if vat.get("kind") == "vat_gold" else 30.0)
 		if d < best_d:
@@ -1406,19 +1414,32 @@ func _fetch(now: float, delta: float) -> void:
 			if _step_t > 1.4:
 				next.call(3)
 		3:
-			# Drawn back away from them, shaking -- then thrown.
+			# The wind-up (note 105: "a larger swing back before letting go"):
+			# the trolley hauled back away from them and the arm swung right
+			# back on its hinge, over FETCH_WIND, shaking as it comes to the
+			# top -- then whipped through toward them, and let go of half way.
 			var p := _aim_point(_target, 0.3)
 			var away := Vector2(_w.x - p.x, _w.z - p.z)
 			away = away.normalized() if away.length() > 0.01 else Vector2.RIGHT
-			_b_goal = Vector2(v.x, v.z) + away * 0.9
-			_len_goal = _len_for_tip(CLEAR_TIP + 0.9)
-			_shaking = 1.0
-			_flex = clampf(_step_t / 0.5, 0.0, 1.0)
-			if _step_t > 0.55:
+			_swing_lock = 0.0
+			_len_goal = _len_for_tip(CLEAR_TIP + 1.1)
+			if _step_t < FETCH_WIND:
+				var k := smoothstep(0.0, 1.0, _step_t / FETCH_WIND)
+				_b_goal = Vector2(v.x, v.z) + away * (0.9 + FETCH_HAUL * k)
+				_o = _o.lerp(away * FETCH_SWING * k, clampf(delta * 8.0, 0.0, 1.0))
+				_ov = Vector2.ZERO
+				_shaking = k
+				_flex = k
+			else:
 				_shaking = 0.0
-				_throw_piece()
-				_ov -= away * 2.5
-				next.call(4)
+				var whip := (_step_t - FETCH_WIND) / FETCH_WHIP
+				var to := -away * FETCH_SWING * 0.8
+				_ov = (to - _o) * 14.0
+				if whip >= 0.45 and _held_piece != null:
+					_throw_piece()
+				if whip >= 1.0:
+					_ov = -away * 3.0
+					next.call(4)
 		4:
 			_open_goal = FINGER_OPEN * 0.8
 			_open_rate = 10.0

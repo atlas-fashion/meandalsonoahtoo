@@ -76,6 +76,15 @@ var model: Node3D
 var home := Transform3D.IDENTITY
 ## Which tub ("vat_gold": the prostheses the claw throws; "vat_bones").
 var kind := "vat_bones"
+## Note 105: the vats across the ways in are bigger (`grow` x, set before it
+## enters the tree) -- 1.45 m in radius, so the 3.4 m corridor mouth they stand
+## in has no gap a player fits through -- and `entry`: the claw leaves them be.
+var grow := 1.0
+var entry := false
+var radius := RADIUS
+var height := HEIGHT
+## A player has begun shoving it (the entrance scene starts on it, note 105).
+signal shove_started(player: Node3D)
 ## The lid on (a world reset puts it back on).
 var lid_on := true
 var _lid: Node3D
@@ -93,9 +102,13 @@ var _jolted := false
 ## How many players shoved it this tick (`_shove`).
 var _pushers := 0
 var _last_shove := -100000
+## The last player to shove it.
+var _pusher: Node3D = null
 
 
 func _ready() -> void:
+	radius = RADIUS * grow
+	height = HEIGHT * grow
 	add_to_group(&"surgery_vat")
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	collision_layer = 1 | 2
@@ -104,8 +117,8 @@ func _ready() -> void:
 	# The table is solid on 1 and 3 (hurtable): 3 stands in for it.
 	collision_mask = 2 | 4 | STOP_LAYER
 	var shape := CylinderShape3D.new()
-	shape.radius = RADIUS
-	shape.height = HEIGHT - STAND_OFF
+	shape.radius = radius
+	shape.height = height - STAND_OFF
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
 	cs.position = Vector3(0.0, STAND_OFF + shape.height * 0.5, 0.0)
@@ -122,7 +135,7 @@ func fit_lid() -> void:
 	load("res://scripts/surgical_table.gd").grade(_lid)
 	for g in _lid.find_children("*", "GeometryInstance3D", true, false):
 		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	_lid_prompt = Interact.prompt("E   Lift the lid", Vector3(0.0, RIM.get(kind, 1.85), 0.0))
+	_lid_prompt = Interact.prompt("E   Lift the lid", Vector3(0.0, rim(), 0.0))
 	add_child(_lid_prompt)
 	_lid.transform = _lid_pose(true)
 
@@ -131,13 +144,13 @@ func fit_lid() -> void:
 ## the plate's corners do not line up with the hoops), else stood on its edge
 ## against the tub's side, leaning in.
 func _lid_pose(on: bool) -> Transform3D:
-	var size := Vector3(LID_SIZE / 1.35, 0.7, LID_SIZE / 1.164)
-	var rim: float = RIM.get(kind, 1.85)
+	var size := Vector3(LID_SIZE / 1.35, 0.7, LID_SIZE / 1.164) * grow
+	var rim := rim()
 	if on:
 		return Transform3D(Basis(Vector3.UP, 0.4).scaled(size), Vector3(0.0, rim - 0.02, 0.0))
 	# On its edge on the floor, leaning back against the tub (+X of the vat).
 	var b := Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.RIGHT, PI * 0.5 - 0.2)
-	return Transform3D(b.scaled(size), Vector3(RADIUS + 0.28, LID_SIZE * 0.5 - 0.05, 0.0))
+	return Transform3D(b.scaled(size), Vector3(radius + 0.28, LID_SIZE * grow * 0.5 - 0.05, 0.0))
 
 
 ## Lifts the lid off (`on` false) or puts it back, over LID_TIME: up off the
@@ -168,7 +181,7 @@ func _process(_delta: float) -> void:
 	if _lid_busy or not _anyone_near():
 		_lid_prompt.visible = false
 		return
-	var p := Interact.chooser(model if model != null else self, RADIUS + 1.6, 2.4, 3.2, 0.1)
+	var p := Interact.chooser(model if model != null else self, radius + 1.6, 2.4, 3.2, 0.1)
 	# Not from on top of it: a player standing on the lid cannot lift it.
 	if p != null and (p as Node3D).global_position.y > global_position.y + 1.0:
 		p = null
@@ -187,7 +200,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## A player standing on it (on the lid or the rim), not beside it.
 func _on_top(n: Node3D) -> bool:
-	return n.global_position.y > global_position.y + HEIGHT * 0.6
+	return n.global_position.y > global_position.y + height * 0.6
 
 
 ## Shoved by a scene (surgery.gd's entrance): slid to `to` (world, on the
@@ -219,8 +232,8 @@ func _make_dust() -> CPUParticles3D:
 	p.local_coords = false
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
 	p.emission_ring_axis = Vector3.UP
-	p.emission_ring_radius = RADIUS * 0.95
-	p.emission_ring_inner_radius = RADIUS * 0.85
+	p.emission_ring_radius = radius * 0.95
+	p.emission_ring_inner_radius = radius * 0.85
 	p.emission_ring_height = 0.05
 	p.direction = Vector3(0.0, 1.0, 0.0)
 	p.spread = 70.0
@@ -282,6 +295,8 @@ func _physics_process(delta: float) -> void:
 	if pushers > 0.0 and shove.length_squared() > 0.01:
 		shove = shove.normalized()
 		_last_shove = Time.get_ticks_msec()
+		if _push_t <= 0.0:
+			shove_started.emit(_pusher)
 		_push_t += delta
 		if _push_t >= BREAKAWAY:
 			if not _jolted:
@@ -332,7 +347,7 @@ func _sway(delta: float) -> void:
 	var local_axis := (global_basis.inverse() * across).normalized()
 	if local_axis.length_squared() < 0.5:
 		local_axis = Vector3.RIGHT
-	model.transform = Transform3D(Basis(local_axis, _rock), model.transform.origin)
+	model.transform = Transform3D(Basis(local_axis, _rock).scaled(Vector3.ONE * grow), model.transform.origin)
 
 
 ## The shove on it this tick: the sum of the directions (from them to it) of
@@ -357,7 +372,7 @@ func _shove() -> Vector3:
 		if not touching:
 			var gap := n.global_position - global_position
 			gap.y = 0.0
-			touching = gap.length() < RADIUS + TOUCH
+			touching = gap.length() < radius + TOUCH
 		if not touching:
 			continue
 		var input: Vector2 = n.call("_move_input")
@@ -373,6 +388,7 @@ func _shove() -> Vector3:
 			continue
 		sum += to.normalized()
 		_pushers += 1
+		_pusher = n
 	return sum
 
 
@@ -384,7 +400,7 @@ func _player_ahead() -> bool:
 			continue
 		var to := n.global_position - global_position
 		to.y = 0.0
-		if to.length() < RADIUS + 0.5 and to.normalized().dot(_dir) > 0.35:
+		if to.length() < radius + 0.5 and to.normalized().dot(_dir) > 0.35:
 			return true
 	return false
 
@@ -395,11 +411,11 @@ func _anyone_near() -> bool:
 		if n == null:
 			continue
 		var to := n.global_position - global_position
-		if absf(to.y) < 3.0 and Vector2(to.x, to.z).length() < RADIUS + 1.5:
+		if absf(to.y) < 3.0 and Vector2(to.x, to.z).length() < radius + 1.5:
 			return true
 	return false
 
 
 ## The tub's rim over the floor (its kind's).
 func rim() -> float:
-	return RIM.get(kind, 1.85)
+	return float(RIM.get(kind, 1.85)) * grow

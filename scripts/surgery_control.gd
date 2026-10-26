@@ -1,27 +1,23 @@
 extends Node3D
 
-## The surgery's CONTROL ROOM and its SURGEON (2026-10-22, note 99; note 102: no
-## longer a way in or a way to stop the machine; note 104: both again -- see "The
-## way in from the hall" below: the landing, the kick, the surgeon thrown out of
-## the window, the lever). Note 99 had him killed in a
-## cutscene behind a door kicked in at the top of a freight lift, and the master
-## lever thrown; the user then asked for the crystal under the floor
-## (surgery_power.gd) to be the machine's power, "and when the player comes back
-## up out of the powering room after removing the crystal from the room, the
-## surgeon should be gone." The lift, the kick and the scene are gone (asked:
-## the booth stays, no kick-in).
+## The surgery's CONTROL ROOM and its SURGEON (2026-10-22, note 99; 102; 104;
+## 105). Built by surgery.gd in its plan frame, up against the -X wall over the
+## INTAKE: a timber booth on an iron platform at BOOTH_FLOOR -- leaded windows
+## over the hall and at its far end (note 101's glazing), a door at its near
+## end onto a LANDING in the hall's corner, a plank roof -- on oak posts. In it
+## the CONSOLE, the master LEVER, and the SURGEON at the console
+## (models/surgery/surgeon.glb, the Meshy-rigged character; a boss body of his
+## own, surgeon_boss.gd).
 ##
-## Built by surgery.gd in its plan frame, up against the -X wall over the
-## INTAKE: a timber booth on an iron platform -- leaded windows over the hall
-## (note 101's glazing), a door at the end (shut), a plank roof -- on oak posts.
-## In it the CONSOLE of levers and gauges and the SURGEON at it
-## (models/surgery/surgeon.glb, the Meshy-rigged character; his "work" clip),
-## working the claw, seen through the glass from the hall.
-##
-## `power_cut`: the crystal is out -- the console's lamps die and his lamp
-## gutters; he stays at it, staring. `leave`: done while the player climbs out
-## of the powering room with the screen black -- he is gone, the booth's door
-## stands open, the lamp low.
+## Two ways to switch the machine off, and both end with him to fight
+## (note 105):
+## - THE BOOTH: up onto the table, across the vats, a jump from a vat shoved up
+##   to the landing; E at the door (`_storm`): the kick throws the door in and
+##   him out of the far window onto the flags; E at the lever (`_pull_lever`):
+##   the machine dies and he gets up (`surgeon_rises`).
+## - THE CRYSTAL (surgery_power.gd): `power_cut` -- his lamps die, he turns from
+##   the window; `leave` -- done while the player climbs out with the screen
+##   black: he has come down into the hall, the door left open, and waits.
 
 const KIT := {
 	"platform": preload("res://models/surgery/platform.glb"),
@@ -31,6 +27,8 @@ const KIT := {
 	"console": preload("res://models/surgery/console.glb"),
 	"beam": preload("res://models/surgery/beam.glb"),
 	"surgeon": preload("res://models/surgery/surgeon.glb"),
+	"leverbox": preload("res://models/surgery/leverbox.glb"),
+	"handle": preload("res://models/surgery/handle.glb"),
 }
 const PLANKS := preload("res://textures/surgery_planks.png")
 const WOOD_DOOR := preload("res://scripts/wood_door.gd")
@@ -39,7 +37,7 @@ const Vat := preload("res://scripts/surgery_vat.gd")
 const Table := preload("res://scripts/surgical_table.gd")
 
 ## The booth's floor (its top) and its walls' height.
-const BOOTH_FLOOR := 3.6
+const BOOTH_FLOOR := 2.9
 const BOOTH_H := 2.3
 ## The door wall's opening: its middle across the wall (model +X, measured off
 ## the piece) and its width.
@@ -52,9 +50,13 @@ const TURN_TIME := 0.3
 const RUSH_TIME := 0.2
 const SLOWMO := 0.3
 const SLOWMO_TIME := 0.3
-## A player on a vat this near the landing or the booth (from the vat's middle
-## to their edges) climbs up and the scene starts (note 104).
-const CLIMB_NEAR := 2.2
+## The lever (note 105): the kit's lever box, scaled to the booth, its handle
+## this high on it, up (rest) and pulled.
+const LEVER_SCALE := 0.85
+const LEVER_HEIGHT := 1.42
+const HANDLE_UP := -0.35
+const HANDLE_DOWN := 2.4
+const BOSS := preload("res://scripts/surgeon_boss.gd")
 
 var surgery: Node3D
 var table: Node3D
@@ -79,6 +81,14 @@ var surgeon_thrown := false
 var _busy := false
 var _hall_pane: MeshInstance3D
 var _hall_window: Node3D
+var _end_pane: MeshInstance3D
+## Note 105: the surgeon as a boss (surgeon_boss.gd), the lever, the prompts.
+var boss: CharacterBody3D
+var lever_pulled := false
+var _lever: Node3D
+var _handle: Node3D
+var _door_prompt: Interact.Prompt
+var _lever_prompt: Interact.Prompt
 
 
 func setup(surgery_: Node3D, table_: Node3D, inner: float, cell: float) -> void:
@@ -89,6 +99,7 @@ func setup(surgery_: Node3D, table_: Node3D, inner: float, cell: float) -> void:
 	_build_booth()
 	_build_surgeon()
 	_build_landing()
+	_build_lever()
 
 
 # --- The booth -------------------------------------------------------------------
@@ -151,6 +162,7 @@ func _build_booth() -> void:
 	var end := _piece("boothwindow", _booth, Vector3(mid.x, BOOTH_FLOOR, z1 - 0.125), 0.0)
 	end.scale = Vector3(_c / 5.94, BOOTH_H / 2.5, 1.0)
 	_glaze(end)
+	_end_pane = end.get_node_or_null("Pane") as MeshInstance3D
 	_box(_booth, Vector3(_c, BOOTH_H, 0.25), Vector3(mid.x, BOOTH_FLOOR + BOOTH_H * 0.5, z1 - 0.125))
 	# The door's end, facing the lift; its opening at DOOR_X across it (the piece
 	# turned to face -Z, so its +X runs along -X).
@@ -269,9 +281,19 @@ static func _without_panes(mesh: Mesh) -> Mesh:
 
 # --- The surgeon ------------------------------------------------------------------
 
+## He is a body (surgeon_boss.gd, note 105) with the Meshy model under it, at his
+## console, working.
 func _build_surgeon() -> void:
 	var mid := booth_centre()
-	_surgeon = _piece("surgeon", _booth, Vector3(-_inner + 1.25, BOOTH_FLOOR, mid.z), PI * 0.5)
+	boss = CharacterBody3D.new()
+	boss.set_script(BOSS)
+	boss.name = "Surgeon"
+	boss.set("surgery", surgery)
+	_booth.add_child(boss)
+	boss.position = Vector3(-_inner + 1.25, BOOTH_FLOOR, mid.z)
+	boss.rotation.y = PI * 0.5
+	_surgeon = _piece("surgeon", boss, Vector3.ZERO, 0.0)
+	boss.call("take_model", _surgeon)
 	var found := _surgeon.find_children("*", "AnimationPlayer", true, false)
 	if not found.is_empty():
 		_anim = found[0] as AnimationPlayer
@@ -289,6 +311,14 @@ func _clip(key: StringName) -> StringName:
 		if String(n).to_lower().contains(String(key)):
 			return n
 	return &""
+
+
+## Where he stands to fight, in the hall below the booth's far window, facing
+## the middle (world): where the kick throws him (`_landing_spot`).
+func _boss_spot() -> Transform3D:
+	var at := global_transform * _landing_spot()
+	var to := surgery.global_position - at
+	return Transform3D(Basis(Vector3.UP, atan2(to.x, to.z)), at)
 
 
 # --- The power cut, and after ---------------------------------------------------
@@ -320,20 +350,23 @@ func power_cut(now := false) -> void:
 			_anim.pause()
 
 
-## Gone (the player climbing out of the powering room, the screen black): no
-## surgeon, the door left standing open behind him.
+## The crystal route (the player climbing out of the powering room, the screen
+## black): he has come down out of his booth -- the door left standing open
+## behind him -- and waits in the hall to fight (note 105; note 102 had him
+## simply gone).
 func leave() -> void:
-	# Thrown out of the booth (note 104): he lies in the hall.
-	if surgeon_thrown:
-		return
-	if surgeon_gone:
+	if surgeon_thrown or surgeon_gone:
 		return
 	surgeon_gone = true
 	power_cut(true)
-	if _anim != null:
-		_anim.stop()
-	_surgeon.visible = false
-	_surgeon.process_mode = Node.PROCESS_MODE_DISABLED
+	_swing_door_open()
+	_down_to_the_hall()
+	boss.call("wait_at", _boss_spot())
+
+
+func _swing_door_open() -> void:
+	if door_broken:
+		return
 	# Swung on its edge (the model's -X), not about its middle.
 	var edge := Vector3(-DOOR_W * 0.5, 0.0, 0.0)
 	var pivot := _door.transform * edge
@@ -342,19 +375,34 @@ func leave() -> void:
 	_door_body.collision_layer = 0
 
 
+## His body out of the booth into the hall's frame, keeping where it is.
+func _down_to_the_hall() -> void:
+	if boss.get_parent() == surgery:
+		return
+	boss.reparent(surgery, true)
 
-# --- The way in from the hall (note 104) -------------------------------------------
+
+# --- The way in from the hall (notes 104, 105) ------------------------------------
 ##
-## The user: "make the control room to where the player can push a vat over to
-## it, jump on the vat, and start a cutscene where the player kicks the door
-## down, throw the surgeon out of the control room down to the surgery room, and
-## power off the system from the control room. The player has to start by
-## jumping on the middle table, then to the vats." A vat (1.9 m) is too tall to
-## jump onto from the floor; the table (1.2 m) is not, and from it the vats
-## round the middle can be reached, and from vat to vat the rest. A player
-## standing on a vat shoved up beside the booth (CLIMB_NEAR) climbs up onto the
-## LANDING outside its door -- the iron platform the freight lift used to stop
-## at (note 99), back in the corner -- and the scene runs (`_storm`).
+## Note 104 (the user): "make the control room to where the player can push a
+## vat over to it, jump on the vat, and start a cutscene where the player kicks
+## the door down, throw the surgeon out of the control room down to the surgery
+## room, and power off the system from the control room. The player has to start
+## by jumping on the middle table, then to the vats." Note 105: "Make the
+## control room lower, so the player can actually jump onto the landing by the
+## control room door. Make the cutscene start when the player interacts with the
+## control room door. The cutscene should be the player kicking the door down
+## with such force, that it sends the surgeon out the window, and the surgeon
+## lands on the ground. The player should then be able to interact with the
+## lever, actually flip it, and the system powers down."
+##
+## The booth is at BOOTH_FLOOR 2.9: a vat's top is 1.97, so from a vat shoved up
+## against the LANDING outside the door (the platform in the corner) a jump
+## (1.28 m high) gets onto it. E at the door: `_storm` -- the kick bursts the door
+## in and the door hits him: he goes out through the booth's far window and
+## down onto the flags, where he lies. Then the LEVER at the back of the booth:
+## E flips it (`_pull_lever`), the machine dies, and he gets up to fight
+## (surgeon_boss.gd).
 
 ## The landing outside the door, over the hall's corner cell, at the booth's
 ## floor: the kit's platform, an oak post under its outer corner.
@@ -370,49 +418,56 @@ func _build_landing() -> void:
 	var post := _piece("beam", _booth, Vector3(x1 - 0.2, (BOOTH_FLOOR - 0.45) * 0.5, z0 + 0.2))
 	post.basis = Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3((BOOTH_FLOOR - 0.45) / 4.66, 0.6, 0.6))
 	_box(_booth, Vector3(0.35, BOOTH_FLOOR - 0.45, 0.35), Vector3(x1 - 0.2, (BOOTH_FLOOR - 0.45) * 0.5, z0 + 0.2))
+	_door_prompt = Interact.prompt("E   Kick in", Vector3(0.0, 1.1, 0.0))
+	_door.add_child(_door_prompt)
 
 
-## The landing's and the booth's footprints on the floor (plan frame, x and z).
-func _landing_rect() -> Rect2:
-	return Rect2(-_inner, -_inner, _c, _c)
-
-
-func _booth_rect() -> Rect2:
-	return Rect2(-_inner, -_inner + _c, _c, _c * 2.0)
-
-
-static func _rect_gap(r: Rect2, p: Vector2) -> float:
-	var q := Vector2(clampf(p.x, r.position.x, r.end.x), clampf(p.y, r.position.y, r.end.y))
-	return p.distance_to(q)
+## The master lever: the kit's lever box (note 98's) against the booth's back
+## wall at its far end, facing in; its handle up.
+func _build_lever() -> void:
+	var z1 := -_inner + _c * 3.0
+	_lever = Node3D.new()
+	_lever.name = "Lever"
+	_booth.add_child(_lever)
+	_lever.transform = Transform3D(Basis.looking_at(Vector3(-1.0, 0.0, 0.0), Vector3.UP), Vector3(-_inner + 0.42, BOOTH_FLOOR, z1 - 0.85))
+	var box := _piece("leverbox", _lever, Vector3.ZERO)
+	box.scale = Vector3.ONE * LEVER_SCALE
+	_box(_lever, Vector3(0.7, 2.2, 0.8) * LEVER_SCALE, Vector3(0.0, 1.1 * LEVER_SCALE, 0.0))
+	_handle = Node3D.new()
+	_handle.name = "Handle"
+	_lever.add_child(_handle)
+	_handle.position = Vector3(0.0, LEVER_HEIGHT, 0.45) * LEVER_SCALE
+	var h := _piece("handle", _handle, Vector3.ZERO)
+	h.scale = Vector3.ONE * LEVER_SCALE
+	_handle.rotation.x = HANDLE_UP
+	_lever_prompt = Interact.prompt("E   Pull the lever", _handle.position)
+	_lever.add_child(_lever_prompt)
 
 
 func _process(_delta: float) -> void:
-	if _busy or door_broken or table == null or bool(table.call("is_depowered")):
+	var down := table == null or bool(table.call("is_depowered"))
+	var kicker: Node = null
+	if not _busy and not door_broken and not down and not surgeon_gone:
+		kicker = Interact.chooser(_door, 2.4, 1.6, 3.0, 0.15)
+	_door_prompt.visible = kicker != null
+	_door_prompt.player = kicker
+	var puller: Node = null
+	if not _busy and door_broken and not down and not lever_pulled:
+		puller = Interact.chooser(_lever, 2.2, 1.6, 3.0, 0.12, [_handle])
+	_lever_prompt.visible = puller != null
+	_lever_prompt.player = puller
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _busy:
 		return
-	for p in Coop.all():
-		var n := p as CharacterBody3D
-		if n == null or n.get("_dead") == true or n.get("in_cutscene") == true or not n.is_on_floor():
-			continue
-		if n.has_method("is_restrained") and n.is_restrained():
-			continue
-		var vat := _vat_under(n)
-		if vat == null:
-			continue
-		var at := to_local(vat.global_position)
-		var flat := Vector2(at.x, at.z)
-		if _rect_gap(_landing_rect(), flat) < CLIMB_NEAR or _rect_gap(_booth_rect(), flat) < CLIMB_NEAR:
-			_storm(n)
-			return
-
-
-## The vat `n` stands on, if any.
-func _vat_under(n: Node3D) -> Node3D:
-	for v in get_tree().get_nodes_in_group(&"surgery_vat"):
-		var vat := v as Node3D
-		var to := n.global_position - vat.global_position
-		if to.y > 1.5 and to.y < 2.4 and Vector2(to.x, to.z).length() < Vat.RADIUS + 0.2:
-			return vat
-	return null
+	if _door_prompt.visible and Interact.pressed(event, _door_prompt.player):
+		get_viewport().set_input_as_handled()
+		_storm(_door_prompt.player as Node3D)
+		return
+	if _lever_prompt.visible and Interact.pressed(event, _lever_prompt.player):
+		get_viewport().set_input_as_handled()
+		_pull_lever()
 
 
 func _tween() -> Tween:
@@ -424,16 +479,16 @@ func _wait(t: float) -> void:
 
 
 func _surgeon_head() -> Vector3:
-	return _surgeon.global_position + Vector3(0.0, 1.6, 0.0)
+	return boss.global_position + Vector3(0.0, 1.6, 0.0)
 
 
-## Up off the vat onto the landing, the door kicked in, the surgeon heaved out
-## through the window down into the hall, the master lever thrown -- one scene,
-## the player untouchable in it.
+## The kick: the door in, so hard it takes him out of the far window -- one
+## scene, the player untouchable in it. Control back once he is down.
 func _storm(p: Node3D) -> void:
 	if p == null or _busy or door_broken:
 		return
 	_busy = true
+	_door_prompt.visible = false
 	p.call("begin_cutscene")
 	p.set("hands_busy", true)
 	var bars := WOOD_DOOR.letterbox(self)
@@ -441,23 +496,7 @@ func _storm(p: Node3D) -> void:
 	var into := (global_basis * Vector3(0.0, 0.0, 1.0)).normalized()
 	var door_at := _door.global_position
 
-	# 1. Up onto the landing: a hand on its edge, hauled up and over.
-	var here := to_local(p.global_position)
-	var r := _landing_rect()
-	var on := Vector3(clampf(here.x, r.position.x + 0.6, r.end.x - 0.6), BOOTH_FLOOR + 0.02,
-		clampf(here.z, r.position.y + 0.6, r.end.y - 0.6))
-	var edge := Vector3(clampf(here.x, r.position.x, r.end.x), BOOTH_FLOOR - 0.4, clampf(here.z, r.position.y, r.end.y))
-	p.call("scene_look_at", global_transform * (on + Vector3(0.0, 0.3, 0.0)), 6.0)
-	var t := _tween()
-	t.tween_property(p, "global_position", global_transform * here.lerp(edge, 0.6), 0.35) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	await t.finished
-	t = _tween()
-	t.tween_property(p, "global_position", global_transform * on, 0.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	await t.finished
-	p.set("velocity", Vector3.ZERO)
-
-	# 2. Square up to the door, a step back.
+	# 1. Square up to the door, a step back.
 	var base := Vector3(door_at.x, p.global_position.y, door_at.z)
 	var windup := base - into * 1.6
 	var strike := base - into * 0.75
@@ -466,32 +505,31 @@ func _storm(p: Node3D) -> void:
 	await Signal(p, &"scene_walk_finished")
 	p.call("scene_look_at", null)
 	var yaw: float = p.rotation.y + wrapf(atan2(-into.x, -into.z) - p.rotation.y, -PI, PI)
-	t = _tween()
+	var t := _tween()
 	t.tween_property(p, "rotation:y", yaw, TURN_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	t.tween_property(p, "_look_pitch", -0.1, TURN_TIME)
+	t.tween_property(p, "_look_pitch", -0.05, TURN_TIME)
 	await t.finished
 
-	# 3. The kick.
+	# 2. The kick.
 	var maker := WOOD_DOOR.new()
 	var leg: Node3D = maker._make_leg(p)
 	maker.free()
 	p.set("_dash_view", 1.0)
 	t = _tween()
 	t.tween_property(p, "global_position", strike, RUSH_TIME).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	t.tween_property(p, "_look_pitch", -0.3, RUSH_TIME)
+	t.tween_property(p, "_look_pitch", -0.2, RUSH_TIME)
 	t.tween_property(leg, "rotation:x", 0.9, RUSH_TIME * 0.65).set_trans(Tween.TRANS_SINE)
 	t.chain().tween_property(leg, "rotation:x", WOOD_DOOR.LEG_STRIKE, RUSH_TIME * 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await t.finished
 
-	# 4. The door bursts in; he wheels round from his console.
+	# 3. The door bursts in, slow motion, and takes him with it: out through
+	# the far window and down.
 	_burst_door(into)
-	Engine.time_scale = SLOWMO
 	p.set("_land_kick", 1.0)
-	p.set("_land_strength", 0.5)
-	var alert := _clip(&"alert")
-	if alert != &"":
-		_anim.get_animation(alert).loop_mode = Animation.LOOP_NONE
-		_anim.play(alert, 0.15)
+	p.set("_land_strength", 0.6)
+	Engine.time_scale = SLOWMO
+	p.call("scene_look_at", _surgeon_head(), 9.0)
+	_fling_surgeon(p)
 	await _wait(SLOWMO_TIME)
 	Engine.time_scale = 1.0
 	t = _tween()
@@ -499,44 +537,11 @@ func _storm(p: Node3D) -> void:
 	await t.finished
 	leg.queue_free()
 	p.set("hands_busy", false)
-	if p.get("_dead") == true:
-		_end_scene(p, bars)
-		return
-
-	# 5. In, onto him: at his side, between him and the door.
-	p.call("scene_look_at", _surgeon_head(), 6.0)
-	p.call("scene_frame", 6.0, 0.0, 2.0)
-	var stand := _surgeon.global_position - into * 0.95
-	stand.y = p.global_position.y
-	p.call("scene_walk_to", stand, 3.5)
-	await Signal(p, &"scene_walk_finished")
-	await _wait(0.2)
-
-	# 6. Seized and heaved over the console, through the window, down into the
-	# hall.
-	p.call("scene_lean", Vector3(0.0, -0.1, -0.25), 9.0)
-	p.call("scene_frame", 12.0, -4.0, 5.0)
-	await _wait(0.25)
-	await _throw_surgeon(p)
-	p.call("scene_lean", Vector3.ZERO, 4.0)
-	p.call("scene_frame", 0.0, 0.0, 2.0)
-	await _wait(0.7)
-
-	# 7. The master lever: the console sparks and dies, and the machine with it.
-	var lever := _console.global_transform * Vector3(0.95, 1.1, 0.0)
-	p.call("scene_look_at", lever, 5.0)
-	var at_lever := _console.global_transform * Vector3(0.95, 0.0, 0.85)
-	at_lever.y = p.global_position.y
-	p.call("scene_walk_to", at_lever, 2.5)
-	await Signal(p, &"scene_walk_finished")
-	await _wait(0.35)
-	_throw_lever()
-	await _wait(0.5)
-	# 8. Out of the broken window: the claw falls.
-	var claw := table.get_node_or_null("Claw") as Node3D
-	if claw != null:
-		p.call("scene_look_at", claw.global_position, 3.0)
-	await _wait(2.6)
+	# Watching him go: through the window, onto the flags.
+	while bool(boss.get("state") == BOSS.State.FLUNG):
+		p.call("scene_look_at", boss.global_position + Vector3(0.0, 1.0, 0.0), 8.0)
+		await get_tree().process_frame
+	await _wait(0.9)
 	_end_scene(p, bars)
 
 
@@ -561,56 +566,74 @@ func _burst_door(into: Vector3) -> void:
 		var mi := node as MeshInstance3D
 		if mi.mesh == null:
 			continue
-		pieces.append_array(DEBRIS.shatter(mi, self, into, impact, 4 if Graphics.effects else 3, 6 if Graphics.effects else 3, 0.35, false))
+		pieces.append_array(DEBRIS.shatter(mi, self, into * 2.2, impact, 4 if Graphics.effects else 3, 6 if Graphics.effects else 3, 0.35, false))
 		mi.visible = false
 	DEBRIS.crumble(pieces, Graphics.effects)
 	if Graphics.effects:
 		DEBRIS.dust(self, impact, into)
 
 
-## Where he lands in the hall: under the window, out from the booth (plan frame).
+## Where he lands in the hall: out from the booth's far window (plan frame) --
+## the first of a few spots there clear of the vats (one landed against a vat
+## and stood stuck behind it).
 func _landing_spot() -> Vector3:
-	var mid := booth_centre()
-	return Vector3(-_inner + _c + 2.4, 0.0, mid.z + 0.5)
+	var base := Vector3(-_inner + 1.25, 0.0, -_inner + _c * 3.0 + 2.6)
+	for off: Vector3 in [Vector3.ZERO, Vector3(0.0, 0.0, 1.2), Vector3(1.3, 0.0, 0.6), Vector3(0.0, 0.0, 2.4),
+			Vector3(1.6, 0.0, 1.8), Vector3(2.6, 0.0, 0.4), Vector3(2.6, 0.0, 2.4)]:
+		var at := base + off
+		var w := global_transform * at
+		var clear := true
+		for v in surgery.get("vats"):
+			var vat := v as Node3D
+			var r: float = vat.get("radius")
+			if Vector2(vat.global_position.x - w.x, vat.global_position.z - w.z).length() < r + 0.7:
+				clear = false
+				break
+		if clear:
+			return at
+	return base
 
 
-## He goes over the console and through the leaded glass in a burst of it, and
-## falls to the flags below, where he lies (his "die" clip).
-func _throw_surgeon(p: Node3D) -> void:
+## The door's blow throws him the length of the booth, through the leaded glass
+## of its far window in a burst of it, and down onto the flags, where he lies.
+func _fling_surgeon(_p: Node3D) -> void:
 	surgeon_thrown = true
-	var mid := booth_centre()
-	var start := _surgeon.global_position
-	var through := global_transform * Vector3(-_inner + _c - 0.1, BOOTH_FLOOR + 1.0, mid.z + 0.2)
+	boss.set("state", BOSS.State.FLUNG)
+	_down_to_the_hall()
+	var start := boss.global_position
+	var through := global_transform * Vector3(-_inner + 1.25, BOOTH_FLOOR + 0.9, -_inner + _c * 3.0)
 	var land := global_transform * _landing_spot()
-	var die := _clip(&"die")
-	if die != &"":
-		_anim.get_animation(die).loop_mode = Animation.LOOP_NONE
-		_anim.play(die, 0.1, 1.4)
-	p.call("scene_look_at", through, 7.0)
+	var spin := boss.rotation
+	boss.call("play", &"die", 0.05, 1.5)
 	var t := _tween()
 	t.tween_method(func(k: float) -> void:
 		var a := start.lerp(through, k)
-		a.y += sin(k * PI) * 0.6
-		_surgeon.global_position = a, 0.0, 1.0, 0.32).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		a.y += sin(k * PI) * 0.35
+		boss.global_position = a, 0.0, 1.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await t.finished
-	_break_window(through)
-	p.call("scene_look_at", land, 5.0)
+	_break_window(through, (through - start).normalized())
 	t = _tween()
 	t.tween_method(func(k: float) -> void:
 		var a := through.lerp(land, k)
-		a.y = lerpf(through.y, land.y, k * k) + sin(k * PI) * 0.4
-		_surgeon.global_position = a, 0.0, 1.0, 0.6)
+		a.y = lerpf(through.y, land.y, k * k) + sin(k * PI) * 0.5
+		boss.global_position = a, 0.0, 1.0, 0.65)
+	t.tween_property(boss, "rotation", spin + Vector3(0.0, 0.6, 0.0), 0.65)
 	await t.finished
 	if table != null:
-		table.call("_impact_fx", land, 0.4)
+		table.call("_impact_fx", land, 0.45)
+	for q in Coop.all():
+		var n := q as Node3D
+		if n != null and n.get("_shake") != null:
+			n.set("_shake", maxf(float(n.get("_shake")), 0.3))
+	boss.call("lie_down")
 	_booth_light.light_energy = 0.8
 
 
-## The hall window's glass bursts out (the lead tracery stays): its pane gone,
-## a spray of glass out over the hall.
-func _break_window(at: Vector3) -> void:
-	if _hall_pane != null:
-		_hall_pane.visible = false
+## The far window's glass bursts out (the lead tracery stays): its pane gone,
+## a spray of glass out over the hall along `dir`.
+func _break_window(at: Vector3, dir: Vector3) -> void:
+	if _end_pane != null:
+		_end_pane.visible = false
 	if table != null:
 		table.call("_sparks", at, Color(0.75, 0.85, 0.9), 30)
 	if not Graphics.effects:
@@ -621,7 +644,7 @@ func _break_window(at: Vector3) -> void:
 	p.amount = 60
 	p.lifetime = 1.4
 	p.explosiveness = 0.95
-	p.direction = global_basis * Vector3(1.0, 0.3, 0.0)
+	p.direction = dir + Vector3(0.0, 0.3, 0.0)
 	p.spread = 40.0
 	p.initial_velocity_min = 2.5
 	p.initial_velocity_max = 6.0
@@ -645,6 +668,22 @@ func _break_window(at: Vector3) -> void:
 	get_tree().create_timer(2.0).timeout.connect(p.queue_free)
 
 
+## E on the lever: the handle thrown down, sparks off the console, the lamps
+## die, and the machine with them (the claw falls; surgery.gd then has him up).
+func _pull_lever() -> void:
+	if lever_pulled:
+		return
+	lever_pulled = true
+	_lever_prompt.visible = false
+	var t := create_tween()
+	t.tween_property(_handle, "rotation:x", HANDLE_DOWN + 0.15, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	t.tween_property(_handle, "rotation:x", HANDLE_DOWN, 0.12)
+	await t.finished
+	if table != null:
+		table.call("_sparks", _handle.global_position, Color(1.0, 0.8, 0.45), 20)
+	_throw_lever()
+
+
 ## The power off: a burst of sparks off the console, its lamps and gauges die,
 ## the booth's lamp gutters out, and the table's power is cut.
 func _throw_lever() -> void:
@@ -661,21 +700,55 @@ func _throw_lever() -> void:
 	lt.tween_property(_booth_light, "light_energy", 0.35, 0.4)
 
 
-## A save with the booth taken: the door gone, the window broken, he lies in
-## the hall, the console dark.
+## The machine has just died: lying in the hall, he gets up (a beat later) and
+## the fight is on.
+func surgeon_rises(after := 2.0) -> void:
+	if boss == null or boss.call("is_dead") or boss.get("state") != BOSS.State.DOWN:
+		return
+	await _wait(after)
+	boss.call("begin_fight")
+
+
+# --- Saving and resetting ---------------------------------------------------------
+
+## A save with the booth taken: the door gone, the far window broken, the lever
+## down, the console dark; he is in the hall, waiting or dead (`restore_boss`).
 func set_thrown_now() -> void:
 	door_broken = true
 	surgeon_thrown = true
+	lever_pulled = true
 	powered = false
 	_door.visible = false
 	_door_body.collision_layer = 0
-	if _hall_pane != null:
-		_hall_pane.visible = false
-	_surgeon.global_position = global_transform * _landing_spot()
-	var die := _clip(&"die")
-	if die != &"":
-		_anim.play(die)
-		_anim.seek(_anim.get_animation(die).length - 0.01, true)
+	if _end_pane != null:
+		_end_pane.visible = false
+	_handle.rotation.x = HANDLE_DOWN
+	_down_to_the_hall()
+	boss.call("wait_at", _boss_spot())
 	for m in _console_mats:
 		(m as StandardMaterial3D).emission_energy_multiplier = 0.0
 	_booth_light.light_energy = 0.35
+
+
+## A save with the machine off: him dead where he fell (`at`), or waiting.
+func restore_boss(dead: bool, at: Transform3D) -> void:
+	if not dead:
+		return
+	_down_to_the_hall()
+	boss.call("set_dead_now", at)
+
+
+## A world reset with the machine off and him still up: whole, waiting.
+func reset_boss() -> void:
+	if boss == null or boss.call("is_dead"):
+		return
+	var s: int = boss.get("state")
+	if s == BOSS.State.AT_WORK:
+		# Off by the crystal, and they died before climbing out: he has come
+		# down all the same.
+		leave()
+		return
+	if s == BOSS.State.DOWN:
+		boss.call("wait_at", _boss_spot())
+	else:
+		boss.call("reset_wait")
