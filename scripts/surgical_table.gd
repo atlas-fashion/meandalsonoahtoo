@@ -952,6 +952,9 @@ func _physics_process(delta: float) -> void:
 func _drive(delta: float) -> void:
 	var lim := Vector2(rail_x - 0.4, bound - 0.6)
 	_b_goal = Vector2(clampf(_b_goal.x, -lim.x, lim.x), clampf(_b_goal.y, -lim.y, lim.y))
+	# Kept off the control room, which rises to the roof (note 108; surgery.gd
+	# `gantry_limits`).
+	_b_goal = _b_goal.clamp(b_lo, b_hi)
 	var vmax := Vector2(TROLLEY_SPEED[level], BRIDGE_SPEED[level]) * _b_speed
 	var acc := Vector2(TROLLEY_ACCEL, BRIDGE_ACCEL) * maxf(_b_speed, 0.6)
 	var before := _bv
@@ -1248,6 +1251,10 @@ func _player_under() -> Node3D:
 ## player"): no one at the console. It lets go of whatever it holds and hangs
 ## over its table, still lit, until the lever is thrown.
 var unmanned := false
+## The gantry's reach, room frame (trolley x, bridge z), past the rails' own
+## limits (surgery.gd `gantry_limits`, note 108).
+var b_lo := Vector2(-INF, -INF)
+var b_hi := Vector2(INF, INF)
 
 
 func operator_gone() -> void:

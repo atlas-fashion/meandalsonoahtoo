@@ -38,11 +38,15 @@ const Table := preload("res://scripts/surgical_table.gd")
 
 ## The booth's floor (its top) and its walls' height.
 const BOOTH_FLOOR := 2.9
+## The window band (note 108: the walls go on up to `_top`, the hall's roof).
 const BOOTH_H := 2.3
-## The door wall's opening: its middle across the wall (model +X, measured off
-## the piece) and its width.
-const DOOR_X := 0.6
-const DOOR_W := 1.0
+## The door (note 108): the dungeon's door leaf, its size -- 1.94 wide, 4.2 to
+## the point of its head -- drawn LEAF_DEPTH thick.
+const DOOR_W := 1.94
+const DOOR_H := 4.2
+const LEAF_DEPTH := 0.3
+const BrickLevel := preload("res://scripts/brick_level.gd")
+const MODULE_LEVEL := preload("res://scripts/module_level.gd")
 ## Gone, he left the door this far open (radians).
 const DOOR_LEFT_OPEN := 1.5
 ## The kick (as note 99's): squaring up, the rush, the slow motion as it bursts.
@@ -65,6 +69,9 @@ var _c := 2.98
 
 ## Built nodes.
 var _booth: Node3D
+## The booth's top (surgery.gd `booth_top`) and its door's height.
+var _top := 6.3
+var _door_h := DOOR_H
 var _door: Node3D
 var _door_body: StaticBody3D
 var _console: Node3D
@@ -140,65 +147,78 @@ func _build_booth() -> void:
 	var x1 := -_inner + _c
 	var z0 := -_inner + _c
 	var z1 := -_inner + _c * 3.0
+	_top = float(surgery.call("booth_top")) if surgery != null and surgery.has_method("booth_top") else BOOTH_FLOOR + 3.4
+	var wall_h := _top - BOOTH_FLOOR
+	var upper := wall_h - BOOTH_H
 	_booth = Node3D.new()
 	_booth.name = "Booth"
 	add_child(_booth)
 	# The iron floor, its long side along the wall.
 	_piece("platform", _booth, Vector3(mid.x, BOOTH_FLOOR, mid.z), PI * 0.5)
 	_box(_booth, Vector3(_c, 0.45, _c * 2.0), Vector3(mid.x, BOOTH_FLOOR - 0.225, mid.z))
-	# Oak posts under its outer corners, from the floor up to it.
+	# Oak posts under its outer corners, from the floor up to it -- and on up its
+	# corners to the roof (note 108).
 	for z: float in [z0 + 0.2, z1 - 0.2]:
 		var post := _piece("beam", _booth, Vector3(x1 - 0.2, (BOOTH_FLOOR - 0.45) * 0.5, z))
 		post.basis = Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3((BOOTH_FLOOR - 0.45) / 4.66, 0.6, 0.6))
 		_box(_booth, Vector3(0.35, BOOTH_FLOOR - 0.45, 0.35), Vector3(x1 - 0.2, (BOOTH_FLOOR - 0.45) * 0.5, z))
-	# The leaded windows over the hall.
+		var up := _piece("beam", _booth, Vector3(x1 - 0.12, BOOTH_FLOOR + wall_h * 0.5, z - 0.08 if z > mid.z else z + 0.08))
+		up.basis = Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(wall_h / 4.66, 0.5, 0.5))
+	# The leaded windows over the hall, in a band at the bottom; plank wall over
+	# them up to the roof.
 	var win := _piece("boothwindow", _booth, Vector3(x1 - 0.125, BOOTH_FLOOR, mid.z), PI * 0.5)
 	win.scale = Vector3(1.0, BOOTH_H / 2.5, 1.0)
 	_glaze(win)
 	_hall_window = win
 	_hall_pane = win.get_node_or_null("Pane") as MeshInstance3D
 	_box(_booth, Vector3(0.25, BOOTH_H, _c * 2.0), Vector3(x1 - 0.125, BOOTH_FLOOR + BOOTH_H * 0.5, mid.z))
-	# The far end: a narrower leaded window.
+	_planks(Vector3(0.25, upper, _c * 2.0), Vector3(x1 - 0.125, BOOTH_FLOOR + BOOTH_H + upper * 0.5, mid.z))
+	# The far end: a narrower leaded window, planks over it.
 	var end := _piece("boothwindow", _booth, Vector3(mid.x, BOOTH_FLOOR, z1 - 0.125), 0.0)
 	end.scale = Vector3(_c / 5.94, BOOTH_H / 2.5, 1.0)
 	_glaze(end)
 	_end_pane = end.get_node_or_null("Pane") as MeshInstance3D
 	_box(_booth, Vector3(_c, BOOTH_H, 0.25), Vector3(mid.x, BOOTH_FLOOR + BOOTH_H * 0.5, z1 - 0.125))
-	# The door's end, facing the lift; its opening at DOOR_X across it (the piece
-	# turned to face -Z, so its +X runs along -X).
-	_piece("boothdoorwall", _booth, Vector3(mid.x, BOOTH_FLOOR, z0 + 0.125), PI).scale = Vector3(1.0, BOOTH_H / 2.5, 1.0)
-	var gap_x := mid.x - DOOR_X
-	var left := (gap_x - DOOR_W * 0.5) - x0
-	var right := x1 - (gap_x + DOOR_W * 0.5)
-	_box(_booth, Vector3(left, BOOTH_H, 0.25), Vector3(x0 + left * 0.5, BOOTH_FLOOR + BOOTH_H * 0.5, z0 + 0.125))
-	_box(_booth, Vector3(right, BOOTH_H, 0.25), Vector3(x1 - right * 0.5, BOOTH_FLOOR + BOOTH_H * 0.5, z0 + 0.125))
-	_box(_booth, Vector3(DOOR_W, BOOTH_H - 2.1, 0.25), Vector3(gap_x, BOOTH_FLOOR + 2.1 + (BOOTH_H - 2.1) * 0.5, z0 + 0.125))
-	# The door in it, shut.
+	_planks(Vector3(_c, upper, 0.25), Vector3(mid.x, BOOTH_FLOOR + BOOTH_H + upper * 0.5, z1 - 0.125))
+	# The door's end, onto the landing (note 108: "make the door the size of all
+	# the other ones"): a plank wall the booth's height with the dungeon's own
+	# door leaf in it (brick kit `door_leaf`, 1.94 x 4.2 with its pointed head),
+	# the wall cut to the leaf's outline (`_door_wall`).
+	_door_h = minf(DOOR_H, wall_h - 0.2)
+	_door_wall(Vector3(mid.x, BOOTH_FLOOR, z0 + 0.125), wall_h)
 	_door = Node3D.new()
 	_door.name = "Door"
 	_booth.add_child(_door)
-	_door.position = Vector3(gap_x, BOOTH_FLOOR, z0 + 0.125)
+	_door.position = Vector3(mid.x, BOOTH_FLOOR, z0 + 0.125)
 	_door.rotation.y = PI
-	_piece("door", _door, Vector3.ZERO).scale = Vector3(DOOR_W / 1.05, 1.0, 1.0)
-	_door_body = _box(_door, Vector3(DOOR_W, 2.1, 0.2), Vector3(0.0, 1.05, 0.0))
+	var leaf := MeshInstance3D.new()
+	leaf.name = "Leaf"
+	leaf.mesh = BrickLevel.standalone("door_leaf")
+	if leaf.mesh != null:
+		# The leaf is drawn 0.16-1.0 m behind its stone face: centred on the wall
+		# and thinned to a plank door's depth.
+		var aabb := leaf.mesh.get_aabb()
+		var k := Vector3(DOOR_W / aabb.size.x, _door_h / aabb.size.y, LEAF_DEPTH / aabb.size.z)
+		leaf.scale = k
+		leaf.position = Vector3(-aabb.get_center().x * k.x, 0.0, -aabb.get_center().z * k.z)
+		leaf.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		_door.add_child(leaf)
+		var backing := MeshInstance3D.new()
+		backing.name = "Backing"
+		backing.mesh = MODULE_LEVEL._leaf_backing_mesh(aabb.get_center().z)
+		backing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		leaf.add_child(backing)
+	_door_body = _box(_door, Vector3(DOOR_W, _door_h, 0.3), Vector3(0.0, _door_h * 0.5, 0.0))
 	# The plank roof, seen from inside and out.
 	var roof := MeshInstance3D.new()
 	roof.name = "Roof"
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(_c, _c * 2.0)
 	roof.mesh = plane
-	var m := StandardMaterial3D.new()
-	m.albedo_texture = PLANKS
-	m.albedo_color = Color(0.6, 0.52, 0.46)
-	m.roughness = 0.9
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	m.uv1_triplanar = true
-	m.uv1_world_triplanar = true
-	m.uv1_scale = Vector3(0.4, 0.4, 0.4)
-	roof.material_override = m
+	roof.material_override = _plank_mat()
 	_booth.add_child(roof)
-	roof.position = Vector3(mid.x, BOOTH_FLOOR + BOOTH_H, mid.z)
-	_box(_booth, Vector3(_c, 0.1, _c * 2.0), Vector3(mid.x, BOOTH_FLOOR + BOOTH_H + 0.05, mid.z))
+	roof.position = Vector3(mid.x, _top, mid.z)
+	_box(_booth, Vector3(_c, 0.1, _c * 2.0), Vector3(mid.x, _top + 0.05, mid.z))
 	# The console, its levers toward the wall where he stands, the window beyond.
 	_console = _piece("console", _booth, Vector3(x1 - 0.85, BOOTH_FLOOR, mid.z), -PI * 0.5)
 	_console_mats = Table.glow(_console, 0.8)
@@ -213,6 +233,75 @@ func _build_booth() -> void:
 	_booth_light.shadow_enabled = false
 	_booth.add_child(_booth_light)
 	_booth_light.position = Vector3(x0 + 0.5, BOOTH_FLOOR + 2.0, mid.z)
+
+
+## The booth's planks (the hall's ceiling planks, triplanar), one material.
+static var _planks_material: StandardMaterial3D
+
+
+static func _plank_mat() -> StandardMaterial3D:
+	if _planks_material == null:
+		var m := StandardMaterial3D.new()
+		m.albedo_texture = PLANKS
+		m.albedo_color = Color(0.6, 0.52, 0.46)
+		m.roughness = 0.9
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.uv1_triplanar = true
+		m.uv1_world_triplanar = true
+		m.uv1_scale = Vector3(0.4, 0.4, 0.4)
+		_planks_material = m
+	return _planks_material
+
+
+## A plank wall `size` at `at` (plan frame): drawn and solid.
+func _planks(size: Vector3, at: Vector3) -> void:
+	if size.y <= 0.01:
+		return
+	var mi := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mi.mesh = box
+	mi.material_override = _plank_mat()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_booth.add_child(mi)
+	mi.position = at
+	_box(_booth, size, at)
+
+
+## The door's end: a plank wall `height` tall across the booth's width at `at`
+## (its foot, plan frame), with the door leaf's outline cut out of it -- straight
+## sides to 3.05 of its 4.25 m, then the pointed head (tools/build_brick_kit.py
+## DOOR_LEAF_HEAD), scaled to the door's height. CSG, solid where it stands.
+func _door_wall(at: Vector3, height: float) -> void:
+	var wall := CSGCombiner3D.new()
+	wall.name = "DoorWall"
+	wall.use_collision = true
+	wall.collision_layer = 1 | 2
+	wall.collision_mask = 0
+	_booth.add_child(wall)
+	wall.position = at
+	var slab := CSGBox3D.new()
+	slab.size = Vector3(_c, height, 0.25)
+	slab.position = Vector3(0.0, height * 0.5, 0.0)
+	slab.material = _plank_mat()
+	wall.add_child(slab)
+	var cut := CSGPolygon3D.new()
+	cut.operation = CSGShape3D.OPERATION_SUBTRACTION
+	var k := _door_h / 4.25
+	var pts := PackedVector2Array()
+	var head: Array = [[3.05, 0.97], [3.25, 0.89], [3.45, 0.74], [3.65, 0.59], [3.85, 0.46], [4.05, 0.24], [4.25, 0.0]]
+	var right := PackedVector2Array([Vector2(DOOR_W * 0.5 + 0.02, -0.1)])
+	for h in head:
+		right.append(Vector2((float(h[1]) / 0.97) * (DOOR_W * 0.5 + 0.02), float(h[0]) * k))
+	for p in right:
+		pts.append(p)
+	for i in range(right.size() - 2, -1, -1):
+		pts.append(Vector2(-right[i].x, right[i].y))
+	cut.polygon = pts
+	cut.depth = 0.6
+	cut.position = Vector3(0.0, 0.0, 0.3)
+	cut.material = _plank_mat()
+	wall.add_child(cut)
 
 
 ## The window's glazing (note 101). The kit's split-off "Glass" holds the

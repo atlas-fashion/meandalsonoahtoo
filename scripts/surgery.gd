@@ -121,14 +121,17 @@ const N := 9
 
 ## The vats (note 102; a checkerboard, note 107): a lattice VAT_STEP apart -- the
 ## dungeon's flagstone grid, so the hatch (cut where two flags meet) falls on one
-## of its points -- no further out than VAT_REACH. Kept clear: an open circle
-## OPEN_RADIUS round the middle, CLEAR_RAIL either side of the rail, CLEAR_DOOR
-## round each way in. CLEAR_MIDDLE: where the rail ends, short of the table. At
-## most VAT_LIGHTS of the gold vats glow.
+## of its points -- no further out than VAT_REACH. Kept clear: CLEAR_RAIL either
+## side of the rail, CLEAR_DOOR round each way in. CLEAR_MIDDLE: where the rail ends, short of the table. At
+## most VAT_LIGHTS of the gold vats glow. Note 108: the checkerboard is close
+## round the table instead -- clear only TABLE_CLEAR round it (so a jump from
+## the table reaches the nearest vats) and out to VAT_OUTER (or just past the
+## hatch, if that is further), the floor beyond open.
 const VAT_STEP := 3.0
 const VAT_REACH := 12.05
 const CLEAR_MIDDLE := 3.1
-const OPEN_RADIUS := 6.0
+const TABLE_CLEAR := 3.0
+const VAT_OUTER := 10.0
 const CLEAR_RAIL := 1.2
 const CLEAR_DOOR := 3.2
 const VAT_LIGHTS := 6
@@ -245,6 +248,9 @@ func _dress() -> void:
 	control.name = "ControlRoom"
 	_plan.add_child(control)
 	control.call("setup", self, table, _inner, _c)
+	var lim := gantry_limits()
+	table.set("b_lo", lim[0])
+	table.set("b_hi", lim[1])
 	var boss: Node = control.get("boss")
 	boss.connect("fight_started", _on_fight_started)
 	boss.connect("defeated", _on_surgeon_defeated)
@@ -540,6 +546,11 @@ func _choose_plan() -> void:
 		var hp := b.inverse() * hole
 		if _rail_distance(hp, _lattice_off(hp)) < CLEAR_RAIL:
 			bad += 2
+		# Note 108: the booth rises to the roof, and its door is a dungeon door
+		# 4.2 m tall -- against a wall the gantry's runways run along (the even
+		# turns) neither fits under them (`booth_top`): only if nothing else will.
+		if k % 2 == 0:
+			bad += 3
 		if bad < best_bad:
 			best_bad = bad
 			best = k
@@ -592,10 +603,12 @@ func _rail_distance(p: Vector3, off := _off) -> float:
 
 # --- The vats (note 102) -----------------------------------------------------------
 
-## A lattice point kept clear of vats: the open circle round the middle, the
-## booth's intake under it, the pens, the rail, the ways in.
+## A lattice point kept clear of vats: right round the table, beyond the
+## checkerboard's edge, the booth's intake under it, the pens, the rail, the ways
+## in.
 func _kept_clear(p: Vector3) -> bool:
-	if Vector2(p.x, p.z).length() < OPEN_RADIUS:
+	var r := Vector2(p.x, p.z).length()
+	if r < TABLE_CLEAR or r > _vat_outer():
 		return true
 	if p.x < -9.5 and p.z > -_inner + _c - 1.6 and p.z < -_inner + _c * 3.0 + 1.0:
 		return true
@@ -612,9 +625,11 @@ func _kept_clear(p: Vector3) -> bool:
 ## them"): on the lattice through the hatch (VAT_STEP apart), every point whose
 ## indices add up to the hatch's parity -- the dark squares -- so no two vats
 ## stand side by side: they meet only at their corners, 4.2 m apart across the
-## diagonal, with the aisles running between them corner to corner. None within
-## OPEN_RADIUS of the middle -- the wide clearing round the table -- nor where
-## `_kept_clear` says. The hatch's point is one of the dark squares, so a vat
+## diagonal, with the aisles running between them corner to corner. Note 108
+## ("Make the checkerboard pattern for the vats close to the table, and the open
+## space further away from it. That way they are harder to move around"): they
+## stand from TABLE_CLEAR round the table out to `_vat_outer()`, the floor open
+## beyond (note 107 had it the other way round) -- nor where `_kept_clear` says. The hatch's point is one of the dark squares, so a vat
 ## always stands over it, and with no vat beside it, it can be shoved off any
 ## way.
 func _lay_vats() -> void:
@@ -1360,3 +1375,51 @@ func entry_point() -> Array:
 	var side := Vector3.UP.cross(inward).normalized()
 	var at: Vector3 = d["world"] + inward * 2.4 + side * 2.1 + Vector3(0.0, 0.3, 0.0)
 	return [at, atan2(-inward.x, -inward.z)]
+
+
+## How far out the checkerboard goes (note 108): VAT_OUTER, or just past the
+## hatch if module_level put it further out -- a vat always stands over it.
+func _vat_outer() -> float:
+	var h := to_local(_hole)
+	return maxf(VAT_OUTER, Vector2(h.x, h.z).length() + 0.6)
+
+
+## How high the control room goes (note 108: "as high as the ceiling"): to the
+## roof -- unless the plan put it against a wall the gantry's runways run
+## along (the even turns), where it stops under them.
+func booth_top() -> float:
+	if _turn % 2 == 1:
+		return CEIL - 0.05
+	return Table.RUNWAY_TOP - GIRDER_H - 0.15
+
+
+## The ground the claw's gantry must keep off (room frame, its trolley's x and
+## its bridge's z): the booth's and its landing's footprint, and SET_BACK beyond
+## it. With the booth to the roof (the odd turns) its bridge must stay out of
+## the strip along that wall; under the runways (the even turns), its trolley.
+func gantry_limits() -> Array:
+	var lo := Vector2(-INF, -INF)
+	var hi := Vector2(INF, INF)
+	var rect: Array[Vector3] = []
+	for x: float in [-_inner, -_inner + _c]:
+		for z: float in [-_inner, -_inner + _c * 3.0]:
+			rect.append(_plan.transform * Vector3(x, 0.0, z))
+	var mn := rect[0]
+	var mx := rect[0]
+	for v in rect:
+		mn = Vector3(minf(mn.x, v.x), 0.0, minf(mn.z, v.z))
+		mx = Vector3(maxf(mx.x, v.x), 0.0, maxf(mx.z, v.z))
+	const SET_BACK := 0.7
+	if mx.x - mn.x < mx.z - mn.z:
+		# Against an X wall (x = +-inner): the trolley (x) kept off it.
+		if mn.x < 0.0:
+			lo.x = mx.x + SET_BACK
+		else:
+			hi.x = mn.x - SET_BACK
+	else:
+		# Against a Z wall: the bridge (z) kept off it.
+		if mn.z < 0.0:
+			lo.y = mx.z + SET_BACK
+		else:
+			hi.y = mn.z - SET_BACK
+	return [lo, hi]
