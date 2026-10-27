@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 115), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 116), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -504,6 +504,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 113 | 2026-10-27 | Ghost mode only on a fresh press: not when Shift was already down as a menu, scene, pause, respawn or focus loss ended, nor in a Ctrl/Alt/Win chord; pad bindings read from the pad, not the latched action | [docs/notes/113-ghost-only-on-a-fresh-press.md](docs/notes/113-ghost-only-on-a-fresh-press.md) |
 | 114 | 2026-10-27 | No moonlight through the roofs: one-sided roofs (the surgery's ceiling, the prison's inside-out dome) never cast for the moon; a shadows-only box over each (`BrickLevel.moon_shade`) | [docs/notes/114-no-moonlight-through-roofs.md](docs/notes/114-no-moonlight-through-roofs.md) |
 | 115 | 2026-10-27 | The enforcer's feet stay planted: each tick the body moves as far as the walk's planted foot sweeps (read from the clip's tracks); the walk backwards when backing off; a stop finishes the step | [docs/notes/115-enforcer-feet-planted-the-gait.md](docs/notes/115-enforcer-feet-planted-the-gait.md) |
+| 116 | 2026-10-27 | The enforcer's walk a little smoother: each tick's step is the planted foot's speed averaged over 0.1 s of clip (`GAIT_SMOOTH`), the dead stop spread over a few ticks for a little slip | [docs/notes/116-enforcer-walk-smoother.md](docs/notes/116-enforcer-walk-smoother.md) |
 
 ## Notes by source file
 
@@ -538,7 +539,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93
 - `scripts/enemy_health_bar.gd`: 6.19
-- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92, 115
+- `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92, 115, 116
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82
 - `scripts/gate.gd`: 6.18

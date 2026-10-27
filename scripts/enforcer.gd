@@ -88,6 +88,12 @@ const GAIT_SAMPLES := 60.0
 ## slower than GAIT_HOLD (m/s at rate 1). Twice a cycle, at its two stomps.
 const GAIT_HOLD := 0.1
 const GAIT_STAND := 0.04
+## SMOOTHER (2026-10-27, the user: "slightly smoother", CLAUDE.md 116): the
+## step each tick is the planted foot's speed averaged over this much clip
+## (seconds) round the moment shown, so the dead stop after each lurch is
+## spread over a few ticks (the biggest drop a tick 11 -> 3.9 m/s at 2.2 m/s)
+## for a little slip (0.004 -> 0.17 m a metre walked). 0 is the foot exactly.
+const GAIT_SMOOTH := 0.1
 ## Walking backwards (backing off a player while facing them) once the way it
 ## goes is this far behind it (cosine).
 const GAIT_BACK := -0.3
@@ -1323,6 +1329,11 @@ func _slide() -> void:
 	var delta := get_physics_process_delta_time()
 	var span := anim.speed_scale * delta
 	var speed := _gait_travel(_walk_time() - span, span) / delta
+	# Smoothed (GAIT_SMOOTH): the foot's mean speed over a window centred on
+	# that span, at the rate shown.
+	if GAIT_SMOOTH > 0.0:
+		var mid := _walk_time() - span * 0.5
+		speed = absf(anim.speed_scale) * _gait_travel(mid - GAIT_SMOOTH * 0.5, GAIT_SMOOTH) / GAIT_SMOOTH
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	super()
