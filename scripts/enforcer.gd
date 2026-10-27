@@ -70,9 +70,27 @@ const HOLD_EARLY := 0.04
 ## (a walk starting at full rate reads as a new clip starting). As the
 ## decrepit's crawl (CLAUDE.md 59).
 const WALK_RATE_EASE := 7.0
-## A planted foot slides back at this speed with the walk at rate 1 (measured
-## in Blender: 1.4 m/s at the authored size).
+## THE GAIT (2026-10-27, CLAUDE.md 115): the body goes where the planted foot
+## says. WALK_BAKED is a stomp -- each lurch of it holds still for a third of
+## its time, then heaves on, the planted foot sweeping back faster and faster until
+## the other lands (0 to 4.3 m/s at rate 1, measured). A body gliding at one
+## steady speed skated its feet through both (1.15 m of slip a metre walked).
+## So `_slide` moves it, every tick, as far as the planted foot sweeps back
+## while the clip runs on that tick (`_gait_travel`, from the clip's own
+## tracks), and the clip plays at the speed asked for over the cycle's mean
+## (`_gait_mean`, 1.03 m/s at rate 1). Its old single figure, kept for a rig
+## the gait cannot be read from:
 const WALK_GROUND_SPEED := 0.82
+## Gait samples per second of clip (the clips are 60 fps).
+const GAIT_SAMPLES := 60.0
+## Asked to stop mid-step, it finishes the step and stands where both feet are
+## down (each within GAIT_STAND m of its lowest) and the planted foot sweeps
+## slower than GAIT_HOLD (m/s at rate 1). Twice a cycle, at its two stomps.
+const GAIT_HOLD := 0.1
+const GAIT_STAND := 0.04
+## Walking backwards (backing off a player while facing them) once the way it
+## goes is this far behind it (cosine).
+const GAIT_BACK := -0.3
 ## BEAM_BAKED: the cannon comes up by frame 37, but only SETTLES -- resting on
 ## the raised shield arm -- on the clip's last frame (47); held there while it
 ## fires. (Held at 37 the shield was still swinging across: "the beam arm is not
@@ -391,6 +409,7 @@ func _ready() -> void:
 	_build_beam()
 	_warm_hit_sparks.call_deferred()
 	_attach_react()
+	_build_gait()
 
 
 func _crystal_material() -> StandardMaterial3D:
@@ -1146,6 +1165,175 @@ func _hold(delta: float) -> void:
 	_slide()
 
 
+# --- The gait (THE GAIT above; CLAUDE.md 115) ---------------------------------------
+
+## WALK_BAKED's planted foot, per clip: [travel, stand]. `travel[i]` is how far
+## it has swept back under the body by sample i (GAIT_SAMPLES a second; metres
+## at the drawn size; the last entry is one whole cycle's); `stand[i]` is 1
+## where it can stop and stand. Shared: every enforcer plays the same clip at
+## the same scale.
+static var _gaits := {}
+var _gait_travel_at := PackedFloat32Array()
+var _gait_stand := PackedByteArray()
+var _gait_mean := WALK_GROUND_SPEED
+
+
+func _build_gait() -> void:
+	if anim == null or _skel == null or not anim.has_animation(ANIM_WALK_CLIP):
+		return
+	var a := anim.get_animation(ANIM_WALK_CLIP)
+	if not _gaits.has(a):
+		_gaits[a] = _read_gait(a)
+	var g: Array = _gaits[a]
+	if g.is_empty() or (g[0] as PackedFloat32Array)[-1] <= 0.0 or a.length <= 0.0:
+		return
+	_gait_travel_at = g[0]
+	_gait_stand = g[1]
+	_gait_mean = _gait_travel_at[-1] / a.length
+
+
+## Reads the walk's feet straight out of its tracks (no rig is posed): at each
+## sample both feet in the body's space, the planted one the lower across the
+## step, and how far it moved back (+Z: the body faces -Z) to the next sample.
+## A planted foot creeping forward (lifting off) counts as standing still.
+func _read_gait(a: Animation) -> Array:
+	var feet: Array[int] = [_skel.find_bone("FOOT_L"), _skel.find_bone("FOOT_R")]
+	if feet.has(-1):
+		return []
+	# The skeleton's place in the body: the model's half turn and scale, and
+	# the import's own.
+	var to_body := Transform3D()
+	var n: Node = _skel
+	while n != null and n != self:
+		if n is Node3D:
+			to_body = (n as Node3D).transform * to_body
+		n = n.get_parent()
+	# Each bone's [position, rotation, scale] tracks, -1 where it has none.
+	var tracks := {}
+	for ti in a.get_track_count():
+		var bone := _skel.find_bone(String(a.track_get_path(ti).get_concatenated_subnames()))
+		if bone < 0:
+			continue
+		var slot: Array = tracks.get(bone, [-1, -1, -1])
+		match a.track_get_type(ti):
+			Animation.TYPE_POSITION_3D:
+				slot[0] = ti
+			Animation.TYPE_ROTATION_3D:
+				slot[1] = ti
+			Animation.TYPE_SCALE_3D:
+				slot[2] = ti
+		tracks[bone] = slot
+	var count := maxi(int(round(a.length * GAIT_SAMPLES)), 2)
+	var at: Array = []
+	var low := [INF, INF]
+	for i in count + 1:
+		var t := a.length * i / count
+		var pair := [to_body * _bone_at(a, tracks, feet[0], t).origin,
+			to_body * _bone_at(a, tracks, feet[1], t).origin]
+		at.append(pair)
+		for f in 2:
+			low[f] = minf(low[f], pair[f].y)
+	var travel := PackedFloat32Array()
+	travel.resize(count + 1)
+	var stand := PackedByteArray()
+	stand.resize(count + 1)
+	travel[0] = 0.0
+	for i in count:
+		var p0: Array = at[i]
+		var p1: Array = at[i + 1]
+		var f := 0 if p0[0].y + p1[0].y <= p0[1].y + p1[1].y else 1
+		var back := maxf(p1[f].z - p0[f].z, 0.0)
+		travel[i + 1] = travel[i] + back
+		var down: bool = p0[0].y - low[0] < GAIT_STAND and p0[1].y - low[1] < GAIT_STAND
+		stand[i] = 1 if down and back * GAIT_SAMPLES < GAIT_HOLD else 0
+	stand[count] = stand[0]
+	return [travel, stand]
+
+
+## A bone's pose in the skeleton's space at clip time `t`, from the tracks
+## (the rest pose where a bone has none).
+func _bone_at(a: Animation, tracks: Dictionary, bone: int, t: float) -> Transform3D:
+	var xf := Transform3D()
+	while bone >= 0:
+		var rest := _skel.get_bone_rest(bone)
+		var slot: Array = tracks.get(bone, [-1, -1, -1])
+		var p: Vector3 = a.position_track_interpolate(slot[0], t) if slot[0] >= 0 else rest.origin
+		var q: Quaternion = a.rotation_track_interpolate(slot[1], t) if slot[1] >= 0 \
+			else rest.basis.get_rotation_quaternion()
+		var s: Vector3 = a.scale_track_interpolate(slot[2], t) if slot[2] >= 0 else rest.basis.get_scale()
+		xf = Transform3D(Basis(q) * Basis.from_scale(s), p) * xf
+		bone = _skel.get_bone_parent(bone)
+	return xf
+
+
+## The walk's clip time as it will be shown: its position plus what enemy.gd's
+## animation LOD has still to step it (`_anim_debt`). Not wrapped.
+func _walk_time() -> float:
+	return anim.current_animation_position + _anim_debt * anim.speed_scale
+
+
+## How far the planted foot sweeps back while the walk runs `span` seconds of
+## clip (either way) from clip time `from`, across the loop.
+func _gait_travel(from: float, span: float) -> float:
+	var length := anim.get_animation(ANIM_WALK_CLIP).length
+	var lo := from if span >= 0.0 else from + span
+	return _gait_upto(lo + absf(span), length) - _gait_upto(lo, length)
+
+
+func _gait_upto(t: float, length: float) -> float:
+	var laps := floorf(t / length)
+	var x := (t - laps * length) / length * (_gait_travel_at.size() - 1)
+	var i := clampi(int(x), 0, _gait_travel_at.size() - 2)
+	return laps * _gait_travel_at[-1] + lerpf(_gait_travel_at[i], _gait_travel_at[i + 1], x - i)
+
+
+## Whether the walk is at a moment it can stand still in.
+func _gait_can_stand(t: float) -> bool:
+	var length := anim.get_animation(ANIM_WALK_CLIP).length
+	var i := int(round(fposmod(t, length) / length * (_gait_stand.size() - 1)))
+	return _gait_stand[clampi(i, 0, _gait_stand.size() - 1)] == 1
+
+
+## The walk is what moves it: on its feet, on the floor, no move, beam, blow or
+## throw holding the body.
+func _gait_live() -> bool:
+	return not _gait_travel_at.is_empty() and anim != null and not _dying \
+		and _clip == ANIM_WALK_CLIP and anim.current_animation == String(ANIM_WALK_CLIP) \
+		and _swipe_t < 0.0 and _beam != Beam.CHARGE and _beam != Beam.FIRE \
+		and not is_stunned() and state != State.STAGGER and is_on_floor()
+
+
+## THE GAIT: moved this tick as far as the planted foot sweeps back while the
+## walk runs on (`anim.speed_scale` of clip a second), the way it was asked to
+## go -- or, finishing a step it was asked to stop, straight on (back, walking
+## backwards). Then `velocity` is put back to the speed it was asked for,
+## turned along whatever it met, so the steering carries on from its own
+## figure, not the step's.
+func _slide() -> void:
+	if not _gait_live():
+		super()
+		return
+	var want := Vector3(velocity.x, 0.0, velocity.z)
+	var asked := want.length()
+	var dir := want / asked if asked > 0.15 else \
+		Vector3(-global_basis.z.x, 0.0, -global_basis.z.z).normalized() * signf(anim.speed_scale)
+	# The span the clip has just run to the pose this tick shows (enemy.gd
+	# steps the rig before the body moves): the step ahead would leave the body
+	# a tick behind its feet, half a metre of slip a metre walked (measured).
+	var delta := get_physics_process_delta_time()
+	var span := anim.speed_scale * delta
+	var speed := _gait_travel(_walk_time() - span, span) / delta
+	velocity.x = dir.x * speed
+	velocity.z = dir.z * speed
+	super()
+	if speed > 0.05:
+		velocity.x *= asked / speed
+		velocity.z *= asked / speed
+	else:
+		velocity.x = want.x
+		velocity.z = want.z
+
+
 ## A clear line from the muzzle to the player's chest through stone. Its
 ## fellows do not count: the beam passes them.
 func _line_to(player: Node3D) -> bool:
@@ -1303,17 +1491,26 @@ func _animate(delta: float, now: float) -> void:
 				# The swipe's clip, started with the move (`_start_swipe`), at 1x.
 				pass
 			else:
-				# The walk at the rate that keeps its feet on the floor, eased to a
-				# stop where it stands (no idle clip); entered from a move at the
-				# phase nearest its pose, from a standstill, and eased up.
-				var v := get_real_velocity()
-				var speed := Vector2(v.x, v.z).length()
-				var want := clampf(speed / WALK_GROUND_SPEED, 0.4, 3.2) if speed > 0.15 else 0.0
+				# The walk at the speed it is asked to go (`velocity`: see
+				# `_slide`) over the cycle's mean -- backwards, backing off -- and
+				# the body goes as its planted foot does (THE GAIT). Entered from
+				# a move at the phase nearest its pose, from a standstill, and
+				# eased up; asked to stop, it finishes its step and stands on both
+				# feet (no idle clip).
+				var v := Vector3(velocity.x, 0.0, velocity.z)
+				var speed := v.length()
+				var want := clampf(speed / _gait_mean, 0.4, 3.2) if speed > 0.15 else 0.0
+				if want > 0.0 and v.dot(-global_basis.z) < GAIT_BACK * speed:
+					want = -want
 				if _clip != ANIM_WALK_CLIP:
 					_play_clip(ANIM_WALK_CLIP, 0.0, 0.3, true)
 				elif anim != null:
-					anim.speed_scale = move_toward(anim.speed_scale, want,
-						delta * (WALK_RATE_EASE if want > 0.0 else 4.0))
+					var rate := anim.speed_scale
+					if want != 0.0 or _gait_travel_at.is_empty():
+						anim.speed_scale = move_toward(rate, want,
+							delta * (WALK_RATE_EASE if want != 0.0 else 4.0))
+					elif absf(rate) < 0.3 or _gait_can_stand(_walk_time()):
+						anim.speed_scale = 0.0
 
 	# The crystal and the eyes: their rest glow, flaring through a charge and
 	# burning hot while it fires. (enemy.gd's state colours ride on the same
