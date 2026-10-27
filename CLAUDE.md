@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 112), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 113), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -501,6 +501,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 110 | 2026-10-25 | The surgeon deals his moves in turn, the needle dash first -- hopping back when too close, the needle blazing and leaving a streak; the booth route's scene waits until they are down out of the booth; the claw bigger (x1.3) and carrying higher | [docs/notes/110-the-needle-dash-seen-booth-scene-waits-bigger-claw.md](docs/notes/110-the-needle-dash-seen-booth-scene-waits-bigger-claw.md) |
 | 111 | 2026-10-26 | The surgeon's claw taken off him and kept (a scene, the inventory's Surgeon's Claw); hold E to move a vat, no turning while pushing; the claw's motion fluid (eased hoist, drawn between ticks, sprung fingers) | [docs/notes/111-take-the-surgeons-claw-hold-e-vats-fluid-claw.md](docs/notes/111-take-the-surgeons-claw-hold-e-vats-fluid-claw.md) |
 | 112 | 2026-10-26 | Realistic fog that limits the view (depth fog total at 60 m, a volumetric mist only shadowed lights light, nothing drawn past the fog); the presets retuned for the RTX 3060 at 3440x1440; `--ablate` from the settings in effect, a gpu ms column | [docs/notes/112-fog-and-the-3060.md](docs/notes/112-fog-and-the-3060.md) |
+| 113 | 2026-10-27 | Ghost mode only on a fresh press: not when Shift was already down as a menu, scene, pause, respawn or focus loss ended, nor in a Ctrl/Alt/Win chord; pad bindings read from the pad, not the latched action | [docs/notes/113-ghost-only-on-a-fresh-press.md](docs/notes/113-ghost-only-on-a-fresh-press.md) |
 
 ## Notes by source file
 
@@ -563,7 +564,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93
 - `scripts/puzzle_room.gd`: 18, 22, 79

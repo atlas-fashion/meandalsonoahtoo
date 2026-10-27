@@ -1013,10 +1013,18 @@ var _held_potion: Node3D
 ## Latest moment a jump will still be honoured after leaving the ground.
 var _coyote_until := 0.0
 ## Ghost mode: whether it is on, the bar (1 full, 0 empty), and whether the
-## key has to be let go before it can start again (after running the bar dry).
+## key has to be let go before it can start again (after running the bar dry,
+## or after it was held through a menu, a scene, a death or a lost focus --
+## note 113).
 var _ghosting := false
 var _ghost_meter := 1.0
-var _ghost_locked := false
+var _ghost_locked := true
+## Last physics frame the player was in play, and whether this frame follows a
+## gap in that (`_physics_process`): a key held across the gap needs a fresh press.
+var _ghost_frame := -10
+var _ghost_resumed := false
+## Pad device ids `_pad_held` asks (Godot's joypad slots).
+const PAD_SLOTS := 16
 ## 1.0 while a ghost is on, decaying to 0 after. One clock drives the field of
 ## view, the bank and the HUD's streaks, so they can never drift apart.
 var _dash_view := 0.0
@@ -1842,6 +1850,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Out of play -- held, hidden, on a ladder or a vat, in a scene, or the game
+	# paused (no call at all) -- leaves a gap in `_ghost_frame`, and a ghost key
+	# still down across it has to be let go before it starts one (note 113).
+	var frame := Engine.get_physics_frames()
+	if not (is_hidden() or climbing or restrained_by != null or latched_to != null or in_cutscene):
+		_ghost_resumed = frame - _ghost_frame > 1
+		_ghost_frame = frame
 	if is_hidden() or climbing or restrained_by != null:
 		# Held: the holder places them every frame (note 96).
 		velocity = Vector3.ZERO
@@ -3798,10 +3813,18 @@ func _is_blocked(origin: Vector3, body: Node3D) -> bool:
 ## it will start again -- otherwise it would flicker on and off at the refill.
 ## While on, the dash's whole look is held: no colour, the view opened out,
 ## the edge streaks, a bank into sideways motion.
+##
+## A ghost only ever starts on a fresh press (note 113). A key that was already
+## down when play resumed -- a menu closed (Shift-click in the inventory), a
+## scene ended, the game unpaused, a respawn, the window back in focus -- or
+## one pressed as part of a system chord (Win+Shift+S, Ctrl/Alt+Shift) locks
+## it until it is let go, where before it set a ghost off by itself.
 func _update_ghost(delta: float) -> void:
-	var held := _dodge_held() and not ui_open and not _dead
+	var held := _dodge_held()
 	if not held:
 		_ghost_locked = false
+	elif ui_open or _dead or _ghost_resumed or _system_chord():
+		_ghost_locked = true
 	var want := held and not _ghost_locked and not _slamming and _now() >= _slam_recover_until \
 		and not is_drinking()
 	var was := _ghosting
@@ -3838,11 +3861,33 @@ func _dodge_held() -> bool:
 	return not remote_view and _action_held(&"dodge")
 
 
+func _notification(what: int) -> void:
+	# The window lost focus (Alt+Tab, a snipping overlay): whatever is down now
+	# was pressed for something else, so the ghost waits for a fresh press.
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_ghost_locked = true
+
+
+## Ctrl, Alt or the Windows key down with the keyboard player's Shift: a system
+## shortcut (Win+Shift+S, the Copilot key, Ctrl+Shift+Esc), never a ghost. The
+## game binds none of them.
+func _system_chord() -> bool:
+	if Coop.active and Coop.index_of(self) == 1:
+		return false
+	for k in [KEY_CTRL, KEY_ALT, KEY_META]:
+		if Input.is_physical_key_pressed(k) or Input.is_key_pressed(k):
+			return true
+	return false
+
+
 ## Whether anything bound to `action` is down RIGHT NOW, asked of the keyboard
 ## and mouse themselves rather than of the action's stored state: that latched
 ## on (a release that never arrived, e.g. with the window losing focus
 ## mid-press) and the ghost carried on after its key was let go. Pad bindings
-## still go through the action.
+## are asked of the pads the same way (`_pad_held`): `is_action_pressed` there
+## answered for the WHOLE action, keyboard state included, so the latched state
+## came straight back for any action with a pad binding -- the ghost among them
+## (note 113).
 func _action_held(action: StringName) -> bool:
 	# Co-op: player 2 holds it on their pad only (the split "p2_" action);
 	# player 1 by keys and mouse alone, below, never the pad's binding.
@@ -3860,8 +3905,29 @@ func _action_held(action: StringName) -> bool:
 		elif button != null:
 			if Input.is_mouse_button_pressed(button.button_index):
 				return true
-		elif Input.is_action_pressed(action):
+		elif _pad_held(e, InputMap.action_get_deadzone(action)):
 			return true
+	return false
+
+
+## Whether a pad binding is down RIGHT NOW on the pad itself (every pad slot for
+## a device -1 binding -- slots, not just connected pads, so a harness's made-up
+## pad events count): a button pressed, or a stick / trigger past the action's
+## deadzone on the binding's side.
+func _pad_held(e: InputEvent, deadzone: float) -> bool:
+	var pad_button := e as InputEventJoypadButton
+	var motion := e as InputEventJoypadMotion
+	if pad_button == null and motion == null:
+		return false
+	for device in PAD_SLOTS:
+		if e.device >= 0 and device != e.device:
+			continue
+		if pad_button != null and Input.is_joy_button_pressed(device, pad_button.button_index):
+			return true
+		if motion != null:
+			var value := Input.get_joy_axis(device, motion.axis)
+			if signf(value) == signf(motion.axis_value) and absf(value) >= maxf(deadzone, 0.01):
+				return true
 	return false
 
 
@@ -4562,7 +4628,8 @@ func _respawn() -> void:
 	_invulnerable_until = _now() + invulnerable_time
 	_ghosting = false
 	_ghost_meter = 1.0
-	_ghost_locked = false
+	# Up again with the key still down: no ghost until it is pressed afresh.
+	_ghost_locked = true
 	_slam_recover_until = 0.0
 	_knock_at = -1.0
 	_slam_crouch = 0.0
