@@ -441,6 +441,12 @@ func _build_roof() -> void:
 	ceiling.material_override = m
 	ceiling.position = Vector3(0.0, CEIL, 0.0)
 	add_child(ceiling)
+	# The plane faces down, so it never cast the moon's shadow (note 114), and
+	# neither did the inward-facing brick above the corridors' lids: the hall's
+	# floor and mist were moonlit. Floor to just over the roof, half a metre
+	# into the walls.
+	var top := CEIL + 0.4
+	BrickLevel.moon_shade(self, Vector3(span + 0.4, top + 0.2, span + 0.4), Vector3(0.0, top * 0.5 - 0.1, 0.0))
 	var beam := _mesh_of("beam")
 	var xfs: Array[Transform3D] = []
 	var count := ceili(span / BEAM_LEN)

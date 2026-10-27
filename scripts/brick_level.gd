@@ -147,6 +147,29 @@ static func _fix_material(m: StandardMaterial3D, tint: float) -> void:
 static var _standalone: Dictionary = {}
 
 
+## A roofed room's shade from the moon (note 114): an invisible box, shadows
+## only, over the room from its floor to over its roof. The rooms' own roofs are
+## one-sided -- the surgery's ceiling a downward plane, the prison's dome turned
+## inside out, their upper walls panels facing in -- and a shadow pass culls
+## faces turned away from the light, so from above the moon saw none of them
+## and lit the floors and the mist inside. A box is closed: whichever faces the
+## moon cast, so nothing under it, through its top or its sides, is moonlit;
+## from inside, a light sees only its back faces and they cull. On the moon's
+## own layer, so it costs no torch shadow pass. `size` and `at` (its middle) in
+## `parent`'s frame.
+static func moon_shade(parent: Node3D, size: Vector3, at: Vector3) -> MeshInstance3D:
+	var box := BoxMesh.new()
+	box.size = size
+	var mi := MeshInstance3D.new()
+	mi.name = "MoonShade"
+	mi.mesh = box
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	mi.layers = MOON_ONLY_LAYER
+	mi.position = at
+	parent.add_child(mi)
+	return mi
+
+
 ## A kit mesh for a plain MeshInstance3D: its materials copied with the
 ## instance-colour albedo switched off (without an instance colour it renders
 ## black). Cached per piece.

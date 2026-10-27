@@ -480,6 +480,12 @@ func _build_dome_hall(kit) -> void:
 		Vector3(0.0, DOME_BASE, 0.0))
 	dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	add_child(dome)
+	# Turned inside out, the dome never cast the moon's shadow, nor did the band
+	# (faced into the hall) on the moon's side: the hall was as moonlit as an
+	# open court (note 114). Over the whole block, cells and all, floor to just
+	# over the dome.
+	var top := (dome.transform * dome.get_aabb()).end.y + 0.3
+	kit.moon_shade(self, Vector3(_block * 2.0, top + 0.2, _block * 2.0), Vector3(0.0, top * 0.5 - 0.1, 0.0))
 	# Embers' glow up under the dome, so its brick and ribs read out of the dark.
 	for k in 4:
 		var a := TAU * (float(k) + 0.5) / 4.0
