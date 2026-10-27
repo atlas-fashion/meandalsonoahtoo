@@ -685,6 +685,8 @@ func _build_full_map(root: Control) -> void:
 	hints.name = "Hints"
 	hints.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hints.text = "Mouse / left stick: move the map      Scroll / right stick: zoom      Left click / A: pin (again to remove)      Right click / X: mark with a note      Esc / B: close"
+	if Sandbox.active:
+		hints.text += "      T / Y: teleport there"
 	hints.add_theme_font_size_override("font_size", 14)
 	hints.add_theme_color_override("font_color", Color(0.82, 0.8, 0.76))
 	hints.add_theme_color_override("font_outline_color", Color(0, 0, 0))
@@ -804,9 +806,17 @@ func _map_input(event: InputEvent) -> void:
 			_click_map(_full_panel.size * 0.5)
 		get_viewport().set_input_as_handled()
 		return
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_T and Sandbox.active:
+		_sandbox_teleport()
+		get_viewport().set_input_as_handled()
+		return
 	var pad := event as InputEventJoypadButton
 	if pad != null and pad.pressed:
-		if pad.button_index == JOY_BUTTON_A:
+		if pad.button_index == JOY_BUTTON_Y and Sandbox.active:
+			_sandbox_teleport()
+			get_viewport().set_input_as_handled()
+		elif pad.button_index == JOY_BUTTON_A:
 			_quick_pin(_full_panel.size * 0.5)
 			get_viewport().set_input_as_handled()
 		elif pad.button_index == JOY_BUTTON_X:
@@ -911,6 +921,41 @@ func _quick_pin(p: Vector2) -> void:
 	_pins.append({"x": world.x, "z": world.y, "note": "", "color": QUICK_PIN_COLOUR, "shape": 0, "quick": true, "level": _level})
 	_hover_pin = _pin_at(p)
 	_pin_layer.queue_redraw()
+
+
+## The sandbox only (note 117): T / pad Y teleports to the mark under the
+## cursor, or else to the spot under it, on the level the map shows. A spot in
+## the rock goes to the nearest open cell's centre; sandbox_world.gd
+## `teleport_to_map` finds the floor there. The screen shuts behind it.
+func _sandbox_teleport() -> void:
+	var world_ := get_tree().get_first_node_in_group(&"sandbox_world")
+	if _built == null or world_ == null or _full_panel == null:
+		return
+	var p := _full_panel.size * 0.5
+	var hit := _pin_at(p)
+	var at := Vector2(float(_pins[hit]["x"]), float(_pins[hit]["z"])) if hit >= 0 else _panel_to_world(p)
+	var cell := _cell_for_world(Vector3(at.x, 0.0, at.y))
+	if not _built.cells.has(cell):
+		var from := cell
+		var best := INF
+		for c: Vector2i in _built.cells:
+			var d := Vector2(c - from).length_squared()
+			if d < best:
+				best = d
+				cell = c
+		if best == INF:
+			return
+		var centre: Vector3 = _built.to_world(cell)
+		at = Vector2(centre.x, centre.z)
+	var floor_y: float = (_built.to_world(cell) as Vector3).y
+	if _embedded:
+		var hud := Coop.hud(_player)
+		var screen = hud.get("_inventory_screen") if hud != null else null
+		if screen != null and is_instance_valid(screen):
+			screen.call("set_open", false)
+	else:
+		set_full_map_open(false)
+	world_.call("teleport_to_map", Vector3(at.x, floor_y, at.y), float(_player.rotation.y))
 
 
 ## Panel point -> world x, z (the inverse of `_continuous_px`).

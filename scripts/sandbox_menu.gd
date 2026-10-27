@@ -204,8 +204,14 @@ func _build_switches() -> Control:
 	# the rats without catching one first.
 	col.add_child(SP.spacer(10))
 	col.add_child(SP.section_label("GIVE ITEMS"))
-	for entry in [[&"live_rat", 1, "Live rat"], [&"robot_rat", 1, "Robot rat"],
-			[&"gold_crystal", 10, "10 gold crystals"]]:
+	# Heals (note 117): health back to full at once, or potions to drink.
+	var full := SP.menu_button("Heal to full", func() -> void:
+		if _player != null and is_instance_valid(_player):
+			_player.call("heal", float(_player.get("max_health"))))
+	full.custom_minimum_size.y = 32
+	col.add_child(full)
+	for entry in [[&"health_potion", 5, "5 health potions"], [&"live_rat", 1, "Live rat"],
+			[&"robot_rat", 1, "Robot rat"], [&"gold_crystal", 10, "10 gold crystals"]]:
 		var id: StringName = entry[0]
 		var n: int = entry[1]
 		var b := SP.menu_button(entry[2], func() -> void:
@@ -237,8 +243,9 @@ func _set_level(id: StringName, level: int) -> void:
 
 func _build_teleport() -> Control:
 	var col := _column("TELEPORT")
+	col.add_child(SP.dim_label("Or anywhere: on the map (M), T / Y\nteleports to the cursor or the pin under it"))
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(330, 470)
+	scroll.custom_minimum_size = Vector2(330, 430)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
 	_teleports = VBoxContainer.new()

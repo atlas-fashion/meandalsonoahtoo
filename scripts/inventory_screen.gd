@@ -823,6 +823,9 @@ func _build_map_footer() -> Control:
 	for hint in [["Mouse / L stick", "Move"], ["Scroll / R stick", "Zoom"], ["LMB / A", "Pin"],
 			["RMB / X", "Note"], ["M / Select", "Items"]]:
 		row.add_child(_hint(hint[0], hint[1]))
+	# The sandbox teleports to the cursor (explore_map.gd `_sandbox_teleport`).
+	if Sandbox.active:
+		row.add_child(_hint("T / Y", "Teleport"))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE

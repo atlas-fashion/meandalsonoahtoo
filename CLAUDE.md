@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 116), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 117), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -505,6 +505,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 114 | 2026-10-27 | No moonlight through the roofs: one-sided roofs (the surgery's ceiling, the prison's inside-out dome) never cast for the moon; a shadows-only box over each (`BrickLevel.moon_shade`) | [docs/notes/114-no-moonlight-through-roofs.md](docs/notes/114-no-moonlight-through-roofs.md) |
 | 115 | 2026-10-27 | The enforcer's feet stay planted: each tick the body moves as far as the walk's planted foot sweeps (read from the clip's tracks); the walk backwards when backing off; a stop finishes the step | [docs/notes/115-enforcer-feet-planted-the-gait.md](docs/notes/115-enforcer-feet-planted-the-gait.md) |
 | 116 | 2026-10-27 | The enforcer's walk a little smoother: each tick's step is the planted foot's speed averaged over 0.1 s of clip (`GAIT_SMOOTH`), the dead stop spread over a few ticks for a little slip | [docs/notes/116-enforcer-walk-smoother.md](docs/notes/116-enforcer-walk-smoother.md) |
+| 117 | 2026-10-27 | Sandbox: T / pad Y on the map teleports to the pin under the cursor or the spot (rock goes to the nearest open cell; the floor and navmesh found there); "Heal to full" and "5 health potions" in the menu | [docs/notes/117-sandbox-map-teleport-and-heals.md](docs/notes/117-sandbox-map-teleport-and-heals.md) |
 
 ## Notes by source file
 
@@ -541,7 +542,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92, 115, 116
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
-- `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82
+- `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82, 117
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
 - `scripts/graphics_settings.gd`: 79, 80, 112
@@ -551,7 +552,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hud.gd`: 6.19, 24, 79, 84
 - `scripts/interact.gd`: 6.18, 79
 - `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111
-- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79
 - `scripts/item_icon.gd`: 6.19, 77, 84, 111
 - `scripts/item_slot.gd`: 6.19, 30
@@ -580,8 +581,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/robot_rat.gd`: 77
 - `scripts/save_system.gd`: 19, 60, 79
 - `scripts/sandbox.gd`: 60, 68
-- `scripts/sandbox_menu.gd`: 60, 68, 77, 84
-- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102
+- `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112
 - `scripts/split_screen.gd`: 79, 80, 82

@@ -60,6 +60,8 @@ var _nav: NavigationRegion3D
 func build(owner_maze: Node3D) -> void:
 	maze = owner_maze
 	name = "Sandbox"
+	# The map finds it to teleport (explore_map.gd `_sandbox_teleport`).
+	add_to_group(&"sandbox_world")
 	_build_plane()
 
 
@@ -341,10 +343,34 @@ func destinations() -> Array:
 	return out
 
 
+## A spot picked on the map (note 117): `at` is in an open cell, on its level's
+## floor height (0, or the sewer's). The floor is found under it, then the
+## nearest navmesh point, so a spot on a pillar, a vat or the edge of a wall
+## lands beside it rather than in it.
+func teleport_to_map(at: Vector3, yaw: float) -> void:
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(at + Vector3(0.0, MAP_RAY_UP, 0.0), at + Vector3(0.0, -MAP_RAY_DOWN, 0.0), 1 | 2)
+	var hit := space.intersect_ray(q)
+	var spot: Vector3 = hit["position"] if not hit.is_empty() else at
+	var nav := NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, spot)
+	if Vector2(nav.x - spot.x, nav.z - spot.z).length() < MAP_NAV_REACH and absf(nav.y - spot.y) < 1.0:
+		spot = nav
+	teleport(spot, yaw, false)
+
+
+## How far above a map spot's floor height the floor ray starts (under every
+## corridor's ceiling) and how far below it reaches (short of the sewer).
+const MAP_RAY_UP := 1.6
+const MAP_RAY_DOWN := 6.0
+## How far the navmesh may move a map spot sideways.
+const MAP_NAV_REACH := 4.0
+
+
 ## Puts the player at `at` facing `yaw`, out of anything that holds them.
-func teleport(at: Vector3, yaw: float) -> void:
+## `snap`: drop onto the floor below `at` first (a spot already on it does not).
+func teleport(at: Vector3, yaw: float, snap := true) -> void:
 	# Co-op: the party goes together, player 2 a step beside player 1.
-	var spot := _floor_at(at)
+	var spot := _floor_at(at) if snap else at
 	for p in Coop.all():
 		var here: Vector3 = spot if Coop.index_of(p) == 0 else maze.call("_partner_spot", spot, yaw)
 		_teleport_one(p as CharacterBody3D, here, yaw)
