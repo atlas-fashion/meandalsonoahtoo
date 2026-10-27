@@ -4,6 +4,11 @@ Godot 4.7.2, Forward+, Vulkan. Target hardware is a **Quadro P620 driving a
 3440×1440 ultrawide** — weak fill rate, 2 GB VRAM, ~5 megapixels. Every decision
 below follows from that.
 
+**Since 2026-10-06 the user's PC runs an RTX 3060 on that same 3440×1440
+screen.** There the frame is torch shadow passes and, near the boss and the
+surgery, CPU (enemy physics) -- not pixels. Note 112 has the 3060 baseline and
+the retuned presets; measure against those, not the P620 tables below.
+
 ## How this file and `docs/notes/` work together -- READ THIS FIRST
 
 Sections 1-5 below are the standing rules. Everything else this project has
@@ -37,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 111), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 112), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -355,7 +360,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 `C:\Users\tflfr\Desktop\Godot_v4.7.2-stable_win64.exe` (examples here say
 `godot`). Game args go after `--` (`OS.get_cmdline_user_args()`): `title_screen.gd` reads `--sandbox` (straight into
 the sandbox, note 60);
-`tools/benchmark.gd` reads `--bench --ablate --shot --swing --no-trail
+`tools/benchmark.gd` reads `--bench --ablate --at= --only= --set= --shot --swing --no-trail
 --preset=<name> --size=WxH --nocull --flat`; `maze.gd` reads `--no-enemies`
 and `--modules`; `brick_level.gd` reads `--brick-skip=a,b`. Harnesses are
 `extends SceneTree` scripts run with `--script res://tools/<x>.gd` (see
@@ -495,6 +500,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 109 | 2026-10-25 | The claw home over the table when it dies; the surgeon takes it onto his back (an ambush at the hatch, or after the lever) and speaks; a stand-in body with iron limbs and a needle; his dash, spin and slam | [docs/notes/109-surgeon-takes-the-claw-two-openings-stand-in-body-three-moves.md](docs/notes/109-surgeon-takes-the-claw-two-openings-stand-in-body-three-moves.md) |
 | 110 | 2026-10-25 | The surgeon deals his moves in turn, the needle dash first -- hopping back when too close, the needle blazing and leaving a streak; the booth route's scene waits until they are down out of the booth; the claw bigger (x1.3) and carrying higher | [docs/notes/110-the-needle-dash-seen-booth-scene-waits-bigger-claw.md](docs/notes/110-the-needle-dash-seen-booth-scene-waits-bigger-claw.md) |
 | 111 | 2026-10-26 | The surgeon's claw taken off him and kept (a scene, the inventory's Surgeon's Claw); hold E to move a vat, no turning while pushing; the claw's motion fluid (eased hoist, drawn between ticks, sprung fingers) | [docs/notes/111-take-the-surgeons-claw-hold-e-vats-fluid-claw.md](docs/notes/111-take-the-surgeons-claw-hold-e-vats-fluid-claw.md) |
+| 112 | 2026-10-26 | Realistic fog that limits the view (depth fog total at 60 m, a volumetric mist only shadowed lights light, nothing drawn past the fog); the presets retuned for the RTX 3060 at 3440x1440; `--ablate` from the settings in effect, a gpu ms column | [docs/notes/112-fog-and-the-3060.md](docs/notes/112-fog-and-the-3060.md) |
 
 ## Notes by source file
 
@@ -534,7 +540,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
-- `scripts/graphics_settings.gd`: 79, 80
+- `scripts/graphics_settings.gd`: 79, 80, 112
 - `scripts/hand_torch.gd`: 24, 29
 - `scripts/held_potion.gd`: 6.19
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
@@ -547,10 +553,10 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
@@ -572,8 +578,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102
-- `scripts/settings_panel.gd`: 19, 46, 80
-- `scripts/sewer.gd`: 50, 55, 56, 57, 79
+- `scripts/settings_panel.gd`: 19, 46, 80, 112
+- `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92
 - `scripts/shard_door.gd`: 18, 79
@@ -613,7 +619,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/torch_flame.gdshader`: 6.18, 19
 - `shaders/vine_leaf.gdshader`: 6.18
 - `shaders/water_drip.gdshader`: 39
-- `tools/benchmark.gd`: 6.11, 33
+- `tools/benchmark.gd`: 6.11, 33, 112
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66

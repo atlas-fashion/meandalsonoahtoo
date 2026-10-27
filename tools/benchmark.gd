@@ -24,6 +24,12 @@ var _shot := false
 var _swing := false
 var _no_trail := false
 var _size := Vector2i(1280, 720)
+## `--set=key=value,key=value`: Graphics knobs set after the preset, never
+## saved -- one change measured against the run without it.
+var _overrides := {}
+## `--at=<station>`: where `--ablate` measures (default the boss room edge).
+var _ablate_at := "boss room edge"
+var _only: PackedStringArray = []
 
 
 func _ready() -> void:
@@ -49,6 +55,16 @@ func _ready() -> void:
 			var idx := Graphics.PRESET_NAMES.find(_tag.capitalize())
 			if idx >= 0:
 				_preset = idx
+		elif arg.begins_with("--set="):
+			for pair in arg.substr(6).split(","):
+				var kv := pair.split("=")
+				if kv.size() == 2:
+					_overrides[kv[0]] = str_to_var(kv[1])
+			_tag += "+" + arg.substr(6)
+		elif arg.begins_with("--at="):
+			_ablate_at = arg.substr(5)
+		elif arg.begins_with("--only="):
+			_only = arg.substr(7).split(",")
 		elif arg.begins_with("--size="):
 			var wh := arg.substr(7).split("x")
 			if wh.size() == 2:
@@ -125,9 +141,14 @@ func _run() -> void:
 		Graphics.set_preset(_preset, false)
 	# Held on the settings object rather than forced on the DisplayServer, so
 	# that later apply_all() calls during ablation do not put the cap back.
+	for key in _overrides:
+		Graphics.set(key, _overrides[key])
 	Graphics.vsync = false
 	Graphics.fps_cap = 0
 	Graphics.apply_all()
+	# The GPU's own time per frame, so a station can be told GPU-bound (gpu ms
+	# close to the frame) from CPU-bound (gpu ms well under it).
+	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	await get_tree().create_timer(1.0).timeout
 
 	var start := _player.global_position
@@ -181,7 +202,7 @@ func _run() -> void:
 			env.ssao_enabled, env.glow_enabled, env.fog_enabled, _torch_shadows()])
 
 	if _ablate:
-		await _run_ablation(stations["boss room edge"])
+		await _run_ablation(stations.get(_ablate_at, stations["boss room edge"]))
 	else:
 		for name in stations:
 			await _station(name, stations[name])
@@ -189,36 +210,66 @@ func _run() -> void:
 	get_tree().quit()
 
 
-## What each switch is actually worth, measured one at a time at the worst spot
-## in the level. Presets are guesses until this says otherwise.
+## What each switch is actually worth, measured one at a time at one spot
+## (`--at=<station>`). The baseline is the settings in effect -- the player's
+## own, or `--preset=`, plus `--set=` -- not always High: on the P620 High
+## pinned every station at the cap and measured nothing. A variant the
+## baseline already has is skipped.
 func _run_ablation(where: Vector3) -> void:
+	var base := {}
+	for key in Graphics.KEYS:
+		base[key] = Graphics.get(key)
 	var variants := [
-		["High (baseline)", {}],
+		["baseline", {}],
 		["- MSAA off", {"msaa": 0}],
 		["- SSAO off", {"ssao": false}],
 		["- bloom off", {"glow": false}],
+		["- fog off", {"fog": false}],
+		["- mist off", {"volumetric_fog": 0}],
+		["- mist on", {"volumetric_fog": 1}],
+		["- mist fine", {"volumetric_fog": 2}],
 		["- torch shadows off", {"shadows": 0}],
+		["- 12 torches lit", {"torch_lights": 12.0}],
+		["- 8 torches lit", {"torch_lights": 8.0}],
+		["- mesh LOD 2 px", {"lod_threshold": 2.0}],
+		["- mesh LOD 4 px", {"lod_threshold": 4.0}],
+		["- shadow atlas 2048", {"shadow_atlas": 2048}],
 		["- triplanar off", {"texture_detail": 1}],
-		["- textures off", {"texture_detail": 0}],
 		["- render scale 0.70", {"render_scale": 0.7}],
 		["- render scale 0.50", {"render_scale": 0.5}],
 		["- view distance 0.70", {"view_distance": 0.7}],
+		["- anim LOD banded", {"anim_quality": 1}],
 		["- anim LOD aggressive", {"anim_quality": 0}],
+		["- sim range 0.75", {"npc_detail": 0.75}],
+		# The same again, last: if it disagrees with the first, the spot itself
+		# changed during the run (an enemy arrived, a scene started) and the
+		# rows between are not comparable.
+		["baseline again", {}],
 	]
 	for v in variants:
-		_reset_to_high()
+		# `--only=mist,fog`: just the rows whose names hold one of these, and
+		# the baselines.
+		if not _only.is_empty() and not (v[0] as String).begins_with("baseline"):
+			var keep := false
+			for word in _only:
+				keep = keep or (v[0] as String).contains(word)
+			if not keep:
+				continue
+		var skip := false
+		for key in (v[1] as Dictionary):
+			if base.get(key) == v[1][key]:
+				skip = true
+		if skip:
+			continue
+		for key in base:
+			Graphics.set(key, base[key])
 		for key in (v[1] as Dictionary):
 			Graphics.set(key, v[1][key])
+		Graphics.vsync = false
+		Graphics.fps_cap = 0
 		Graphics.apply_all()
 		await get_tree().create_timer(0.6).timeout
 		await _station(v[0], where)
-
-
-func _reset_to_high() -> void:
-	for key in Graphics.PRESETS[Graphics.Preset.HIGH]:
-		Graphics.set(key, Graphics.PRESETS[Graphics.Preset.HIGH][key])
-	Graphics.vsync = false
-	Graphics.fps_cap = 0
 
 
 ## Grabs the pause menu as the player actually sees it. Assertions confirm the
@@ -434,6 +485,7 @@ func _station(name: String, where: Vector3) -> void:
 	var prims := 0.0
 	var proc := 0.0
 	var phys := 0.0
+	var gpu := 0.0
 	var n := 0
 	t = 0.0
 	while t < STATION_SECONDS:
@@ -447,6 +499,7 @@ func _station(name: String, where: Vector3) -> void:
 		prims += Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
 		proc += Performance.get_monitor(Performance.TIME_PROCESS)
 		phys += Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)
+		gpu += RenderingServer.viewport_get_measured_render_time_gpu(get_viewport().get_viewport_rid())
 		n += 1
 
 	frames.sort()
@@ -464,6 +517,7 @@ func _station(name: String, where: Vector3) -> void:
 		"primitives": prims / maxi(n, 1),
 		"cpu_process_ms": proc / maxi(n, 1) * 1000.0,
 		"cpu_physics_ms": phys / maxi(n, 1) * 1000.0,
+		"gpu_ms": gpu / maxi(n, 1),
 	})
 
 
@@ -500,13 +554,13 @@ func _pct(sorted: Array[float], p: float) -> float:
 
 func _report() -> void:
 	print("")
-	print("%-18s %7s %7s %7s %8s %8s %9s %10s %8s %8s" % [
-		"station", "avg fps", "1% low", "avg ms", "p95 ms", "p99 ms",
+	print("%-22s %7s %7s %7s %8s %8s %8s %9s %10s %8s %8s" % [
+		"station", "avg fps", "1% low", "avg ms", "p95 ms", "p99 ms", "gpu ms",
 		"draws", "prims", "cpu ms", "phys ms"])
 	for r in _rows:
-		print("%-18s %7.1f %7.1f %7.2f %8.2f %8.2f %9.0f %10.0f %8.2f %8.2f" % [
+		print("%-22s %7.1f %7.1f %7.2f %8.2f %8.2f %8.2f %9.0f %10.0f %8.2f %8.2f" % [
 			r["station"], r["avg_fps"], r["low1_fps"], r["avg_ms"], r["p95_ms"],
-			r["p99_ms"], r["draw_calls"], r["primitives"],
+			r["p99_ms"], r["gpu_ms"], r["draw_calls"], r["primitives"],
 			r["cpu_process_ms"], r["cpu_physics_ms"]])
 	var worst := 0.0
 	var total := 0.0

@@ -31,31 +31,37 @@ const PRESET_NAMES := ["Ultra", "High", "Medium", "Low", "Potato", "Custom"]
 const PRESETS := {
 	Preset.ULTRA: {
 		"render_scale": 1.0, "msaa": 2, "shadows": 2, "shadow_atlas": 4096,
-		"torch_lights": 16.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "effects": true, "damp": true,
+		"torch_lights": 16.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 2, "effects": true, "damp": true,
 		"light_detail": 1.15, "view_distance": 1.25, "texture_detail": 2,
 		"lod_threshold": 1.0, "anim_quality": 2, "npc_detail": 1.25,
 	},
+	# High and Medium retuned on the RTX 3060 at 3440x1440 (note 112). There the
+	# frame is torch SHADOWS first (soft = six-sided cubes: 5.3 ms of the chest
+	# room's 22.8 against hard), MSAA (~2.6 ms), and on the CPU the enemies
+	# awake round the player (sim range 1.0 -> 0.9: boss room edge 21.7 -> 12.9
+	# ms). High: 73.6 fps overall, worst p99 23.1 ms (was 54.2 / 51.7).
+	# Medium adds render scale 0.85: 76.1 fps, every station's avg under 16.7.
 	Preset.HIGH: {
-		"render_scale": 1.0, "msaa": 1, "shadows": 2, "shadow_atlas": 4096,
-		"torch_lights": 12.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "effects": true, "damp": true,
+		"render_scale": 1.0, "msaa": 0, "shadows": 1, "shadow_atlas": 4096,
+		"torch_lights": 12.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 1, "effects": true, "damp": true,
 		"light_detail": 1.0, "view_distance": 1.0, "texture_detail": 2,
-		"lod_threshold": 1.0, "anim_quality": 2, "npc_detail": 1.0,
+		"lod_threshold": 1.0, "anim_quality": 1, "npc_detail": 0.9,
 	},
 	Preset.MEDIUM: {
-		"render_scale": 0.8, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
-		"torch_lights": 10.0, "coop_torch_share": 0.5, "ssao": false, "glow": true, "fog": true, "effects": true, "damp": true,
+		"render_scale": 0.85, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
+		"torch_lights": 12.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 1, "effects": true, "damp": true,
 		"light_detail": 1.0, "view_distance": 1.0, "texture_detail": 2,
 		"lod_threshold": 2.0, "anim_quality": 1, "npc_detail": 0.9,
 	},
 	Preset.LOW: {
 		"render_scale": 0.62, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
-		"torch_lights": 8.0, "coop_torch_share": 0.5, "ssao": false, "glow": false, "fog": true, "effects": true, "damp": true,
+		"torch_lights": 8.0, "coop_torch_share": 0.5, "ssao": false, "glow": false, "fog": true, "volumetric_fog": 0, "effects": true, "damp": true,
 		"light_detail": 0.9, "view_distance": 0.9, "texture_detail": 2,
 		"lod_threshold": 4.0, "anim_quality": 1, "npc_detail": 0.75,
 	},
 	Preset.POTATO: {
 		"render_scale": 0.45, "msaa": 0, "shadows": 0, "shadow_atlas": 256,
-		"torch_lights": 6.0, "coop_torch_share": 0.5, "ssao": false, "glow": false, "fog": false, "effects": false, "damp": false,
+		"torch_lights": 6.0, "coop_torch_share": 0.5, "ssao": false, "glow": false, "fog": false, "volumetric_fog": 0, "effects": false, "damp": false,
 		"light_detail": 0.7, "view_distance": 0.75, "texture_detail": 0,
 		"lod_threshold": 8.0, "anim_quality": 0, "npc_detail": 0.55,
 	},
@@ -84,6 +90,10 @@ var coop_torch_share := 0.5
 var ssao := false
 var glow := false
 var fog := true
+## The volumetric mist (note 112): 0 off, 1 on (a 64 x 64 x 48 froxel grid),
+## 2 fine (128 x 128 x 96: tighter halos, less bleed past corners). Only with
+## `fog` on. Only shadow-casting lights scatter in it (`_apply_light`).
+var volumetric_fog := 1
 ## Death bursts and other non-essential flourishes.
 var effects := true
 ## Wet patches on the floor that catch the torchlight, and water dripping
@@ -112,6 +122,8 @@ var preset := Preset.LOW
 
 var _loaded := false
 var _sweeping := false
+## Where the depth fog is total, or 0 (`_apply_environment`).
+var _fog_sight := 0.0
 
 # --- animation LOD bands, read every frame by enemy.gd ----------------------
 ## Inside this, rigs pose every physics frame.
@@ -265,10 +277,22 @@ func _apply_environment() -> void:
 		for cam: Camera3D in Coop.split.call("cameras"):
 			if cam.environment != null:
 				envs.append(cam.environment)
+	# Past a depth fog's end nothing shows, so nothing there need be drawn
+	# (`_apply_visibility`). Zero: no such limit.
+	_fog_sight = 0.0
+	match volumetric_fog:
+		1:
+			RenderingServer.environment_set_volumetric_fog_volume_size(64, 48)
+		2:
+			RenderingServer.environment_set_volumetric_fog_volume_size(128, 96)
 	for env in envs:
 		env.ssao_enabled = ssao
 		env.glow_enabled = glow
 		env.fog_enabled = fog
+		env.volumetric_fog_enabled = fog and volumetric_fog > 0
+		if fog and env.fog_mode == Environment.FOG_MODE_DEPTH \
+				and env.fog_density >= 1.0 and env.fog_depth_end > 0.0:
+			_fog_sight = maxf(_fog_sight, env.fog_depth_end)
 		# Without fog the sky reads as a flat band on the horizon, so the
 		# background goes dark instead of showing a seam.
 		env.ssil_enabled = false
@@ -303,7 +327,21 @@ func _apply_visibility(g: GeometryInstance3D) -> void:
 		g.set_meta("gfx_vis_end", g.visibility_range_end)
 		g.set_meta("gfx_vis_margin", g.visibility_range_end_margin)
 	var base: float = g.get_meta("gfx_vis_end")
-	g.visibility_range_end = base * view_distance
+	var end := base * view_distance
+	if _fog_sight > 0.0:
+		# A range is measured from the node's ORIGIN (note 6.09), so the fog
+		# limit is pushed out by how far the node's own bounds reach from it:
+		# a 24 m chunk whose origin is past the fog can still have a wall in
+		# front of it.
+		if not g.has_meta("gfx_reach"):
+			var box := g.get_aabb()
+			var reach := 0.0
+			for i in 8:
+				var basis := g.global_basis if g.is_inside_tree() else g.basis
+				reach = maxf(reach, (basis * box.get_endpoint(i)).length())
+			g.set_meta("gfx_reach", reach)
+		end = minf(end, _fog_sight + float(g.get_meta("gfx_reach")))
+	g.visibility_range_end = end
 	g.visibility_range_end_margin = float(g.get_meta("gfx_vis_margin")) * view_distance
 
 
@@ -315,6 +353,7 @@ func _apply_light(l: Light3D) -> void:
 			"fade_begin": l.distance_fade_begin,
 			"fade_enabled": l.distance_fade_enabled,
 			"fade_length": l.distance_fade_length,
+			"fog_energy": l.light_volumetric_fog_energy,
 		})
 	var saved: Dictionary = l.get_meta("gfx_light")
 	# Only lights that were authored to cast shadows are candidates; this never
@@ -322,6 +361,11 @@ func _apply_light(l: Light3D) -> void:
 	var torch := l.has_meta("torch_shadow")
 	if saved["shadow"]:
 		l.shadow_enabled = shadows > 0
+	# The volumetric mist (note 112) is lit only by lights that cast shadows:
+	# an unshadowed light would glow in the mist through the stone (the
+	# sewer's moss lights, say, into the corridors' air above them).
+	l.light_volumetric_fog_energy = (float(saved.get("fog_energy", 1.0))
+		if l.shadow_enabled else 0.0)
 	if l.has_meta("moon"):
 		# The red moon (maze `_setup_moon`) lights the courts and skylights
 		# only because its shadows stop it at every roof. Without shadows it
@@ -418,7 +462,7 @@ func _materials_of(g: GeometryInstance3D) -> Array:
 # ---------------------------------------------------------------------------
 const SAVE_PATH := "user://graphics.cfg"
 const KEYS := [
-	"render_scale", "msaa", "shadows", "shadow_atlas", "torch_lights", "coop_torch_share", "ssao", "glow", "fog",
+	"render_scale", "msaa", "shadows", "shadow_atlas", "torch_lights", "coop_torch_share", "ssao", "glow", "fog", "volumetric_fog",
 	"effects", "damp", "light_detail", "view_distance", "texture_detail",
 	"lod_threshold", "anim_quality", "npc_detail", "vsync", "fps_cap",
 ]

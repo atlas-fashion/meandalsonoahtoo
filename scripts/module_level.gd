@@ -160,7 +160,32 @@ const ROOM_TORCH_EVERY := 3
 const AMBIENT_COLOUR := Color(0.17, 0.175, 0.19)
 const AMBIENT_ENERGY := 7.0
 const FOG_COLOUR := Color(0.035, 0.035, 0.045)
-const FOG_DENSITY := 0.030
+
+## --- The fog (note 112) -------------------------------------------------------
+## Two layers. The DEPTH fog closes the view: nothing at all is seen past
+## FOG_SIGHT metres, it thickens along FOG_CURVE from FOG_BEGIN, and anything
+## set to be culled past the fog (Graphics `_apply_visibility`) is already gone
+## into it. The VOLUMETRIC mist is the realism: a lit medium the torches glow
+## in and the moon shafts through, shadowed by the same stone that stops their
+## light (only shadow-casting lights scatter in it; Graphics `_apply_light`).
+## The mist is a quality knob (Graphics.volumetric_fog); the depth fog is
+## `Graphics.fog`, free on the 3060 (ablation, note 112).
+const FOG_SIGHT := 60.0
+const FOG_BEGIN := 3.0
+## Under 1 the fog thickens fast near and slowly far, the way real air does
+## (an exponential); 1 would be linear.
+const FOG_CURVE := 0.8
+## How much of the sky the depth fog veils: some, so the moon reads through
+## mist, never all of it.
+const FOG_SKY := 0.35
+const MIST_DENSITY := 0.022
+const MIST_ALBEDO := Color(0.78, 0.8, 0.86)
+## Forward scatter: the mist brightens toward a light the player faces, which
+## is the halo round a torch seen down a corridor.
+const MIST_ANISOTROPY := 0.55
+## The ambient's share of the mist's light: none. Ambient is everywhere, and at
+## 0.04 it washed every room lavender-grey; the mist shows only where a light is.
+const MIST_AMBIENT := 0.0
 
 ## Distance from a cell's centre to the inside face of its solid walls, in
 ## metres, measured off the built meshes by tools/verify_modules.py. The plugged
@@ -2701,9 +2726,26 @@ static func configure_environment(env: Environment, ambient: float = 1.0,
 	# set here, and raising it produced a pixel-identical frame.
 	env.ambient_light_sky_contribution = 0.0
 	env.fog_enabled = fog
+	env.fog_mode = Environment.FOG_MODE_DEPTH
 	env.fog_light_color = FOG_COLOUR
 	env.fog_light_energy = 0.4
-	env.fog_density = FOG_DENSITY
+	# In depth mode the density is the fog's opacity at FOG_SIGHT: total.
+	env.fog_density = 1.0
+	env.fog_depth_begin = FOG_BEGIN
+	env.fog_depth_end = FOG_SIGHT
+	env.fog_depth_curve = FOG_CURVE
+	env.fog_sky_affect = FOG_SKY
+	# The mist's look; whether it is on at all is Graphics' (volumetric_fog).
+	env.volumetric_fog_density = MIST_DENSITY
+	env.volumetric_fog_albedo = MIST_ALBEDO
+	env.volumetric_fog_anisotropy = MIST_ANISOTROPY
+	env.volumetric_fog_length = FOG_SIGHT
+	env.volumetric_fog_detail_spread = 2.0
+	env.volumetric_fog_ambient_inject = MIST_AMBIENT
+	env.volumetric_fog_gi_inject = 0.0
+	env.volumetric_fog_sky_affect = 0.0
+	env.volumetric_fog_temporal_reprojection_enabled = true
+	env.volumetric_fog_temporal_reprojection_amount = 0.85
 	# The game's own grade: ACES at white 4.0 plus a colour adjustment. A
 	# fresh Environment is linear with no adjustment, and ACES crushes
 	# midtones hard, so previews without this flattered the level badly.

@@ -2023,6 +2023,10 @@ const MOON_COLOUR := Color(0.86, 0.8, 1.0)
 ## `module_view_range` (70 m) plus a block's half diagonal, so the shadow must
 ## reach past that.
 const MOON_SHADOW_DISTANCE := 95.0
+## The moon's share of light in the volumetric mist (note 112). At the full 1.0
+## the mist in every court and hall glowed lavender and the dark was gone; this
+## leaves shafts under the open sky.
+const MOON_MIST := 0.3
 
 
 func _setup_moon() -> void:
@@ -2041,6 +2045,7 @@ func _setup_moon() -> void:
 	moon.light_color = MOON_COLOUR
 	moon.light_energy = moon_energy
 	moon.light_specular = 0.2
+	moon.light_volumetric_fog_energy = MOON_MIST
 	moon.shadow_enabled = true
 	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	moon.directional_shadow_max_distance = MOON_SHADOW_DISTANCE

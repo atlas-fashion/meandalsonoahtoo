@@ -52,7 +52,9 @@ func _run() -> void:
 	# brightness for exactly this kind of omission.
 	ModuleLevel.configure_environment(env, 1.0, true)
 	SkySetup.apply(env)
-	# `configure_environment()` never touches `fog_sky_affect` -- it is set
+	# (Since note 112 `configure_environment()` sets `fog_sky_affect` itself
+	# (FOG_SKY); this preview still forces 0, to judge the sky shader alone.)
+	# Before that it never touched `fog_sky_affect` -- it was set
 	# once, in `scenes/main.tscn`'s authored Environment resource (0.0, fog
 	# does not touch the sky), and this preview builds a FRESH `Environment`
 	# that does not carry that. Its engine default is 1.0, which means dense

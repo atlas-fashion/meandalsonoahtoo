@@ -90,7 +90,9 @@ const MOSS_LIGHT_ENERGY := 1.2
 const MOSS_LIGHT_RANGE := 4.5
 ## Share of moss clusters that carry a light.
 const MOSS_LIT_SHARE := 0.6
-## The haze while the camera is below.
+## The haze while the camera is below. An EXPONENTIAL fog: the dungeon's is a
+## depth fog (note 112), in which this density would be a 6% veil, so the mode
+## is switched too and put back above.
 const HAZE_COLOUR := Color(0.06, 0.07, 0.045)
 const HAZE_ENERGY := 1.0
 const HAZE_DENSITY := 0.06
@@ -1241,9 +1243,11 @@ func _haze_env(env: Environment, on: bool) -> void:
 	if on:
 		if saved.is_empty():
 			saved = {"env": env, "colour": env.fog_light_color, "energy": env.fog_light_energy,
-				"density": env.fog_density, "ambient": env.ambient_light_color,
+				"density": env.fog_density, "mode": env.fog_mode,
+				"ambient": env.ambient_light_color,
 				"ambient_energy": env.ambient_light_energy}
 			_fog_saved[key] = saved
+		env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 		env.fog_light_color = HAZE_COLOUR
 		env.fog_light_energy = HAZE_ENERGY
 		env.fog_density = HAZE_DENSITY
@@ -1259,6 +1263,7 @@ func _unhaze(saved: Dictionary) -> void:
 	env.fog_light_color = saved["colour"]
 	env.fog_light_energy = saved["energy"]
 	env.fog_density = saved["density"]
+	env.fog_mode = saved["mode"]
 	env.ambient_light_color = saved["ambient"]
 	env.ambient_light_energy = saved["ambient_energy"]
 
