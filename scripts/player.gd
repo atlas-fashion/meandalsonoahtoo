@@ -540,8 +540,9 @@ func is_restrained() -> bool:
 ## E on a surgery vat grabs it (surgery_vat.gd `grab`): both hands on it, the
 ## weapon put away (`hands_busy`), no attacking, guarding or jumping. The vat
 ## moves them with it and reads their keys -- forward pushes, back pulls, the
-## sides turn it -- until E again, a blow that knocks them down, the claw, a
-## scene, or death lets go (`unlatch`).
+## sides turn it (only while it is not heaved) -- until E is let go (note 111:
+## held, not toggled), a blow that knocks them down, the claw, a scene, or
+## death lets go (`unlatch`). Their view keeps its yaw meanwhile.
 var latched_to: Node3D = null
 
 
@@ -1708,7 +1709,9 @@ func _pad_look(delta: float) -> void:
 		return
 	if _pose_kind == &"spin" and not _spin_released():
 		return
-	rotate_y(-v.x * k)
+	# On a vat, no turning (note 111).
+	if latched_to == null:
+		rotate_y(-v.x * k)
 	_look_pitch = clampf(_look_pitch - v.y * k * pad_pitch_share, deg_to_rad(min_pitch), deg_to_rad(max_pitch))
 
 
@@ -1753,7 +1756,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		# Yaw turns the whole body so movement follows the view; pitch stays on
 		# the head alone, otherwise looking up would tilt the capsule.
-		rotate_y(-event.relative.x * _look_scale())
+		# Holding a vat (note 111: "The player shouldnt be able to turn when
+		# pushing a vat"), only the pitch: they face it, and it is what turns.
+		if latched_to == null:
+			rotate_y(-event.relative.x * _look_scale())
 		# Kept in its own variable rather than read back off the node. The head
 		# also carries the bob and the dash bank, and accumulating look from a
 		# value those have already nudged would let them drift into your aim.
@@ -1764,7 +1770,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		)
 	elif latched_to != null:
 		# Both hands on a vat (note 106): no swinging, guarding, jumping or
-		# slamming -- only looking about (above); E lets go (the vat's own).
+		# slamming -- only looking up and down (above); letting go of E lets go
+		# (the vat's own, note 111).
 		return
 	elif event.is_action_pressed("attack"):
 		_attack_key_spills_drink()

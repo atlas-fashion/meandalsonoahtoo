@@ -1013,9 +1013,12 @@ func _on_fight_started() -> void:
 	_want_bars = true
 
 
-## He is dead: the bars come down; the room is done.
+## He is dead: the bars come down; the room is done -- but for his claw, which
+## the player takes off him (note 111, surgery_control.gd `_take_his_claw`).
 func _on_surgeon_defeated() -> void:
 	lower_bars()
+	if control != null:
+		control.call("claw_scene_when_ready")
 
 
 ## Whether `at` (world) is in the hall, on its floor or up to the roof (not
@@ -1263,6 +1266,8 @@ func save_state() -> Dictionary:
 		if boss != null and bool(boss.call("is_dead")):
 			var bt := to_local(boss.global_position)
 			out["surgeon_dead"] = [bt.x, bt.y, bt.z, boss.global_rotation.y - global_rotation.y]
+		# Note 111: his claw taken off him, into the player's inventory.
+		out["claw_kept"] = bool(control.get("claw_kept"))
 	if power != null:
 		out["hatch"] = bool(power.get("hatch_open"))
 		out["crystal"] = bool(power.get("crystal_gone"))
@@ -1320,7 +1325,7 @@ func _restore_surgeon(data: Dictionary) -> void:
 		control.call("restore_boss", false, Transform3D.IDENTITY)
 		return
 	var at := Transform3D(Basis(Vector3.UP, global_rotation.y + float(dead[3])), to_global(Vector3(float(dead[0]), float(dead[1]), float(dead[2]))))
-	control.call("restore_boss", true, at)
+	control.call("restore_boss", true, at, bool(data.get("claw_kept", false)))
 
 
 ## Everyone died: with the table still running, all of it back as it was --

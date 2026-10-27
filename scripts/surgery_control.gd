@@ -840,12 +840,19 @@ func set_thrown_now() -> void:
 
 
 ## A save with the machine off: him dead where he fell (`at`), or waiting.
-func restore_boss(dead: bool, at: Transform3D) -> void:
+## `kept` (note 111): the claw already the player's -- gone from his back;
+## otherwise, dead, the scene in which it is taken plays when they are about.
+func restore_boss(dead: bool, at: Transform3D, kept := false) -> void:
 	_arm_him()
 	if not dead:
 		return
 	_down_to_the_hall()
 	boss.call("set_dead_now", at)
+	if kept:
+		claw_kept = true
+		boss.call("drop_claw_now")
+	else:
+		claw_scene_when_ready(2.5)
 
 
 ## A world reset with the machine off and him still up: whole, waiting.
@@ -1025,4 +1032,247 @@ func _claim(p: Node3D, knocked: bool) -> void:
 			if n.get("in_cutscene") == true:
 				n.call("end_cutscene")
 	boss.call("begin_fight", true)
+	_busy = false
+
+
+# --- His claw, taken (note 111) -------------------------------------------------------
+##
+## The user: "When the surgeon is killed, there should be a cutscene where the
+## the player takes the claw from the surgeon and the player should keep it in
+## their inventory."
+##
+## surgery.gd `_on_surgeon_defeated` -> `claw_scene_when_ready`: once he has
+## fallen and someone is up and free in the hall, `_take_his_claw` -- everyone in
+## the scene, letterboxed. The nearest player walks to him and kneels; wrenches
+## at the claw on his back (his body jerked about, sparks off its socket) until
+## it tears free; lifts it up into their view, its fingers flexing once and its
+## eye flaring; and puts it away -- the inventory's "surgeon_claw". Saved as
+## surgery.gd's "claw_kept"; a save made after his death but before the scene
+## plays it when the game is next loaded.
+
+## The claw is the player's: off his body, in their inventory.
+var claw_kept := false
+var _claw_waiting := false
+## The claw's fingers about their knuckles (surgical_table.gd FINGER_AT).
+const CLAW_FINGERS: Array[float] = [30.0, 150.0, 270.0]
+## Held up in view (camera space): where its hub is, and its size there.
+const CLAW_HELD_AT := Vector3(0.24, -0.36, -0.72)
+const CLAW_HELD_SCALE := 0.32
+## ...and the way its fingers (its -Y) point there.
+const CLAW_HELD_POINT := Vector3(-0.32, 0.42, -1.0)
+
+
+## He is dead: after `after` seconds, as soon as someone is up and free in the
+## hall, the scene.
+func claw_scene_when_ready(after := 1.8) -> void:
+	if claw_kept or _claw_waiting or boss == null or not bool(boss.call("has_claw")):
+		return
+	_claw_waiting = true
+	await _wait(after)
+	var p: Node3D = null
+	while p == null:
+		if not is_inside_tree() or claw_kept or not bool(boss.call("has_claw")):
+			_claw_waiting = false
+			return
+		if not _busy:
+			p = _claw_taker()
+		if p == null:
+			await get_tree().process_frame
+	_claw_waiting = false
+	_take_his_claw(p)
+
+
+## The nearest player up, free and in the hall, or null.
+func _claw_taker() -> Node3D:
+	var best: Node3D = null
+	var best_d := INF
+	for q in Coop.all():
+		var n := q as Node3D
+		if n == null or n.get("_dead") == true or n.get("in_cutscene") == true or n.get("ui_open") == true:
+			continue
+		if not bool(surgery.call("in_hall", n.global_position)):
+			continue
+		var d := n.global_position.distance_to(boss.global_position)
+		if d < best_d:
+			best_d = d
+			best = n
+	return best
+
+
+## The claw's fingers `open` radians out about their knuckles.
+func _flex_claw(claw: Node3D, open: float) -> void:
+	if not is_instance_valid(claw):
+		return
+	var found := claw.find_children("*", "Skeleton3D", true, false)
+	if found.is_empty():
+		return
+	var skel := found[0] as Skeleton3D
+	for f in CLAW_FINGERS.size():
+		var a := deg_to_rad(CLAW_FINGERS[f])
+		skel.set_bone_pose_rotation(f + 1, Quaternion(Vector3(-sin(a), 0.0, cos(a)), open))
+
+
+## Where the claw is held up in `p`'s view (world): its hub low on the right,
+## its fingers reaching up and across toward the middle; `s` its scale.
+func _held_pose(p: Node3D, s: float) -> Transform3D:
+	var cam := Coop.camera(p)
+	var view: Transform3D = cam.global_transform if cam != null else p.global_transform
+	var y := -CLAW_HELD_POINT.normalized()
+	var x := Vector3.UP.cross(y).normalized()
+	var b := Basis(x, y, x.cross(y)).orthonormalized()
+	return view * Transform3D(b.scaled(Vector3.ONE * s), CLAW_HELD_AT)
+
+
+## Where `p` kneels to take the claw (world): CLAW_STAND from it, round the side
+## nearest them with no vat in the way (he may have fallen against one, and
+## kneeling into a vat the scene was a view of its iron); the near side if every
+## side is blocked.
+const CLAW_STAND := 1.15
+
+
+func _claw_stand(p: Node3D, claw_at: Vector3) -> Vector3:
+	var best := Vector3.INF
+	var best_d := INF
+	for i in 16:
+		var a := TAU * float(i) / 16.0
+		var at := claw_at + Vector3(sin(a), 0.0, cos(a)) * CLAW_STAND
+		at.y = p.global_position.y
+		var clear := bool(surgery.call("in_hall", at))
+		# Not standing on him: clear of every joint of his body.
+		var joints: Dictionary = boss.get("_j")
+		for j in joints.values():
+			var to_j: Vector3 = (j as Node3D).global_position - at
+			if Vector2(to_j.x, to_j.z).length() < 0.75:
+				clear = false
+		for v in surgery.get("vats"):
+			var vn := v as Node3D
+			var to := vn.global_position - at
+			# The stand and the line from it to the claw both off the tub.
+			var mid := vn.global_position - (at + claw_at) * 0.5
+			var room := float(vn.get("radius")) + 0.5
+			if Vector2(to.x, to.z).length() < room or Vector2(mid.x, mid.z).length() < room - 0.2:
+				clear = false
+				break
+		var d := at.distance_to(p.global_position)
+		if clear and d < best_d:
+			best_d = d
+			best = at
+	if best == Vector3.INF:
+		var side := p.global_position - claw_at
+		side.y = 0.0
+		side = side.normalized() if side.length() > 0.01 else Vector3.FORWARD
+		best = claw_at + side * CLAW_STAND
+		best.y = p.global_position.y
+	return best
+
+
+func _take_his_claw(p: Node3D) -> void:
+	if _busy or claw_kept or boss == null or not bool(boss.call("has_claw")):
+		return
+	_busy = true
+	var everyone: Array[Node3D] = []
+	for q in Coop.all():
+		var n := q as Node3D
+		if n != null and n.get("_dead") != true:
+			everyone.append(n)
+			if n.get("in_cutscene") != true:
+				n.call("begin_cutscene")
+	p.set("hands_busy", true)
+	var bars := WOOD_DOOR.letterbox(self)
+	var claw_at: Vector3 = boss.call("claw_point")
+	for n in everyone:
+		n.call("scene_look_at", claw_at, 4.0)
+	# 1. Over to him, beside the claw, on the nearest side a vat is not on.
+	var stand := _claw_stand(p, claw_at)
+	if Vector2(stand.x - p.global_position.x, stand.z - p.global_position.z).length() > 0.25:
+		p.call("scene_walk_to", stand, 5.0)
+		await Signal(p, &"scene_walk_finished")
+	# 2. Down on a knee over him, both hands on it.
+	p.call("scene_lean", Vector3(0.0, -0.62, -0.2), 4.0)
+	p.call("scene_frame", 8.0, 0.0, 3.0)
+	p.call("scene_look_at", claw_at, 5.0)
+	await _wait(0.9)
+	# 3. Wrenched at: it holds, his body jerking with it, sparks off the socket.
+	for k in 5:
+		boss.call("jolt", 0.6 + 0.15 * float(k))
+		if table != null:
+			table.call("_sparks", claw_at + Vector3(0.0, 0.15, 0.0), Color(1.0, 0.75, 0.45), 6 + 3 * k)
+		p.set("_shake", maxf(float(p.get("_shake")), 0.1 + 0.03 * float(k)))
+		var lean := 0.06 if k % 2 == 0 else -0.06
+		p.call("scene_lean", Vector3(lean, -0.58 + 0.05 * float(k % 2), -0.12 - 0.04 * float(k % 2)), 10.0)
+		await _wait(0.2 + 0.05 * float(k))
+	# 4. Torn free: up off him, in their hands.
+	var claw: Node3D = boss.call("unmount_claw")
+	if claw == null:
+		_end_claw_scene(everyone, p, bars)
+		return
+	# (unmount_claw leaves its world transform in `transform`.)
+	var from: Transform3D = claw.transform
+	surgery.add_child(claw)
+	claw.global_transform = from
+	boss.call("jolt", 1.2)
+	if table != null:
+		table.call("_sparks", claw_at + Vector3(0.0, 0.2, 0.0), Color(1.0, 0.85, 0.55), 22)
+	for n in everyone:
+		n.set("_shake", maxf(float(n.get("_shake")), 0.3))
+	_flex_claw(claw, 0.5)
+	p.call("scene_lean", Vector3(0.0, -0.15, 0.05), 3.0)
+	p.call("scene_frame", 0.0, 0.0, 2.0)
+	# Up off the floor: the view comes level to look at it in their hands.
+	var ahead := -p.global_basis.z
+	ahead.y = 0.0
+	p.call("scene_look_at", p.global_position + ahead.normalized() * 4.0 + Vector3(0.0, 1.2, 0.0), 3.0)
+	var eye := claw.get_node_or_null("EyeLight") as OmniLight3D
+	var lift := create_tween().set_ignore_time_scale(true)
+	lift.tween_method(func(k: float) -> void:
+		if not is_instance_valid(claw) or not is_instance_valid(p):
+			return
+		var e := k * k * (3.0 - 2.0 * k)
+		var to := _held_pose(p, CLAW_HELD_SCALE)
+		var t := from.interpolate_with(to, e)
+		t.origin += Vector3(0.0, 0.35 * sin(e * PI), 0.0)
+		claw.global_transform = t
+		_flex_claw(claw, lerpf(0.5, -0.1, e)), 0.0, 1.0, 1.1)
+	await lift.finished
+	# 5. Looked at: the fingers tried once, its eye flaring.
+	var flex := create_tween().set_ignore_time_scale(true)
+	flex.tween_method(func(k: float) -> void:
+		if not is_instance_valid(claw) or not is_instance_valid(p):
+			return
+		claw.global_transform = _held_pose(p, CLAW_HELD_SCALE)
+		var o := -0.1 + 0.85 * sin(k * PI) - 0.25 * sin(k * TAU) * float(k > 0.5)
+		_flex_claw(claw, o)
+		if eye != null:
+			eye.visible = true
+			eye.light_energy = 0.4 + 2.2 * sin(k * PI), 0.0, 1.0, 1.4)
+	await flex.finished
+	# 6. Put away: lowered out of view, and it is theirs.
+	var down := create_tween().set_ignore_time_scale(true)
+	down.tween_method(func(k: float) -> void:
+		if not is_instance_valid(claw) or not is_instance_valid(p):
+			return
+		var t := _held_pose(p, CLAW_HELD_SCALE * (1.0 - 0.4 * k))
+		t.origin += (Coop.camera(p).global_basis.y if Coop.camera(p) != null else Vector3.UP) * -0.55 * k * k
+		claw.global_transform = t, 0.0, 1.0, 0.45)
+	await down.finished
+	claw.queue_free()
+	claw_kept = true
+	if p.has_method("add_item"):
+		p.call("add_item", &"surgeon_claw", 1)
+	_end_claw_scene(everyone, p, bars)
+	var hud := Coop.hud(p)
+	if hud != null and hud.has_method("_show_toast"):
+		hud.call("_show_toast", "Surgeon's Claw")
+
+
+func _end_claw_scene(everyone: Array[Node3D], p: Node3D, bars: CanvasLayer) -> void:
+	if bars != null and is_instance_valid(bars):
+		WOOD_DOOR.letterbox_out(bars)
+	for n in everyone:
+		if is_instance_valid(n):
+			n.call("scene_look_at", null)
+			if n.get("in_cutscene") == true:
+				n.call("end_cutscene")
+	if is_instance_valid(p):
+		p.set("hands_busy", false)
 	_busy = false

@@ -57,6 +57,8 @@ static func paint(c: CanvasItem, id: StringName, rect: Rect2, tint := Color.WHIT
 			pass
 		&"gold_crystal", &"red_crystal":
 			_shard(c, o, s, tint, Inventory.item_color(id))
+		&"surgeon_claw":
+			_claw(c, o, s, tint)
 		_ when Inventory.item_kind(id) == "Relic":
 			_shard(c, o, s, tint, Inventory.item_color(id))
 		_:
@@ -77,6 +79,43 @@ static func _shard(c: CanvasItem, o: Vector2, s: float, tint: Color, col: Color)
 	c.draw_colored_polygon(PackedVector2Array([top, right, bottom, waist]), col.darkened(0.35) * tint)
 	c.draw_polyline(PackedVector2Array([top, right, bottom, left, top]), col.darkened(0.7) * tint, maxf(1.0, s * 0.02))
 	c.draw_line(top, waist, Color(1, 1, 1, 0.7) * tint, maxf(1.0, s * 0.015))
+
+
+## The surgeon's claw (note 111): an iron hub with a red eye at the top, three
+## jointed iron fingers hanging from it and curling in, brass knuckles.
+static func _claw(c: CanvasItem, o: Vector2, s: float, tint: Color) -> void:
+	var p := func(x: float, y: float) -> Vector2: return o + Vector2(x, y) * s
+	var iron := Color(0.5, 0.52, 0.56) * tint
+	var iron_dark := Color(0.26, 0.27, 0.3) * tint
+	var brass := Color(0.78, 0.6, 0.28) * tint
+	var dark := Color(0.1, 0.09, 0.1) * tint
+	var w := maxf(1.0, s * 0.018)
+	# The three fingers: knuckle -> middle joint -> tip, curling in.
+	var fingers := [
+		[p.call(0.36, 0.42), p.call(0.22, 0.62), p.call(0.32, 0.86)],
+		[p.call(0.5, 0.44), p.call(0.5, 0.68), p.call(0.5, 0.92)],
+		[p.call(0.64, 0.42), p.call(0.78, 0.62), p.call(0.68, 0.86)],
+	]
+	for f: Array in fingers:
+		c.draw_polyline(PackedVector2Array(f), dark, s * 0.1)
+		c.draw_polyline(PackedVector2Array(f), iron_dark, s * 0.075)
+		c.draw_line(f[0], f[1], iron, s * 0.045)
+		c.draw_circle(f[1], s * 0.04, brass)
+		c.draw_circle(f[0], s * 0.045, brass)
+	# The hub: a riveted drum, the arm's stub on top, the red eye on its face.
+	c.draw_line(p.call(0.5, 0.08), p.call(0.5, 0.2), iron_dark, s * 0.12)
+	var hub := PackedVector2Array([p.call(0.3, 0.2), p.call(0.7, 0.2), p.call(0.74, 0.32),
+		p.call(0.66, 0.44), p.call(0.34, 0.44), p.call(0.26, 0.32)])
+	c.draw_colored_polygon(hub, iron)
+	c.draw_colored_polygon(PackedVector2Array([p.call(0.26, 0.32), p.call(0.74, 0.32), p.call(0.66, 0.44),
+		p.call(0.34, 0.44)]), iron_dark)
+	var outline := hub.duplicate()
+	outline.append(hub[0])
+	c.draw_polyline(outline, dark, w)
+	c.draw_circle(p.call(0.5, 0.3), s * 0.075, Color(1.0, 0.35, 0.12, 0.35) * tint)
+	c.draw_circle(p.call(0.5, 0.3), s * 0.04, Color(1.0, 0.4, 0.15) * tint)
+	for x: float in [0.33, 0.67]:
+		c.draw_circle(p.call(x, 0.25), s * 0.015, brass)
 
 
 ## Corner to corner, head up and to the right: an ash shaft with leather

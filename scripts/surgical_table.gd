@@ -776,6 +776,7 @@ func _sleep_pose() -> void:
 	_o = Vector2.ZERO
 	_ov = Vector2.ZERO
 	_update_wrist()
+	_settle()
 	for c in _cuffs:
 		c.rotation = Vector3.ZERO
 	if _prisoner != null:
@@ -822,6 +823,7 @@ func set_dead_now(at: Vector3, _yaw: float) -> void:
 	_len = _dead_len()
 	_len_goal = _len
 	_update_wrist()
+	_settle()
 	_apply_pose(0.0)
 
 
@@ -895,6 +897,7 @@ func _enter(s: State) -> void:
 func _physics_process(delta: float) -> void:
 	if room == null:
 		return
+	_snap_prev()
 	var now := _now()
 	_t += delta
 	match state:
@@ -941,7 +944,7 @@ func _physics_process(delta: float) -> void:
 	if state != State.DEAD:
 		_drive(delta)
 		_swing(delta)
-		_len = move_toward(_len, _len_goal, _hoist * delta)
+		_hoist_step(delta)
 		_update_wrist()
 	_hold_victim()
 	_hold_cargo()
@@ -968,6 +971,90 @@ func _drive(delta: float) -> void:
 
 
 var _last_accel := Vector2.ZERO
+
+
+# --- Fluid motion (note 111, the user: "Make the claw's animations more fluid") ------
+##
+## Three things made it move in steps:
+## - the hoist paid out and hauled in at a constant speed that started and
+##   stopped dead (`move_toward`); now `_hoist_step` drives it as `_drive` does
+##   the gantry -- up to `_hoist`, accelerating and braking to arrive;
+## - it was drawn where the last physics tick left it, so at more frames than
+##   ticks it stood still for a frame and then jumped; now `_apply_pose` draws
+##   it between the last two ticks (`_snap_prev`, the interpolation fraction);
+## - the fingers lurched off toward each new goal at once (an exponential
+##   lerp: full speed on the first frame); now a critically damped spring
+##   (`_finger_step`) eases them off and settles them without overshoot. The
+##   shake before the drop and the turn at the wrist ease in and out too.
+
+## Reaches its top speed in 1/HOIST_KICK s (never slower than HOIST_ACCEL_MIN).
+const HOIST_KICK := 4.0
+const HOIST_ACCEL_MIN := 6.0
+## The fingers' spring: this many times stiffer than `_open_rate`.
+const FINGER_SPRING := 1.6
+var _len_v := 0.0
+var _len_was := FOLD_LEN
+var _open_v := 0.0
+var _spin_rate := 0.4
+var _shake_amt := 0.0
+## The last tick's state, for drawing between ticks.
+var _prev_b := Vector2.ZERO
+var _prev_o := Vector2.ZERO
+var _prev_len := FOLD_LEN
+
+
+## The arm paid out or hauled in toward `_len_goal`, a motor's way. A length set
+## outright since the last tick (the drop, a catch, a save) stops it there.
+func _hoist_step(delta: float) -> void:
+	if absf(_len - _len_was) > 0.0001:
+		_len_v = 0.0
+	var d := _len_goal - _len
+	var acc := maxf(HOIST_ACCEL_MIN, _hoist * HOIST_KICK)
+	var want := signf(d) * minf(_hoist, sqrt(2.0 * acc * absf(d)))
+	# Coming in faster than this speed can stop from (a goal moved closer, or
+	# a slower drive taking over from a fast one): brake as hard as it takes to
+	# stop exactly on it, not stop dead on arrival.
+	var rate := acc
+	if signf(_len_v) == signf(d) and absf(_len_v) > absf(want) and absf(d) > 0.001:
+		rate = maxf(acc, _len_v * _len_v / (2.0 * absf(d)))
+	_len_v = move_toward(_len_v, want, rate * delta)
+	var step := _len_v * delta
+	if absf(d) < 0.0005 or (signf(step) == signf(d) and absf(step) >= absf(d)):
+		# Arrived (or would pass it this tick): there, and stopped.
+		_len = _len_goal
+		_len_v = 0.0
+	else:
+		_len += step
+	_len_was = _len
+
+
+## Put somewhere outright (a reset, a save): at rest there, nothing to draw
+## between.
+func _settle() -> void:
+	_len_v = 0.0
+	_len_was = _len
+	_open_v = 0.0
+	_shake_amt = 0.0
+	_snap_prev()
+
+
+## Where things were at the start of this tick (drawn from, `_apply_pose`).
+func _snap_prev() -> void:
+	_prev_b = _b
+	_prev_o = _o
+	_prev_len = _len
+
+
+## The fingers toward `_open_goal`: a critically damped spring (the closed-form
+## smooth damp, steady at any frame time).
+func _finger_step(delta: float) -> void:
+	var w := _open_rate * FINGER_SPRING
+	var x := w * delta
+	var e := 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x)
+	var change := _open - _open_goal
+	var temp := (_open_v + w * change) * delta
+	_open_v = (_open_v - w * temp) * e
+	_open = _open_goal + (change + temp) * e
 
 
 ## The hanging arm swings: a damped spring pulled back under the trolley, thrown
@@ -1674,10 +1761,14 @@ func _take_cargo() -> void:
 
 
 ## Held: hanging from the fingers, swinging with the claw.
-func _hold_cargo() -> void:
+## `w`, `axis`: the wrist and the arm's line to hang it from (the tick's, or as
+## drawn between ticks, `_pose_arm`).
+func _hold_cargo(w: Variant = null, axis: Variant = null) -> void:
 	if _cargo == null or not is_instance_valid(_cargo) or state != State.FERRY or _step < 2 or _step >= 5:
 		return
-	var grip := room.to_global(_w + _axis * CLAW_LEN * 0.8)
+	var at: Vector3 = _w if w == null else w
+	var along: Vector3 = _axis if axis == null else axis
+	var grip := room.to_global(at + along * CLAW_LEN * 0.8)
 	var yaw := _cargo.global_rotation.y
 	var hang := Basis(Vector3.UP, yaw)
 	if _cargo_prop:
@@ -2228,14 +2319,30 @@ func _pose_arm(delta: float) -> void:
 	if room == null:
 		return
 	var rt := room.global_transform
-	_bridge.global_transform = rt * Transform3D(Basis(), Vector3(0.0, 0.0, _b.y))
-	_ring.global_transform = rt * Transform3D(Basis().scaled(Vector3.ONE * TROLLEY_SCALE), Vector3(_b.x, TROLLEY_TOP, _b.y))
-	_lamp.global_transform = rt * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(_b.x, ROOT_Y - 0.2, _b.y))
+	# Drawn between the last two ticks (note 111), so it glides at any frame
+	# rate instead of stepping at the physics rate.
+	var f := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0) if delta > 0.0 else 1.0
+	var b := _prev_b.lerp(_b, f)
+	var o := _prev_o.lerp(_o, f)
+	var w := Vector3(b.x + o.x, ROOT_Y - lerpf(_prev_len, _len, f), b.y + o.y)
+	var hang := w - Vector3(b.x, ROOT_Y, b.y)
+	var axis := hang.normalized() if hang.length() > 0.2 else Vector3.DOWN
+	_bridge.global_transform = rt * Transform3D(Basis(), Vector3(0.0, 0.0, b.y))
+	_ring.global_transform = rt * Transform3D(Basis().scaled(Vector3.ONE * TROLLEY_SCALE), Vector3(b.x, TROLLEY_TOP, b.y))
+	_lamp.global_transform = rt * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(b.x, ROOT_Y - 0.2, b.y))
 	# The claw: its -Y along the arm, turning slowly at the wrist (fast while it
-	# works on someone), its fingers trembling as it locks on.
-	if delta > 0.0 and _power > 0.05:
-		_spin += delta * (0.4 + (4.0 if state == State.STRAP or state == State.WORK else 0.0)) * _power
-	var y := -_axis.normalized()
+	# works on someone -- the turn eased up and down, note 111), its fingers
+	# trembling as it locks on.
+	if delta > 0.0:
+		var spin_to := (0.4 + (4.0 if state == State.STRAP or state == State.WORK else 0.0)) * _power
+		_spin_rate = lerpf(_spin_rate, spin_to, 1.0 - exp(-3.0 * delta))
+		if _power > 0.05:
+			_spin += delta * _spin_rate
+		# The shake comes on and dies away rather than switching.
+		_shake_amt = move_toward(_shake_amt, _shaking, delta * 6.0)
+	elif _shaking <= 0.0:
+		_shake_amt = 0.0
+	var y := -axis
 	var ref := Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT
 	var x := ref.cross(y).normalized()
 	var z := x.cross(y).normalized()
@@ -2243,28 +2350,31 @@ func _pose_arm(delta: float) -> void:
 	# claw, the fingers shaking on their own.
 	var shudder := 0.0
 	var wobble := Vector3.ZERO
-	if _shaking > 0.0:
+	if _shake_amt > 0.0:
 		var t := _now()
-		shudder = 0.025 * _shaking * sin(t * 47.0)
-		wobble = Vector3(sin(t * 53.0), 0.0, cos(t * 59.0)) * 0.018 * _shaking
+		shudder = 0.025 * _shake_amt * sin(t * 47.0)
+		wobble = Vector3(sin(t * 53.0), 0.0, cos(t * 59.0)) * 0.018 * _shake_amt
 	var claw_basis := Basis(x, y, z) * Basis(Vector3.UP, _spin + shudder) * Basis(Vector3.RIGHT, shudder)
 	# Taken off the arm by the surgeon (note 109): his now.
-	if claw_taken:
-		pass
-	else:
-		_claw.global_transform = rt * Transform3D(claw_basis, _w + wobble)
-	# The fingers.
+	if not claw_taken:
+		_claw.global_transform = rt * Transform3D(claw_basis, w + wobble)
+		# What it carries goes with it as drawn -- a player too, so their own
+		# view glides with it.
+		_hold_cargo(w, axis)
+		if state == State.CARRY and _victim != null and is_instance_valid(_victim) and delta > 0.0:
+			_victim.global_position = rt * (w + axis * CLAW_LEN * 0.95) - Vector3(0.0, HANG_UNDER, 0.0)
+	# The fingers, on their spring (note 111).
 	if delta > 0.0:
-		_open = lerpf(_open, _open_goal, clampf(delta * _open_rate, 0.0, 1.0))
+		_finger_step(delta)
 	if state == State.LIMP:
 		# Swinging loose: they splay as it swings.
 		_pose_fingers(_open + clampf(_ov.length() * 0.08, 0.0, 0.25), 0.0)
 	else:
-		_pose_fingers(_open, _shaking)
+		_pose_fingers(_open, _shake_amt)
 	# The arm: from the trolley straight down into the wrist, its segments as
 	# many as the length needs -- it telescopes.
-	var root := Vector3(_b.x, ROOT_Y + 0.35, _b.y)
-	var total := root.distance_to(_w)
+	var root := Vector3(b.x, ROOT_Y + 0.35, b.y)
+	var total := root.distance_to(w)
 	var n := clampi(ceili(total / SEG_LEN), 1, SEG_MAX)
 	for i in SEG_MAX:
 		var seg := _segs[i]
@@ -2272,15 +2382,15 @@ func _pose_arm(delta: float) -> void:
 			seg.visible = false
 			continue
 		seg.visible = true
-		var a := root.lerp(_w, float(i) / float(n))
-		var b := root.lerp(_w, float(i + 1) / float(n))
-		var d := b - a
+		var a := root.lerp(w, float(i) / float(n))
+		var e := root.lerp(w, float(i + 1) / float(n))
+		var d := e - a
 		var len_ := d.length()
 		var sy := d / len_
 		var sref := Vector3.UP if absf(sy.y) < 0.95 else Vector3.RIGHT
 		var sx := sref.cross(sy).normalized()
 		var sz := sx.cross(sy).normalized()
-		seg.global_transform = rt * Transform3D(Basis(sx * SEG_THICK, sy * (len_ * 1.08), sz * SEG_THICK), (a + b) * 0.5)
+		seg.global_transform = rt * Transform3D(Basis(sx * SEG_THICK, sy * (len_ * 1.08), sz * SEG_THICK), (a + e) * 0.5)
 
 
 ## The prisoner thrown off the side as the restraints open (`instant` for a

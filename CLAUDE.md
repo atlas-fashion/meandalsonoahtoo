@@ -37,7 +37,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 110), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 111), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -494,6 +494,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 108 | 2026-10-25 | The control room up to the roof (the gantry kept off it), its door the dungeon doors' size; the vats checkered close round the table, the floor open beyond | [docs/notes/108-booth-to-the-roof-dungeon-door-vats-close-round-the-table.md](docs/notes/108-booth-to-the-roof-dungeon-door-vats-close-round-the-table.md) |
 | 109 | 2026-10-25 | The claw home over the table when it dies; the surgeon takes it onto his back (an ambush at the hatch, or after the lever) and speaks; a stand-in body with iron limbs and a needle; his dash, spin and slam | [docs/notes/109-surgeon-takes-the-claw-two-openings-stand-in-body-three-moves.md](docs/notes/109-surgeon-takes-the-claw-two-openings-stand-in-body-three-moves.md) |
 | 110 | 2026-10-25 | The surgeon deals his moves in turn, the needle dash first -- hopping back when too close, the needle blazing and leaving a streak; the booth route's scene waits until they are down out of the booth; the claw bigger (x1.3) and carrying higher | [docs/notes/110-the-needle-dash-seen-booth-scene-waits-bigger-claw.md](docs/notes/110-the-needle-dash-seen-booth-scene-waits-bigger-claw.md) |
+| 111 | 2026-10-26 | The surgeon's claw taken off him and kept (a scene, the inventory's Surgeon's Claw); hold E to move a vat, no turning while pushing; the claw's motion fluid (eased hoist, drawn between ticks, sprung fingers) | [docs/notes/111-take-the-surgeons-claw-hold-e-vats-fluid-claw.md](docs/notes/111-take-the-surgeons-claw-hold-e-vats-fluid-claw.md) |
 
 ## Notes by source file
 
@@ -539,10 +540,10 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/hud.gd`: 6.19, 24, 79, 84
 - `scripts/interact.gd`: 6.18, 79
-- `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102
+- `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111
 - `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79
-- `scripts/item_icon.gd`: 6.19, 77, 84
+- `scripts/item_icon.gd`: 6.19, 77, 84, 111
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79
@@ -556,7 +557,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93
 - `scripts/puzzle_room.gd`: 18, 22, 79
@@ -582,15 +583,15 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108
+- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109
-- `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106
+- `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106, 111
 - `scripts/surgery_piece.gd`: 104, 110
 - `scripts/subtitles.gd`: 109
-- `scripts/surgeon_boss.gd`: 105, 109, 110
-- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110
-- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110
+- `scripts/surgeon_boss.gd`: 105, 109, 110, 111
+- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111
+- `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80

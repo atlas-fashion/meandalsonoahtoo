@@ -22,6 +22,13 @@ extends CharacterBody3D
 ## is aimed. E again lets go (so does anything that knocks them over, the claw,
 ## a scene). Walking into a vat no longer moves it (note 102's shove).
 ##
+## HELD, not toggled (note 111, the user: "The player should have to hold "e" to
+## move vats around. The player shouldnt be able to turn when pushing a vat."):
+## the grip lasts only while E is held (`_check_holders`), and the moment it is
+## let go, so is the vat. Their view does not turn while they hold it (player.gd
+## mouse and stick look keep only the pitch), and a vat being pushed or pulled
+## is not turned -- left and right turn it only while it is not being heaved.
+##
 ## Pushed or pulled, nothing moves at first: it takes BREAKAWAY s of steady
 ## heaving before the vat gives with a jolt; then it creeps in lurches -- each
 ## heave a shove, the slurry slopping -- up to PUSH_SPEED, and it stops dead
@@ -62,6 +69,8 @@ const TURN_SPEED := 0.3
 const TEAM_BONUS := 0.45
 ## Running into something: what is left of the move slides along it this much.
 const GRAZE := 0.35
+## Its prompt (note 111: held, not toggled).
+const GRAB_TEXT := "Hold E   Grab"
 ## What stops it besides the world: the open hatch's curb (surgery_power.gd).
 const STOP_LAYER := 1 << 22
 
@@ -131,7 +140,7 @@ func _ready() -> void:
 	add_child(cs)
 	_dust = _make_dust()
 	add_child(_dust)
-	_grab_prompt = Interact.prompt("E   Grab", Vector3(0.0, 1.1 * grow, 0.0))
+	_grab_prompt = Interact.prompt(GRAB_TEXT, Vector3(0.0, 1.1 * grow, 0.0))
 	add_child(_grab_prompt)
 
 
@@ -181,15 +190,13 @@ func set_lid(on: bool, instant := false) -> void:
 	tw.tween_callback(func() -> void: _lid_busy = false)
 
 
-## "E Grab" for a player beside it looking at it (not on top, not already on a
-## vat); "E Let go" for one holding it.
+## "Hold E Grab" for a player beside it looking at it (not on top, not already
+## on a vat); none while it is held (letting go of E lets go of it).
 func _process(_delta: float) -> void:
 	if _grab_prompt == null:
 		return
 	if not _holders.is_empty():
-		_grab_prompt.visible = true
-		_grab_prompt.player = _holders[0]["p"]
-		_grab_prompt.text = "E   Let go"
+		_grab_prompt.visible = false
 		return
 	if not _anyone_near():
 		_grab_prompt.visible = false
@@ -199,15 +206,11 @@ func _process(_delta: float) -> void:
 		p = null
 	_grab_prompt.visible = p != null
 	_grab_prompt.player = p
-	_grab_prompt.text = "E   Grab"
+	_grab_prompt.text = GRAB_TEXT
 
 
+## E pressed takes hold; E let go lets go (`_check_holders`, note 111).
 func _unhandled_input(event: InputEvent) -> void:
-	for h in _holders:
-		if Interact.pressed(event, h["p"]):
-			get_viewport().set_input_as_handled()
-			release(h["p"])
-			return
 	if _grab_prompt != null and _grab_prompt.visible and _holders.is_empty() \
 			and Interact.pressed(event, _grab_prompt.player):
 		get_viewport().set_input_as_handled()
@@ -231,7 +234,7 @@ func grab(p: Node3D) -> void:
 	_place_holders()
 
 
-## Let go of them (E, or player.gd `unlatch` -- which calls this).
+## Let go of them (E let go, or player.gd `unlatch` -- which calls this).
 func release(p: Node3D) -> void:
 	for i in range(_holders.size() - 1, -1, -1):
 		if _holders[i]["p"] == p:
@@ -259,12 +262,13 @@ func _place_holders() -> void:
 		n.global_position = Vector3(at.x, n.global_position.y, at.z)
 
 
-## Holders that can no longer hold it: dead, in a scene, held by the claw, on
-## another vat, or somewhere else entirely (a teleport).
+## Holders that can no longer hold it: E let go (note 111), dead, in a scene,
+## held by the claw, on another vat, or somewhere else entirely (a teleport).
 func _check_holders() -> void:
 	for i in range(_holders.size() - 1, -1, -1):
 		var n = _holders[i]["p"]
-		var gone: bool = not is_instance_valid(n) or n.get("_dead") == true or n.get("in_cutscene") == true \
+		var gone: bool = not is_instance_valid(n) or not Coop.held(n, &"interact") \
+			or n.get("_dead") == true or n.get("in_cutscene") == true \
 			or n.get("latched_to") != self or (n.has_method("is_restrained") and n.is_restrained())
 		if not gone:
 			var to: Vector3 = n.global_position - global_position
@@ -389,8 +393,11 @@ func _physics_process(delta: float) -> void:
 			scale += 1.0 if f > 0.0 else PULL_SCALE
 			pushers += 1
 			_pusher = n
-		turn += input.x
-	_turn_by(turn, delta)
+		else:
+			# Not while heaving it (note 111): turning is done standing.
+			turn += input.x
+	if pushers == 0:
+		_turn_by(turn, delta)
 	if pushers > 0 and heave.length_squared() > 0.01:
 		var want := heave.normalized()
 		if _push_t <= 0.0:

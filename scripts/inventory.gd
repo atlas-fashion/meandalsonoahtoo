@@ -84,6 +84,12 @@ const ITEMS := {
 		"kind": "Relic",
 		"desc": "A long pale-blue crystal wrenched from the clamps under the surgery. The claw overhead fell the moment it came free.",
 		"quote": "Cold now. It was the only warm thing down there."},
+	# The claw the surgeon took off his machine and wore, torn off his back once
+	# he is dead (note 111, surgery_control.gd `_take_his_claw`).
+	&"surgeon_claw": {"name": "Surgeon's Claw", "stack": 1, "color": Color(0.85, 0.42, 0.22),
+		"kind": "Relic",
+		"desc": "The great three-fingered claw of the surgery's machine, wrenched off the surgeon's back. Its joints still flex when it is held, and its red eye has not quite gone out.",
+		"quote": "He built soldiers with it. It does not know he is gone."},
 	# The chest rooms' shards (dungeon_room.gd), one per room; the great door
 	# before the throne hall (shard_door.gd) wants every one.
 	&"shard_crimson": {"name": "Crimson Shard", "stack": 1, "color": Color(1.0, 0.2, 0.15),

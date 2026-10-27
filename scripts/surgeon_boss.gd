@@ -419,7 +419,12 @@ func _animate(delta: float, rate := 12.0) -> void:
 				w.x += swing * 0.35
 		var j: Node3D = _j[key]
 		j.rotation = j.rotation.lerp(w, k)
-	_rig.position = _rig.position.lerp(_rig_pos + Vector3(0.0, absf(swing) * 0.04, 0.0), k)
+	_rig_at = _rig_at.lerp(_rig_pos + Vector3(0.0, absf(swing) * 0.04, 0.0), k)
+	_rig.position = _rig_at
+	if _jolt > 0.001:
+		var t := Time.get_ticks_msec() / 1000.0
+		_rig.position += Vector3(sin(t * 61.0), sin(t * 47.0) * 0.5, cos(t * 53.0)) * 0.05 * _jolt
+		_jolt = maxf(_jolt - delta * 3.0, 0.0)
 	var spin := Vector3(0.0, _spin_yaw, 0.0) if move == Move.SPIN else Vector3.ZERO
 	_rig.rotation = _rig.rotation.lerp(_rig_rot + spin, k) if move != Move.SPIN else _rig_rot + spin
 	_pose_claw(delta)
@@ -462,6 +467,43 @@ func mount_claw(claw: Node3D) -> void:
 
 func has_claw() -> bool:
 	return _claw != null
+
+
+## Where the claw is on him (world): its hub.
+func claw_point() -> Vector3:
+	return _claw.global_position if _claw != null else _back.global_position
+
+
+## The claw torn off his back (note 111, surgery_control.gd `_take_his_claw`):
+## handed over where it lies -- the caller gives it a new parent -- and no
+## longer posed here.
+func unmount_claw() -> Node3D:
+	var c := _claw
+	if c == null:
+		return null
+	_claw = null
+	_claw_skel = null
+	var at := c.global_transform
+	c.get_parent().remove_child(c)
+	c.transform = at
+	return c
+
+
+## The claw gone from him for good (a save made after it was taken).
+func drop_claw_now() -> void:
+	var c := unmount_claw()
+	if c != null:
+		c.queue_free()
+
+
+## His body yanked about (the claw wrenched off him): a shake of the whole rig
+## `amount` strong, dying away.
+var _jolt := 0.0
+var _rig_at := Vector3.ZERO
+
+
+func jolt(amount: float) -> void:
+	_jolt = maxf(_jolt, amount)
 
 
 ## The claw on his back by mode: folded up over his shoulder; let down and
