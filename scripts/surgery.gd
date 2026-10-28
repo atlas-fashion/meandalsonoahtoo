@@ -192,6 +192,7 @@ var _want_bars := false
 var _pen_spots: Array = []
 var _pen: Array[Node3D] = []
 var _loose: Array[Node3D] = []
+var _soldiers: Node3D
 var _entry_vats: Array = []
 var _entry_bars: Array[Node3D] = []
 var _entry_bar_bodies: Array[StaticBody3D] = []
@@ -1083,7 +1084,17 @@ func stock_pens() -> void:
 func _pen_soldier(at: Vector3, yaw: float, hand: StringName) -> Node3D:
 	var e := PROSTHETIC.make(ENEMY_SCENE, hand) as CharacterBody3D
 	e.name = "PenSoldier"
-	add_child(e)
+	# Not under the surgery itself: it is turned, and an enemy turns by writing a
+	# world heading into its own `rotation.y` (enemy.gd `_face`), so under a
+	# turned parent every soldier walked and fought sideways (note 119). They
+	# live under a node held square to the world.
+	if _soldiers == null:
+		_soldiers = Node3D.new()
+		_soldiers.name = "Soldiers"
+		_soldiers.top_level = true
+		add_child(_soldiers)
+		_soldiers.global_transform = Transform3D.IDENTITY
+	_soldiers.add_child(e)
 	e.global_position = at + Vector3(0.0, 0.05, 0.0)
 	e.global_rotation = Vector3(0.0, yaw, 0.0)
 	e.set("wanders", false)

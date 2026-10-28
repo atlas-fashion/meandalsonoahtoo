@@ -14,9 +14,10 @@ pens' own back wall (the pens are column N-1, the +X side). So from the hall
 they showed their backs, and from the aisle along the bars their profile.
 Now `PI/2` (+-0.25 jitter): -X, out through the bars. Measured in a
 throwaway harness: the six pen soldiers' facing in the plan frame went from
-(0.97..1.0, 0, ...) to (-0.97..-1.0, 0, ...). Thrown soldiers and the claw's
-cargo were already right (the claw hangs a body at its own yaw; turned loose,
-it chases and `_face`s).
+(0.97..1.0, 0, ...) to (-0.97..-1.0, 0, ...). **Superseded by note 119:**
+this was only their spawn facing. Moving and fighting they were still
+sideways (and so was the surgeon), because they turn by writing a world
+heading into a local rotation under the turned surgery.
 
 ### The gaps were slits between the raised brick pieces
 

@@ -570,11 +570,20 @@ func script_on() -> void:
 	velocity = Vector3.ZERO
 
 
+## Turned to world heading `yaw` (his +Z). He is a child of the surgery (or its
+## booth), which is turned, so a world heading written into `rotation.y` was off
+## by the room's turn -- sideways in a room turned 90 degrees (note 119).
+func _face_yaw(yaw: float) -> void:
+	var r := global_rotation
+	r.y = yaw
+	global_rotation = r
+
+
 ## Turns to face `at` (world) at once.
 func face(at: Vector3) -> void:
 	var to := at - global_position
 	if Vector2(to.x, to.z).length() > 0.01:
-		rotation.y = atan2(to.x, to.z)
+		_face_yaw(atan2(to.x, to.z))
 
 
 ## Walks (a scene) to `target` (world) round the vats, at WALK_SPEED; returns
@@ -591,7 +600,7 @@ func walk_to(target: Vector3, timeout := 14.0) -> void:
 		var dir := _steer(to)
 		var delta := get_physics_process_delta_time()
 		global_position += dir * minf(WALK_SPEED * delta, to.length())
-		rotation.y = lerp_angle(rotation.y, atan2(dir.x, dir.z), 1.0 - exp(-TURN_RATE * delta))
+		_face_yaw(lerp_angle(global_rotation.y, atan2(dir.x, dir.z), 1.0 - exp(-TURN_RATE * delta)))
 		_walking = 1.0
 		_walk_ph += delta * WALK_SPEED * 3.2
 		if _path_i >= _path.size():
@@ -697,7 +706,7 @@ func _fight(delta: float) -> void:
 	to.y = 0.0
 	var dist := to.length()
 	if dist > 0.01:
-		rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), 1.0 - exp(-TURN_RATE * delta))
+		_face_yaw(lerp_angle(global_rotation.y, atan2(to.x, to.z), 1.0 - exp(-TURN_RATE * delta)))
 	_next_move -= delta
 	if _next_move <= 0.0 and dist < 12.0:
 		_start_move(dist)
@@ -826,7 +835,7 @@ func _dash(delta: float) -> void:
 			to.y = 0.0
 			if to.length() > 0.01:
 				_move_dir = to.normalized()
-				rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), 1.0 - exp(-14.0 * delta))
+				_face_yaw(lerp_angle(global_rotation.y, atan2(to.x, to.z), 1.0 - exp(-14.0 * delta)))
 		if not _cued and _mt >= DASH_WIND - 0.3:
 			_cue(0.3 + DASH_TIME)
 		return

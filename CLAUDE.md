@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 118), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 119), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -507,6 +507,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 116 | 2026-10-27 | The enforcer's walk a little smoother: each tick's step is the planted foot's speed averaged over 0.1 s of clip (`GAIT_SMOOTH`), the dead stop spread over a few ticks for a little slip | [docs/notes/116-enforcer-walk-smoother.md](docs/notes/116-enforcer-walk-smoother.md) |
 | 117 | 2026-10-27 | Sandbox: T / pad Y on the map teleports to the pin under the cursor or the spot (rock goes to the nearest open cell; the floor and navmesh found there); "Heal to full" and "5 health potions" in the menu | [docs/notes/117-sandbox-map-teleport-and-heals.md](docs/notes/117-sandbox-map-teleport-and-heals.md) |
 | 118 | 2026-10-27 | The surgery: the pen soldiers face the hall (they faced their pens' back wall); the black slits between the raised brick pieces backed with a second skin of the same brick (`BackingBrick`, no shadows) | [docs/notes/118-surgery-soldiers-face-the-hall-no-black-gaps.md](docs/notes/118-surgery-soldiers-face-the-hall-no-black-gaps.md) |
+| 119 | 2026-10-28 | The surgery's soldiers and surgeon face the player moving and fighting: they wrote a world heading into a local `rotation.y` under the turned surgery (soldiers under a top-level `Soldiers` node; the surgeon's `_face_yaw` sets `global_rotation`) | [docs/notes/119-surgery-enemies-turn-in-world-yaw.md](docs/notes/119-surgery-enemies-turn-in-world-yaw.md) |
 
 ## Notes by source file
 
@@ -595,13 +596,13 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118
+- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109
 - `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106, 111
 - `scripts/surgery_piece.gd`: 104, 110
 - `scripts/subtitles.gd`: 109
-- `scripts/surgeon_boss.gd`: 105, 109, 110, 111
+- `scripts/surgeon_boss.gd`: 105, 109, 110, 111, 119
 - `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
