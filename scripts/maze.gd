@@ -321,7 +321,8 @@ const DIRECTIONS := {
 ## maze does not thin out the danger. 0 falls back to `enemy_count`.
 ## (0.25 -> 0.32, note 121: "spawn more frequently". With the smaller groups
 ## the same bodies are also spread over about twice the encounters.)
-@export var enemies_per_corridor_cell := 0.32
+## (0.32 -> 0.42, note 123: "make enemies spawn more frequently", again.)
+@export var enemies_per_corridor_cell := 0.42
 ## Overrides the scene's aggro so the whole map does not converge on the player
 ## at once. Corridor-length sight lines are roughly this long.
 @export var enemy_aggro_range := 18.0
@@ -3489,6 +3490,7 @@ func seal_room(room: int, shut: bool) -> void:
 
 func _process(_delta: float) -> void:
 	_tick_decrepit()
+	_tick_spawns()
 	# Index 0 is the boss chamber, and treasure room r is at r + 1.
 	#
 	# Committed, not simply mirrored from `engaged`: sealing straight off the
@@ -4358,6 +4360,9 @@ func _populate() -> void:
 		if is_instance_valid(node):
 			node.free()
 	_spawned.clear()
+	_corridor_enemies.clear()
+	_corridor_want = 0
+	_respawn_at = Time.get_ticks_msec() / 1000.0 + respawn_every
 	_boss = null
 	_mimic = null
 	# The fights are over: a death raises the bars of whatever room it happened
@@ -4573,29 +4578,108 @@ func _spawn_enemies() -> void:
 			continue
 		spots.remove_at(pick)
 		taken.append(tile)
+		placed += _roll_encounter(tile, want - placed)
 
-		# One roll decides the whole group, so a pack is all of a kind: a knot
-		# of reds or a lone crier, never a mixed committee.
-		var flying: bool = flyer_scene != null and _rng.randf() < flyer_share
-		var pack := _rng.randi_range(flyer_pack_min, flyer_pack_max) if flying else _roll_pack_size()
-		pack = mini(pack, want - placed)
-		# Two or three may be an enforcer and the skeletons it walks with.
-		var escort := not flying and enforcers_with_packs and pack >= 2 \
-			and _rng.randf() < pack_enforcer_share
-		var bones := pack - 1 if escort else pack
-		# Containment (note 120): a skeleton encounter comes only in the share
-		# of the types let out, and only of those. One that does not come is
-		# counted as if it had, so the criers keep the density they always had
-		# -- at the start they are the corridors' only encounters.
-		if not flying and progression:
-			if _rng.randf() >= float(released_hands.size()) / float(CONTAINED.size()):
-				placed += pack
-				continue
-			placed += _spawn_pack(tile, false, bones, _pack_hands(bones), escort)
-			continue
-		placed += _spawn_pack(tile, flying, bones, [], escort)
-
+	# What actually came is what the trickle keeps up -- not `want`, which
+	# counts the skeleton rolls progression skipped (note 120): kept to that, the
+	# trickle filled the gap with criers, 149 at the start growing toward 382.
+	_corridor_want = _corridor_enemies.size()
 	_spawn_room_packs(taken)
+
+
+## One corridor encounter at `tile`, of at most `budget` bodies. Returns the
+## bodies it counts as placed (a skeleton roll that does not come under
+## `progression` counts too, note 120). What it spawns joins
+## `_corridor_enemies`, which the trickle keeps topped up (note 123).
+func _roll_encounter(tile: Vector2i, budget: int) -> int:
+	var before := _spawned.size()
+	var placed := _encounter(tile, budget)
+	for k in range(before, _spawned.size()):
+		var n: Node = _spawned[k]
+		if n is CharacterBody3D:
+			_corridor_enemies.append(n)
+	return placed
+
+
+func _encounter(tile: Vector2i, budget: int) -> int:
+	# One roll decides the whole group, so a pack is all of a kind: a knot
+	# of reds or a lone crier, never a mixed committee.
+	var flying: bool = flyer_scene != null and _rng.randf() < flyer_share
+	var pack := _rng.randi_range(flyer_pack_min, flyer_pack_max) if flying else _roll_pack_size()
+	pack = mini(pack, budget)
+	# Two or three may be an enforcer and the skeletons it walks with.
+	var escort := not flying and enforcers_with_packs and pack >= 2 \
+		and _rng.randf() < pack_enforcer_share
+	var bones := pack - 1 if escort else pack
+	# Containment (note 120): a skeleton encounter comes only in the share
+	# of the types let out, and only of those. One that does not come is
+	# counted as if it had, so the criers keep the density they always had
+	# -- at the start they are the corridors' only encounters.
+	if not flying and progression:
+		if _rng.randf() >= float(released_hands.size()) / float(CONTAINED.size()):
+			return pack
+		return _spawn_pack(tile, false, bones, _pack_hands(bones), escort)
+	return _spawn_pack(tile, flying, bones, [], escort)
+
+
+## --- The trickle (note 123) ----------------------------------------------------------
+##
+## The user: "Make enemies spawn more frequently." Besides the denser
+## population, the corridors fill back up while the player is in them, not
+## only when a death repopulates the world: every `respawn_every` seconds, if
+## fewer of the corridor spawner's enemies are alive than came at the
+## population (`_corridor_want`),
+## one more encounter is rolled as at the start (so criers only until a type is
+## out, the same small groups, patrols as rare) at a corridor point at least
+## `respawn_clear` from every player and out of their sight. Each released type
+## keeps `loose_per_type` loose subjects about the same way.
+@export var respawn_every := 8.0
+@export var respawn_clear := 35.0
+var _corridor_enemies: Array = []
+var _corridor_want := 0
+var _respawn_at := 0.0
+
+
+func _tick_spawns() -> void:
+	if not is_built or _corridor_want <= 0 or _patrol_points.is_empty():
+		return
+	if Sandbox.active and not sandbox_population:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _respawn_at:
+		return
+	_respawn_at = now + respawn_every
+	var alive: Array = []
+	for e in _corridor_enemies:
+		if is_instance_valid(e) and e.get("_dying") != true:
+			alive.append(e)
+	_corridor_enemies = alive
+	_note_spawn_eye()
+	if alive.size() < _corridor_want:
+		# A few rolls, so a skeleton roll of a type still contained does not
+		# leave the tick empty.
+		for tries in 4:
+			var at = _far_point(respawn_clear)
+			if at == null:
+				break
+			var before := _corridor_enemies.size()
+			_roll_encounter(world_to_tile(at), _corridor_want - alive.size())
+			if _corridor_enemies.size() > before:
+				break
+	for h in released_hands:
+		var loose := 0
+		for e in get_tree().get_nodes_in_group(&"loose_subjects"):
+			if is_instance_valid(e) and e.get("_dying") != true and _hand_of(e) == h:
+				loose += 1
+		if loose < loose_per_type:
+			_spawn_loose(h, 1)
+
+
+static func _hand_of(e: Node) -> StringName:
+	if e.has_method("is_archer"):
+		return &"crossbow"
+	var h = e.get("hand")
+	return h if h != null else &""
 
 
 ## One, two or three, by `pack_size_weights`.
