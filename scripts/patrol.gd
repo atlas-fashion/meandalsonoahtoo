@@ -59,6 +59,16 @@ var _avoid := Vector3.ZERO
 var _plan_after := 0.0
 var stalls := 0
 var plan_fails := 0
+## Note 126: its own area, round `home` (where the patrol began), and the stop
+## it makes at the end of each leg: what it is doing there and till when.
+const HOME_RADIUS := 45.0
+const STOP_MIN := 2.0
+const STOP_MAX := 6.0
+var home := Vector3.ZERO
+var _stop_until := 0.0
+var _stop_kind := 0
+var _stop_yaw := 0.0
+var _stop_t := 0.0
 ## Followers: a navmesh path to their place in the column when it is round a
 ## corner, and their own unsticking (member -> state).
 var _ways := {}
@@ -70,6 +80,8 @@ func setup(pack: Array[Node3D], route_points: Array[Vector3], seed_value: int) -
 	_rng.seed = seed_value
 	for m in members:
 		m.set("patrol", self)
+	if not members.is_empty() and is_instance_valid(members[0]):
+		home = (members[0] as Node3D).global_position
 
 
 ## While two members are both on the march they pass through each other: in a
@@ -172,6 +184,16 @@ func _lead(e: Node3D, _delta: float, now: float) -> Vector3:
 		_trail.push_front(here)
 		if _trail.size() > TRAIL_MAX:
 			_trail.pop_back()
+	# Arrived (note 126): it stops a while and does something there before
+	# setting off again -- looks about, studies the wall, or turns and
+	# listens back the way it came.
+	if not _path.is_empty() and _at >= _path.size():
+		_path = PackedVector3Array()
+		_at = 0
+		_begin_stop(e, now)
+	if now < _stop_until:
+		_do_stop(e, now)
+		return Vector3.ZERO
 	if _at >= _path.size() and now >= _plan_after:
 		_plan(e)
 		_check_at = now + 2.0
@@ -251,6 +273,10 @@ func _plan(e: Node3D) -> void:
 		if g == null:
 			continue
 		var goal: Vector3 = g
+		# Within its own area (note 126): HOME_RADIUS of where the patrol
+		# began -- or, carried off it (a chase), a goal nearer home.
+		if _flat(goal, home) > maxf(HOME_RADIUS, _flat(from, home) - 5.0):
+			continue
 		queried += 1
 		var path := NavigationServer3D.map_get_path(map, from, goal, true)
 		if path.size() < 2:
@@ -483,3 +509,52 @@ static func _bucket(src: Array) -> void:
 			if not _buckets.has(b):
 				_buckets[b] = []
 			(_buckets[b] as Array).append(p)
+
+
+## --- What it does at a stop (note 126) -----------------------------------------
+##
+## The user: "They should wander around in their respective areas, as if they
+## have a brain and are doing something." At the end of each leg the leader
+## stops STOP_MIN-STOP_MAX seconds and, rolled each time:
+## - LOOK about: turning its head and body slowly side to side, as the old idle
+##   wanderers did;
+## - STUDY the nearest wall: turned square to it and standing there;
+## - LISTEN back the way it came: turned round to face down its own trail.
+## The column catches up behind and stands with it.
+enum { LOOK, STUDY, LISTEN }
+
+
+func _begin_stop(e: Node3D, now: float) -> void:
+	_stop_until = now + _rng.randf_range(STOP_MIN, STOP_MAX)
+	_stop_kind = _rng.randi_range(0, 2)
+	_stop_t = 0.0
+	_stop_yaw = e.rotation.y
+	if _stop_kind == STUDY:
+		var space := e.get_world_3d().direct_space_state
+		var at := e.global_position + Vector3(0.0, 1.2, 0.0)
+		var best := INF
+		for k in 8:
+			var dir := Vector3(cos(TAU * k / 8.0), 0.0, sin(TAU * k / 8.0))
+			var q := PhysicsRayQueryParameters3D.create(at, at + dir * 3.0)
+			q.collision_mask = 2
+			q.exclude = [(e as CollisionObject3D).get_rid()]
+			var hit := space.intersect_ray(q)
+			if not hit.is_empty() and at.distance_to(hit["position"]) < best:
+				best = at.distance_to(hit["position"])
+				_stop_yaw = atan2(-dir.x, -dir.z)
+		if best == INF:
+			_stop_kind = LOOK
+	elif _stop_kind == LISTEN and _trail.size() >= 4:
+		var back := _trail[mini(_trail.size() - 1, 8)] - e.global_position
+		back.y = 0.0
+		if back.length_squared() > 0.25:
+			_stop_yaw = atan2(-back.x, -back.z)
+
+
+func _do_stop(e: Node3D, _now: float) -> void:
+	_stop_t += e.get_physics_process_delta_time()
+	match _stop_kind:
+		LOOK:
+			e.rotation.y = _stop_yaw + sin(_stop_t * 0.9) * 0.9
+		_:
+			e.rotation.y = lerp_angle(e.rotation.y, _stop_yaw, clampf(e.get_physics_process_delta_time() * 3.0, 0.0, 1.0))

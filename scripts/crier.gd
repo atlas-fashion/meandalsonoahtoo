@@ -342,28 +342,44 @@ var _patrol_check_at := 0.0
 var _patrol_check_from := Vector3.ZERO
 var _patrol_rng := RandomNumberGenerator.new()
 var _patrol_avoid := Vector3.ZERO
+## Note 126: its own area (HOME_RADIUS round where it first patrolled), and the
+## look about at each stop.
+const HOME_RADIUS := 45.0
+var _patrol_home := Vector3.INF
+var _look_yaw := 0.0
+var _look_t := 0.0
 var _unstick_until := 0.0
 var _unstick_dir := Vector3.ZERO
 var patrol_stalls := 0
 
 
 func _patrol(delta: float, now: float) -> void:
+	if _patrol_home == Vector3.INF:
+		_patrol_home = global_position
 	if patrol_points.is_empty() or now < _patrol_pause_until:
 		velocity = velocity.move_toward(Vector3(0.0, cos(_bob) * bob_amount, 0.0), acceleration * delta)
 		move_and_slide()
+		# Hanging at a stop, it looks about (note 126).
+		if not patrol_points.is_empty():
+			_look_t += delta
+			rotation.y = _look_yaw + sin(_look_t * 1.1) * 1.0
 		return
 	var here := global_position
 	if _patrol_at >= _patrol_path.size():
 		if not _patrol_path.is_empty():
 			# Arrived: a moment's pause before the next leg.
 			_patrol_path = PackedVector3Array()
-			_patrol_pause_until = now + _patrol_rng.randf_range(0.6, 2.0)
+			_patrol_pause_until = now + _patrol_rng.randf_range(1.5, 4.5)
+			_look_yaw = rotation.y
+			_look_t = 0.0
 			return
 		_plan_patrol()
 		_patrol_check_at = now + 2.0
 		_patrol_check_from = here
 		if _patrol_path.is_empty():
 			_patrol_pause_until = now + 1.0
+			_look_yaw = rotation.y
+			_look_t = 0.0
 			return
 	if now < _unstick_until:
 		velocity = velocity.move_toward(_unstick_dir * patrol_speed, acceleration * delta)
@@ -428,6 +444,9 @@ func _plan_patrol() -> void:
 		if g == null:
 			continue
 		var goal: Vector3 = g
+		var home_d := Vector2(goal.x - _patrol_home.x, goal.z - _patrol_home.z).length()
+		if home_d > maxf(HOME_RADIUS, Vector2(from.x - _patrol_home.x, from.z - _patrol_home.z).length() - 5.0):
+			continue
 		queried += 1
 		var path := NavigationServer3D.map_get_path(map, from, goal, true)
 		if path.size() < 2:

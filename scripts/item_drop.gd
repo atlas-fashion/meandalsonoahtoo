@@ -119,6 +119,15 @@ func _ready() -> void:
 	# is inside the stone, on the inner side of the shell (measured: drops
 	# freed from inside a wall came to rest on ledges in there).
 	_ray.hit_back_faces = false
+	# Coins: a little golden flame always licking up off them (note 126).
+	if id == &"coins":
+		add_child(_coin_flame())
+	# Laid down where it lies (a room's loose coins, note 126): no pop, it just
+	# settles onto the floor beneath.
+	if has_meta("lying"):
+		_velocity = Vector3.ZERO
+		_spin = Vector3.ZERO
+		return
 	# The pop: up and out to a random side.
 	var a := randf() * TAU
 	_velocity = Vector3(cos(a), 0.0, sin(a)) * randf_range(1.2, 2.6) + Vector3(0.0, randf_range(3.2, 4.6), 0.0)
@@ -158,6 +167,19 @@ func _process(delta: float) -> void:
 	if not _resting:
 		_fall(delta)
 	else:
+		# Lying far from everyone (note 126: the rooms' coins lie about all game):
+		# no flame burning, no looking for a taker -- checked twice a second.
+		# Measured: 25 lying coins doing all of it every frame cost ~5 fps.
+		_far_check -= delta
+		if _far_check <= 0.0:
+			_far_check = 0.5
+			var near := Coop.nearest(global_position, false) as Node3D
+			_far = near == null or near.global_position.distance_squared_to(global_position) > FAR * FAR
+			var flame := get_node_or_null("CoinFlame") as CPUParticles3D
+			if flame != null:
+				flame.emitting = not _far
+		if _far:
+			return
 		# The glint breathes, slowly, so a drop catches the eye without blinking.
 		_glint.transparency = 0.35 + 0.25 * sin(_clock * 2.4)
 		_support_timer -= delta
@@ -590,6 +612,80 @@ func _add_bone(holder: Node3D) -> void:
 
 
 ## A soft additive halo hanging over the drop, in the item's colour.
+## The user: "Coins should have a small golden animated trail shooting up from
+## them, kinda like fire, so the player can see them." Small soft gold wisps
+## rising off the stack: born on it, climbing ~0.5 m in 0.75 s with a sway,
+## shrinking and going from white-gold through orange to nothing, additive and
+## unshaded so they read in the dark. A CPU emitter of FLAME_COUNT, drawn only
+## within FLAME_SEEN; with Graphics.effects off, fewer and shorter-lived.
+const FLAME_COUNT := 18
+## Lying further than this from every player, a drop rests: no flame, no checks.
+const FAR := 34.0
+var _far := false
+var _far_check := 0.0
+const FLAME_SEEN := 32.0
+static var _flame_mesh: QuadMesh
+
+
+static func _coin_flame() -> CPUParticles3D:
+	if _flame_mesh == null:
+		_flame_mesh = QuadMesh.new()
+		_flame_mesh.size = Vector2(0.07, 0.11)
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		mat.vertex_color_use_as_albedo = true
+		mat.disable_fog = true
+		var grad := Gradient.new()
+		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+		var tex := GradientTexture2D.new()
+		tex.gradient = grad
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(0.5, 0.0)
+		tex.width = 32
+		tex.height = 32
+		mat.albedo_texture = tex
+		_flame_mesh.material = mat
+	var p := CPUParticles3D.new()
+	p.name = "CoinFlame"
+	p.mesh = _flame_mesh
+	var rich: bool = Graphics.effects
+	p.amount = FLAME_COUNT if rich else FLAME_COUNT / 2
+	p.lifetime = 0.75 if rich else 0.5
+	p.local_coords = false
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 0.035
+	p.direction = Vector3.UP
+	p.spread = 12.0
+	p.gravity = Vector3(0.0, 0.35, 0.0)
+	p.initial_velocity_min = 0.45
+	p.initial_velocity_max = 0.75
+	p.damping_min = 0.2
+	p.damping_max = 0.5
+	# The sway: a little sideways drift that wanders.
+	p.tangential_accel_min = -0.4
+	p.tangential_accel_max = 0.4
+	p.scale_amount_min = 0.7
+	p.scale_amount_max = 1.2
+	var shrink := Curve.new()
+	shrink.add_point(Vector2(0.0, 0.6))
+	shrink.add_point(Vector2(0.25, 1.0))
+	shrink.add_point(Vector2(1.0, 0.0))
+	p.scale_amount_curve = shrink
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 0.3, 0.7, 1.0])
+	ramp.colors = PackedColorArray([Color(1.0, 0.95, 0.7, 0.9), Color(1.0, 0.75, 0.2, 0.8),
+		Color(1.0, 0.42, 0.06, 0.45), Color(0.8, 0.2, 0.02, 0.0)])
+	p.color_ramp = ramp
+	p.position = Vector3(0.0, 0.03, 0.0)
+	p.visibility_range_end = FLAME_SEEN
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
+
+
 static func _make_glint(colour: Color) -> MeshInstance3D:
 	var glint := MeshInstance3D.new()
 	glint.name = "Glint"

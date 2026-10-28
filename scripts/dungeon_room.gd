@@ -324,6 +324,8 @@ func _build_domed_prison() -> void:
 	_build_generator()
 	_build_beams()
 	_drop_sky_lights()
+	if is_containment():
+		_place_coins()
 	if maze != null and maze.has_signal("level_built"):
 		maze.connect("level_built", _arm_doors, CONNECT_ONE_SHOT)
 
@@ -539,6 +541,56 @@ func _build_back_door(cell: Dictionary, xf: Transform3D) -> void:
 		(body.get_child(0) as CollisionShape3D).rotation = xf.basis.get_euler()
 		(body.get_child(0) as CollisionShape3D).disabled = true
 		cell["back_body"] = body
+
+
+## --- Loose coins (note 126) ---------------------------------------------------------
+##
+## The user: "You should be able to find coins lying around in containment
+## rooms." COIN_PILES small stacks (item_drop.gd, id coins, COIN_MIN-COIN_MAX
+## each) dropped about the court at build -- clear of the generator in the
+## middle and short of the cells' gates -- each lit by the drop's golden flame.
+## Children of the room, so a death does not put them back; the ones picked up
+## are saved ("coins_taken") and stay gone after a load.
+const COIN_PILES := 5
+const COIN_MIN := 3
+const COIN_MAX := 9
+var _coins: Array = []
+var _coins_taken: Array = []
+
+
+func _place_coins() -> void:
+	var drops = load("res://scripts/item_drop.gd")
+	var placed: Array[Vector3] = []
+	for k in COIN_PILES:
+		var at := Vector3.ZERO
+		for tries in 20:
+			var a := _rng.randf() * TAU
+			var r := _rng.randf_range(2.6, maxf(_span - 1.6, 3.0))
+			at = Vector3(cos(a) * r, 0.25, sin(a) * r)
+			var apart := true
+			for p in placed:
+				if p.distance_to(at) < 2.5:
+					apart = false
+			if apart:
+				break
+		placed.append(at)
+		var drop := Node3D.new()
+		drop.set_script(drops)
+		drop.set("id", &"coins")
+		drop.set("count", _rng.randi_range(COIN_MIN, COIN_MAX))
+		drop.set_meta("lying", true)
+		drop.name = "Coins%d" % k
+		add_child(drop)
+		drop.position = at
+		drop.tree_exiting.connect(_on_coins_gone.bind(k, drop))
+		_coins.append(drop)
+
+
+## Picked up (it is freed when it reaches the player), not just the level
+## going away.
+func _on_coins_gone(k: int, drop: Node) -> void:
+	if drop.is_queued_for_deletion() and not _coins_taken.has(k):
+		_coins_taken.append(k)
 
 
 ## Note 122: with the cell's back open onto a passage, the door stands in it
@@ -2181,13 +2233,20 @@ func save_state() -> Dictionary:
 			dead.append(i)
 	return {"kind": kind, "looted": looted, "enforcers_down": enforcers_down,
 		"powered_off": powered_off, "prisoners_down": prisoners_down, "freed_alive": alive,
-		"miners_dead": dead}
+		"miners_dead": dead, "coins_taken": _coins_taken.duplicate()}
 
 
 ## A loaded game: the room as it was left, straight into its finished look.
 func restore_state(data: Dictionary) -> void:
 	if StringName(data.get("kind", kind)) != kind:
 		return
+	# The coins already picked up (note 126) stay picked up.
+	for i in data.get("coins_taken", []):
+		var k := int(i)
+		if k < _coins.size() and is_instance_valid(_coins[k]):
+			_coins[k].queue_free()
+		if not _coins_taken.has(k):
+			_coins_taken.append(k)
 	looted = bool(data.get("looted", false))
 	if kind == &"prison":
 		# Saves from before the rename (2026-10-15) call them wardens.
