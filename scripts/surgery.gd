@@ -104,6 +104,9 @@ const FRIEZE_Y := 4.8
 ## The brick kit's wall piece: its height and width (one course).
 const COURSE := 3.5
 const COURSE_W := 5.19
+## The skin behind the raised brick (note 118): [height, how far behind the wall face].
+## The upper row reaches 9.1 m, past the ceiling (CEIL).
+const BACK_ROWS := [[COURSE, 0.45], [COURSE * 1.6, 0.6]]
 ## The roof (note 96): a plank ceiling at CEIL on oak beams across the hall.
 const CEIL := 8.6
 const BEAM_Z: Array[float] = [-10.5, -6.0, -2.0, 2.0, 6.0, 10.5]
@@ -381,6 +384,31 @@ func _raise_walls(h: int, cell: float) -> void:
 				var at := d * _wall + along * float(k) * cell + Vector3(0.0, y, 0.0)
 				xfs.append(Transform3D(face.scaled(Vector3(cell / COURSE_W, 1.0, 1.0)), at))
 	_multi(mesh, xfs, "RaisedBrick")
+	# The brick's edges are ragged, so where two pieces meet (the frames' joins,
+	# open there) there were slits through to the void: black gaps (note 118).
+	# Behind them, a second skin of the same brick, half a piece along (its
+	# joins behind the front's solid middles) and set back: a slit shows brick.
+	# Two rows, the upper further back so they do not fight where they overlap;
+	# over a way in only the upper one, clear of the corridor's vault (its crown
+	# 5.1 m). Hidden behind the walls, it casts no shadow: casting, it cost
+	# 1.5 ms in the torches' shadow passes.
+	var back: Array[Transform3D] = []
+	for d: Vector3 in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
+		var along := Vector3(-d.z, 0.0, d.x)
+		var face := Basis(Vector3.UP, atan2(-d.x, -d.z))
+		for k in range(-h - 1, h + 1):
+			var v := (float(k) + 0.5) * cell
+			var by_door := false
+			for dw in _doorways:
+				if (dw[1] as Vector3).dot(d) > 0.9 and absf((dw[0] as Vector3).dot(along) - v) < cell:
+					by_door = true
+			for row: Array in BACK_ROWS:
+				if by_door and float(row[0]) < COURSE * 1.5:
+					continue
+				var at := d * (_wall + float(row[1])) + along * v + Vector3(0.0, float(row[0]), 0.0)
+				back.append(Transform3D(face.scaled(Vector3(cell / COURSE_W, 1.0, 1.0)), at))
+	_multi(mesh, back, "BackingBrick")
+	(get_node("BackingBrick") as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## The walls' stone: on every wall cell an open gothic frame in front of the brick
@@ -823,7 +851,9 @@ func _build_dispatch() -> void:
 		var j := 3 + k % 3
 		var row := float(k / 3)
 		var at := cell_at(N - 1, j) + Vector3(-0.55 + row * 0.9, 0.0, _rng.randf_range(-0.5, 0.5))
-		_pen_spots.append([at, -PI * 0.5 + _rng.randf_range(-0.25, 0.25)])
+		# Facing -X, out through the bars into the hall (an enemy faces its -Z;
+		# -PI/2 had them all staring at the pen's back wall, note 118).
+		_pen_spots.append([at, PI * 0.5 + _rng.randf_range(-0.25, 0.25)])
 	_kit(holder, "casket", cell_at(N - 1, 3) + Vector3(0.9, 0.0, -1.0), -PI * 0.5, Vector3(0.6, 2.2, 0.9))
 	_kit(holder, "casket", cell_at(N - 1, 5) + Vector3(0.9, 0.0, 1.0), -PI * 0.5, Vector3(0.6, 2.2, 0.9))
 	var light := OmniLight3D.new()
@@ -1192,7 +1222,7 @@ func _intro(p: Node3D, k: int) -> void:
 		t += get_process_delta_time()
 	if _ferried_at != null:
 		var at: Vector3 = _ferried_at
-		var e := _pen_soldier(Vector3(at.x, global_position.y + 0.6, at.z), _plan.global_rotation.y - PI * 0.5, &"blade")
+		var e := _pen_soldier(Vector3(at.x, global_position.y + 0.6, at.z), _plan.global_rotation.y + PI * 0.5, &"blade")
 		table.call("_impact_fx", Vector3(at.x, global_position.y, at.z), 0.3)
 		e.velocity = Vector3.ZERO
 	await _wait(0.6)
