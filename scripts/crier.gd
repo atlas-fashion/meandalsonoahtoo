@@ -276,6 +276,7 @@ func _physics_process(delta: float) -> void:
 			_seen_time = now
 
 	if _sees:
+		_patrol_path = PackedVector3Array()
 		# Straight at the face.
 		var face := _face_point(player)
 		var to_face := face - global_position
@@ -288,10 +289,11 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if now - _seen_time > memory:
-		# Lost them: hang where it is, bobbing.
-		velocity = velocity.move_toward(Vector3(0.0, cos(_bob) * bob_amount, 0.0), acceleration * delta)
-		move_and_slide()
+		# Nobody seen (or lost them): on patrol down the corridors (note 124),
+		# or, with no route, hanging where it is, bobbing.
+		_patrol(delta, now)
 		return
+	_patrol_path = PackedVector3Array()
 
 	# Round the walls to where it last saw them. The agent's waypoint distances
 	# must exceed hover_height, or a flyer never gets close enough to a
@@ -314,6 +316,96 @@ func _physics_process(delta: float) -> void:
 	if heading.length_squared() > 0.001:
 		_turn_to(heading)
 	move_and_slide()
+
+
+## --- On patrol (note 124) ---------------------------------------------------------
+##
+## The user: "criers should be patroling the hallways. When they see a player,
+## they should agro." Until it sees someone, a crier flies the corridors at
+## `patrol_speed` from one of maze.gd's corridor points (`patrol_points`, world)
+## to another PATROL_MIN-PATROL_MAX metres off, along the navmesh, at its hover
+## height, pausing a moment at each. A route through a shut wooden door is
+## refused (it cannot open one; the navmesh runs through them). No headway in
+## two seconds: a fresh route. The look for the player runs as ever every
+## LOOK_EVERY, so the moment it sees them it rushes the face.
+@export var patrol_speed := 3.2
+## How wide it looks ahead while it has nobody (360 = every way, as before).
+@export_range(30.0, 360.0) var vision_cone_degrees := 150.0
+const VISION_NEAR := 3.0
+const PATROL_MIN := 12.0
+const PATROL_MAX := 40.0
+var patrol_points: Array[Vector3] = []
+var _patrol_path := PackedVector3Array()
+var _patrol_at := 0
+var _patrol_pause_until := 0.0
+var _patrol_check_at := 0.0
+var _patrol_check_from := Vector3.ZERO
+var _patrol_rng := RandomNumberGenerator.new()
+
+
+func _patrol(delta: float, now: float) -> void:
+	if patrol_points.is_empty() or now < _patrol_pause_until:
+		velocity = velocity.move_toward(Vector3(0.0, cos(_bob) * bob_amount, 0.0), acceleration * delta)
+		move_and_slide()
+		return
+	var here := global_position
+	if _patrol_at >= _patrol_path.size():
+		if not _patrol_path.is_empty():
+			# Arrived: a moment's pause before the next leg.
+			_patrol_path = PackedVector3Array()
+			_patrol_pause_until = now + _patrol_rng.randf_range(0.6, 2.0)
+			return
+		_plan_patrol()
+		_patrol_check_at = now + 2.0
+		_patrol_check_from = here
+		if _patrol_path.is_empty():
+			_patrol_pause_until = now + 1.0
+			return
+	if now >= _patrol_check_at:
+		if Vector2(here.x - _patrol_check_from.x, here.z - _patrol_check_from.z).length() < 0.6:
+			_patrol_path = PackedVector3Array()
+			_patrol_at = 0
+			return
+		_patrol_check_at = now + 2.0
+		_patrol_check_from = here
+	while _patrol_at < _patrol_path.size() \
+			and Vector2(_patrol_path[_patrol_at].x - here.x, _patrol_path[_patrol_at].z - here.z).length() < 0.8:
+		_patrol_at += 1
+	if _patrol_at >= _patrol_path.size():
+		return
+	var to := _patrol_path[_patrol_at] - here
+	var heading := Vector3(to.x, 0.0, to.z).normalized()
+	var desired := heading * patrol_speed
+	var wanted_height := _patrol_path[_patrol_at].y + hover_height + sin(_bob) * bob_amount
+	desired.y = clampf(wanted_height - here.y, -1.0, 1.0) * patrol_speed * 0.8
+	velocity = velocity.move_toward(desired, acceleration * 0.5 * delta)
+	_turn_to(heading)
+	move_and_slide()
+
+
+func _plan_patrol() -> void:
+	_patrol_path = PackedVector3Array()
+	_patrol_at = 0
+	if _patrol_rng.seed == 0:
+		_patrol_rng.seed = get_instance_id()
+	var map := get_world_3d().navigation_map
+	var shut: Array[Vector3] = []
+	for d in get_tree().get_nodes_in_group(&"wood_doors"):
+		if d.get("opened") != true:
+			shut.append((d as Node3D).global_position)
+	var from := global_position - Vector3(0.0, hover_height, 0.0)
+	for tries in 24:
+		var goal: Vector3 = patrol_points[_patrol_rng.randi_range(0, patrol_points.size() - 1)]
+		var d := Vector2(goal.x - from.x, goal.z - from.z).length()
+		if d < PATROL_MIN * (1.0 if tries < 16 else 0.3) or d > PATROL_MAX:
+			continue
+		var path := NavigationServer3D.map_get_path(map, from, goal, true)
+		if path.size() < 2 or path[path.size() - 1].distance_to(goal) > 1.5:
+			continue
+		if preload("res://scripts/patrol.gd")._through_door(path, shut):
+			continue
+		_patrol_path = path
+		return
 
 
 ## --- Scared off by a thrown rat (rat.gd, 2026-10-18) ---------------------------
@@ -371,6 +463,18 @@ func _can_see(player: Node3D, eye: Vector3) -> bool:
 		return false
 	if global_position.distance_squared_to(eye) > aggro_range * aggro_range:
 		return false
+	# On patrol it sees ahead (note 124): within `vision_cone_degrees` of the
+	# way its lens faces, or any way at all within VISION_NEAR. Once it has the
+	# player it keeps them in view whichever way it turns.
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _seen_time > memory and vision_cone_degrees < 360.0:
+		var to := eye - global_position
+		var flat := Vector2(to.x, to.z)
+		if flat.length() > VISION_NEAR:
+			var ahead := Vector2(-global_basis.z.x, -global_basis.z.z)
+			if ahead.length_squared() > 0.0001 \
+					and absf(ahead.angle_to(flat)) > deg_to_rad(vision_cone_degrees * 0.5):
+				return false
 	_sight.from = global_position
 	_sight.to = eye
 	_sight.exclude = [player.get_rid(), get_rid()]

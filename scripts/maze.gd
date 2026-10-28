@@ -314,7 +314,8 @@ const DIRECTIONS := {
 ## The flying criers (bombers before 2026-10-14). Kept a minority of the population so they read as a
 ## hazard rather than the main body of it.
 @export var flyer_scene: PackedScene = preload("res://scenes/crier.tscn")
-@export_range(0.0, 1.0) var flyer_share := 0.45
+## 0.45 -> 0.25 (note 124, the user: "There should be less criers").
+@export_range(0.0, 1.0) var flyer_share := 0.25
 @export var enemy_count := 72
 ## In the module level the count follows the corridor length instead: this
 ## many per corridor cell (72 over the old ~283 cells was 0.25), so growing the
@@ -4551,6 +4552,7 @@ func _spawn_enemies() -> void:
 		return
 	var spots := _spawn_candidates()
 	_patrol_points.clear()
+	_crier_points_from = -1
 	for tile in spots:
 		_patrol_points.append(tile_to_world(tile))
 	var taken: Array[Vector2i] = []
@@ -4620,6 +4622,21 @@ func _encounter(tile: Vector2i, budget: int) -> int:
 			return pack
 		return _spawn_pack(tile, false, bones, _pack_hands(bones), escort)
 	return _spawn_pack(tile, flying, bones, [], escort)
+
+
+## The corridor points (world) criers patrol between: the spawn candidates,
+## shared by every crier of the population (note 124).
+var _crier_points: Array[Vector3] = []
+var _crier_points_from := -1
+
+
+func _crier_route() -> Array[Vector3]:
+	if _crier_points_from != _patrol_points.size():
+		_crier_points_from = _patrol_points.size()
+		_crier_points.clear()
+		for p in _patrol_points:
+			_crier_points.append(to_global(p))
+	return _crier_points
 
 
 ## --- The trickle (note 123) ----------------------------------------------------------
@@ -4757,6 +4774,9 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringNa
 
 		add_child(enemy)
 		enemy.aggro_range = enemy_aggro_range
+		# A crier patrols the corridors between these (note 124).
+		if flying and enemy.get("patrol_points") != null:
+			enemy.set("patrol_points", _crier_route())
 		_give_wander_area(enemy, tile, roams)
 		_spawned.append(enemy)
 	# A skeleton pack may walk with an enforcer (enforcer.gd; `escort`, note
