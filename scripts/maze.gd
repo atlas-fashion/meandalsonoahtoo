@@ -370,9 +370,13 @@ func _melee_hand() -> StringName:
 	return &"hammer" if _hand_rng.randf() < hammer_share else &"blade"
 
 
-## Skeleton packs in the corridors are always on the move (patrol.gd): the
-## column walks routes between corridor points, the enforcer at its back.
+## Skeleton packs in the corridors on the move (patrol.gd): the column walks
+## routes between corridor points, the enforcer at its back.
 @export var patrols := true
+## How many packs are on patrol. Every one was until 2026-10-28; the user asked
+## for travelling groups to be rare (note 120), so the rest keep to their own
+## stretch of corridor, wandering it or standing guard.
+@export_range(0.0, 1.0) var patrol_share := 0.2
 const PATROL := preload("res://scripts/patrol.gd")
 var _patrol_points: Array[Vector3] = []
 @export var red_pack_min := 1
@@ -508,7 +512,10 @@ var _full_graph = null
 @export var module_chest_half := 2
 ## How many chest rooms to try for. Fewer are placed if the map cannot fit
 ## them a corridor apart from one another.
-@export var module_chest_rooms := 5
+## 6 since 2026-10-28 (note 120): the surgery takes one, and the other five are
+## the containment blocks, one per skeleton type. (5 before; the count feeds
+## the generator, so every seed's layout changed with it.)
+@export var module_chest_rooms := 6
 ## Scales how many wall torches are hung. Omni light count is a per-pixel cost
 ## on this hardware, which is why it is a knob and not a constant.
 ## 1.1 since 2026-10-10, second pass ("way too dark... more torches, but way
@@ -1043,37 +1050,61 @@ func _build_puzzle_rooms(holder: Node3D) -> void:
 	var rooms: Array[Dictionary] = _module_level.chest_rooms()
 	if rooms.is_empty():
 		return
-	mimic_index = _far_room_from_start() if spawn_mimic else -1
+	var script = load("res://scripts/dungeon_room.gd")
+	var walks := _room_walks()
+	# Containment (note 120): the rooms nearest the start by walking hold the
+	# skeleton types in CONTAINED order, one each, each with its shard. Any
+	# rooms over take the old roles (mimic, prison, mine, vacant) with no shard:
+	# the great door wants the containment rooms' five.
+	var holds := {}
+	if progression:
+		var order: Array[int] = []
+		for i in rooms.size():
+			order.append(i)
+		order.sort_custom(func(a: int, b: int) -> bool: return walks[a] < walks[b])
+		for k in mini(CONTAINED.size(), order.size()):
+			holds[order[k]] = CONTAINED[k]
+		if holds.size() < CONTAINED.size():
+			push_warning("only %d chest rooms for %d skeleton types: %s are never contained"
+				% [holds.size(), CONTAINED.size(), CONTAINED.slice(holds.size())])
+	var others: Array[int] = []
+	for i in rooms.size():
+		if not holds.has(i):
+			others.append(i)
+	mimic_index = _far_room_from_start(others, walks) if spawn_mimic else -1
 	# The chest rooms (dungeon_room.gd, 2026-10-09; the puzzles are no longer
 	# built): `prison_rooms` of them are prison blocks, never the mimic's room,
 	# chosen by the seed; the rest are plain rooms until they are designed.
-	var script = load("res://scripts/dungeon_room.gd")
 	var pick := RandomNumberGenerator.new()
 	pick.seed = _active_seed ^ 0x5eed
 	var open: Array[int] = []
-	for i in rooms.size():
+	for i in others:
 		if i != mimic_index:
 			open.append(i)
 	var prisons := {}
-	while prisons.size() < prison_rooms and not open.is_empty():
+	while prisons.size() < prison_rooms and not open.is_empty() and holds.is_empty():
 		prisons[open.pop_at(pick.randi_range(0, open.size() - 1))] = true
 	# Then `mine_rooms` crystal mines, from what is left.
 	var mines := {}
 	while mines.size() < mine_rooms and not open.is_empty():
 		mines[open.pop_at(pick.randi_range(0, open.size() - 1))] = true
 	for i in rooms.size():
-		var kind: StringName = &"prison" if prisons.has(i) else (&"mine" if mines.has(i) else &"vacant")
+		var kind: StringName = &"prison" if prisons.has(i) or holds.has(i) \
+			else (&"mine" if mines.has(i) else &"vacant")
 		var shard: StringName = Inventory.SHARDS[i % Inventory.SHARDS.size()]
+		if not holds.is_empty():
+			shard = Inventory.SHARDS[CONTAINED.find(holds[i])] if holds.has(i) else &""
 		_puzzles.append(script.build(holder, _module_level, rooms[i], kind, shard,
-			i == mimic_index, self, module_stone_tint))
+			i == mimic_index, self, module_stone_tint, holds.get(i, &"")))
+		if holds.has(i):
+			print("[containment] %s hands in the room at %s, %.0f m to walk from the start"
+				% [holds[i], rooms[i]["centre"], walks[i] * tile_size])
 
 
-## The mimic's room: far from the start both ways -- to walk to, and as the crow
-## flies. (It used to be the first room met; at the user's request it is far
-## away.) Walking alone is not enough: the first pick was the longest walk at
-## 367 tiles but only 36 m from the start in a straight line, right beside it
-## on the map. Each distance is scaled by the largest, and the best sum wins.
-func _far_room_from_start() -> int:
+## Tiles walked from the start to each chest room's centre (straight-line tiles
+## for one the walk does not reach, which should not happen), in
+## `chest_rooms()` order.
+func _room_walks() -> Array[float]:
 	var rooms: Array[Dictionary] = _module_level.chest_rooms()
 	var start := world_to_tile(_module_level.spawn)
 	var steps := {start: 0}
@@ -1088,30 +1119,42 @@ func _far_room_from_start() -> int:
 				continue
 			steps[next] = int(steps[tile]) + 1
 			queue.append(next)
-	var walks: Array[float] = []
-	var flies: Array[float] = []
+	var out: Array[float] = []
+	for room in rooms:
+		var centre := world_to_tile(_module_level.room_world(room))
+		var walk := float(steps.get(centre, -1))
+		out.append(walk if walk >= 0.0 else Vector2(centre - start).length())
+	return out
+
+
+## The mimic's room, of `among`: far from the start both ways -- to walk to, and
+## as the crow flies. (It used to be the first room met; at the user's request
+## it is far away.) Walking alone is not enough: the first pick was the longest
+## walk at 367 tiles but only 36 m from the start in a straight line, right
+## beside it on the map. Each distance is scaled by the largest, and the best
+## sum wins. -1 when `among` is empty (every room holds a skeleton type).
+func _far_room_from_start(among: Array[int], walks: Array[float]) -> int:
+	if among.is_empty():
+		return -1
+	var rooms: Array[Dictionary] = _module_level.chest_rooms()
+	var start := world_to_tile(_module_level.spawn)
+	var flies := {}
 	var most_walk := 1.0
 	var most_fly := 1.0
-	for i in rooms.size():
+	for i in among:
 		var centre := world_to_tile(_module_level.room_world(rooms[i]))
-		var fly := Vector2(centre - start).length()
-		var walk := float(steps.get(centre, -1))
-		if walk < 0.0:
-			# Not reached by the walk (it should be): straight-line tiles instead.
-			walk = fly
-		walks.append(walk)
-		flies.append(fly)
-		most_walk = maxf(most_walk, walk)
-		most_fly = maxf(most_fly, fly)
+		flies[i] = Vector2(centre - start).length()
+		most_walk = maxf(most_walk, walks[i])
+		most_fly = maxf(most_fly, float(flies[i]))
 	var best := -1
 	var best_score := -1.0
-	for i in rooms.size():
-		var score := walks[i] / most_walk + flies[i] / most_fly
+	for i in among:
+		var score: float = walks[i] / most_walk + float(flies[i]) / most_fly
 		if score > best_score:
 			best_score = score
 			best = i
 	print("[puzzle] the mimic's room is %d of %d: %.0f m to walk, %.0f m away"
-		% [best, rooms.size(), walks[best] * tile_size, flies[best] * tile_size])
+		% [best, rooms.size(), walks[best] * tile_size, float(flies[best]) * tile_size])
 	return best
 
 
@@ -1121,7 +1164,9 @@ func _build_shard_door(holder: Node3D) -> void:
 		return
 	var shards: Array[StringName] = []
 	for p in _puzzles:
-		shards.append(p.get("shard"))
+		# Rooms beyond the containment blocks hold no shard (note 120).
+		if p.get("shard") != &"":
+			shards.append(p.get("shard"))
 	_shard_door = load("res://scripts/shard_door.gd").build(holder, _boss_hall["gate"],
 		_boss_hall["gate_size"], float(_module_level.boss_hall["wall"]), shards)
 
@@ -1240,6 +1285,11 @@ func save_state() -> Dictionary:
 	data["manholes"] = open_holes
 	if _surgery != null:
 		data["surgery"] = _surgery.call("save_state")
+	# The skeleton types let out of containment (note 120).
+	var out: Array[String] = []
+	for h in released_hands:
+		out.append(String(h))
+	data["released"] = out
 	return data
 
 
@@ -1247,6 +1297,11 @@ func save_state() -> Dictionary:
 ## never spawned if he is dead and a kicked-in door never arms its blocker.
 func restore_world(data: Dictionary) -> void:
 	boss_defeated = bool(data.get("boss_defeated", false))
+	# Before `_populate`, which spawns from them.
+	released_hands.clear()
+	for h in data.get("released", []):
+		if CONTAINED.has(StringName(h)) and not released_hands.has(StringName(h)):
+			released_hands.append(StringName(h))
 	zones_cleared.assign(data.get("zones_cleared", []))
 	var doors := _nodes_with("res://scripts/wood_door.gd")
 	for i in data.get("doors", []):
@@ -4317,6 +4372,12 @@ func _populate() -> void:
 	_spawn_boss()
 	_stock_jail_cells()
 	_spawn_enemies()
+	# The types already let out of containment roam loose too, and the collector
+	# goes after them (note 120).
+	_collectors.clear()
+	for h in released_hands:
+		_spawn_loose(h, loose_per_type)
+	_spawn_collectors()
 	_spawn_convoys()
 	_spawn_stalker()
 	_spawn_decrepits()
@@ -4332,6 +4393,7 @@ func _populate() -> void:
 		p.call("on_world_reset")
 	if _surgery != null:
 		_surgery.call("on_world_reset")
+	update_surgery_bolts()
 
 
 ## Counts enemies that spawned inside a room, against how many should have.
@@ -4510,13 +4572,25 @@ func _spawn_enemies() -> void:
 			flyer_pack_min if flying else red_pack_min,
 			flyer_pack_max if flying else red_pack_max)
 		pack = mini(pack, want - placed)
+		# Containment (note 120): a skeleton encounter comes only in the share
+		# of the types let out, and only of those. One that does not come is
+		# counted as if it had, so the criers keep the density they always had
+		# -- at the start they are the corridors' only encounters.
+		if not flying and progression:
+			if _rng.randf() >= float(released_hands.size()) / float(CONTAINED.size()):
+				placed += pack
+				continue
+			placed += _spawn_pack(tile, false, pack, _pack_hands(pack))
+			continue
 		placed += _spawn_pack(tile, flying, pack)
 
 	_spawn_room_packs(taken)
 
 
 ## A group dropped around one tile. Returns how many actually went down.
-func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
+## `hands`: every member's type, decided by the caller (`_pack_hands`); empty
+## rolls them here, from every type.
+func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringName] = []) -> int:
 	var scene: PackedScene = flyer_scene if flying else enemy_scene
 	if scene == null or count <= 0:
 		return 0
@@ -4524,13 +4598,17 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 	# (archer.gd): never alone, so it has fellows to stand behind. Four or more
 	# may bring a second.
 	var archers: Array[int] = []
-	if not flying and count >= 2 and _rng.randf() < archer_share:
+	if not flying and hands.is_empty() and count >= 2 and _rng.randf() < archer_share:
 		archers.append(count - 1)
 		if count >= 4 and _rng.randf() < second_archer_share:
 			archers.append(count - 2)
 	# A shield at the head of a pack with someone to guard.
-	var shield := not flying and (count >= 3 or (count >= 2 and not archers.is_empty())) \
+	var shield := not flying and hands.is_empty() \
+		and (count >= 3 or (count >= 2 and not archers.is_empty())) \
 		and _hand_rng.randf() < shield_share
+	# Only some packs walk the corridors (note 120: travelling groups rare);
+	# the rest keep to their stretch of it.
+	var on_patrol := not flying and patrols and _rng.randf() < patrol_share
 	var leader: Node3D = null
 	var members: Array[Node3D] = []
 	for i in count:
@@ -4538,7 +4616,13 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 		members.append(enemy)
 		if i == 0:
 			leader = enemy
-		if i in archers:
+		if not hands.is_empty() and not flying:
+			if hands[i] == &"crossbow":
+				enemy.set_script(ARCHER_SCRIPT)
+			else:
+				enemy.set_script(PROSTHETIC)
+				enemy.set("hand", hands[i])
+		elif i in archers:
 			# Before it enters the tree: its numbers are set in its _init.
 			enemy.set_script(ARCHER_SCRIPT)
 		elif not flying:
@@ -4552,9 +4636,9 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 			_rng.randf_range(-1.3, 1.3), 0.0, _rng.randf_range(-1.3, 1.3))
 		# Decided before it enters the tree, because a sentry needs placing
 		# differently from a wanderer and _ready captures where it stands.
-		# Skeleton packs in the corridors are always on patrol, so they all roam.
+		# A skeleton pack on patrol all roams.
 		var roams: bool = enemy.get("wanders") != null \
-			and ((not flying and patrols) or _rng.randf() < wander_share)
+			and (on_patrol or _rng.randf() < wander_share)
 		if not roams:
 			jitter = _off_the_wall(tile, jitter)
 		enemy.position = tile_to_world(tile) + jitter \
@@ -4578,7 +4662,7 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 		w.set("pack", members)
 		count += 1
 		# On patrol: the column walks the corridors, the enforcer at its back.
-		if patrols and not _patrol_points.is_empty():
+		if on_patrol and not _patrol_points.is_empty():
 			var column: Array[Node3D] = []
 			column.assign(members)
 			column.append(w)
@@ -4596,7 +4680,10 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int) -> int:
 ## with an enforcer behind. They start somewhere far from the player and from each
 ## other, already moving, every time the world is populated.
 
-@export var convoy_count := 4
+## 1 since 2026-10-28 (4 before): travelling groups are rare (note 120). With
+## `progression` none goes out until the sword hands -- its crew -- are let out
+## of containment.
+@export var convoy_count := 1
 ## Corridor cells on loops per convoy sent out (up to `convoy_count`).
 @export var convoy_loop_cells := 40
 ## Nearest a convoy may start to the player, and to another convoy.
@@ -4609,6 +4696,9 @@ var _convoys: Array[Node3D] = []
 func _spawn_convoys() -> void:
 	_convoys.clear()
 	if not modules or _module_level == null or convoy_count <= 0 or enemy_scene == null:
+		return
+	if not is_released(&"blade"):
+		print("[convoys] none sent out: the sword hands are still contained")
 		return
 	if _convoy_net.is_empty():
 		_convoy_net = CONVOY.network(_module_level)
@@ -5104,3 +5194,214 @@ func _tick_decrepit() -> void:
 		return
 	_decrepit_due.remove_at(0)
 	_spawn_decrepit()
+
+
+## --- Containment and the spawn pool (note 120, 2026-10-28) -------------------------
+##
+## The user: "The maze should start out with only crier encounters ... a prison
+## or 'containment' room for all skeleton types ... As you encounter containment
+## rooms and clear the wardens, you release the prisoners through a back
+## mechanical door of each cell ... Once you've released that enemy type into the
+## maze, you can find them spawned around. You should also be able to find a more
+## rare warden in the maze, attempting to collect and transport the loose test
+## subjects."
+##
+## Every skeleton type is locked in a containment block of its own
+## (dungeon_room.gd `hand`, `_build_puzzle_rooms`). With the block's enforcers
+## down and its crystal out, its prisoners walk out through their cells' back
+## doors and the type joins the corridors' spawn pool (`released_hands`, saved):
+## skeleton packs are rolled in `released / types` of the share they always had
+## and drawn only from the types let out (`_pack_hands`). Each type let out also
+## roams as `loose_per_type` lone "loose subjects" (group "loose_subjects"),
+## which the collector -- `collector_count` lone enforcers (collector.gd) --
+## walks the maze to shackle and lead back to a containment block. The surgery
+## stays bolted until every block is open (`update_surgery_bolts`), and the
+## great door answers only once the surgery is done (`surgery_done`), so the
+## surgery is the last room before the boss.
+
+@export var progression := true
+## The skeleton types, in the order the containment blocks are handed out:
+## the block nearest the start (by walking) holds the first.
+const CONTAINED: Array[StringName] = [&"blade", &"crossbow", &"hammer", &"shield", &"drill"]
+var released_hands: Array[StringName] = []
+## Lone skeletons of each released type roaming the corridors, every population
+## (and the ones that walked out, the moment a block is opened).
+@export var loose_per_type := 3
+@export var collector_count := 1
+## Nearest a loose subject or a collector may appear to a player.
+@export var loose_start_clear := 30.0
+const COLLECTOR := preload("res://scripts/collector.gd")
+var _collectors: Array[Node] = []
+
+
+func is_released(hand: StringName) -> bool:
+	return not progression or released_hands.has(hand)
+
+
+## A skeleton of a type, not yet in the tree.
+func make_skeleton(hand: StringName) -> Node3D:
+	if enemy_scene == null:
+		return null
+	if hand == &"crossbow":
+		var e: Node3D = enemy_scene.instantiate()
+		# Before it enters the tree: its numbers are set in its _init.
+		e.set_script(ARCHER_SCRIPT)
+		return e
+	return PROSTHETIC.make(enemy_scene, hand) as Node3D
+
+
+## A containment block let its prisoners out: the type joins the pool, and the
+## `count` that walked out are loose in the maze from now, out of sight.
+func release_hand(hand: StringName, count: int) -> void:
+	if not released_hands.has(hand):
+		released_hands.append(hand)
+	print("[containment] %s hands let out, %d loose (%d of %d types out)"
+		% [hand, count, released_hands.size(), CONTAINED.size()])
+	_note_spawn_eye()
+	_spawn_loose(hand, count)
+	_spawn_collectors()
+	update_surgery_bolts()
+
+
+## Every member's type for a skeleton pack of `count`, from the types let out:
+## crossbows at its back (`archer_share`) when they are out, a shield at its
+## head (`shield_share`) when shields are and it has someone to guard, and
+## sword, hammer or drill hands for the rest -- whichever of those are out.
+## With only shields or crossbows out, the pack is those.
+func _pack_hands(count: int) -> Array[StringName]:
+	var out: Array[StringName] = []
+	out.resize(count)
+	out.fill(&"")
+	var melee: Array[StringName] = []
+	for h: StringName in [&"blade", &"hammer", &"drill"]:
+		if released_hands.has(h):
+			melee.append(h)
+	var bows := released_hands.has(&"crossbow")
+	var shields := released_hands.has(&"shield")
+	if bows and count >= 2 and _rng.randf() < archer_share:
+		out[count - 1] = &"crossbow"
+		if count >= 4 and _rng.randf() < second_archer_share:
+			out[count - 2] = &"crossbow"
+	if shields and (count >= 3 or (count >= 2 and out.has(&"crossbow"))) \
+			and _hand_rng.randf() < shield_share:
+		out[0] = &"shield"
+	for i in count:
+		if out[i] != &"":
+			continue
+		if not melee.is_empty():
+			if melee.size() == 2 and melee.has(&"blade") and melee.has(&"hammer"):
+				out[i] = _melee_hand()
+			else:
+				out[i] = melee[_hand_rng.randi_range(0, melee.size() - 1)]
+		elif shields and (not bows or i == 0):
+			out[i] = &"shield"
+		else:
+			out[i] = &"crossbow"
+	return out
+
+
+## A corridor point at least `clear` from every player and out of their sight,
+## or null.
+func _far_point(clear: float):
+	if _patrol_points.is_empty():
+		return null
+	for tries in 60:
+		var at: Vector3 = _patrol_points[_rng.randi_range(0, _patrol_points.size() - 1)]
+		var near := false
+		for p in Coop.all():
+			if (p as Node3D).global_position.distance_to(to_global(at)) < clear:
+				near = true
+		if near or _seen_by_player(at):
+			continue
+		return at
+	return null
+
+
+## `count` lone skeletons of a type, each somewhere in the corridors, wandering.
+func _spawn_loose(hand: StringName, count: int) -> void:
+	for i in count:
+		var at = _far_point(loose_start_clear)
+		if at == null:
+			return
+		var e := make_skeleton(hand)
+		if e == null:
+			return
+		e.position = (at as Vector3) + Vector3(_rng.randf_range(-0.8, 0.8), 0.3, _rng.randf_range(-0.8, 0.8))
+		e.rotation.y = _rng.randf() * TAU
+		add_child(e)
+		e.set("aggro_range", enemy_aggro_range)
+		_give_wander_area(e, world_to_tile(at), true)
+		e.add_to_group(&"loose_subjects")
+		_spawned.append(e)
+
+
+## The collector: up to `collector_count` lone enforcers, far off, once any type
+## is out of containment.
+func _spawn_collectors() -> void:
+	if not progression or released_hands.is_empty() or collector_count <= 0 or enemy_scene == null:
+		return
+	var alive: Array[Node] = []
+	for c in _collectors:
+		if is_instance_valid(c) and c.call("is_working"):
+			alive.append(c)
+	_collectors = alive
+	while _collectors.size() < collector_count:
+		var at = _far_point(loose_start_clear * 1.5)
+		if at == null:
+			return
+		var w: Node3D = enemy_scene.instantiate()
+		w.set_script(ENFORCER_SCRIPT)
+		w.position = (at as Vector3) + Vector3(0.0, 0.3, 0.0)
+		w.rotation.y = _rng.randf() * TAU
+		add_child(w)
+		w.set("aggro_range", enforcer_aggro_range)
+		_give_wander_area(w, world_to_tile(at), true)
+		_spawned.append(w)
+		var c: Node = COLLECTOR.new()
+		c.name = "Collector"
+		add_child(c)
+		c.call("setup", w, _patrol_points, self, _rng.randi())
+		_spawned.append(c)
+		_collectors.append(c)
+		print("[collector] out at %s" % at)
+
+
+## Where a collector leading subjects at `from` takes them: outside the nearest
+## containment block's nearest way in. Null with no block.
+func collector_drop(from: Vector3):
+	var best = null
+	var best_d := INF
+	for p in _puzzles:
+		if not p.call("is_containment"):
+			continue
+		var at: Vector3 = p.call("drop_point", from)
+		var d := at.distance_squared_to(from)
+		if d < best_d:
+			best_d = d
+			best = at
+	return best
+
+
+## How many containment blocks are still shut (their crystal still in).
+func containment_left() -> int:
+	if not progression:
+		return 0
+	var n := 0
+	for p in _puzzles:
+		if p.call("is_containment") and p.get("powered_off") != true:
+			n += 1
+	return n
+
+
+## The surgery's ways in stay bolted until every block is open.
+func update_surgery_bolts() -> void:
+	if _surgery != null and _surgery.has_method("set_entrances_bolted"):
+		_surgery.call("set_entrances_bolted", containment_left())
+
+
+## The surgery is done -- the surgeon dead -- or there is none. The great door
+## (shard_door.gd) asks.
+func surgery_done() -> bool:
+	if not progression or _surgery == null:
+		return true
+	return bool(_surgery.call("is_done"))

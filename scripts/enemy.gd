@@ -451,6 +451,16 @@ func _physics_process(delta: float) -> void:
 	_advance_anim(delta)
 	_update_sword()
 
+	# Locked in a containment cell: it stands, or the room walks it out.
+	if caged:
+		engaged = false
+		velocity.x = cage_walk.x
+		velocity.z = cage_walk.z
+		if cage_walk.length_squared() > 0.01:
+			_face(cage_walk)
+		_slide()
+		return
+
 	# Calling for help outranks everything but a broken stance: he has decided
 	# to do this and will not be talked out of it by being hit.
 	if state == State.SUMMON:
@@ -747,6 +757,12 @@ var patrol: Node = null
 ## The convoy (convoy.gd) driving this one, and the pace it walks at.
 var hauled_by: Node = null
 var haul_speed := 0.0
+
+## Locked in a containment cell (dungeon_room.gd, note 120): blind, deaf and
+## unhurt behind its bars, standing where it was put. `cage_walk` is the
+## velocity the room walks it at -- out through its cell's back door.
+var caged := false
+var cage_walk := Vector3.ZERO
 
 
 func _haul_anim(delta: float) -> void:
@@ -1511,7 +1527,7 @@ func _apply_state_color(colour: Color, glow: float) -> void:
 ## Shoves the enemy along `impulse` (horizontal component only) and interrupts
 ## its pursuit for `stun_time`.
 func apply_knockback(impulse: Vector3, stun_time := 0.25) -> void:
-	if _dying:
+	if _dying or caged:
 		return
 	# A shield skeleton braced between it and the blow (prosthetic.gd) takes
 	# the shove as well as the hit.
@@ -1610,7 +1626,7 @@ func _decay_knockback(delta: float) -> void:
 ## anything that ought to provoke it without hurting it -- a door kicked in
 ## beside it -- as well as by every hit.
 func alert() -> void:
-	if _dying:
+	if _dying or caged:
 		return
 	_seen_until = _now() + sight_memory
 	_has_wander_target = false
@@ -1620,7 +1636,7 @@ func alert() -> void:
 
 
 func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void:
-	if _dying:
+	if _dying or caged:
 		return
 	# Guarded: a shield skeleton (prosthetic.gd) stands braced between this one
 	# and whoever struck, and its shield takes the blow instead.

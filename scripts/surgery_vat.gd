@@ -96,6 +96,11 @@ var kind := "vat_bones"
 ## in has no gap a player fits through -- and `entry`: the claw leaves them be.
 var grow := 1.0
 var entry := false
+## A way in's vat, bolted to the floor while containment blocks are still
+## shut (note 120: the surgery is the last room before the boss): the
+## prompt says how many, and it will not take hold. maze.gd sets it
+## (`update_surgery_bolts`, through surgery.gd `set_entrances_bolted`).
+var bolted := 0
 var radius := RADIUS
 var height := HEIGHT
 ## A player has begun shoving it (the entrance scene starts on it, note 105).
@@ -206,7 +211,8 @@ func _process(_delta: float) -> void:
 		p = null
 	_grab_prompt.visible = p != null
 	_grab_prompt.player = p
-	_grab_prompt.text = GRAB_TEXT
+	_grab_prompt.text = GRAB_TEXT if bolted <= 0 else ("Bolted to the floor   %d containment block%s still shut"
+		% [bolted, "" if bolted == 1 else "s"])
 
 
 ## E pressed takes hold; E let go lets go (`_check_holders`, note 111).
@@ -219,7 +225,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Both hands on it where they stand, facing it.
 func grab(p: Node3D) -> void:
-	if p == null or is_held_by(p):
+	if p == null or is_held_by(p) or bolted > 0:
 		return
 	var to := p.global_position - global_position
 	to.y = 0.0

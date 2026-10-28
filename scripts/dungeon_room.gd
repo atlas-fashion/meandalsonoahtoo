@@ -69,6 +69,29 @@ const POSTS := [Vector3(-3.5, -2.0, -1.0), Vector3(3.5, -2.0, -1.0), Vector3(0.0
 const ALARM_IN := 1.8
 const PRISONER_SCALE := 0.94
 
+## A CONTAINMENT block (note 120) is a prison holding one skeleton type, `hand`
+## (&"blade", &"hammer", &"shield", &"crossbow", &"drill"): its prisoners are real
+## skeletons of that type, caged (enemy.gd `caged`) -- blind, deaf and unhurt --
+## and every cell has a mechanical back door in its back wall. The crystal out,
+## the front gates stay shut and the back doors grind up: the prisoners walk out
+## through them into the dark, and the type is loose in the maze
+## (maze.gd `release_hand`). Empty for the plain prison.
+var hand: StringName = &""
+const HAND_NAMES := {&"blade": "SWORD", &"hammer": "HAMMER", &"shield": "SHIELD",
+	&"crossbow": "CROSSBOW", &"drill": "DRILL"}
+const BACK_DOOR_W := 1.2
+const BACK_DOOR_H := 2.3
+## How far the back door's slab slides up its rails.
+const BACK_LIFT := 2.25
+## How far in front of BAY_DEEP the door is built: the brick's real face.
+const BACK_FACE := 0.16
+## How fast a prisoner walks out to it.
+const WALK_OUT := 1.3
+const GREEN := Color(0.25, 1.0, 0.35)
+var _back_lamp_mat: StandardMaterial3D
+## The prisoners let out this run; the room's share of `release_hand`.
+var walked_out := 0
+
 var built
 var room: Dictionary = {}
 var kind: StringName = &"vacant"
@@ -116,10 +139,11 @@ static var _meshes := {}
 
 
 static func build(holder: Node3D, level, room_: Dictionary, kind_: StringName, shard_: StringName,
-		mimic_: bool, maze_: Node, tint_: float) -> Node3D:
+		mimic_: bool, maze_: Node, tint_: float, hand_ := &"") -> Node3D:
 	var p := Node3D.new()
 	p.set_script(load("res://scripts/dungeon_room.gd"))
 	p.name = "ChestRoom"
+	p.set("hand", hand_)
 	p.set("built", level)
 	p.set("room", room_)
 	p.set("kind", kind_)
@@ -133,7 +157,28 @@ static func build(holder: Node3D, level, room_: Dictionary, kind_: StringName, s
 
 
 func title() -> String:
+	if kind == &"prison" and hand != &"":
+		return "CONTAINMENT: %s HANDS" % HAND_NAMES.get(hand, String(hand).to_upper())
 	return String(TITLES[kind][0]) if kind != &"vacant" else "CHEST ROOM"
+
+
+func is_containment() -> bool:
+	return kind == &"prison" and hand != &""
+
+
+## Where the collector (collector.gd) hands its subjects in: the corridor cell
+## just outside the block's nearest way in to `from`.
+func drop_point(from: Vector3) -> Vector3:
+	var best := global_position
+	var best_d := INF
+	for door in built.room_doors(room):
+		var step: Vector2i = door["outward"]
+		var at: Vector3 = built.to_world((door["cell"] as Vector2i) + step)
+		var d := at.distance_squared_to(from)
+		if d < best_d:
+			best_d = d
+			best = at
+	return best
 
 
 ## Never: nothing here shuts the player in. (The Remnant asks.)
@@ -210,6 +255,7 @@ func _build_prison() -> void:
 
 func _build_domed_prison() -> void:
 	_lamp_mat = _glow(RED, 3.0)
+	_back_lamp_mat = _glow(RED, 3.0)
 	var kit = load("res://scripts/brick_level.gd")
 	var bays := _prison_bays()
 	var cells: Array[int] = []
@@ -268,6 +314,8 @@ func _build_domed_prison() -> void:
 		_dress_bay(cell, xf, held.has(i))
 		_cells.append(cell)
 
+	if is_containment():
+		_torches_off_back_doors()
 	_build_partitions(kit)
 	_build_dome_hall(kit)
 	_build_generator()
@@ -348,7 +396,13 @@ func _dress_bay(cell: Dictionary, xf: Transform3D, held: bool) -> void:
 	var straw := _box(self, Vector3(1.4, 0.06, 1.0), Vector3.ZERO, _mat(&"straw"))
 	straw.transform = xf * Transform3D(Basis(Vector3.UP, _rng.randf_range(-0.3, 0.3)),
 		Vector3(_rng.randf_range(-1.0, 1.0), 0.03, -3.0))
-	for side: float in [-0.6, 0.6]:
+	# A containment cell's back door takes the middle of the back wall; the
+	# chains move out to its sides.
+	var chains_at := 0.6
+	if is_containment():
+		_build_back_door(cell, xf)
+		chains_at = 1.45
+	for side: float in [-chains_at, chains_at]:
 		var chain := _cyl(0.015, 0.9, 4, _mat(&"iron"))
 		chain.position = xf * Vector3(side, 1.55, -BAY_DEEP + 0.14)
 		add_child(chain)
@@ -375,6 +429,14 @@ func _dress_bay(cell: Dictionary, xf: Transform3D, held: bool) -> void:
 			var crate := _box(self, Vector3(0.5, 0.45, 0.5), Vector3.ZERO, _mat(&"wood"))
 			crate.transform = xf * Transform3D(Basis(Vector3.UP, _rng.randf_range(-0.2, 0.2)),
 				Vector3(-1.4, 0.225 + 0.45 * float(k), -4.0))
+		return
+	if held and is_containment():
+		# Where its caged skeleton stands (`_cage_prisoner`, put back on every
+		# world reset): up at the bars, facing out into the hall, as the
+		# prison's figures do. -Z of an enemy is its front.
+		cell["xf"] = xf * Transform3D(Basis(Vector3.UP, PI + _rng.randf_range(-0.25, 0.25)),
+			Vector3(_rng.randf_range(-0.5, 0.5), 0.0, -0.9))
+		cell["held"] = true
 		return
 	if held:
 		var decor := Node3D.new()
@@ -403,6 +465,76 @@ func _dress_bay(cell: Dictionary, xf: Transform3D, held: bool) -> void:
 		bone.transform = xf * Transform3D(Basis.from_euler(Vector3(PI * 0.5, _rng.randf_range(0.0, TAU), 0.0)),
 			Vector3(_rng.randf_range(-1.2, 1.2), 0.03, -_rng.randf_range(1.5, 4.0)))
 		add_child(bone)
+
+
+## A containment cell's mechanical back door, in the middle of its back wall
+## (bay frame: the wall face at -BAY_DEEP): iron rails up either side, a riveted
+## slab that slides up them, a gear wheel that turns as it goes, a lamp that goes
+## from red to green, and pure black behind -- the passage the prisoners walk
+## out into. Nothing is cut in the wall: the black is a panel on its face, and a
+## prisoner reaching it is taken off the floor and slid into it (`_vanish`).
+func _build_back_door(cell: Dictionary, xf: Transform3D) -> void:
+	# The brick's face stands proud of BAY_DEEP: a panel at -BAY_DEEP + 0.03 was
+	# behind it, and the open door showed brick (measured, screenshot).
+	var z := -BAY_DEEP + BACK_FACE
+	var w := BACK_DOOR_W
+	var h := BACK_DOOR_H
+	var hole := _box(self, Vector3(w, h, 0.02), Vector3.ZERO, _mat(&"void"))
+	hole.transform = xf * Transform3D(Basis(), Vector3(0.0, h * 0.5, z + 0.03))
+	hole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var rail_h := h + BACK_LIFT + 0.2
+	for side: float in [-1.0, 1.0]:
+		var rail := _box(self, Vector3(0.14, rail_h, 0.16), Vector3.ZERO, _mat(&"rust"))
+		rail.transform = xf * Transform3D(Basis(), Vector3(side * (w * 0.5 + 0.07), rail_h * 0.5, z + 0.08))
+	var lintel := _box(self, Vector3(w + 0.28, 0.18, 0.18), Vector3.ZERO, _mat(&"rust"))
+	lintel.transform = xf * Transform3D(Basis(), Vector3(0.0, h + 0.11, z + 0.09))
+	# The slab rides in front of the rails, so it slides up over the lintel.
+	var slab := Node3D.new()
+	slab.name = "BackDoor%d" % int(cell["k"])
+	slab.transform = xf * Transform3D(Basis(), Vector3(0.0, 0.0, z + 0.21))
+	add_child(slab)
+	_box(slab, Vector3(w, h, 0.07), Vector3(0.0, h * 0.5, 0.0), _mat(&"iron"))
+	for band_y: float in [0.35, 1.15, 1.95]:
+		_box(slab, Vector3(w + 0.02, 0.08, 0.1), Vector3(0.0, band_y, 0.0), _mat(&"rust"))
+	for k in 6:
+		var rivet := _sphere(0.025, _mat(&"iron"))
+		rivet.position = Vector3((float(k % 3) - 1.0) * 0.42, 0.75 + 0.8 * float(k / 3), 0.05)
+		slab.add_child(rivet)
+	var gear := _cyl(0.24, 0.07, 12, _mat(&"rust"))
+	gear.transform = xf * Transform3D(Basis(Vector3.RIGHT, PI * 0.5),
+		Vector3(-(w * 0.5 + 0.42), h - 0.3, z + 0.06))
+	add_child(gear)
+	var hub := _cyl(0.07, 0.12, 8, _mat(&"iron"))
+	gear.add_child(hub)
+	var lamp := _sphere(0.06, _back_lamp_mat)
+	lamp.position = xf * Vector3(w * 0.5 + 0.36, h - 0.2, z + 0.1)
+	add_child(lamp)
+	cell["back_door"] = slab
+	cell["gear"] = gear
+	cell["bay_xf"] = xf
+	# Where a prisoner walks to (a step off the door), and where it goes.
+	cell["back"] = xf * Vector3(0.0, 0.0, z + 0.6)
+	cell["into"] = xf * Vector3(0.0, 0.0, z - 1.2)
+
+
+## The level hangs a torch on many a cell's back wall (module_level, before the
+## rooms are dressed), and it hung right over the back door: moved along the
+## wall to the door's side, clear of its gear and lamp.
+func _torches_off_back_doors() -> void:
+	var torch_script = load("res://scripts/torch.gd")
+	for n in get_parent().find_children("*", "Node3D", true, false):
+		if n.get_script() != torch_script or is_ancestor_of(n):
+			continue
+		var local := to_local((n as Node3D).global_position)
+		for cell in _cells:
+			if not cell.has("bay_xf"):
+				continue
+			var bay: Transform3D = cell["bay_xf"]
+			var p := bay.affine_inverse() * local
+			if absf(p.x) < 1.5 and p.z < -BAY_DEEP + 1.2 and p.z > -BAY_DEEP - 0.6:
+				(n as Node3D).global_position = to_global(bay * Vector3(2.0 if p.x >= 0.0 else -2.0, p.y, p.z))
+				n.set("_fixed_position", (n as Node3D).global_position)
+				break
 
 
 ## A wall (and the band above it) across every arch between two ring cells:
@@ -1429,7 +1561,8 @@ func _mine_off_now() -> void:
 
 ## The doors' collision comes on once the navmesh has been baked without it.
 func _arm_doors() -> void:
-	if powered_off:
+	# A containment block's front gates never open.
+	if powered_off and not is_containment():
 		return
 	for cell in _cells:
 		var db: StaticBody3D = cell["door_body"]
@@ -1440,6 +1573,8 @@ func _arm_doors() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	if is_containment():
+		_run_walkers(delta)
 	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
 	_player = Coop.user_for(self, _player)
 	if _player == null:
@@ -1530,6 +1665,15 @@ func _cut_power() -> void:
 	powered_off = true
 	_focus = false
 	_prompt.visible = false
+	if is_containment():
+		# The type is loose from this moment -- a death before the doors are up
+		# still lets it out. The ones walking out are the room's own show.
+		walked_out = 0
+		for cell in _cells:
+			if is_instance_valid(cell.get("caged")):
+				walked_out += 1
+		if maze != null and maze.has_method("release_hand"):
+			maze.call("release_hand", hand, walked_out)
 	var at := _crystal.global_position
 	_crystal.top_level = true
 	_crystal.global_position = at
@@ -1569,7 +1713,8 @@ func _cut_power() -> void:
 	for k in 3:
 		lamps.tween_property(_lamp_mat, "emission_energy_multiplier", 0.2 if k % 2 == 0 else 3.0, 0.1)
 	lamps.tween_property(_lamp_mat, "emission_energy_multiplier", 0.0, 0.6)
-	get_tree().create_timer(1.0).timeout.connect(_open_cells)
+	get_tree().create_timer(1.0).timeout.connect(
+		_open_back_doors if is_containment() else _open_cells)
 
 
 func _open_cells() -> void:
@@ -1596,6 +1741,117 @@ func _open_cells() -> void:
 		delay += 0.12
 	if _reward != null and is_instance_valid(_reward):
 		_reward.set("locked", false)
+
+
+## Containment: the front gates stay shut and the back doors grind up, one after
+## another along the block, and each prisoner turns and walks out through its own.
+func _open_back_doors() -> void:
+	if not is_inside_tree():
+		return
+	var hud := _hud()
+	if hud != null and hud.has_method("announce"):
+		hud.announce("THE BACK DOORS GRIND OPEN",
+			"The %s hands are loose in the maze." % String(HAND_NAMES.get(hand, "")).to_lower())
+	var delay := 0.0
+	for cell in _cells:
+		_lift_back_door(cell, delay, false)
+		if is_instance_valid(cell.get("caged")):
+			get_tree().create_timer(delay + 1.1).timeout.connect(_walk_out.bind(cell))
+		delay += 0.15
+	if _back_lamp_mat != null:
+		var lamp := create_tween()
+		lamp.tween_interval(0.4)
+		lamp.tween_property(_back_lamp_mat, "emission", GREEN, 0.3)
+
+
+func _lift_back_door(cell: Dictionary, delay: float, now: bool) -> void:
+	var slab: Node3D = cell.get("back_door")
+	if slab == null:
+		return
+	if cell.get("lifted", false):
+		return
+	cell["lifted"] = true
+	var up := slab.position + Vector3(0.0, BACK_LIFT, 0.0)
+	if now:
+		slab.position = up
+		return
+	var lift := create_tween()
+	lift.tween_interval(delay)
+	# A jolt as the catch lets go, then the long haul up the rails.
+	lift.tween_property(slab, "position", slab.position + Vector3(0.0, 0.06, 0.0), 0.12)
+	lift.tween_property(slab, "position", up, 1.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var gear: Node3D = cell.get("gear")
+	if gear != null:
+		# About its own axle (its local Y, out of the wall).
+		var rest := gear.basis
+		var spin := create_tween()
+		spin.tween_interval(delay + 0.12)
+		spin.tween_method(func(a: float) -> void: gear.basis = rest * Basis(Vector3.UP, a), 0.0, -TAU * 2.5, 1.6) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+func _walk_out(cell: Dictionary) -> void:
+	if not is_inside_tree() or not is_instance_valid(cell.get("caged")):
+		return
+	cell["walking"] = true
+	cell["walk_until"] = _time + 7.0
+
+
+## Walks each let-out prisoner to its back door (it stays caged: blind, deaf,
+## unhurt, walked by `cage_walk`), and takes it in through the door when there.
+func _run_walkers(_delta: float) -> void:
+	for cell in _cells:
+		if not cell.get("walking", false):
+			continue
+		var e = cell.get("caged")
+		if not is_instance_valid(e):
+			cell["walking"] = false
+			continue
+		if not cell.has("back"):
+			_vanish(cell, e)
+			continue
+		var to: Vector3 = to_global(cell["back"]) - (e as Node3D).global_position
+		to.y = 0.0
+		if to.length() < 0.35 or _time >= float(cell["walk_until"]):
+			_vanish(cell, e)
+		else:
+			e.set("cage_walk", to.normalized() * WALK_OUT)
+
+
+## Off the floor and into the dark behind the door, then gone.
+func _vanish(cell: Dictionary, e: Node3D) -> void:
+	cell["walking"] = false
+	cell["caged"] = null
+	cell["held"] = false
+	_freed.erase(e)
+	e.set("cage_walk", Vector3.ZERO)
+	e.set_physics_process(false)
+	(e as CollisionObject3D).collision_layer = 0
+	(e as CollisionObject3D).collision_mask = 0
+	var into: Vector3 = to_global(cell.get("into", cell.get("back", to_local(e.global_position))))
+	into.y = e.global_position.y
+	var go := create_tween()
+	go.tween_property(e, "global_position", into, 1.1)
+	go.tween_callback(e.queue_free)
+
+
+## A real skeleton of the block's type, locked in its cell.
+func _cage_prisoner(cell: Dictionary) -> Node3D:
+	if maze == null or not maze.has_method("make_skeleton"):
+		return null
+	var e: Node3D = maze.call("make_skeleton", hand)
+	if e == null:
+		return null
+	e.set("caged", true)
+	e.set("wanders", false)
+	var xf := to_global_xf(cell)
+	e.transform = maze.global_transform.affine_inverse() * Transform3D(xf.basis.orthonormalized(),
+		xf.origin + Vector3(0.0, 0.3, 0.0))
+	maze.call("adopt_enemy", e)
+	e.set("aggro_range", 0.5)
+	cell["caged"] = e
+	_freed.append(e)
+	return e
 
 
 ## Out into the aisle. The door runs along +X from its hinge, and a turn of a
@@ -1737,6 +1993,14 @@ func _respawn_prison() -> void:
 			w.set("aggro_range", 26.0)
 			w.connect("died", _on_enforcer_died)
 			_enforcers.append(w)
+	if is_containment():
+		# Locked up again, unless they were let out.
+		for cell in _cells:
+			cell["walking"] = false
+			cell["caged"] = null
+			if not powered_off and cell.get("held", false):
+				_cage_prisoner(cell)
+		return
 	if powered_off and not prisoners_down:
 		for cell in _cells:
 			if cell["alive"]:
@@ -1839,6 +2103,15 @@ func _power_off_now(alive: Array) -> void:
 	_crystal = null
 	_gen_light.light_energy = 0.0
 	_lamp_mat.emission_energy_multiplier = 0.0
+	if is_containment():
+		# The front gates still shut; the back doors up, their lamps green, the
+		# cells empty.
+		if _back_lamp_mat != null:
+			_back_lamp_mat.emission = GREEN
+		for cell in _cells:
+			_lift_back_door(cell, 0.0, true)
+			cell["held"] = false
+		return
 	for i in _cells.size():
 		var cell: Dictionary = _cells[i]
 		(cell["door"] as Node3D).rotation.y += _open_angle(cell)
@@ -1998,5 +2271,9 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 		&"bone":
 			m.albedo_color = Color(0.48, 0.45, 0.38)
 			m.roughness = 0.9
+		&"void":
+			# The dark beyond a back door: no light reaches it.
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.albedo_color = Color(0.0, 0.0, 0.0)
 	_mats[key] = m
 	return m

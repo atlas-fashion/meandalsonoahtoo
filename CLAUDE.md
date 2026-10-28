@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 119), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 120), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -283,7 +283,8 @@ save's) -> level builder -> `_build_gates`, `_place_player`,
 `Graphics.apply_all` -> `_seal_cells`, `restore_world(save)`, `_populate()`,
 `restore_player(save)` -> `is_built = true`, emits **`level_built`**.
 `_populate()` spawns: boss, jail-cell stock, enemies, convoys, stalker,
-decrepits, sewer lizards, rats (own `_rat_rng`), chests.
+decrepits, sewer lizards, rats (own `_rat_rng`), chests. Corridor skeletons only of the
+types let out of containment (`released_hands`, note 120): at the start, only criers.
 
 **The live level path** is `maze.gd` `modules = true` ->
 `_build_module_level()`:
@@ -325,7 +326,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
   "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65-71), `sewer_lizard.gd` +
   `goo.gd`, `stalker.gd` ("the Remnant" / "the Shade"), `mimic.gd`,
-  `convoy.gd`; helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
+  `convoy.gd`, `collector.gd` (rounds up loose skeletons, note 120); helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
   `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`, `shield_hitbox.gd`
   (bone hitboxes: both enforcers' shields, the decrepit's left foot; hit windows; notes 68-69). Clip changes on the
   enforcer and decrepit rigs are inertialized by `enforcer_react.gd`
@@ -508,6 +509,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 117 | 2026-10-27 | Sandbox: T / pad Y on the map teleports to the pin under the cursor or the spot (rock goes to the nearest open cell; the floor and navmesh found there); "Heal to full" and "5 health potions" in the menu | [docs/notes/117-sandbox-map-teleport-and-heals.md](docs/notes/117-sandbox-map-teleport-and-heals.md) |
 | 118 | 2026-10-27 | The surgery: the pen soldiers face the hall (they faced their pens' back wall); the black slits between the raised brick pieces backed with a second skin of the same brick (`BackingBrick`, no shadows) | [docs/notes/118-surgery-soldiers-face-the-hall-no-black-gaps.md](docs/notes/118-surgery-soldiers-face-the-hall-no-black-gaps.md) |
 | 119 | 2026-10-28 | The surgery's soldiers and surgeon face the player moving and fighting: they wrote a world heading into a local `rotation.y` under the turned surgery (soldiers under a top-level `Soldiers` node; the surgeon's `_face_yaw` sets `global_rotation`) | [docs/notes/119-surgery-enemies-turn-in-world-yaw.md](docs/notes/119-surgery-enemies-turn-in-world-yaw.md) |
+| 120 | 2026-10-28 | Containment: the maze starts with only criers; one prison-look containment block per skeleton type (caged prisoners, mechanical back doors they walk out through once its enforcers are down and the crystal is out); each type let out joins the spawn pool; patrols and convoys rare; the collector (a lone enforcer chaining loose subjects); the surgery bolted until every block is open, the great door until the surgeon is dead | [docs/notes/120-containment-and-the-spawn-pool.md](docs/notes/120-containment-and-the-spawn-pool.md) |
 
 ## Notes by source file
 
@@ -533,14 +535,15 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79
-- `scripts/convoy.gd`: 23, 28, 79, 93
+- `scripts/collector.gd`: 120
+- `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79
 - `scripts/damp.gd`: 39, 40, 41
 - `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
-- `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114
-- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93
+- `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120
+- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93, 120
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92, 115, 116
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
@@ -560,7 +563,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112
@@ -589,17 +592,17 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92
-- `scripts/shard_door.gd`: 18, 79
+- `scripts/shard_door.gd`: 18, 79, 120
 - `scripts/shield_hitbox.gd`: 68, 69
 - `scripts/skeleton_eyes.gd`: 13
 - `scripts/skeleton_sword.gd`: 24, 93
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119
+- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109
-- `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106, 111
+- `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106, 111, 120
 - `scripts/surgery_piece.gd`: 104, 110
 - `scripts/subtitles.gd`: 109
 - `scripts/surgeon_boss.gd`: 105, 109, 110, 111, 119

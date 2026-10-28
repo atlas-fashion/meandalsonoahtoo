@@ -955,6 +955,22 @@ func _block_entrances() -> void:
 		_entry_vats.append(vat)
 
 
+## Note 120: the ways in's vats are bolted down while `left` containment blocks
+## are still shut -- never once the player has been in (the entrance scene run).
+func set_entrances_bolted(left: int) -> void:
+	for v in _entry_vats:
+		if is_instance_valid(v):
+			v.set("bolted", 0 if intro_done else left)
+
+
+## The surgery is done: the surgeon dead (note 105), his claw kept or not.
+func is_done() -> bool:
+	if control == null:
+		return true
+	var boss = control.get("boss")
+	return not is_instance_valid(boss) or bool(boss.call("is_dead")) or bool(control.get("claw_kept"))
+
+
 ## The kit's pen bars in each way in, sunk under the floor until the claw
 ## shuts them in (`raise_bars`), with its collision off till then.
 func _build_bars() -> void:

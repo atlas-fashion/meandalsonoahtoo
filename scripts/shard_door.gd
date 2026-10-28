@@ -225,6 +225,12 @@ func set_count() -> int:
 
 
 func _use() -> void:
+	# Note 120: the surgery is the last room before the boss -- the door does
+	# not answer while the surgeon lives.
+	var maze := get_tree().get_first_node_in_group(&"maze")
+	if maze != null and maze.has_method("surgery_done") and not bool(maze.call("surgery_done")):
+		_toast("The door will not answer. Something still works in the surgery.", 2.6)
+		return
 	var inv = _player.get("inventory")
 	var to_set: Array[int] = []
 	if inv != null:
@@ -239,7 +245,7 @@ func _use() -> void:
 				spare[id] = int(spare[id]) - 1
 				to_set.append(k)
 	if to_set.is_empty():
-		_toast("The door is sealed: %d of %d shards set. The rest lie in the puzzle rooms."
+		_toast("The door is sealed: %d of %d shards set. The rest lie in the containment blocks."
 			% [set_count(), shards.size()], 2.6)
 		return
 	# Out of the pack at once, so dying part way through cannot lose or copy one.
