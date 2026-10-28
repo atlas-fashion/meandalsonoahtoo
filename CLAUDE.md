@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 124), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 125), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -514,6 +514,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 122 | 2026-10-28 | Containment exits really lead into the maze: each block's cells opened at the back onto a corridor, or a passage dug to one (`module_level._make_back_exits`); an iron bulkhead round each back door; the prisoners walk out along it and stay loose where they come out, 3 more of the type elsewhere; 3 collectors | [docs/notes/122-containment-exits-into-the-maze.md](docs/notes/122-containment-exits-into-the-maze.md) |
 | 123 | 2026-10-28 | Enemies spawn more often: 0.42 per corridor cell (was 0.32); a trickle (`_tick_spawns`) rolls one more encounter every 8 s, 35 m off and out of sight, while fewer are alive than came at the population; loose subjects kept up the same way | [docs/notes/123-more-spawns-and-the-trickle.md](docs/notes/123-more-spawns-and-the-trickle.md) |
 | 124 | 2026-10-28 | Fewer criers (`flyer_share` 0.25, was 0.45); criers patrol the corridors (`crier._patrol`: navmesh legs between corridor points at 3.2 m/s, no shut doors) and on patrol see ahead (150 degree cone, 3 m all round), rushing the face once they see the player | [docs/notes/124-fewer-criers-on-patrol.md](docs/notes/124-fewer-criers-on-patrol.md) |
+| 125 | 2026-10-28 | Every corridor enemy patrols (`patrol_share` 1.0; lone skeletons and packs without an enforcer never got a patrol before; loose subjects too); patrol.gd picks goals in reach from shared buckets, takes part-way routes (up to a shut door), backs off when stuck and avoids that way, followers steer by the navmesh; criers likewise. Standing still 62% -> 8% of the time | [docs/notes/125-every-enemy-patrols-smartly.md](docs/notes/125-every-enemy-patrols-smartly.md) |
 
 ## Notes by source file
 
@@ -539,9 +540,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79
-- `scripts/collector.gd`: 120, 122
+- `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
-- `scripts/crier.gd`: 43, 48, 60, 77, 79, 124
+- `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125
 - `scripts/damp.gd`: 39, 40, 41
 - `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92
 - `scripts/decrepit_react.gd`: 56, 59
@@ -567,7 +568,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122
@@ -575,7 +576,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
 - `scripts/pad_keyboard_input.gd`: 26
-- `scripts/patrol.gd`: 24
+- `scripts/patrol.gd`: 24, 125
 - `scripts/pause_menu.gd`: 19
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113
 - `scripts/portcullis.gd`: 6.18

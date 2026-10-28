@@ -377,10 +377,11 @@ func _melee_hand() -> StringName:
 ## Skeleton packs in the corridors on the move (patrol.gd): the column walks
 ## routes between corridor points, the enforcer at its back.
 @export var patrols := true
-## How many packs are on patrol. Every one was until 2026-10-28; the user asked
-## for travelling groups to be rare (note 120), so the rest keep to their own
-## stretch of corridor, wandering it or standing guard.
-@export_range(0.0, 1.0) var patrol_share := 0.2
+## How many packs are on patrol. 0.2 in note 120 (travelling groups rare); 1.0
+## since note 125, the user: "Make sure all enemies smartly patrol the
+## corridors. They shouldn't get stuck on corners or stand up against a wall
+## motionless." Most encounters are one skeleton now (note 121).
+@export_range(0.0, 1.0) var patrol_share := 1.0
 const PATROL := preload("res://scripts/patrol.gd")
 var _patrol_points: Array[Vector3] = []
 ## A skeleton encounter's size, by weight: alone, two, three (note 121, the
@@ -4781,8 +4782,9 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringNa
 		_spawned.append(enemy)
 	# A skeleton pack may walk with an enforcer (enforcer.gd; `escort`, note
 	# 121), which keeps close to the pack's first skeleton while they amble.
+	var w: Node3D = null
 	if not flying and enforcers_with_packs and escort and leader != null:
-		var w := _spawn_enforcer(tile, leader, members)
+		w = _spawn_enforcer(tile, leader, members)
 		# It passes through its own pack: two of them standing side by side in a
 		# corridor otherwise wall in its wider body (measured: one of six stuck
 		# 7.6 m from its escort, wedged between two sentries).
@@ -4790,17 +4792,27 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringNa
 			(w as PhysicsBody3D).add_collision_exception_with(m)
 		w.set("pack", members)
 		count += 1
-		# On patrol: the column walks the corridors, the enforcer at its back.
-		if on_patrol and not _patrol_points.is_empty():
-			var column: Array[Node3D] = []
-			column.assign(members)
+	# On patrol: the column walks the corridors, the enforcer (if any) at its
+	# back. Note 125: a lone skeleton, or a pack with no enforcer, patrols too
+	# -- before, only packs with one were ever given a patrol.
+	if on_patrol and not _patrol_points.is_empty():
+		var column: Array[Node3D] = []
+		column.assign(members)
+		if w != null:
 			column.append(w)
-			var p: Node = PATROL.new()
-			p.name = "Patrol"
-			add_child(p)
-			p.call("setup", column, _patrol_points, _rng.randi())
-			_spawned.append(p)
+		_start_patrol(column)
 	return count
+
+
+func _start_patrol(column: Array) -> Node:
+	var typed: Array[Node3D] = []
+	typed.assign(column)
+	var p: Node = PATROL.new()
+	p.name = "Patrol"
+	add_child(p)
+	p.call("setup", typed, _patrol_points, _rng.randi())
+	_spawned.append(p)
+	return p
 
 
 ## --- Haul convoys (convoy.gd, 2026-10-09) ---------------------------------------
@@ -5402,6 +5414,8 @@ func turn_loose_subject(e: Node3D) -> void:
 	e.set("aggro_range", enemy_aggro_range)
 	_give_wander_area(e, world_to_tile(to_local(e.global_position)), true)
 	e.add_to_group(&"loose_subjects")
+	if patrols and not _patrol_points.is_empty():
+		_start_patrol([e])
 
 
 ## Every member's type for a skeleton pack of `count`, from the types let out:
@@ -5474,6 +5488,9 @@ func _spawn_loose(hand: StringName, count: int) -> void:
 		_give_wander_area(e, world_to_tile(at), true)
 		e.add_to_group(&"loose_subjects")
 		_spawned.append(e)
+		# On patrol on its own (note 125).
+		if patrols and not _patrol_points.is_empty():
+			_start_patrol([e])
 
 
 ## The collector: up to `collector_count` lone enforcers, far off, once any type

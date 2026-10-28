@@ -341,6 +341,10 @@ var _patrol_pause_until := 0.0
 var _patrol_check_at := 0.0
 var _patrol_check_from := Vector3.ZERO
 var _patrol_rng := RandomNumberGenerator.new()
+var _patrol_avoid := Vector3.ZERO
+var _unstick_until := 0.0
+var _unstick_dir := Vector3.ZERO
+var patrol_stalls := 0
 
 
 func _patrol(delta: float, now: float) -> void:
@@ -361,10 +365,25 @@ func _patrol(delta: float, now: float) -> void:
 		if _patrol_path.is_empty():
 			_patrol_pause_until = now + 1.0
 			return
+	if now < _unstick_until:
+		velocity = velocity.move_toward(_unstick_dir * patrol_speed, acceleration * delta)
+		move_and_slide()
+		return
 	if now >= _patrol_check_at:
 		if Vector2(here.x - _patrol_check_from.x, here.z - _patrol_check_from.z).length() < 0.6:
+			# Stuck (note 125): back off a moment -- away from where it was going,
+			# and down a little, out from under whatever it hit -- then a route
+			# that does not set off the same way.
+			var was := Vector3(velocity.x, 0.0, velocity.z)
+			if was.length_squared() < 0.01:
+				was = -global_basis.z
+			was = Vector3(was.x, 0.0, was.z).normalized()
+			_patrol_avoid = was
+			_unstick_dir = (-was).rotated(Vector3.UP, _patrol_rng.randf_range(-1.0, 1.0)) + Vector3(0.0, -0.3, 0.0)
+			_unstick_until = now + 0.8
 			_patrol_path = PackedVector3Array()
 			_patrol_at = 0
+			patrol_stalls += 1
 			return
 		_patrol_check_at = now + 2.0
 		_patrol_check_from = here
@@ -394,18 +413,41 @@ func _plan_patrol() -> void:
 		if d.get("opened") != true:
 			shut.append((d as Node3D).global_position)
 	var from := global_position - Vector3(0.0, hover_height, 0.0)
-	for tries in 24:
-		var goal: Vector3 = patrol_points[_patrol_rng.randi_range(0, patrol_points.size() - 1)]
-		var d := Vector2(goal.x - from.x, goal.z - from.z).length()
-		if d < PATROL_MIN * (1.0 if tries < 16 else 0.3) or d > PATROL_MAX:
+	# Only points in reach, sampled from patrol.gd's buckets (note 125): drawn
+	# from the whole map, few picks were ever in range and the crier hung
+	# waiting for a route. At most 8 path queries a plan.
+	var patrol_script = preload("res://scripts/patrol.gd")
+	var queried := 0
+	# Part of a way, kept in case nothing whole turns up (as patrol.gd does).
+	var partial := PackedVector3Array()
+	for tries in 40:
+		if queried >= 8:
+			break
+		var g = patrol_script.sample_point(patrol_points, from,
+			PATROL_MIN * (1.0 if tries < 28 else 0.3), PATROL_MAX, _patrol_rng)
+		if g == null:
 			continue
+		var goal: Vector3 = g
+		queried += 1
 		var path := NavigationServer3D.map_get_path(map, from, goal, true)
-		if path.size() < 2 or path[path.size() - 1].distance_to(goal) > 1.5:
+		if path.size() < 2:
 			continue
-		if preload("res://scripts/patrol.gd")._through_door(path, shut):
+		if Vector2(path[path.size() - 1].x - goal.x, path[path.size() - 1].z - goal.z).length() > 3.0 \
+				or patrol_script._through_door(path, shut):
+			if partial.is_empty():
+				var cut: PackedVector3Array = patrol_script._until_door(path, shut)
+				if cut.size() >= 2 and Vector2(cut[cut.size() - 1].x - from.x, cut[cut.size() - 1].z - from.z).length() >= 2.0:
+					partial = cut
 			continue
+		if _patrol_avoid != Vector3.ZERO and tries < 18 \
+				and preload("res://scripts/patrol.gd")._first_leg(path).dot(_patrol_avoid) > 0.6:
+			continue
+		_patrol_avoid = Vector3.ZERO
 		_patrol_path = path
 		return
+	if not partial.is_empty():
+		_patrol_avoid = Vector3.ZERO
+		_patrol_path = partial
 
 
 ## --- Scared off by a thrown rat (rat.gd, 2026-10-18) ---------------------------

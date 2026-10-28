@@ -106,7 +106,9 @@ func _physics_process(_delta: float) -> void:
 	# Its enforcer down: the shackled are loose again.
 	for s in led:
 		if _alive(s):
-			s.set("patrol", null)
+			# Back on its own patrol, if it had one (note 125).
+			var own = s.get_meta("own_patrol") if s.has_meta("own_patrol") else null
+			s.set("patrol", own if is_instance_valid(own) else null)
 			s.add_to_group(&"loose_subjects")
 	led.clear()
 	for c in _chains.values():
@@ -209,6 +211,7 @@ func _nearest_subject(from: Vector3) -> Node3D:
 
 func _shackle(s: Node3D) -> void:
 	s.remove_from_group(&"loose_subjects")
+	s.set_meta("own_patrol", s.get("patrol"))
 	s.set("patrol", self)
 	(s as PhysicsBody3D).add_collision_exception_with(warden)
 	(warden as PhysicsBody3D).add_collision_exception_with(s)
