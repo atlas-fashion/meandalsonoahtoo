@@ -827,6 +827,8 @@ func _build_module_level() -> void:
 			"morgue": morgue_enabled,
 			"surgery": surgery_enabled,
 			"manholes": manhole_count,
+			# The containment blocks' back doors open onto the maze (note 122).
+			"back_exits": progression and puzzle_rooms,
 		})
 	_pick_morgue()
 	_pick_surgery()
@@ -5249,7 +5251,8 @@ var released_hands: Array[StringName] = []
 ## Lone skeletons of each released type roaming the corridors, every population
 ## (and the ones that walked out, the moment a block is opened).
 @export var loose_per_type := 3
-@export var collector_count := 1
+## 3 since note 122 (1 before): the user asked for more than one.
+@export var collector_count := 3
 ## Nearest a loose subject or a collector may appear to a player.
 @export var loose_start_clear := 30.0
 const COLLECTOR := preload("res://scripts/collector.gd")
@@ -5272,17 +5275,29 @@ func make_skeleton(hand: StringName) -> Node3D:
 	return PROSTHETIC.make(enemy_scene, hand) as Node3D
 
 
-## A containment block let its prisoners out: the type joins the pool, and the
-## `count` that walked out are loose in the maze from now, out of sight.
+## A containment block let its prisoners out: the type joins the pool. The
+## `count` walking out come into the maze through their cells' back exits
+## themselves (dungeon_room `_walk_path` -> `turn_loose_subject`, note 122);
+## `loose_per_type` more of the type turn up elsewhere at once, out of sight.
 func release_hand(hand: StringName, count: int) -> void:
 	if not released_hands.has(hand):
 		released_hands.append(hand)
-	print("[containment] %s hands let out, %d loose (%d of %d types out)"
+	print("[containment] %s hands let out, %d walking out (%d of %d types out)"
 		% [hand, count, released_hands.size(), CONTAINED.size()])
 	_note_spawn_eye()
-	_spawn_loose(hand, count)
+	_spawn_loose(hand, loose_per_type)
 	_spawn_collectors()
 	update_surgery_bolts()
+
+
+## A prisoner come out of its cell's back exit into the maze (note 122): a
+## loose subject from now, wandering the stretch of corridor it came out in.
+func turn_loose_subject(e: Node3D) -> void:
+	if not is_instance_valid(e):
+		return
+	e.set("aggro_range", enemy_aggro_range)
+	_give_wander_area(e, world_to_tile(to_local(e.global_position)), true)
+	e.add_to_group(&"loose_subjects")
 
 
 ## Every member's type for a skeleton pack of `count`, from the types let out:

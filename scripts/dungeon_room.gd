@@ -86,7 +86,7 @@ const BACK_LIFT := 2.25
 ## How far in front of BAY_DEEP the door is built: the brick's real face.
 const BACK_FACE := 0.16
 ## How fast a prisoner walks out to it.
-const WALK_OUT := 1.3
+const WALK_OUT := 1.6
 const GREEN := Color(0.25, 1.0, 0.35)
 var _back_lamp_mat: StandardMaterial3D
 ## The prisoners let out this run; the room's share of `release_hand`.
@@ -259,8 +259,11 @@ func _build_domed_prison() -> void:
 	var kit = load("res://scripts/brick_level.gd")
 	var bays := _prison_bays()
 	var cells: Array[int] = []
+	# Containment with back exits (note 122): the prisoners are only in the cells
+	# with a way out to the maze.
+	var exits_only := is_containment() and bays.any(func(b): return b["exit"] != null)
 	for i in bays.size():
-		if not bays[i]["entrance"]:
+		if not bays[i]["entrance"] and (not exits_only or bays[i]["exit"] != null):
 			cells.append(i)
 	for i in range(cells.size() - 1, 0, -1):
 		var j := _rng.randi_range(0, i)
@@ -286,7 +289,7 @@ func _build_domed_prison() -> void:
 			continue
 		var cell := {"row": 0.0, "k": i, "centre": xf * Vector3(0.0, 0.0, -BAY_DEEP * 0.5),
 			"locker": false, "alive": false, "prisoner": null,
-			"open": -1.6, "open2": 1.6}
+			"open": -1.6, "open2": 1.6, "exit": bay["exit"], "fake_exit": not exits_only}
 		for side: float in [-1.0, 1.0]:
 			var hinge := Node3D.new()
 			hinge.name = "Gate%d%s" % [i, "L" if side < 0.0 else "R"]
@@ -333,6 +336,11 @@ func _prison_bays() -> Array:
 	var h: int = room["half"]
 	var cs: float = built.cell_size
 	var entrances := _open_ring()
+	# Note 122: the cells opened at the back onto the maze (module_level
+	# `_make_back_exits`).
+	var exits := {}
+	for e in room.get("back_exits", []):
+		exits[e["cell"]] = e
 	var out := []
 	for dz in range(-h, h + 1):
 		for dx in range(-h, h + 1):
@@ -347,7 +355,7 @@ func _prison_bays() -> Array:
 			var inward := (global_basis.inverse() * inward_w).normalized()
 			var basis := Basis(Vector3.UP, atan2(inward.x, inward.z))
 			out.append({"pos": p, "xf": Transform3D(basis, Vector3(boundary.x, 0.0, boundary.z)),
-				"entrance": entrances.has(p)})
+				"entrance": entrances.has(p), "exit": exits.get(p)})
 	return out
 
 
@@ -399,7 +407,8 @@ func _dress_bay(cell: Dictionary, xf: Transform3D, held: bool) -> void:
 	# A containment cell's back door takes the middle of the back wall; the
 	# chains move out to its sides.
 	var chains_at := 0.6
-	if is_containment():
+	# A real way out (note 122), or -- in a block with none -- the old dark panel.
+	if is_containment() and (cell.get("exit") != null or cell.get("fake_exit", false)):
 		_build_back_door(cell, xf)
 		chains_at = 1.45
 	for side: float in [-chains_at, chains_at]:
@@ -479,9 +488,11 @@ func _build_back_door(cell: Dictionary, xf: Transform3D) -> void:
 	var z := -BAY_DEEP + BACK_FACE
 	var w := BACK_DOOR_W
 	var h := BACK_DOOR_H
-	var hole := _box(self, Vector3(w, h, 0.02), Vector3.ZERO, _mat(&"void"))
-	hole.transform = xf * Transform3D(Basis(), Vector3(0.0, h * 0.5, z + 0.03))
-	hole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var real: bool = cell.get("exit") != null
+	if not real:
+		var hole := _box(self, Vector3(w, h, 0.02), Vector3.ZERO, _mat(&"void"))
+		hole.transform = xf * Transform3D(Basis(), Vector3(0.0, h * 0.5, z + 0.03))
+		hole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var rail_h := h + BACK_LIFT + 0.2
 	for side: float in [-1.0, 1.0]:
 		var rail := _box(self, Vector3(0.14, rail_h, 0.16), Vector3.ZERO, _mat(&"rust"))
@@ -502,12 +513,12 @@ func _build_back_door(cell: Dictionary, xf: Transform3D) -> void:
 		slab.add_child(rivet)
 	var gear := _cyl(0.24, 0.07, 12, _mat(&"rust"))
 	gear.transform = xf * Transform3D(Basis(Vector3.RIGHT, PI * 0.5),
-		Vector3(-(w * 0.5 + 0.42), h - 0.3, z + 0.06))
+		Vector3(-(w * 0.5 + 0.42), h - 0.3, z + 0.18))
 	add_child(gear)
 	var hub := _cyl(0.07, 0.12, 8, _mat(&"iron"))
 	gear.add_child(hub)
 	var lamp := _sphere(0.06, _back_lamp_mat)
-	lamp.position = xf * Vector3(w * 0.5 + 0.36, h - 0.2, z + 0.1)
+	lamp.position = xf * Vector3(w * 0.5 + 0.36, h - 0.2, z + 0.2)
 	add_child(lamp)
 	cell["back_door"] = slab
 	cell["gear"] = gear
@@ -515,6 +526,77 @@ func _build_back_door(cell: Dictionary, xf: Transform3D) -> void:
 	# Where a prisoner walks to (a step off the door), and where it goes.
 	cell["back"] = xf * Vector3(0.0, 0.0, z + 0.6)
 	cell["into"] = xf * Vector3(0.0, 0.0, z - 1.2)
+	cell["door_z"] = z
+	if real:
+		# The shut slab stops everyone (and sight); off while the navmesh
+		# bakes, so the passage is on it, and off again once it is up.
+		var body := StaticBody3D.new()
+		body.name = "BackDoorBody%d" % int(cell["k"])
+		body.collision_layer = 1 | 2
+		body.collision_mask = 0
+		add_child(body)
+		_add_shape(body, Vector3(w + 0.3, h + 0.2, 0.3), xf * Vector3(0.0, (h + 0.2) * 0.5, z + 0.15))
+		(body.get_child(0) as CollisionShape3D).rotation = xf.basis.get_euler()
+		(body.get_child(0) as CollisionShape3D).disabled = true
+		cell["back_body"] = body
+
+
+## Note 122: with the cell's back open onto a passage, the door stands in it
+## with stone either side -- the passage is wider than the door. An iron
+## bulkhead closes the rest: a plate each side out to the passage's walls and
+## one over the door up to its roof, found by casting from the door's middle
+## (so this waits for the level's collision: `_arm_doors`, on level_built).
+## Solid to everyone and to sight.
+func _fit_bulkheads() -> void:
+	var space := get_world_3d().direct_space_state
+	var w := BACK_DOOR_W * 0.5 + 0.14
+	for cell in _cells:
+		if not cell.has("back_body") or cell.has("bulkhead"):
+			continue
+		var xf: Transform3D = global_transform * (cell["bay_xf"] as Transform3D)
+		var z: float = cell["door_z"] + 0.08
+		var reach := func(from: Vector3, dir: Vector3, most: float) -> float:
+			var q := PhysicsRayQueryParameters3D.create(from, from + dir * most)
+			q.collision_mask = 1 | 2
+			q.exclude = [cell["back_body"].get_rid()]
+			var hit := space.intersect_ray(q)
+			return most if hit.is_empty() else from.distance_to(hit["position"])
+		var mid := xf * Vector3(0.0, 1.2, z)
+		var right := xf.basis.x.normalized()
+		var left_d: float = reach.call(mid, -right, 4.0)
+		var right_d: float = reach.call(mid, right, 4.0)
+		# The vault has no collision: capped at the walls' top, where it springs.
+		var roof: float = minf(reach.call(xf * Vector3(0.0, 0.3, z), Vector3.UP, 7.0) + 0.3,
+			float(built.height) + 0.2)
+		var body := StaticBody3D.new()
+		body.name = "Bulkhead%d" % int(cell["k"])
+		body.collision_layer = 1 | 2
+		body.collision_mask = 0
+		add_child(body)
+		var plates: Array = []
+		# Each plate runs 0.15 m into the stone so no seam shows.
+		if left_d > w + 0.05:
+			plates.append([-(w + left_d + 0.15) * 0.5, left_d + 0.15 - w, 0.0, roof])
+		if right_d > w + 0.05:
+			plates.append([(w + right_d + 0.15) * 0.5, right_d + 0.15 - w, 0.0, roof])
+		var top := BACK_DOOR_H + 0.2
+		if roof > top + 0.05:
+			plates.append([0.0, w * 2.0, top, roof])
+		for pl in plates:
+			var size := Vector3(float(pl[1]), float(pl[3]) - float(pl[2]), 0.12)
+			var at := Vector3(float(pl[0]), (float(pl[2]) + float(pl[3])) * 0.5, z)
+			var plate := _box(self, size, Vector3.ZERO, _mat(&"iron"))
+			plate.transform = (cell["bay_xf"] as Transform3D) * Transform3D(Basis(), at)
+			# Riveted ribs across it.
+			for rib_y: float in [0.9, 2.6]:
+				if rib_y > float(pl[2]) + 0.1 and rib_y < float(pl[3]) - 0.1:
+					var rib := _box(self, Vector3(size.x, 0.09, 0.05), Vector3.ZERO, _mat(&"rust"))
+					rib.transform = (cell["bay_xf"] as Transform3D) * Transform3D(Basis(),
+						Vector3(at.x, rib_y, z + 0.08))
+			_add_shape(body, size, (cell["bay_xf"] as Transform3D) * at)
+			(body.get_child(body.get_child_count() - 1) as CollisionShape3D).rotation = \
+				(cell["bay_xf"] as Transform3D).basis.get_euler()
+		cell["bulkhead"] = [left_d, right_d, roof]
 
 
 ## The level hangs a torch on many a cell's back wall (module_level, before the
@@ -1561,6 +1643,11 @@ func _mine_off_now() -> void:
 
 ## The doors' collision comes on once the navmesh has been baked without it.
 func _arm_doors() -> void:
+	if is_containment():
+		_fit_bulkheads()
+		for cell in _cells:
+			if cell.has("back_body") and not cell.get("lifted", false):
+				(cell["back_body"].get_child(0) as CollisionShape3D).disabled = false
 	# A containment block's front gates never open.
 	if powered_off and not is_containment():
 		return
@@ -1771,6 +1858,8 @@ func _lift_back_door(cell: Dictionary, delay: float, now: bool) -> void:
 	if cell.get("lifted", false):
 		return
 	cell["lifted"] = true
+	if cell.has("back_body"):
+		(cell["back_body"].get_child(0) as CollisionShape3D).set_deferred("disabled", true)
 	var up := slab.position + Vector3(0.0, BACK_LIFT, 0.0)
 	if now:
 		slab.position = up
@@ -1795,6 +1884,15 @@ func _walk_out(cell: Dictionary) -> void:
 		return
 	cell["walking"] = true
 	cell["walk_until"] = _time + 7.0
+	# A real way out (note 122): along the navmesh, through the door and the
+	# passage behind it, to the maze cell it comes out in.
+	if cell.get("exit") != null:
+		var e: Node3D = cell["caged"]
+		var out_at: Vector3 = built.to_world(cell["exit"]["join"])
+		cell["path"] = NavigationServer3D.map_get_path(get_world_3d().navigation_map,
+			e.global_position, out_at, true)
+		cell["path_at"] = 0
+		cell["walk_until"] = _time + 30.0
 
 
 ## Walks each let-out prisoner to its back door (it stays caged: blind, deaf,
@@ -1807,6 +1905,9 @@ func _run_walkers(_delta: float) -> void:
 		if not is_instance_valid(e):
 			cell["walking"] = false
 			continue
+		if cell.has("path"):
+			_walk_path(cell, e)
+			continue
 		if not cell.has("back"):
 			_vanish(cell, e)
 			continue
@@ -1816,6 +1917,40 @@ func _run_walkers(_delta: float) -> void:
 			_vanish(cell, e)
 		else:
 			e.set("cage_walk", to.normalized() * WALK_OUT)
+
+
+## Note 122: out along its path; at its end (or a stall past `walk_until`) it is
+## let go into the maze -- uncaged, a loose subject roaming where it came out
+## (maze.gd `turn_loose_subject`).
+func _walk_path(cell: Dictionary, e: Node3D) -> void:
+	var path: PackedVector3Array = cell["path"]
+	var i: int = cell["path_at"]
+	while i < path.size() and Vector2(path[i].x - e.global_position.x, path[i].z - e.global_position.z).length() < 0.5:
+		i += 1
+	cell["path_at"] = i
+	# No headway in three seconds (something in the passage): let go where it
+	# stands -- out past its door by then.
+	if _time >= float(cell.get("stall_at", _time + 3.0)):
+		if e.global_position.distance_to(cell["stall_from"]) < 0.4 and i > 1:
+			cell["walk_until"] = _time
+		cell.erase("stall_at")
+	if not cell.has("stall_at"):
+		cell["stall_at"] = _time + 3.0
+		cell["stall_from"] = e.global_position
+	if i >= path.size() or _time >= float(cell["walk_until"]):
+		cell["walking"] = false
+		cell["caged"] = null
+		cell["held"] = false
+		cell.erase("path")
+		_freed.erase(e)
+		e.set("cage_walk", Vector3.ZERO)
+		e.set("caged", false)
+		if maze != null and maze.has_method("turn_loose_subject"):
+			maze.call("turn_loose_subject", e)
+		return
+	var to := path[i] - e.global_position
+	to.y = 0.0
+	e.set("cage_walk", to.normalized() * WALK_OUT)
 
 
 ## Off the floor and into the dark behind the door, then gone.

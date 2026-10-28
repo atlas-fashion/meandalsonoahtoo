@@ -391,6 +391,9 @@ const DEFAULTS := {
 	"surgery": false,
 	## Manholes down to the sewer (sewer.gd, manhole.gd); brick kit only.
 	"manholes": 0,
+	## The chest rooms' cells opened at the back onto the corridor behind them
+	## (`_make_back_exits`, note 122): the containment blocks' back doors.
+	"back_exits": false,
 }
 
 
@@ -437,6 +440,8 @@ static func build(parent: Node3D, seed_value: int, size: Vector2i, cell_size: fl
 		_make_morgue_hall(out, brick)
 	if bool(opt["surgery"]):
 		_make_surgery_hall(out, brick)
+	if bool(opt["back_exits"]):
+		_make_back_exits(out)
 	if brick:
 		# The kit always has its skylight vault and niche wall.
 		var have := {SKYLIGHT_KIND: true, NICHE_KIND: true}
@@ -508,6 +513,161 @@ static func _make_surgery_hall(out: Built, enclose: bool) -> void:
 			open[c + Vector2i(dx, dy)] = true
 	out.set_meta("open_roof", open)
 	_pick_surgery_hatch(out, best)
+
+
+## The containment blocks' back exits (note 122): in every chest room still kind
+## "chest" (the morgue and the surgery have had their picks), ring cells along
+## a side -- never a corner, a way in, or a bay beside a way in -- are opened at
+## the back onto the maze, up to BACK_EXITS_WANTED of them:
+## - first wherever a corridor already runs right behind the wall;
+## - then, short of that, through a passage dug in the rock from the cell's back
+##   to the nearest corridor (`_dig_path`, at most BACK_EXIT_DIG cells, the
+##   shortest first).
+## A joined corridor cell is never the player's starting dead end. Every cell
+## touched is classified again from its new openings. Recorded per room as
+## "back_exits": [{cell, side, dug, join}] (join: the maze cell reached) -- NOT among its "entrances", so no wooden
+## door is hung there and the prison keeps the bay a cell.
+static func _make_back_exits(out: Built) -> void:
+	var start := _pick_spawn(out)
+	var start_cell := Vector2i(roundi((start.x - out.origin.x) / out.cell_size),
+		roundi((start.z - out.origin.z) / out.cell_size))
+	var made := 0
+	var dug := 0
+	# Every cell a dug passage runs through, and the cell it joins: no wooden
+	# door is hung on them (`place_doors`) -- a prisoner walking out stuck
+	# at a shut one.
+	var passage: Dictionary = out.get_meta("exit_passage", {})
+	for room in out.chest_rooms():
+		var c: Vector2i = room["centre"]
+		var h: int = room["half"]
+		var skip := {}
+		for way in room["entrances"]:
+			var cell: Vector2i = way["cell"]
+			skip[cell] = true
+			for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				skip[cell + step] = true
+		# The ring cells along the sides that can be cells: [pos, step, side].
+		var bays: Array = []
+		for dz in range(-h, h + 1):
+			for dx in range(-h, h + 1):
+				if maxi(absi(dx), absi(dz)) != h or (absi(dx) == h and absi(dz) == h):
+					continue
+				var p := c + Vector2i(dx, dz)
+				if skip.has(p) or not out.cells.has(p):
+					continue
+				var step := Vector2i(signi(dx) if absi(dx) == h else 0, signi(dz) if absi(dz) == h else 0)
+				bays.append([p, step, _side_of(step)])
+		var exits: Array = []
+		var left: Array = []
+		for b in bays:
+			var outside = out.cells.get(b[0] + b[1])
+			if exits.size() < BACK_EXITS_WANTED and outside != null \
+					and _joinable(outside, b[1], start_cell):
+				_open_pair(out, b[0], b[1])
+				exits.append({"cell": b[0], "side": b[2], "dug": 0, "join": b[0] + b[1]})
+			else:
+				left.append(b)
+		var runs: Array = []
+		for b in left:
+			var path := _dig_path(out, b[0], b[1], start_cell)
+			if not path.is_empty():
+				runs.append([path.size(), b])
+		runs.sort_custom(func(x, y): return x[0] < y[0])
+		for r in runs:
+			if exits.size() >= BACK_EXITS_WANTED:
+				break
+			var b: Array = r[1]
+			# Again: an earlier dig may be in the way now.
+			var path := _dig_path(out, b[0], b[1], start_cell)
+			if path.is_empty():
+				continue
+			var at: Vector2i = b[0]
+			for next: Vector2i in path:
+				if not out.cells.has(next):
+					var cell := ModuleMaze.Cell.new()
+					cell.pos = next
+					out.cells[next] = cell
+					dug += 1
+				passage[next] = true
+				_open_pair(out, at, next - at)
+				at = next
+			exits.append({"cell": b[0], "side": b[2], "dug": path.size() - 1, "join": path[path.size() - 1]})
+		room["back_exits"] = exits
+		made += exits.size()
+		print("[back exits] the room at %s: %d cells open onto the maze" % [c, exits.size()])
+	out.set_meta("exit_passage", passage)
+	print("[back exits] %d in all, %d cells of passage dug" % [made, dug])
+
+
+## Most back exits a block is given: one per prisoner (dungeon_room PRISONERS).
+const BACK_EXITS_WANTED := 5
+## Longest passage dug from a cell's back to the maze, in cells of rock.
+const BACK_EXIT_DIG := 8
+
+
+static func _side_of(step: Vector2i) -> int:
+	for s in ModuleMaze.ORDER:
+		if ModuleMaze.DIRS[s] == step:
+			return s
+	return 0
+
+
+## A corridor cell a passage may join, coming in along `step`: no room, no
+## gate, not the start, not already open that way.
+static func _joinable(cell, step: Vector2i, start_cell: Vector2i) -> bool:
+	return cell.room < 0 and not cell.court and cell.kind != "gate" and cell.pos != start_cell \
+		and not (cell.open & ModuleMaze._opposite(_side_of(step)))
+
+
+static func _open_pair(out: Built, at: Vector2i, step: Vector2i) -> void:
+	var side := _side_of(step)
+	var a: ModuleMaze.Cell = out.cells[at]
+	var b: ModuleMaze.Cell = out.cells[at + step]
+	a.open |= side
+	b.open |= ModuleMaze._opposite(side)
+	ModuleMaze._classify(a)
+	ModuleMaze._classify(b)
+
+
+## The cells of a passage from ring cell `p` out through its back (`step`) to
+## the nearest corridor cell it may join, the join last: a walk through rock
+## (cells not yet in the maze) of at most BACK_EXIT_DIG cells, never leaving the
+## map. Empty if the cell behind is not rock or nothing is in reach.
+static func _dig_path(out: Built, p: Vector2i, step: Vector2i, start_cell: Vector2i) -> Array[Vector2i]:
+	var first := p + step
+	if out.cells.has(first) or not _inside(out, first):
+		return []
+	var came := {first: p}
+	var depth := {first: 1}
+	var queue: Array[Vector2i] = [first]
+	var head := 0
+	while head < queue.size():
+		var at: Vector2i = queue[head]
+		head += 1
+		for s: Vector2i in [step, Vector2i(step.y, step.x), Vector2i(-step.y, -step.x), -step]:
+			var next := at + s
+			if came.has(next) or next == p:
+				continue
+			var cell = out.cells.get(next)
+			if cell != null:
+				if _joinable(cell, s, start_cell):
+					var path: Array[Vector2i] = [next]
+					var back := at
+					while back != p:
+						path.push_front(back)
+						back = came[back]
+					return path
+				continue
+			if int(depth[at]) >= BACK_EXIT_DIG or not _inside(out, next):
+				continue
+			came[next] = at
+			depth[next] = int(depth[at]) + 1
+			queue.append(next)
+	return []
+
+
+static func _inside(out: Built, at: Vector2i) -> bool:
+	return at.x >= 1 and at.y >= 1 and at.x < out.size.x - 1 and at.y < out.size.y - 1
 
 
 ## The hatch down to the surgery's powering room (note 102, surgery_power.gd):
@@ -1245,6 +1405,7 @@ static func place_doors(parent: Node3D, out: Built) -> Node3D:
 	var rng := RandomNumberGenerator.new()
 	var seen := {}
 	var placed := 0
+	var passage: Dictionary = out.get_meta("exit_passage", {})
 	# [cell, step] for every door: the spawn's own first, always, hung in the
 	# dead end so its face (+Z, the iron side) is towards the player; then one
 	# in DOOR_EVERY of the corridor-to-corridor archways.
@@ -1265,6 +1426,9 @@ static func place_doors(parent: Node3D, out: Built) -> Node3D:
 			var other = out.cells.get(cell.pos + step)
 			# Corridor to corridor only: never into a room or a courtyard.
 			if other == null or other.court or other.room >= 0:
+				continue
+			# Nor in a containment block's dug exit (note 122).
+			if passage.has(cell.pos) or passage.has(other.pos):
 				continue
 			var edge := _door_edge(cell.pos, step)
 			if seen.has(edge):

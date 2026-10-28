@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 121), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 122), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -511,6 +511,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 119 | 2026-10-28 | The surgery's soldiers and surgeon face the player moving and fighting: they wrote a world heading into a local `rotation.y` under the turned surgery (soldiers under a top-level `Soldiers` node; the surgeon's `_face_yaw` sets `global_rotation`) | [docs/notes/119-surgery-enemies-turn-in-world-yaw.md](docs/notes/119-surgery-enemies-turn-in-world-yaw.md) |
 | 120 | 2026-10-28 | Containment: the maze starts with only criers; one prison-look containment block per skeleton type (caged prisoners, mechanical back doors they walk out through once its enforcers are down and the crystal is out); each type let out joins the spawn pool; patrols and convoys rare; the collector (a lone enforcer chaining loose subjects); the surgery bolted until every block is open, the great door until the surgeon is dead | [docs/notes/120-containment-and-the-spawn-pool.md](docs/notes/120-containment-and-the-spawn-pool.md) |
 | 121 | 2026-10-27 | A damp sewer: thick wet air while below, a drifting ground mist on the water (a world-space fog volume per cell), the moss glowing in it, drips off the crowns, wet walls; enemies more often and mostly alone (1 / 2 / 3 at 66 / 24 / 10%, an enforcer only in some twos and threes); the floor's black joints now dark wet earth | [docs/notes/121-damp-sewer-mist-solo-spawns-dirt-floor-joints.md](docs/notes/121-damp-sewer-mist-solo-spawns-dirt-floor-joints.md) |
+| 122 | 2026-10-28 | Containment exits really lead into the maze: each block's cells opened at the back onto a corridor, or a passage dug to one (`module_level._make_back_exits`); an iron bulkhead round each back door; the prisoners walk out along it and stay loose where they come out, 3 more of the type elsewhere; 3 collectors | [docs/notes/122-containment-exits-into-the-maze.md](docs/notes/122-containment-exits-into-the-maze.md) |
 
 ## Notes by source file
 
@@ -536,14 +537,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79
-- `scripts/collector.gd`: 120
+- `scripts/collector.gd`: 120, 122
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79
 - `scripts/damp.gd`: 39, 40, 41
 - `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
-- `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120
+- `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120, 122
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93, 120
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92, 115, 116
@@ -564,10 +565,10 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
