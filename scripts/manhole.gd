@@ -20,6 +20,7 @@ extends Node3D
 ## scene (player.gd `begin_climb`).
 
 const SEWER := preload("res://scripts/sewer.gd")
+const BrickLevel := preload("res://scripts/brick_level.gd")
 
 ## The hole (the notch in the flagstones is cut at this radius).
 const HOLE_R := 0.5
@@ -118,10 +119,7 @@ func _dress(cell_centre: Vector3) -> void:
 	_cover_home = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.018, 0.0))
 	_cover.transform = _cover_home
 	# The bed under this cell's flagstones, with the hole left in it.
-	var bed_mat := StandardMaterial3D.new()
-	bed_mat.albedo_color = Color(0.085, 0.062, 0.044)
-	bed_mat.roughness = 1.0
-	bed_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	var bed_mat := BrickLevel.bed_material()
 	var c_local := cell_centre - position
 	var gap := HOLE_R + 0.06
 	var x0 := c_local.x - 3.0

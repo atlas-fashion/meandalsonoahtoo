@@ -101,6 +101,36 @@ const HAZE_DENSITY := 0.06
 const DAMP_AMBIENT := Color(0.15, 0.18, 0.15)
 const DAMP_AMBIENT_SCALE := 2.2
 
+## The damp (note 121, the user: "hyper-realistic mist ... the sewers should
+## feel very damp"). Three layers, all through Graphics.volumetric_fog (off on
+## Low and Potato, where the haze above is all there is):
+## - the AIR: the volumetric mist switched while below (`_haze_env`) to a
+##   thick, wet, faintly green air that the damp ambient lights everywhere
+##   (ambient inject, which the dungeon keeps at 0 -- up there it would glow
+##   through the stone; down here there is nothing outside to leak);
+const AIR_DENSITY := 0.028
+const AIR_ALBEDO := Color(0.74, 0.77, 0.74)
+const AIR_ANISOTROPY := 0.35
+const AIR_AMBIENT := 0.16
+## (froxels spent on the near 30 m: a pipe is never seen further.)
+const AIR_LENGTH := 30.0
+## - the GROUND MIST: a FogVolume per cell (`_build_mist`,
+##   shaders/sewer_mist.gdshader) lying on the water and thinning upward,
+##   torn into slow drifting wisps;
+const MIST_DENSITY := 0.35
+const MIST_THIN := 0.75
+const MIST_TOP := 3.6
+## - the MOSS seen through it: the moss lights light the mist (Graphics lets
+##   no other unshadowed light, note 112), so every cluster stands in a green
+##   halo.
+const MOSS_MIST := 1.6
+## And it drips: drops off the crown of every other pipe into the channel
+## (`_build_drips`, damp.gd's drop shader; Graphics.damp), glinting the moss's
+## green; and the walls run wet (sewer_stone.gdshader `damp`).
+const DRIP_SHARE := 0.55
+const DRIP_RANGE := 22.0
+const DRIP_GLINT := Color(0.16, 0.42, 0.26)
+
 var built
 var map: SewerMap
 ## Per manhole cell: {cell, hole (world, at the dungeon floor), along, foot
@@ -157,6 +187,8 @@ func _build_all(seed_value: int) -> void:
 	_build_water()
 	_build_moss()
 	_build_fireflies()
+	_build_mist()
+	_build_drips()
 
 
 # --- Layout ------------------------------------------------------------------------
@@ -1067,6 +1099,10 @@ func _moss_light(at: Vector3, strength: float) -> OmniLight3D:
 	l.distance_fade_enabled = true
 	l.distance_fade_begin = 30.0
 	l.distance_fade_length = 8.0
+	# It lights the mist (note 121): Graphics keeps this one's mist energy
+	# though it has no shadows.
+	l.light_volumetric_fog_energy = MOSS_MIST
+	l.set_meta("mist_lit", true)
 	l.position = at
 	return l
 
@@ -1186,9 +1222,141 @@ func _build_fireflies() -> void:
 	print("[sewer] fireflies in %d cells" % n)
 
 
+# --- The damp: ground mist and drips (note 121) ---------------------------------------
+
+## A FogVolume over every cell, from just under the water to MIST_TOP: the
+## shader lays the mist on the water and tears it into wisps in world space, so
+## the boxes join into one.
+func _build_mist() -> void:
+	var holder := Node3D.new()
+	holder.name = "Mist"
+	add_child(holder)
+	_chunks.append(holder)
+	var fn := FastNoiseLite.new()
+	fn.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	fn.frequency = 0.045
+	fn.fractal_octaves = 3
+	fn.seed = _rng.randi()
+	var noise := NoiseTexture3D.new()
+	noise.width = 64
+	noise.height = 64
+	noise.depth = 64
+	noise.seamless = true
+	noise.noise = fn
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/sewer_mist.gdshader")
+	m.set_shader_parameter(&"noise", noise)
+	m.set_shader_parameter(&"density", MIST_DENSITY)
+	m.set_shader_parameter(&"thin", MIST_THIN)
+	m.set_shader_parameter(&"water_y", FLOOR_Y + WATER_Y)
+	var low := WATER_Y - 0.1
+	var size := Vector3(map.cell_size, MIST_TOP - low, map.cell_size)
+	for key: Vector2i in map.cells:
+		var v := FogVolume.new()
+		v.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
+		v.size = size
+		v.material = m
+		v.position = map.to_world(key) + Vector3(0.0, (low + MIST_TOP) * 0.5, 0.0)
+		holder.add_child(v)
+	print("[sewer] mist: %d volumes" % map.cells.size())
+
+
+var _drips: Array[GPUParticles3D] = []
+var _drips_on := true
+var _drip_clock := 0.0
+
+
+## Drops off the crown of the pipes into the channel: one in DRIP_SHARE of the
+## straight cells, damp.gd's drop (`shaders/water_drip.gdshader`), its glint the
+## moss's green. Chambers have none: the ladders come down through their crowns.
+func _build_drips() -> void:
+	add_to_group(&"damp")
+	var holder := Node3D.new()
+	holder.name = "Drips"
+	add_child(holder)
+	_chunks.append(holder)
+	var drop := SphereMesh.new()
+	drop.radius = 0.0065
+	drop.height = 0.013
+	drop.radial_segments = 8
+	drop.rings = 4
+	var dm := StandardMaterial3D.new()
+	dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	dm.albedo_color = DRIP_GLINT
+	drop.material = dm
+	var shader: Shader = load("res://shaders/water_drip.gdshader")
+	var keys: Array = map.cells.keys()
+	keys.sort()
+	for key: Vector2i in keys:
+		if _is_chamber(key) or _rng.randf() > DRIP_SHARE:
+			continue
+		var c: ModuleMaze.Cell = map.cells[key]
+		var along := Vector3(0, 0, 1) if c.open & ModuleMaze.N else Vector3(1, 0, 0)
+		var across := Vector3(along.z, 0.0, along.x)
+		var off := _rng.randf_range(-0.3, 0.3)
+		# The vault is a half circle of PIPE_HALF on the springing line.
+		var crown := FLOOR_Y + PIPE_SPRING + sqrt(PIPE_HALF * PIPE_HALF - off * off) - 0.012
+		var at := map.to_world(key) + along * _rng.randf_range(-2.4, 2.4) + across * off
+		at.y = crown
+		var fall := crown - (FLOOR_Y + WATER_Y)
+		var period := _rng.randf_range(1.4, 3.8)
+		var mat := ShaderMaterial.new()
+		mat.shader = shader
+		mat.set_shader_parameter("fall", fall)
+		mat.set_shader_parameter("hang", maxf(0.3, (period - sqrt(2.0 * fall / 9.8) - 0.14) * 0.85))
+		mat.set_shader_parameter("splash", 0.14)
+		mat.set_shader_parameter("gravity", 9.8)
+		mat.set_shader_parameter("phase", _rng.randf() * period)
+		var p := GPUParticles3D.new()
+		p.amount = 1
+		p.lifetime = period
+		p.local_coords = true
+		p.process_material = mat
+		p.draw_pass_1 = drop
+		p.layers = VISUAL_LAYER
+		p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		p.visibility_aabb = AABB(Vector3(-0.1, -fall - 0.1, -0.1), Vector3(0.2, fall + 0.2, 0.2))
+		p.visibility_range_end = DRIP_RANGE
+		p.emitting = false
+		p.position = at
+		holder.add_child(p)
+		_drips.append(p)
+	set_meta("drip_count", _drips.size())
+	print("[sewer] %d drips" % _drips.size())
+	var gfx := get_node_or_null("/root/Graphics")
+	set_enabled(gfx == null or bool(gfx.get("damp")))
+
+
+## Graphics.damp (the group "damp"): the drips, and the walls' wet sheen.
+func set_enabled(on: bool) -> void:
+	_drips_on = on
+	if _stone != null:
+		_stone.set_shader_parameter(&"damp", 1.0 if on else 0.0)
+	if not on:
+		for p in _drips:
+			p.emitting = false
+
+
+## Only the drips near the camera run, and only while it is down here.
+func _tick_drips(delta: float) -> void:
+	_drip_clock -= delta
+	if _drip_clock > 0.0:
+		return
+	_drip_clock = 0.25
+	var cam := get_viewport().get_camera_3d()
+	var eye: Vector3 = cam.global_position if cam != null else Vector3.INF
+	for p in _drips:
+		var near := _drips_on and _below \
+			and p.global_position.distance_squared_to(eye) < DRIP_RANGE * DRIP_RANGE
+		if p.emitting != near:
+			p.emitting = near
+
+
 # --- Running ------------------------------------------------------------------------
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_tick_drips(delta)
 	# Co-op (split_screen.gd): each half hazes its own Environment by its own
 	# camera, and the sewer is drawn while either camera is down here.
 	if Coop.active and Coop.split != null and is_instance_valid(Coop.split):
@@ -1245,7 +1413,10 @@ func _haze_env(env: Environment, on: bool) -> void:
 			saved = {"env": env, "colour": env.fog_light_color, "energy": env.fog_light_energy,
 				"density": env.fog_density, "mode": env.fog_mode,
 				"ambient": env.ambient_light_color,
-				"ambient_energy": env.ambient_light_energy}
+				"ambient_energy": env.ambient_light_energy,
+				"air": [env.volumetric_fog_density, env.volumetric_fog_albedo,
+					env.volumetric_fog_anisotropy, env.volumetric_fog_ambient_inject,
+					env.volumetric_fog_length]}
 			_fog_saved[key] = saved
 		env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 		env.fog_light_color = HAZE_COLOUR
@@ -1253,6 +1424,12 @@ func _haze_env(env: Environment, on: bool) -> void:
 		env.fog_density = HAZE_DENSITY
 		env.ambient_light_color = DAMP_AMBIENT
 		env.ambient_light_energy = float(saved["ambient_energy"]) * DAMP_AMBIENT_SCALE
+		# The damp air (note 121). Whether the mist is on at all stays Graphics'.
+		env.volumetric_fog_density = AIR_DENSITY
+		env.volumetric_fog_albedo = AIR_ALBEDO
+		env.volumetric_fog_anisotropy = AIR_ANISOTROPY
+		env.volumetric_fog_ambient_inject = AIR_AMBIENT
+		env.volumetric_fog_length = AIR_LENGTH
 	elif not saved.is_empty():
 		_unhaze(saved)
 		_fog_saved.erase(key)
@@ -1266,6 +1443,12 @@ func _unhaze(saved: Dictionary) -> void:
 	env.fog_mode = saved["mode"]
 	env.ambient_light_color = saved["ambient"]
 	env.ambient_light_energy = saved["ambient_energy"]
+	var air: Array = saved["air"]
+	env.volumetric_fog_density = air[0]
+	env.volumetric_fog_albedo = air[1]
+	env.volumetric_fog_anisotropy = air[2]
+	env.volumetric_fog_ambient_inject = air[3]
+	env.volumetric_fog_length = air[4]
 
 
 func _exit_tree() -> void:

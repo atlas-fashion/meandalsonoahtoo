@@ -319,7 +319,9 @@ const DIRECTIONS := {
 ## In the module level the count follows the corridor length instead: this
 ## many per corridor cell (72 over the old ~283 cells was 0.25), so growing the
 ## maze does not thin out the danger. 0 falls back to `enemy_count`.
-@export var enemies_per_corridor_cell := 0.25
+## (0.25 -> 0.32, note 121: "spawn more frequently". With the smaller groups
+## the same bodies are also spread over about twice the encounters.)
+@export var enemies_per_corridor_cell := 0.32
 ## Overrides the scene's aggro so the whole map does not converge on the player
 ## at once. Corridor-length sight lines are roughly this long.
 @export var enemy_aggro_range := 18.0
@@ -379,8 +381,13 @@ func _melee_hand() -> StringName:
 @export_range(0.0, 1.0) var patrol_share := 0.2
 const PATROL := preload("res://scripts/patrol.gd")
 var _patrol_points: Array[Vector3] = []
-@export var red_pack_min := 1
-@export var red_pack_max := 5
+## A skeleton encounter's size, by weight: alone, two, three (note 121, the
+## user: "commonly found solo, and less frequently in groups of 2 or 3"; it was
+## an even 1-5 before). The size counts everyone in it, the enforcer too.
+@export var pack_size_weights: PackedFloat32Array = [0.66, 0.24, 0.10]
+## Of the groups of two or three, how many are led by an enforcer (as one of
+## them); a lone skeleton never is. Every pack had one before note 121.
+@export_range(0.0, 1.0) var pack_enforcer_share := 0.45
 ## Criers fly solo (2026-10-14; they came in ones and twos).
 @export var flyer_pack_min := 1
 @export var flyer_pack_max := 1
@@ -4568,10 +4575,12 @@ func _spawn_enemies() -> void:
 		# One roll decides the whole group, so a pack is all of a kind: a knot
 		# of reds or a lone crier, never a mixed committee.
 		var flying: bool = flyer_scene != null and _rng.randf() < flyer_share
-		var pack := _rng.randi_range(
-			flyer_pack_min if flying else red_pack_min,
-			flyer_pack_max if flying else red_pack_max)
+		var pack := _rng.randi_range(flyer_pack_min, flyer_pack_max) if flying else _roll_pack_size()
 		pack = mini(pack, want - placed)
+		# Two or three may be an enforcer and the skeletons it walks with.
+		var escort := not flying and enforcers_with_packs and pack >= 2 \
+			and _rng.randf() < pack_enforcer_share
+		var bones := pack - 1 if escort else pack
 		# Containment (note 120): a skeleton encounter comes only in the share
 		# of the types let out, and only of those. One that does not come is
 		# counted as if it had, so the criers keep the density they always had
@@ -4580,17 +4589,31 @@ func _spawn_enemies() -> void:
 			if _rng.randf() >= float(released_hands.size()) / float(CONTAINED.size()):
 				placed += pack
 				continue
-			placed += _spawn_pack(tile, false, pack, _pack_hands(pack))
+			placed += _spawn_pack(tile, false, bones, _pack_hands(bones), escort)
 			continue
-		placed += _spawn_pack(tile, flying, pack)
+		placed += _spawn_pack(tile, flying, bones, [], escort)
 
 	_spawn_room_packs(taken)
+
+
+## One, two or three, by `pack_size_weights`.
+func _roll_pack_size() -> int:
+	var total := 0.0
+	for w in pack_size_weights:
+		total += w
+	var roll := _rng.randf() * total
+	for i in pack_size_weights.size():
+		roll -= pack_size_weights[i]
+		if roll < 0.0:
+			return i + 1
+	return maxi(pack_size_weights.size(), 1)
 
 
 ## A group dropped around one tile. Returns how many actually went down.
 ## `hands`: every member's type, decided by the caller (`_pack_hands`); empty
 ## rolls them here, from every type.
-func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringName] = []) -> int:
+func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringName] = [],
+		escort := true) -> int:
 	var scene: PackedScene = flyer_scene if flying else enemy_scene
 	if scene == null or count <= 0:
 		return 0
@@ -4650,9 +4673,9 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringNa
 		enemy.aggro_range = enemy_aggro_range
 		_give_wander_area(enemy, tile, roams)
 		_spawned.append(enemy)
-	# Every skeleton pack walks with a enforcer (enforcer.gd), which keeps close
-	# to the pack's first skeleton while they amble.
-	if not flying and enforcers_with_packs and leader != null:
+	# A skeleton pack may walk with an enforcer (enforcer.gd; `escort`, note
+	# 121), which keeps close to the pack's first skeleton while they amble.
+	if not flying and enforcers_with_packs and escort and leader != null:
 		var w := _spawn_enforcer(tile, leader, members)
 		# It passes through its own pack: two of them standing side by side in a
 		# corridor otherwise wall in its wider body (measured: one of six stuck
@@ -4846,9 +4869,8 @@ func _spawn_room_packs(taken: Array[Vector2i]) -> void:
 		while left > 0:
 			var tile: Vector2i = spots[_rng.randi() % spots.size()]
 			var flying: bool = flyer_scene != null and _rng.randf() < flyer_share * 0.5
-			var group := mini(_rng.randi_range(
-				flyer_pack_min if flying else red_pack_min,
-				flyer_pack_max if flying else red_pack_max), left)
+			var group := mini(_rng.randi_range(flyer_pack_min, flyer_pack_max) if flying
+				else _roll_pack_size(), left)
 			left -= _spawn_pack(tile, flying, group)
 			taken.append(tile)
 

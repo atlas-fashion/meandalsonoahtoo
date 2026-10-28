@@ -364,8 +364,10 @@ func _apply_light(l: Light3D) -> void:
 	# The volumetric mist (note 112) is lit only by lights that cast shadows:
 	# an unshadowed light would glow in the mist through the stone (the
 	# sewer's moss lights, say, into the corridors' air above them).
+	# (Except a light marked "mist_lit": the sewer's moss, note 121, hidden
+	# with the sewer whenever the camera is above, and 12 m under the floor.)
 	l.light_volumetric_fog_energy = (float(saved.get("fog_energy", 1.0))
-		if l.shadow_enabled else 0.0)
+		if l.shadow_enabled or l.has_meta("mist_lit") else 0.0)
 	if l.has_meta("moon"):
 		# The red moon (maze `_setup_moon`) lights the courts and skylights
 		# only because its shadows stop it at every roof. Without shadows it

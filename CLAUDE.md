@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 120), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 121), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -510,6 +510,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 118 | 2026-10-27 | The surgery: the pen soldiers face the hall (they faced their pens' back wall); the black slits between the raised brick pieces backed with a second skin of the same brick (`BackingBrick`, no shadows) | [docs/notes/118-surgery-soldiers-face-the-hall-no-black-gaps.md](docs/notes/118-surgery-soldiers-face-the-hall-no-black-gaps.md) |
 | 119 | 2026-10-28 | The surgery's soldiers and surgeon face the player moving and fighting: they wrote a world heading into a local `rotation.y` under the turned surgery (soldiers under a top-level `Soldiers` node; the surgeon's `_face_yaw` sets `global_rotation`) | [docs/notes/119-surgery-enemies-turn-in-world-yaw.md](docs/notes/119-surgery-enemies-turn-in-world-yaw.md) |
 | 120 | 2026-10-28 | Containment: the maze starts with only criers; one prison-look containment block per skeleton type (caged prisoners, mechanical back doors they walk out through once its enforcers are down and the crystal is out); each type let out joins the spawn pool; patrols and convoys rare; the collector (a lone enforcer chaining loose subjects); the surgery bolted until every block is open, the great door until the surgeon is dead | [docs/notes/120-containment-and-the-spawn-pool.md](docs/notes/120-containment-and-the-spawn-pool.md) |
+| 121 | 2026-10-27 | A damp sewer: thick wet air while below, a drifting ground mist on the water (a world-space fog volume per cell), the moss glowing in it, drips off the crowns, wet walls; enemies more often and mostly alone (1 / 2 / 3 at 66 / 24 / 10%, an enforcer only in some twos and threes); the floor's black joints now dark wet earth | [docs/notes/121-damp-sewer-mist-solo-spawns-dirt-floor-joints.md](docs/notes/121-damp-sewer-mist-solo-spawns-dirt-floor-joints.md) |
 
 ## Notes by source file
 
@@ -530,7 +531,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
-- `scripts/brick_level.gd`: 27, 96, 102, 114
+- `scripts/brick_level.gd`: 27, 96, 102, 114, 121
 - `scripts/chest.gd`: 18, 79
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
@@ -550,7 +551,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82, 117
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
-- `scripts/graphics_settings.gd`: 79, 80, 112
+- `scripts/graphics_settings.gd`: 79, 80, 112, 121
 - `scripts/hand_torch.gd`: 24, 29
 - `scripts/held_potion.gd`: 6.19
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
@@ -562,8 +563,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_icon.gd`: 6.19, 77, 84, 111
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
-- `scripts/manhole.gd`: 50, 51, 79
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120
+- `scripts/manhole.gd`: 50, 51, 79, 121
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112
@@ -589,7 +590,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
-- `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112
+- `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92
 - `scripts/shard_door.gd`: 18, 79, 120
@@ -601,7 +602,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/spear.gd`: 14, 78, 79
 - `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
-- `scripts/surgery_power.gd`: 102, 109
+- `scripts/surgery_power.gd`: 102, 109, 121
 - `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106, 111, 120
 - `scripts/surgery_piece.gd`: 104, 110
 - `scripts/subtitles.gd`: 109
@@ -618,9 +619,11 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/debris_dissolve.gdshader`: 6.19
 - `shaders/dread.gdshader`: 11, 16
 - `shaders/energy_beam.gdshader`: 45
+- `shaders/floor_dirt.gdshader`: 121
 - `shaders/ghost.gdshader`: 11
 - `shaders/lunge_lines.gdshader`: 10
-- `shaders/sewer_stone.gdshader`: 55
+- `shaders/sewer_mist.gdshader`: 121
+- `shaders/sewer_stone.gdshader`: 55, 121
 - `shaders/sewer_water.gdshader`: 55
 - `shaders/surgery_cable.gdshader`: 94, 98
 - `shaders/surgery_glass.gdshader`: 101
@@ -628,7 +631,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/spear_blast.gdshader`: 14
 - `shaders/torch_flame.gdshader`: 6.18, 19
 - `shaders/vine_leaf.gdshader`: 6.18
-- `shaders/water_drip.gdshader`: 39
+- `shaders/water_drip.gdshader`: 39, 121
 - `tools/benchmark.gd`: 6.11, 33, 112
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75

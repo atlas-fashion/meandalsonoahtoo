@@ -175,10 +175,7 @@ func setup(surgery_: Node3D, table_: Node3D, control_: Node3D, cell_centre: Vect
 ## The bed under this cell's flagstones with the hole left in it (manhole.gd's;
 ## brick_level leaves this cell's bed out).
 func _build_bed(cell_centre: Vector3) -> void:
-	var bed_mat := StandardMaterial3D.new()
-	bed_mat.albedo_color = Color(0.085, 0.062, 0.044)
-	bed_mat.roughness = 1.0
-	bed_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	var bed_mat := BrickLevel.bed_material()
 	var c := to_local(cell_centre)
 	var gap := SHAFT
 	var x0 := c.x - 3.0

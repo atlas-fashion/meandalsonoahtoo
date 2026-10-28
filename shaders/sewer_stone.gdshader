@@ -30,6 +30,8 @@ uniform vec3 mold_dark : source_color = vec3(0.012, 0.014, 0.01);
 uniform vec3 slime_colour : source_color = vec3(0.035, 0.04, 0.022);
 uniform float normal_depth = 0.9;
 uniform float brick_ease = 0.4;
+// Graphics.damp (sewer.gd `set_enabled`): the walls' wet film, note 121.
+uniform float damp = 1.0;
 
 varying vec3 wpos;
 varying vec3 wnrm;
@@ -129,9 +131,15 @@ void fragment() {
 	float chan = 1.0 - smoothstep(-0.06, 0.0, h);
 	col = mix(col, mix(slime_colour, sludge * 0.45, 0.5), chan * 0.9);
 
+	// --- Note 121: the walls run wet. A film down the damp streaks (less where
+	// the mold is thick and drinks it) and condensation under the crown: darker,
+	// and glossy enough to catch the moss.
+	float film = damp * max(wall * smoothstep(0.4, 0.7, streak) * (1.0 - m * 0.5), crown * 0.8);
+	col *= 1.0 - 0.22 * film;
+
 	ALBEDO = col;
 
-	float wet = max(max(on_floor, foot), chan);
+	float wet = max(max(max(on_floor, foot), chan), film * 0.8);
 	float rough = mix(0.82, 0.2, wet);
 	rough = mix(rough, 0.96, m * (1.0 - wet * 0.6));
 	ROUGHNESS = rough;

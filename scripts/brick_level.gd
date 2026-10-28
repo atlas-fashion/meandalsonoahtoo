@@ -549,13 +549,25 @@ static func _bed() -> Mesh:
 		return _bed_mesh
 	var box := BoxMesh.new()
 	box.size = Vector3(6.0, 0.2, 6.0)
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.085, 0.062, 0.044)
-	m.roughness = 1.0
-	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	box.material = m
+	box.material = bed_material()
 	_bed_mesh = box
 	return box
+
+
+static var _bed_mat: Material = null
+
+
+## The bed's dark dirt (note 121; a flat dark brown before): shared with the
+## beds manhole.gd and surgery_power.gd lay round their holes.
+static func bed_material() -> Material:
+	if _bed_mat != null:
+		return _bed_mat
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/floor_dirt.gdshader")
+	m.set_shader_parameter(&"dirt", load("res://textures/sewer_sludge.png"))
+	m.set_shader_parameter(&"dirt_normal", load("res://textures/sewer_sludge_normal.png"))
+	_bed_mat = m
+	return m
 
 
 static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view_range: float) -> void:
