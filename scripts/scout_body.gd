@@ -182,6 +182,17 @@ const P_REEL := {"grip": Vector3(0.24, 0.04, 0.12), "aim": Vector3(0.18, 0.8, -0
 	"roll": 0.2, "twist": 0.25, "pelvis": 0.1, "lean": -0.22, "crouch": 0.1, "side": 0.12,
 	"lead": 0.2, "back": 0.3, "wide": 0.1, "out": 0.5}
 
+## The bag pulled off a kneeling captive's head with the spear (note 128,
+## boss_abduction.gd): the point reached out, slow, into the sack's crown (the
+## scene pitches it at the head and walks the scout in or out until the point
+## is there), then flicked up and back over its shoulder, the sack on the barbs.
+const P_HOOK := {"grip": Vector3(0.06, -0.08, -0.3), "aim": Vector3(-0.05, 0.0, -1.0),
+	"roll": 0.0, "twist": -0.08, "pelvis": 0.06, "lean": 0.3, "crouch": 0.12, "side": 0.0,
+	"lead": 0.24, "back": 0.14, "wide": 0.05, "out": 0.5}
+const P_FLICK := {"grip": Vector3(0.22, 0.06, 0.16), "aim": Vector3(0.12, 0.9, -0.42),
+	"roll": 0.25, "twist": -0.5, "pelvis": 0.18, "lean": 0.02, "crouch": 0.06, "side": 0.06,
+	"lead": 0.22, "back": 0.16, "wide": 0.06, "out": 0.5}
+
 ## Each move: [time, pose, ease into it]. Ease 0 smooth, 1 in (a strike,
 ## fastest as it arrives), 2 out (a draw or a settle, fastest as it leaves).
 const MOVES := {
@@ -193,6 +204,8 @@ const MOVES := {
 		[0.66, P_DASH_RUN, 0], [0.98, P_DASH_STRIKE, 1], [1.25, P_DASH_STRIKE, 0], [1.7, P_HUNT, 0]],
 	&"swipe": [[0.0, P_HUNT, 0], [0.48, P_SWIPE_WIND, 2], [0.56, P_SWIPE_COIL, 0],
 		[0.68, P_SWIPE_MID, 1], [0.8, P_SWIPE_FOLLOW, 2], [1.0, P_SWIPE_SETTLE, 0], [1.45, P_HUNT, 0]],
+	&"unhood": [[0.0, P_GUARD, 0], [0.6, P_HOOK, 2], [0.95, P_HOOK, 0], [1.2, P_FLICK, 1],
+		[1.5, P_FLICK, 0], [2.3, P_GUARD, 0]],
 }
 
 # --- What the scout tells it (scout.gd, each physics tick) ---------------------

@@ -12,6 +12,10 @@ extends Node3D
 ## (the portcullis hangs in the middle of the same arch, so the opened leaves lie
 ## inside the hall past it). Shards set stay set through death; an opened door
 ## stays open.
+##
+## Since note 128 the shards are not wanted (`need_shards`): the player is
+## carried through it to the boss once the surgeon is dead (boss_abduction.gd
+## opens it), and E opens it for anyone coming back after a death.
 
 const WoodDoor := preload("res://scripts/wood_door.gd")
 
@@ -24,6 +28,9 @@ const REACH := 3.6
 var shards: Array[StringName] = []
 var filled: Array[bool] = []
 var opened := false
+## The shards set in it open it (note 18). Off since note 128: once the
+## surgery is done it opens for E alone.
+var need_shards := false
 
 var _width := 8.0
 var _height := 8.0
@@ -63,7 +70,8 @@ func _dress(size: Vector2, shards_: Array[StringName]) -> void:
 	filled.clear()
 	for s in shards:
 		filled.append(false)
-	_prompt = Interact.prompt("E   Set shards", Vector3(0.0, MEDALLION_Y, -LEAF_THICK))
+	_prompt = Interact.prompt("E   Set shards" if need_shards else "E   Open",
+		Vector3(0.0, MEDALLION_Y, -LEAF_THICK))
 	add_child(_prompt)
 
 	# The leaves, hinged at the jambs on the hall side, closed across the arch.
@@ -231,6 +239,18 @@ func _use() -> void:
 	if maze != null and maze.has_method("surgery_done") and not bool(maze.call("surgery_done")):
 		_toast("The door will not answer. Something still works in the surgery.", 2.6)
 		return
+	# Note 128: the shards are no longer wanted. The surgery done, the player is
+	# carried in through it (boss_abduction.gd, which opens it); this is for
+	# the way back after a death, or a game from before that -- it opens.
+	if not need_shards:
+		_busy = true
+		var player := _player
+		player.call("begin_cutscene", false)
+		player.set("hands_busy", true)
+		player.call("scene_look_at", to_global(Vector3(0.0, MEDALLION_Y, -LEAF_THICK)), 4.0)
+		fill_all()
+		await _open(player)
+		return
 	var inv = _player.get("inventory")
 	var to_set: Array[int] = []
 	if inv != null:
@@ -389,16 +409,24 @@ func restore_state(data: Dictionary) -> void:
 			(_sockets[k]["ring"] as StandardMaterial3D).emission_energy_multiplier = 2.2
 	_seam_mat.emission_energy_multiplier = 0.4 * float(set_count())
 	_light.light_energy = 0.0 if set_count() == 0 else 0.5 + 0.35 * float(set_count())
-	if bool(data.get("opened", false)) and not opened:
-		opened = true
-		_seal.visible = false
-		_light.light_energy = 0.0
-		if _blocker != null:
-			_blocker.queue_free()
-			_blocker = null
-		_leaves[0].rotation.y = -PI * 0.5 * 0.97
-		_leaves[1].rotation.y = PI * 0.5 * 0.97
-		_open_collision()
+	if bool(data.get("opened", false)):
+		open_now()
+
+
+## Open at once, without its scene: a loaded game, or the player carried in
+## through it (note 128, boss_abduction.gd).
+func open_now() -> void:
+	if opened:
+		return
+	opened = true
+	_seal.visible = false
+	_light.light_energy = 0.0
+	if _blocker != null:
+		_blocker.queue_free()
+		_blocker = null
+	_leaves[0].rotation.y = -PI * 0.5 * 0.97
+	_leaves[1].rotation.y = PI * 0.5 * 0.97
+	_open_collision()
 
 
 ## For a harness or a debug key: every socket filled, the door left shut.

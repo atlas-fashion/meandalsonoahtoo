@@ -178,6 +178,50 @@ func is_scout() -> bool:
 	return true
 
 
+# --- Scripted (note 128) ------------------------------------------------------------------
+##
+## A scene drives it (boss_abduction.gd: the two who carry the player to the
+## boss): no AI, no patrol, no blows. It walks at `scripted_walk` (world, flat),
+## turns to face `scripted_face` (a world point; null: the way it walks), looks
+## at `scripted_look` (a world point, or null to look about), and plays the body
+## move `scripted_move` (a scout_body.gd MOVES key) at `scripted_move_t`, which
+## the scene advances, with the point pitched `scripted_pitch`.
+var scripted := false
+var scripted_walk := Vector3.ZERO
+var scripted_face = null
+var scripted_look = null
+var scripted_move := &""
+var scripted_move_t := 0.0
+var scripted_pitch := 0.0
+
+
+func _scripted_step(delta: float) -> void:
+	_dormant = false
+	engaged = false
+	if not is_on_floor():
+		velocity += get_gravity() * delta
+	velocity.x = move_toward(velocity.x, scripted_walk.x, acceleration * delta)
+	velocity.z = move_toward(velocity.z, scripted_walk.z, acceleration * delta)
+	if scripted_face != null:
+		_face((scripted_face as Vector3) - global_position)
+	elif scripted_walk.length_squared() > 0.01:
+		_face(scripted_walk)
+	move_and_slide()
+	if _body == null:
+		return
+	var v := get_real_velocity()
+	_body.velocity = Vector3(v.x, 0.0, v.z)
+	_body.asleep = false
+	_body.move = scripted_move
+	_body.move_t = scripted_move_t
+	_body.alert = 1.0
+	_body.scanning = false
+	_body.look_point = scripted_look
+	_body.aim_pitch = scripted_pitch
+	_body.lod_distance = 0.0
+	_body.flare(0.0)
+
+
 # --- The body ---------------------------------------------------------------------------
 
 func _enter_tree() -> void:
@@ -233,6 +277,9 @@ func _physics_process(delta: float) -> void:
 	# Dead, it lies where it fell: enemy.gd would keep moving it under gravity,
 	# and with its shape off that carried it down through the floor.
 	if _dying:
+		return
+	if scripted:
+		_scripted_step(delta)
 		return
 	var now := _now()
 	if _move != Move.NONE:
@@ -757,6 +804,9 @@ func _on_scared() -> void:
 # --- Blows on it, death -------------------------------------------------------------------
 
 func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void:
+	# In a scene (note 128): part of it, not a target.
+	if scripted:
+		return
 	var was_dying := _dying
 	if amount > 0.0 and _from_direction.length_squared() > 0.0001:
 		_last_blow = _from_direction

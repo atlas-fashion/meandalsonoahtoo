@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 127), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 128), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -339,6 +339,9 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   move's own clock (hit windows, parry cues, an end), never synced to
   enemy.gd's wind-up timer (note 74). Rigs with 60 fps clips import at
   `animation/fps=60` (at 30 Godot resamples and swings limbs across the gaps).
+- After the surgeon: `boss_abduction.gd` (note 128: bagged, carried to the
+  boss hall, a scout hooks the sack off; `_long_scene` is where the long
+  cutscene goes; then the fight), started by maze.gd `take_to_the_boss`.
 - World: `chest.gd`, `gate.gd`, `portcullis.gd`, `workbench.gd`,
   `screen_fade.gd`, `sky_setup.gd` (sky, moon).
 - UI: `hud.gd`, `attack_icons.gd`, `inventory.gd` (data),
@@ -521,6 +524,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 125 | 2026-10-28 | Every corridor enemy patrols (`patrol_share` 1.0; lone skeletons and packs without an enforcer never got a patrol before; loose subjects too); patrol.gd picks goals in reach from shared buckets, takes part-way routes (up to a shut door), backs off when stuck and avoids that way, followers steer by the navmesh; criers likewise. Standing still 62% -> 8% of the time | [docs/notes/125-every-enemy-patrols-smartly.md](docs/notes/125-every-enemy-patrols-smartly.md) |
 | 126 | 2026-10-28 | Enemies keep to their area (45 m of where their patrol began) and stop 2-6 s at each leg's end to look about, study the nearest wall, or listen back the way they came; criers look about at their stops; nothing but the player opens doors. Coins lying in the containment rooms (5 piles a block, saved when taken), every coin drop with a small golden flame rising off it; far drops rest | [docs/notes/126-purposeful-wandering-and-room-coins.md](docs/notes/126-purposeful-wandering-and-room-coins.md) |
 | 127 | 2026-10-28 | The scout: a spearman robot in rusted riveted plate with a ragged mantle and blue goggle eyes, built from primitives into one skinned mesh and animated procedurally (feet planted by a stepping gait, two-bone IK, the spear leading the arms, damped springs, a verlet mantle); roams alone on patrol, hunts on sight, circles, tri-stab / knockdown swipe / spear dash, searches where it lost them; 110 health | [docs/notes/127-the-scout.md](docs/notes/127-the-scout.md) |
+| 128 | 2026-10-29 | Bagged and carried to the boss: once the surgeon is dead and his claw kept, a sack over the head, carried to the throne hall, a scripted scout hooks it off with its spear; `_long_scene` (boss_abduction.gd) is the placeholder for the long cutscene; then the fight. The great door wants no shards (E opens it once the surgery is done) | [docs/notes/128-bagged-and-carried-to-the-boss.md](docs/notes/128-bagged-and-carried-to-the-boss.md) |
 
 ## Notes by source file
 
@@ -539,6 +543,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/arrow.gd`: 20, 79, 93
 - `scripts/attack_icons.gd`: 24, 77, 79, 84
 - `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91
+- `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27, 96, 102, 114, 121
@@ -574,7 +579,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122
@@ -599,27 +604,27 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127
-- `scripts/scout.gd`: 127
-- `scripts/scout_body.gd`: 127
+- `scripts/scout.gd`: 127, 128
+- `scripts/scout_body.gd`: 127, 128
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92
-- `scripts/shard_door.gd`: 18, 79, 120
+- `scripts/shard_door.gd`: 18, 79, 120, 128
 - `scripts/shield_hitbox.gd`: 68, 69
 - `scripts/skeleton_eyes.gd`: 13
 - `scripts/skeleton_sword.gd`: 24, 93
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
 - `scripts/spear.gd`: 14, 78, 79
-- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120
+- `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120, 128
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109, 121
 - `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106, 111, 120
 - `scripts/surgery_piece.gd`: 104, 110
 - `scripts/subtitles.gd`: 109
 - `scripts/surgeon_boss.gd`: 105, 109, 110, 111, 119
-- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111
+- `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111, 128
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
@@ -628,6 +633,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/workbench.gd`: 32, 77, 79
 - `shaders/berserk_ground.gdshader`: 84
 - `shaders/blood_screen.gdshader`: 15
+- `shaders/burlap_bag.gdshader`: 128
 - `shaders/debris_dissolve.gdshader`: 6.19
 - `shaders/dread.gdshader`: 11, 16
 - `shaders/energy_beam.gdshader`: 45

@@ -662,6 +662,7 @@ func _ready() -> void:
 	_populate()
 	if save.has("seed"):
 		restore_player(save)
+		_resume_abduction()
 	is_built = true
 	level_built.emit()
 	if Sandbox.active:
@@ -1048,7 +1049,8 @@ func surgery() -> Node3D:
 ## walking, holds the mimic instead (`mimic_index`), and the mimic carries the
 ## shard. No pedestals, no guards and no chests from `_spawn_chests` in this
 ## mode. The boss hall's arch is shut by the great door (scripts/shard_door.gd),
-## which opens once every shard is set in it.
+## which opened once every shard was set in it -- since note 128 it wants no
+## shards: the player is carried through it once the surgery is done.
 
 @export var puzzle_rooms := true
 ## How many of the chest rooms are prison blocks (dungeon_room.gd).
@@ -1268,7 +1270,7 @@ func _indices(nodes: Array[Node], test: Callable) -> Array[int]:
 
 func save_state() -> Dictionary:
 	var data := {"version": 1, "seed": _active_seed, "boss_defeated": boss_defeated,
-		"zone": zone, "zone_name": zone_name(), "zones_cleared": zones_cleared.duplicate()}
+		"taken_to_boss": taken_to_boss, "zone": zone, "zone_name": zone_name(), "zones_cleared": zones_cleared.duplicate()}
 	var player := get_tree().get_first_node_in_group("player")
 	if player != null and player.has_method("save_state"):
 		data["player"] = player.call("save_state")
@@ -1319,6 +1321,7 @@ func save_state() -> Dictionary:
 ## never spawned if he is dead and a kicked-in door never arms its blocker.
 func restore_world(data: Dictionary) -> void:
 	boss_defeated = bool(data.get("boss_defeated", false))
+	taken_to_boss = bool(data.get("taken_to_boss", false))
 	# Before `_populate`, which spawns from them.
 	released_hands.clear()
 	for h in data.get("released", []):
@@ -5604,3 +5607,46 @@ func surgery_done() -> bool:
 	if not progression or _surgery == null:
 		return true
 	return bool(_surgery.call("is_done"))
+
+
+## --- Taken to the boss (note 128) ---------------------------------------------------
+##
+## The surgeon dead and his claw kept, the player is bagged and carried to the
+## boss's hall, and the fight starts there (scripts/boss_abduction.gd). Asked
+## for by surgery_control.gd at the end of the claw scene (or surgery.gd when
+## there is no claw to take). Saved: once taken, never again -- after a death
+## the way back is through the great door, which opens for E.
+
+const ABDUCTION := preload("res://scripts/boss_abduction.gd")
+var taken_to_boss := false
+var _abduction: Node = null
+
+
+func take_to_the_boss(delay := 1.4) -> void:
+	if taken_to_boss or boss_defeated or _boss_hall.is_empty() or enemy_scene == null:
+		return
+	if _abduction != null and is_instance_valid(_abduction):
+		return
+	if not is_instance_valid(_boss):
+		return
+	_abduction = ABDUCTION.begin(self, _boss as Node3D, delay)
+
+
+## The abduction (or anything else) handed them over: the fight is on.
+func _on_taken_to_boss() -> void:
+	taken_to_boss = true
+	_abduction = null
+
+
+func abduction() -> Node:
+	return _abduction if is_instance_valid(_abduction) else null
+
+
+## A loaded game saved after the claw was taken but before they were carried
+## off (or from before note 128): it happens now.
+func _resume_abduction() -> void:
+	if taken_to_boss or boss_defeated or _surgery == null:
+		return
+	var control = _surgery.get("control")
+	if control != null and bool(control.get("claw_kept")):
+		take_to_the_boss(2.5)

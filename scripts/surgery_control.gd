@@ -1263,6 +1263,10 @@ func _take_his_claw(p: Node3D) -> void:
 	var hud := Coop.hud(p)
 	if hud != null and hud.has_method("_show_toast"):
 		hud.call("_show_toast", "Surgeon's Claw")
+	# Note 128: and then they are taken to the boss.
+	var maze := get_tree().get_first_node_in_group(&"maze")
+	if maze != null and maze.has_method("take_to_the_boss"):
+		maze.call("take_to_the_boss")
 
 
 func _end_claw_scene(everyone: Array[Node3D], p: Node3D, bars: CanvasLayer) -> void:

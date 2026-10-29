@@ -1072,6 +1072,12 @@ func _on_surgeon_defeated() -> void:
 	lower_bars()
 	if control != null:
 		control.call("claw_scene_when_ready")
+	# Note 128: the claw scene hands them on to the boss when it ends; with no
+	# claw to take (no scene coming), they are taken from here.
+	if control == null or (not bool(control.get("_claw_waiting")) and not bool(control.get("_busy"))):
+		var maze := get_tree().get_first_node_in_group(&"maze")
+		if maze != null and maze.has_method("take_to_the_boss"):
+			maze.call("take_to_the_boss", 2.5)
 
 
 ## Whether `at` (world) is in the hall, on its floor or up to the roof (not
