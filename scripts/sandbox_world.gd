@@ -30,6 +30,7 @@ const ARCHER_SCRIPT := preload("res://scripts/archer.gd")
 const PROSTHETIC := preload("res://scripts/prosthetic.gd")
 const ENFORCER_SCRIPT := preload("res://scripts/enforcer.gd")
 const DECREPIT_SCRIPT := preload("res://scripts/decrepit.gd")
+const SCOUT_SCRIPT := preload("res://scripts/scout.gd")
 const LIZARD_SCRIPT := preload("res://scripts/sewer_lizard.gd")
 const STALKER_SCRIPT := preload("res://scripts/stalker.gd")
 const RAT_SCRIPT := preload("res://scripts/rat.gd")
@@ -42,6 +43,7 @@ const KINDS := [
 	[&"skeleton_shield", "Shield skeleton"],
 	[&"archer", "Crossbow skeleton"],
 	[&"enforcer", "Enforcer"],
+	[&"scout", "Scout"],
 	[&"crier", "Crier"],
 	[&"decrepit", "Decrepit enforcer"],
 	[&"lizard", "Sewer lizard"],
@@ -232,6 +234,13 @@ func _make(kind: StringName, at: Vector3) -> Node:
 			e.position = at + Vector3(0.0, 0.1, 0.0)
 			add_child(e)
 			e.set("aggro_range", 22.0)
+			return e
+		&"scout":
+			var e: CharacterBody3D = enemy_scene.instantiate()
+			e.set_script(SCOUT_SCRIPT)
+			e.position = at + Vector3(0.0, 0.1, 0.0)
+			add_child(e)
+			e.set("aggro_range", 32.0)
 			return e
 		&"crier":
 			var flyer: PackedScene = maze.get("flyer_scene")

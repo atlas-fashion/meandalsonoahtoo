@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 126), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 127), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -284,7 +284,8 @@ save's) -> level builder -> `_build_gates`, `_place_player`,
 `restore_player(save)` -> `is_built = true`, emits **`level_built`**.
 `_populate()` spawns: boss, jail-cell stock, enemies, convoys, stalker,
 decrepits, sewer lizards, rats (own `_rat_rng`), chests. Corridor skeletons only of the
-types let out of containment (`released_hands`, note 120): at the start, only criers.
+types let out of containment (`released_hands`, note 120): at the start, only criers
+and scouts (a lone scout is `scout_share` of the encounters, note 127).
 
 **The live level path** is `maze.gd` `modules = true` ->
 `_build_module_level()`:
@@ -326,7 +327,10 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
   "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65-71), `sewer_lizard.gd` +
   `goo.gd`, `stalker.gd` ("the Remnant" / "the Shade"), `mimic.gd`,
-  `convoy.gd`, `collector.gd` (rounds up loose skeletons, note 120); helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
+  `convoy.gd`, `collector.gd` (rounds up loose skeletons, note 120), `scout.gd` (the spearman
+  robot that roams hunting the player; its body, rig and every animation are
+  procedural in `scout_body.gd`: planted-foot gait, IK, springs, mantle cloth;
+  note 127); helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
   `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`, `shield_hitbox.gd`
   (bone hitboxes: both enforcers' shields, the decrepit's left foot; hit windows; notes 68-69). Clip changes on the
   enforcer and decrepit rigs are inertialized by `enforcer_react.gd`
@@ -516,6 +520,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 124 | 2026-10-28 | Fewer criers (`flyer_share` 0.25, was 0.45); criers patrol the corridors (`crier._patrol`: navmesh legs between corridor points at 3.2 m/s, no shut doors) and on patrol see ahead (150 degree cone, 3 m all round), rushing the face once they see the player | [docs/notes/124-fewer-criers-on-patrol.md](docs/notes/124-fewer-criers-on-patrol.md) |
 | 125 | 2026-10-28 | Every corridor enemy patrols (`patrol_share` 1.0; lone skeletons and packs without an enforcer never got a patrol before; loose subjects too); patrol.gd picks goals in reach from shared buckets, takes part-way routes (up to a shut door), backs off when stuck and avoids that way, followers steer by the navmesh; criers likewise. Standing still 62% -> 8% of the time | [docs/notes/125-every-enemy-patrols-smartly.md](docs/notes/125-every-enemy-patrols-smartly.md) |
 | 126 | 2026-10-28 | Enemies keep to their area (45 m of where their patrol began) and stop 2-6 s at each leg's end to look about, study the nearest wall, or listen back the way they came; criers look about at their stops; nothing but the player opens doors. Coins lying in the containment rooms (5 piles a block, saved when taken), every coin drop with a small golden flame rising off it; far drops rest | [docs/notes/126-purposeful-wandering-and-room-coins.md](docs/notes/126-purposeful-wandering-and-room-coins.md) |
+| 127 | 2026-10-28 | The scout: a spearman robot in rusted riveted plate with a ragged mantle and blue goggle eyes, built from primitives into one skinned mesh and animated procedurally (feet planted by a stepping gait, two-bone IK, the spear leading the arms, damped springs, a verlet mantle); roams alone on patrol, hunts on sight, circles, tri-stab / knockdown swipe / spear dash, searches where it lost them; 110 health | [docs/notes/127-the-scout.md](docs/notes/127-the-scout.md) |
 
 ## Notes by source file
 
@@ -569,7 +574,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122
@@ -577,7 +582,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
 - `scripts/pad_keyboard_input.gd`: 26
-- `scripts/patrol.gd`: 24, 125, 126
+- `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113
 - `scripts/portcullis.gd`: 6.18
@@ -593,7 +598,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/save_system.gd`: 19, 60, 79
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117
-- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127
+- `scripts/scout.gd`: 127
+- `scripts/scout_body.gd`: 127
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82

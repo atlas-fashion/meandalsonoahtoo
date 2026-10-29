@@ -369,6 +369,16 @@ const PROSTHETIC := preload("res://scripts/prosthetic.gd")
 var _hand_rng := RandomNumberGenerator.new()
 
 
+## The SCOUTS (scout.gd, note 127): of the corridor encounters, this many are a
+## lone scout, on patrol from the start (they are not held in containment).
+@export_range(0.0, 1.0) var scout_share := 0.08
+## Further than a skeleton: it is out looking.
+@export var scout_aggro_range := 32.0
+const SCOUT_SCRIPT := preload("res://scripts/scout.gd")
+## Its own stream too: the scouts leave every other spawn where it was.
+var _scout_rng := RandomNumberGenerator.new()
+
+
 ## A sword or a hammer hand, by `hammer_share`.
 func _melee_hand() -> StringName:
 	return &"hammer" if _hand_rng.randf() < hammer_share else &"blade"
@@ -4385,6 +4395,7 @@ func _populate() -> void:
 	# Reseed so a reset reproduces the same population rather than drifting.
 	_rng.seed = _active_seed
 	_hand_rng.seed = hash(_active_seed + 4111)
+	_scout_rng.seed = hash(_active_seed + 6151)
 	_spawn_boss()
 	_stock_jail_cells()
 	_spawn_enemies()
@@ -4587,6 +4598,11 @@ func _spawn_enemies() -> void:
 	# counts the skeleton rolls progression skipped (note 120): kept to that, the
 	# trickle filled the gap with criers, 149 at the start growing toward 382.
 	_corridor_want = _corridor_enemies.size()
+	var scouts := 0
+	for e in _corridor_enemies:
+		if e.has_method("is_scout"):
+			scouts += 1
+	print("[scouts] %d of %d corridor enemies, each alone on patrol" % [scouts, _corridor_enemies.size()])
 	_spawn_room_packs(taken)
 
 
@@ -4605,6 +4621,9 @@ func _roll_encounter(tile: Vector2i, budget: int) -> int:
 
 
 func _encounter(tile: Vector2i, budget: int) -> int:
+	# A lone scout, out looking (note 127).
+	if scout_share > 0.0 and budget >= 1 and _scout_rng.randf() < scout_share:
+		return _spawn_scout(tile)
 	# One roll decides the whole group, so a pack is all of a kind: a knot
 	# of reds or a lone crier, never a mixed committee.
 	var flying: bool = flyer_scene != null and _rng.randf() < flyer_share
@@ -4802,6 +4821,28 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringNa
 			column.append(w)
 		_start_patrol(column)
 	return count
+
+
+## One scout at `tile`, alone and on patrol. Returns 1 (0 without a scene).
+func _spawn_scout(tile: Vector2i) -> int:
+	if enemy_scene == null:
+		return 0
+	var s: Node3D = enemy_scene.instantiate()
+	s.set_script(SCOUT_SCRIPT)
+	s.position = tile_to_world(tile) + Vector3(_scout_rng.randf_range(-1.0, 1.0), 0.3,
+		_scout_rng.randf_range(-1.0, 1.0))
+	s.rotation.y = _scout_rng.randf() * TAU
+	add_child(s)
+	s.set("aggro_range", scout_aggro_range)
+	_spawned.append(s)
+	if patrols and not _patrol_points.is_empty():
+		var column: Array[Node3D] = [s]
+		var p: Node = PATROL.new()
+		p.name = "Patrol"
+		add_child(p)
+		p.call("setup", column, _patrol_points, _scout_rng.randi())
+		_spawned.append(p)
+	return 1
 
 
 func _start_patrol(column: Array) -> Node:
