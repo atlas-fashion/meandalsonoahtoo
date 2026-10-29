@@ -445,8 +445,9 @@ func _animate(dt: float) -> void:
 	# The pose wanted, and its springs.
 	var want := _target_pose()
 	var fast := move != &"" or _t < _reel_until
-	var w_spear := 26.0 if fast else 9.0
-	var w_body := 15.0 if fast else 7.5
+	# Stiff enough in a move for the scout's quickened tempo (note 129).
+	var w_spear := 31.0 if fast else 9.0
+	var w_body := 18.0 if fast else 7.5
 	var z_spear := 0.68 if fast else 0.9
 	var z_body := 0.72 if fast else 0.92
 	_sp(&"grip", want["grip"], w_spear, z_spear, dt)

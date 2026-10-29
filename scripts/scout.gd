@@ -8,7 +8,8 @@ extends "res://scripts/enemy.gd"
 ##
 ## A hunched robot soldier in rusted riveted plate with a ragged mantle and a
 ## barbed spear (scout_body.gd: the model and all its animation, procedural).
-## 110 health (an enforcer has 240); its blows are lighter than an enforcer's.
+## 160 health (an enforcer has 240; 110 before note 129); its blows are
+## lighter than an enforcer's.
 ##
 ## ROAMING: alone, always on patrol (patrol.gd: legs between corridor points,
 ## stops to look about, its own area, never through a shut door), stalking with
@@ -34,20 +35,42 @@ extends "res://scripts/enemy.gd"
 ## looks about, then on the way they were going, twice, then back to its
 ## patrol. Making no headway at them (a shut door between: nothing but the
 ## player opens one, note 126) it gives up and searches where it stands.
+##
+## TUNED (note 129), the user: "a little more health, faster, attack faster.
+## When the scout performs the 3 stab attack he should move swiftly forward
+## with each stab. He should be able to close the gap between himself and the
+## player. He should be able to chain 2 attacks together, but not all the time.
+## He should attack and move smart, with the goal of killing the player."
+##   * 160 health (still well under an enforcer's 240); faster on its feet and
+##     turning; every move runs at TEMPO, shorter breaths between them.
+##   * the tri-stab DRIVES at them: each stab's step is stretched, as it
+##     starts, to bring the point onto them (STAB_DRIVE), so it covers 1-3 m
+##     and is started from up to STAB_GAP off.
+##   * CHAINS: at a move's chain point it may go straight into another (a
+##     chained move never chains again), more often when they are down,
+##     drinking or swinging.
+##   * SMART (`_read_player`): it punishes an opening (knocked down, drinking,
+##     a swing recovering) at once, aiming low at someone on the floor; it
+##     steps back out of a swing coming at it; faced with a raised guard it
+##     circles to their side before it strikes (a guard covers only the front);
+##     it dashes more readily at someone backing away.
 
 const ENF := preload("res://scripts/enforcer.gd")
 const BODY := preload("res://scripts/scout_body.gd")
 
-const HUNT_SPEED := 4.6
+const HUNT_SPEED := 5.5
 ## Coming in the last few metres: measured, not a charge.
-const CLOSE_SPEED := 2.3
+const CLOSE_SPEED := 3.2
 ## Patrolling (patrol.gd walks it at PACE 1.25 of this).
-const STALK_SPEED := 1.3
-const SEARCH_SPEED := 2.3
-const CIRCLE_SPEED := 1.4
+const STALK_SPEED := 1.5
+const SEARCH_SPEED := 2.8
+const CIRCLE_SPEED := 1.9
 ## How fast it turns, radians a second; in a move, onto its target.
-const TURN_RATE := 7.5
-const TURN_STRIKE := 9.0
+const TURN_RATE := 9.5
+const TURN_STRIKE := 11.0
+## Every move's clock runs this much faster than real time (its wind-ups,
+## blows and recoveries all shorter by the same share; note 129).
+const TEMPO := 1.25
 ## Heard within this, whichever way it faces (with no stone between).
 const HEAR_RANGE := 4.0
 
@@ -63,7 +86,15 @@ const STAB_HITS := [[0.37, 0.52], [0.72, 0.86], [1.14, 1.38]]
 const STAB_CUES := [0.18, 0.56, 0.92]
 const STAB_LISTEN := 0.25
 const STAB_END := 1.75
-const STAB_STEPS := [[0.3, 0.42, 0.16], [0.66, 0.78, 0.14], [1.04, 1.2, 0.55]]
+## Each stab's step in: [from, to, least metres, most metres]. Its length is
+## set as the step starts: as far as brings the point STAB_OVER past their
+## middle, never under the least, never over the most (note 129).
+const STAB_DRIVE := [[0.26, 0.42, 0.25, 1.1], [0.62, 0.78, 0.25, 1.1], [1.0, 1.2, 0.45, 1.4]]
+## The point reaches this far ahead of its body at a stab's full extension.
+const STAB_POINT := 2.05
+const STAB_OVER := 0.25
+## Edge to edge, from which it opens with a tri-stab (it drives the rest).
+const STAB_GAP := 3.4
 ## The point counts as in them within their radius and this.
 const POINT_REACH := 0.14
 
@@ -71,7 +102,7 @@ const DASH_DAMAGE := 16.0
 const DASH_WIND := 0.5
 ## The burst: up to DASH_TRAVEL in DASH_SLIDE, fastest at once (about 16 m/s
 ## at its longest -- a man sprinting at a lunge, not a projectile).
-const DASH_SLIDE := 0.7
+const DASH_SLIDE := 0.8
 const DASH_HITS := [[0.85, 1.28]]
 const DASH_CUES := [0.55]
 const DASH_LISTEN := 0.35
@@ -82,8 +113,10 @@ const DASH_MAX := 9.5
 ## Where the slide stops (centre to centre): its point a little past them.
 const DASH_ARRIVE := 1.25
 const DASH_TRAVEL := 7.5
-const DASH_COOLDOWN := 4.5
+const DASH_COOLDOWN := 3.2
 const DASH_CHANCE := 0.6
+## At someone backing away.
+const DASH_CHANCE_FLEEING := 0.9
 const DASH_SHOVE := 4.0
 
 const SWIPE_DAMAGE := 12.0
@@ -93,14 +126,29 @@ const SWIPE_LISTEN := 0.26
 const SWIPE_END := 1.45
 const SWIPE_STEPS := [[0.56, 0.74, 0.3]]
 const SWIPE_THROW := 7.0
-const SWIPE_COOLDOWN := 3.2
+const SWIPE_COOLDOWN := 2.4
 const SWIPE_SHARE := 0.4
 ## The swept shaft counts within their radius and this.
 const SHAFT_REACH := 0.12
 
 ## Edge to edge, inside which it uses its close moves.
 const CLOSE_GAP := 1.9
-const CLOSE_PAUSE := Vector2(0.45, 1.1)
+const CLOSE_PAUSE := Vector2(0.2, 0.6)
+## Chaining (move seconds at which it may go straight into another, the chance
+## of it, and the chance when they are open).
+const CHAIN_AT := {Move.TRISTAB: 1.42, Move.SWIPE: 1.02, Move.DASH: 1.32}
+const CHAIN_CHANCE := 0.3
+const CHAIN_CHANCE_OPEN := 0.75
+## Stepping out of a swing coming at it: how often, how long, how fast.
+const EVADE_CHANCE := 0.55
+const EVADE_TIME := 0.32
+const EVADE_SPEED := 4.2
+## Circling round a raised guard to get at their side: for at most this long,
+## then it strikes anyway. Their front: within this many degrees of their
+## facing.
+const FLANK_TIME := 1.6
+const FLANK_SPEED := 2.8
+const GUARD_FRONT := 60.0
 const BLOCK_SHOVE := 3.5
 ## How long it searches at most, and the legs it walks doing it.
 const SEARCH_TIME := 16.0
@@ -140,6 +188,20 @@ var _progress_from := Vector3.ZERO
 var _blind_until := 0.0
 var _circle_sign := 1.0
 var _circle_flip := 0.0
+## Each stab's step length, decided as it starts (-1: not yet).
+var _drive: Array[float] = [-1.0, -1.0, -1.0]
+## This move was chained onto the last; whether its chain point was passed.
+var _chained := false
+var _chain_rolled := false
+var _evade_until := 0.0
+var _swing_ended_at := -10.0
+var _swing_began := false
+var _evade_dir := Vector3.ZERO
+var _was_swinging := false
+var _flank_until := -1.0
+var chains := 0
+var evades := 0
+var flanks := 0
 var _last_blow := Vector3.ZERO
 ## For the tests: how many of each move, how many blows landed.
 var moves_made := {}
@@ -148,9 +210,9 @@ var blows_landed := 0
 
 func _init() -> void:
 	armed = false
-	max_health = 110.0
+	max_health = 160.0
 	move_speed = HUNT_SPEED
-	acceleration = 16.0
+	acceleration = 24.0
 	vision_cone_degrees = 140.0
 	sight_needs_line_of_sight = true
 	sight_memory = 1.2
@@ -282,9 +344,19 @@ func _physics_process(delta: float) -> void:
 		_scripted_step(delta)
 		return
 	var now := _now()
+	_watch_swing(now)
 	if _move != Move.NONE:
 		if now < _stun_until:
 			_end_move()
+		elif _move != Move.SPOT and _swing_began and _target != null and is_instance_valid(_target) \
+				and (_move_t < _first_blow() - 0.05 or _move_t > _last_blow_end()) and randf() < EVADE_CHANCE \
+				and _target.global_position.distance_to(global_position) < 2.9:
+			# Their swing comes in during its wind-up or its recovery: it breaks
+			# off and steps out (between its blows it is committed).
+			var to := _target.global_position - global_position
+			_end_move()
+			_close_ready = now
+			_evade(Vector3(to.x, 0.0, to.z), now)
 		else:
 			if not is_on_floor():
 				velocity += get_gravity() * delta
@@ -332,7 +404,8 @@ func _feed(now: float) -> void:
 		if _move != Move.NONE and _move != Move.SPOT:
 			var to := player.global_position - global_position
 			var d := Vector2(to.x, to.z).length()
-			var lift := (to.y + 1.0) - 1.25
+			var down: bool = player.has_method("is_knocked_down") and player.call("is_knocked_down")
+			var lift := (to.y + (0.35 if down else 1.0)) - 1.25
 			# The swipe goes for the legs whatever their height.
 			if _move != Move.SWIPE:
 				_body.aim_pitch = clampf(atan2(lift, maxf(d, 0.5)), -0.35, 0.35)
@@ -386,20 +459,50 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		_progress_at = now + 2.5
 		_progress_from = global_position
 	var dy := absf(player.global_position.y - global_position.y)
+	# Reading them (note 129): a swing coming at it close in is stepped out of;
+	# an opening is punished at once; a raised guard is circled.
+	if _swing_began and gap < 2.3 and randf() < EVADE_CHANCE:
+		_evade(flat, now)
+	if now < _evade_until:
+		velocity.x = move_toward(velocity.x, _evade_dir.x * EVADE_SPEED, acceleration * 2.0 * delta)
+		velocity.z = move_toward(velocity.z, _evade_dir.z * EVADE_SPEED, acceleration * 2.0 * delta)
+		_face(flat)
+		_slide()
+		# Straight back in as it lands.
+		_close_ready = minf(_close_ready, _evade_until)
+		return true
+	if _opening(player, now):
+		_close_ready = minf(_close_ready, now)
+	var front := _guard_front(player)
+	if front and _flank_until < 0.0:
+		_flank_until = now + FLANK_TIME
+		flanks += 1
+	elif not front:
+		_flank_until = -1.0
+	var flanking := front and now < _flank_until
 	var pick := Move.NONE
-	if gap <= CLOSE_GAP:
-		if now >= _close_ready and dy < 1.2 and _clear_to(player, 1.1):
-			pick = _pick_close(now)
-	elif distance >= DASH_MIN and distance <= DASH_MAX and now >= _dash_ready and now >= _roll_at and dy < 1.0:
+	if not flanking and now >= _close_ready and gap <= STAB_GAP and dy < 1.2 and _clear_to(player, 1.1):
+		pick = _pick_close(now) if gap <= CLOSE_GAP else Move.TRISTAB
+	elif not flanking and distance >= DASH_MIN and distance <= DASH_MAX and now >= _dash_ready \
+			and now >= _roll_at and dy < 1.0:
 		_roll_at = now + 0.4
-		if randf() < DASH_CHANCE and _clear_to(player, 1.0) and _clear_to(player, 0.4):
+		var chance := DASH_CHANCE_FLEEING if _fleeing(player) else DASH_CHANCE
+		if randf() < chance and _clear_to(player, 1.0) and _clear_to(player, 0.4):
 			pick = Move.DASH
 	if pick != Move.NONE:
 		_start_move(pick, player)
 		_run_move(delta, now)
 		return true
 	var want := Vector3.ZERO
-	if gap > CLOSE_GAP + 0.6 or (now >= _close_ready and gap > CLOSE_GAP * 0.8):
+	if flanking and gap < 4.0:
+		# Round to their side, where the guard does not cover.
+		var r := -flat.normalized() if flat.length_squared() > 0.0001 else global_basis.z
+		var pf := -player.global_basis.z
+		var side := pf.z * r.x - pf.x * r.z
+		var t := Vector3(r.z, 0.0, -r.x) * (1.0 if side >= 0.0 else -1.0)
+		want = t * FLANK_SPEED + (-r) * clampf(gap - 1.7, -1.0, 1.0) * 1.5
+		_face(flat)
+	elif gap > CLOSE_GAP + 0.6 or (now >= _close_ready and gap > CLOSE_GAP * 0.8):
 		var dir := _path_dir(now, player.global_position)
 		var speed := HUNT_SPEED if gap > 4.0 else lerpf(CLOSE_SPEED, HUNT_SPEED, clampf((gap - 1.5) / 2.5, 0.0, 1.0))
 		want = dir * speed
@@ -424,6 +527,60 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		_circle_sign = -_circle_sign
 		_circle_flip = now + 1.2
 	return true
+
+
+## Steps back out of a swing, a little to one side, for EVADE_TIME.
+func _evade(flat: Vector3, now: float) -> void:
+	var away := -flat.normalized() if flat.length_squared() > 0.0001 else global_basis.z
+	_evade_dir = (away + Vector3(-away.z, 0.0, away.x) * randf_range(-0.7, 0.7)).normalized()
+	_evade_until = now + EVADE_TIME
+	evades += 1
+
+
+## Whether their swing began or ended this tick (`_swing_began`,
+## `_swing_ended_at`), read once a tick before anything acts on it.
+func _watch_swing(now: float) -> void:
+	_swing_began = false
+	var p := _player
+	if p == null or not is_instance_valid(p):
+		return
+	var swinging: bool = p.get("_attacking") == true
+	_swing_began = swinging and not _was_swinging
+	if _was_swinging and not swinging:
+		_swing_ended_at = now
+	_was_swinging = swinging
+
+
+## They are open: knocked down, drinking, or just finished a swing.
+func _opening(player: Node3D, now: float) -> bool:
+	if player.has_method("is_knocked_down") and player.call("is_knocked_down"):
+		return true
+	if player.has_method("is_drinking") and player.call("is_drinking"):
+		return true
+	return now - _swing_ended_at < 0.45
+
+
+## Their guard is up and it is in front of them (where it covers).
+func _guard_front(player: Node3D) -> bool:
+	if not (player.has_method("is_blocking") and player.call("is_blocking")):
+		return false
+	var pf := -player.global_basis.z
+	pf.y = 0.0
+	var r := global_position - player.global_position
+	r.y = 0.0
+	if pf.length_squared() < 0.0001 or r.length_squared() < 0.0001:
+		return false
+	return rad_to_deg(pf.normalized().angle_to(r.normalized())) < GUARD_FRONT
+
+
+## Backing away from it.
+func _fleeing(player: Node3D) -> bool:
+	var pv = player.get("velocity")
+	if not (pv is Vector3):
+		return false
+	var r := player.global_position - global_position
+	r.y = 0.0
+	return r.length_squared() > 0.0001 and (pv as Vector3).dot(r.normalized()) > 1.5
 
 
 func _pick_close(now: float) -> int:
@@ -558,7 +715,12 @@ func _search_step(delta: float, now: float) -> Vector3:
 
 # --- The moves -------------------------------------------------------------------------------
 
-func _start_move(kind: int, player: Node3D) -> void:
+func _start_move(kind: int, player: Node3D, chained := false) -> void:
+	_chained = chained
+	_chain_rolled = false
+	_drive = [-1.0, -1.0, -1.0]
+	if chained:
+		chains += 1
 	_move = kind
 	_move_t = 0.0
 	_target = player
@@ -607,7 +769,8 @@ func _run_move(delta: float, _now_t: float) -> void:
 		_end_move()
 		return
 	var prev := _move_t
-	_move_t += delta
+	var tempo := _tempo()
+	_move_t += delta * tempo
 	var to := player.global_position - global_position
 	var flat := Vector3(to.x, 0.0, to.z)
 	var gap := flat.length() - _body_radius - maxf(_target_radius, 0.3)
@@ -616,8 +779,8 @@ func _run_move(delta: float, _now_t: float) -> void:
 	var tracking := true
 	match _move:
 		Move.TRISTAB:
-			fwd = minf(_steps(STAB_STEPS, prev, _move_t), maxf(gap - 0.3, 0.0))
-			tracking = _tracking(0.06)
+			fwd = minf(_drive_step(prev, flat.length()), maxf(gap - 0.25, 0.0))
+			tracking = _tracking(0.05)
 		Move.SWIPE:
 			fwd = minf(_steps(SWIPE_STEPS, prev, _move_t), maxf(gap - 0.3, 0.0))
 			tracking = _move_t < 0.52
@@ -628,7 +791,7 @@ func _run_move(delta: float, _now_t: float) -> void:
 		Move.SPOT:
 			turn = 6.0
 	if tracking and flat.length_squared() > 0.01:
-		rotation.y = rotate_toward(rotation.y, atan2(-flat.x, -flat.z), turn * delta)
+		rotation.y = rotate_toward(rotation.y, atan2(-flat.x, -flat.z), turn * delta * tempo)
 	var step := -global_basis.z * fwd
 	velocity.x = step.x / delta
 	velocity.z = step.z / delta
@@ -640,8 +803,69 @@ func _run_move(delta: float, _now_t: float) -> void:
 			var listen := STAB_LISTEN if _move == Move.TRISTAB else (DASH_LISTEN if _move == Move.DASH else SWIPE_LISTEN)
 			player.call("parry_cue", self, listen)
 	_tick_windows(prev, player)
+	# Its chain point: now and then (not after a chain) straight into another.
+	if _move != Move.NONE and not _chain_rolled and CHAIN_AT.has(_move) and _move_t >= float(CHAIN_AT[_move]):
+		_chain_rolled = true
+		if not _chained and engaged and _try_chain(player, flat.length()):
+			return
 	if _move != Move.NONE and _move_t >= _end_at:
 		_end_move()
+
+
+## At a chain point: straight into a second move if one fits where they are.
+func _try_chain(player: Node3D, dist: float) -> bool:
+	var now := _now()
+	var chance := CHAIN_CHANCE_OPEN if _opening(player, now) else CHAIN_CHANCE
+	if randf() >= chance or not _clear_to(player, 1.1):
+		return false
+	var gap := dist - _body_radius - maxf(_target_radius, 0.3)
+	var next := Move.NONE
+	if gap <= CLOSE_GAP:
+		next = Move.SWIPE if (_move != Move.SWIPE and now >= _swipe_ready and randf() < 0.5) else Move.TRISTAB
+	elif gap <= STAB_GAP:
+		next = Move.TRISTAB
+	elif dist >= DASH_MIN and dist <= DASH_MAX and now >= _dash_ready and _clear_to(player, 0.4):
+		next = Move.DASH
+	if next == Move.NONE:
+		return false
+	_start_move(next, player, true)
+	return true
+
+
+## A tri-stab's drive this tick: each stab's step, its length set as it begins
+## to bring the point STAB_OVER past their middle (`dist` centre to centre).
+func _drive_step(prev: float, dist: float) -> float:
+	var out := 0.0
+	for k in STAB_DRIVE.size():
+		var d: Array = STAB_DRIVE[k]
+		var t0 := float(d[0])
+		var t1 := float(d[1])
+		if _move_t < t0 or prev > t1:
+			continue
+		if _drive[k] < 0.0:
+			_drive[k] = clampf(dist + STAB_OVER - STAB_POINT, float(d[2]), float(d[3]))
+		var ua := clampf((prev - t0) / (t1 - t0), 0.0, 1.0)
+		var ub := clampf((_move_t - t0) / (t1 - t0), 0.0, 1.0)
+		out += _drive[k] * (_smooth(ub) - _smooth(ua))
+	return out
+
+
+## How fast the move's clock runs: TEMPO, but the swipe's sweep itself at
+## 1x -- quickened, its front hand went past 20 m/s.
+func _tempo() -> float:
+	if _move == Move.SWIPE and _move_t >= 0.56 and _move_t <= 0.86:
+		return 1.0
+	return TEMPO
+
+
+## When the move's last blow is over (move seconds), or 0.
+func _last_blow_end() -> float:
+	return float(_windows[-1][1]) if not _windows.is_empty() else 0.0
+
+
+## When the move's first blow comes (move seconds), or its end.
+func _first_blow() -> float:
+	return float(_windows[0][0]) if not _windows.is_empty() else _end_at
 
 
 ## Still turning onto them: until `lead` seconds before the next blow.

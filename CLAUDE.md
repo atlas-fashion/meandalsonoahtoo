@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 128), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 129), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -525,6 +525,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 126 | 2026-10-28 | Enemies keep to their area (45 m of where their patrol began) and stop 2-6 s at each leg's end to look about, study the nearest wall, or listen back the way they came; criers look about at their stops; nothing but the player opens doors. Coins lying in the containment rooms (5 piles a block, saved when taken), every coin drop with a small golden flame rising off it; far drops rest | [docs/notes/126-purposeful-wandering-and-room-coins.md](docs/notes/126-purposeful-wandering-and-room-coins.md) |
 | 127 | 2026-10-28 | The scout: a spearman robot in rusted riveted plate with a ragged mantle and blue goggle eyes, built from primitives into one skinned mesh and animated procedurally (feet planted by a stepping gait, two-bone IK, the spear leading the arms, damped springs, a verlet mantle); roams alone on patrol, hunts on sight, circles, tri-stab / knockdown swipe / spear dash, searches where it lost them; 110 health | [docs/notes/127-the-scout.md](docs/notes/127-the-scout.md) |
 | 128 | 2026-10-29 | Bagged and carried to the boss: once the surgeon is dead and his claw kept, a sack over the head, carried to the throne hall, a scripted scout hooks it off with its spear; `_long_scene` (boss_abduction.gd) is the placeholder for the long cutscene; then the fight. The great door wants no shards (E opens it once the surgery is done) | [docs/notes/128-bagged-and-carried-to-the-boss.md](docs/notes/128-bagged-and-carried-to-the-boss.md) |
+| 129 | 2026-10-29 | The scout tuned: 160 health (enforcer 240), hunts at 5.5 m/s, every move at TEMPO 1.25 (the swipe's sweep at 1x), shorter pauses; the tri-stab drives each stab onto them (1-3 m, opened from 3.4 m); two-move chains now and then (never three); it punishes openings, steps out of swings, circles a raised guard to the side, dashes at someone backing off | [docs/notes/129-scout-tuning.md](docs/notes/129-scout-tuning.md) |
 
 ## Notes by source file
 
@@ -604,8 +605,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127
-- `scripts/scout.gd`: 127, 128
-- `scripts/scout_body.gd`: 127, 128
+- `scripts/scout.gd`: 127, 128, 129
+- `scripts/scout_body.gd`: 127, 128, 129
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
