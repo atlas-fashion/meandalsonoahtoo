@@ -28,6 +28,8 @@ const LOWER := 0.3
 const RAISE_RATE := 4.0
 const LOWER_RATE := 6.0
 const DRINK_TIME := 0.62
+## The small health potion (note 130) is the same flask at this size.
+const SMALL_SCALE := 0.72
 
 ## Saturated and not too bright: ACES desaturates anything hot, and at 2.6 the
 ## liquid read as pale mint rather than green.
@@ -35,6 +37,8 @@ const LIQUID := Color(0.08, 0.8, 0.18)
 const GLOW := 1.1
 
 var want := false
+## Holding the small health potion: the flask drawn smaller.
+var small := false
 
 var _raise := 0.0
 var _drink := -1.0
@@ -135,6 +139,7 @@ func _process(delta: float) -> void:
 		_drink = -1.0
 		return
 	var e := _raise * _raise * (3.0 - 2.0 * _raise)
+	_model.scale = Vector3.ONE * SCALE * (SMALL_SCALE if small else 1.0)
 
 	var d := 0.0
 	var sip := 0.0

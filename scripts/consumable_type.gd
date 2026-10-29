@@ -11,3 +11,6 @@ extends Resource
 ## Relative likelihood when an enemy rolls a drop. Higher is more common; the
 ## values are weights, not percentages, so they need not sum to anything.
 @export var drop_weight := 1.0
+## How long it takes to drink, as a share of the player's `drink_time` (the
+## small health potion, note 130: half).
+@export var drink_scale := 1.0

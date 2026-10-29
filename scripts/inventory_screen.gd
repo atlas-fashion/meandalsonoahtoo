@@ -313,7 +313,8 @@ func _refresh() -> void:
 	_capacity_label.text = "%d / %d" % [used, Inventory.BAG]
 	_capacity_bar.queue_redraw()
 	_coins_value.text = _thousands(player.currency)
-	_potions_value.text = str(player.inventory.count(&"health_potion"))
+	var small: int = player.inventory.count(&"small_health_potion")
+	_potions_value.text = str(player.inventory.count(&"health_potion")) + (" + %d small" % small if small > 0 else "")
 	_describe()
 
 

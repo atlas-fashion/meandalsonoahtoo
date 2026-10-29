@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ConsumableType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/consumable_type.gd" id="1_type"]
+
+[resource]
+script = ExtResource("1_type")
+item_name = "Small Health Potion"
+heal_amount = 20.0
+color = Color(0.55, 0.95, 0.4, 1)
+drop_weight = 3.0
+drink_scale = 0.5

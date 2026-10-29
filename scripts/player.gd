@@ -352,10 +352,11 @@ extends CharacterBody3D
 ## must match an entry in Inventory.ITEMS.
 @export var consumables: Array[ConsumableType] = [
 	preload("res://resources/health_potion.tres"),
+	preload("res://resources/small_health_potion.tres"),
 ]
 ## How many of each consumable the player starts with -- and is topped back
 ## up to on respawn -- matched to `consumables` by position.
-@export var starting_counts: Array[int] = [3]
+@export var starting_counts: Array[int] = [3, 0]
 
 @export_group("Sword out of view")
 ## How close to the eye the sword is DRAWN, as a fraction of its real depth
@@ -1449,6 +1450,8 @@ func _update_sword(delta: float) -> void:
 	if _held_potion != null:
 		_held_potion.want = _consumable_for(held_item()) != null and not hands_busy \
 			and not forced
+		if not is_drinking():
+			_held_potion.set("small", held_item() == &"small_health_potion")
 	# The sword is put away while a flask is at the lips, whatever is in hand.
 	# Also while a live rat hangs from the hand (rat_control.gd).
 	var away: bool = held_item() != &"sword" or hands_busy or is_drinking() \
@@ -4305,10 +4308,13 @@ func use_consumable(slot: int) -> bool:
 		return false
 	_end_block()
 	_drink_type = type
-	_drink_left = drink_time
+	# A small potion is drunk in its share of the time (`drink_scale`, note 130).
+	_drink_total = drink_time * maxf(type.drink_scale, 0.05)
+	_drink_left = _drink_total
 	_drink_healed = 0.0
 	if _held_potion != null:
-		_held_potion.drink(drink_time)
+		_held_potion.set("small", _item_id(type) == &"small_health_potion")
+		_held_potion.drink(_drink_total)
 	inventory.take(slot, 1)
 	return true
 
@@ -4322,15 +4328,18 @@ func is_drinking() -> bool:
 func drink_remaining() -> float:
 	if _drink_type == null:
 		return -1.0
-	return clampf(_drink_left / maxf(drink_time, 0.01), 0.0, 1.0)
+	return clampf(_drink_left / maxf(_drink_total, 0.01), 0.0, 1.0)
 
 
 ## What the drink in progress has restored so far (health it could give; at
 ## full health the rest is simply not needed).
 var _drink_healed := 0.0
+## How long the drink in progress takes in all (its type's share of
+## `drink_time`).
+var _drink_total := 3.0
 
 
-## The healing flows in at an even rate, `heal_amount` over `drink_time`, and
+## The healing flows in at an even rate, `heal_amount` over the drink's time, and
 ## is applied straight to health -- the HUD's "Used ..." line is raised once,
 ## for the total, when the drink ends (`_finish_drink`), not every frame.
 func _update_drink(delta: float) -> void:
@@ -4338,7 +4347,7 @@ func _update_drink(delta: float) -> void:
 		return
 	var step := minf(delta, _drink_left)
 	_drink_left -= step
-	var dose := _drink_type.heal_amount * step / maxf(drink_time, 0.01)
+	var dose := _drink_type.heal_amount * step / maxf(_drink_total, 0.01)
 	var before := health
 	health = minf(health + dose, max_health)
 	if health > before:

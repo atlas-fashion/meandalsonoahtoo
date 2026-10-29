@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 129), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 130), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -526,6 +526,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 127 | 2026-10-28 | The scout: a spearman robot in rusted riveted plate with a ragged mantle and blue goggle eyes, built from primitives into one skinned mesh and animated procedurally (feet planted by a stepping gait, two-bone IK, the spear leading the arms, damped springs, a verlet mantle); roams alone on patrol, hunts on sight, circles, tri-stab / knockdown swipe / spear dash, searches where it lost them; 110 health | [docs/notes/127-the-scout.md](docs/notes/127-the-scout.md) |
 | 128 | 2026-10-29 | Bagged and carried to the boss: once the surgeon is dead and his claw kept, a sack over the head, carried to the throne hall, a scripted scout hooks it off with its spear; `_long_scene` (boss_abduction.gd) is the placeholder for the long cutscene; then the fight. The great door wants no shards (E opens it once the surgery is done) | [docs/notes/128-bagged-and-carried-to-the-boss.md](docs/notes/128-bagged-and-carried-to-the-boss.md) |
 | 129 | 2026-10-29 | The scout tuned: 160 health (enforcer 240), hunts at 5.5 m/s, every move at TEMPO 1.25 (the swipe's sweep at 1x), shorter pauses; the tri-stab drives each stab onto them (1-3 m, opened from 3.4 m); two-move chains now and then (never three); it punishes openings, steps out of swings, circles a raised guard to the side, dashes at someone backing off | [docs/notes/129-scout-tuning.md](docs/notes/129-scout-tuning.md) |
+| 130 | 2026-10-29 | The small health potion: 20 health (half) in 1.5 s (half; `ConsumableType.drink_scale`), a smaller flask on the floor, in the hand and as an icon; the sewer lizards drop it (0.3 a roll) instead of the full one | [docs/notes/130-small-health-potion.md](docs/notes/130-small-health-potion.md) |
 
 ## Notes by source file
 
@@ -549,6 +550,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27, 96, 102, 114, 121
 - `scripts/chest.gd`: 18, 79
+- `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79
@@ -569,14 +571,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/goo.gd`: 58, 79
 - `scripts/graphics_settings.gd`: 79, 80, 112, 121
 - `scripts/hand_torch.gd`: 24, 29
-- `scripts/held_potion.gd`: 6.19
+- `scripts/held_potion.gd`: 6.19, 130
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/hud.gd`: 6.19, 24, 79, 84
 - `scripts/interact.gd`: 6.18, 79
-- `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111
-- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117
-- `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126
-- `scripts/item_icon.gd`: 6.19, 77, 84, 111
+- `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111, 130
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130
+- `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
+- `scripts/item_icon.gd`: 6.19, 77, 84, 111, 130
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79, 121
@@ -590,7 +592,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93
 - `scripts/puzzle_room.gd`: 18, 22, 79
@@ -603,14 +605,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/robot_rat.gd`: 77
 - `scripts/save_system.gd`: 19, 60, 79
 - `scripts/sandbox.gd`: 60, 68
-- `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117
+- `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127
 - `scripts/scout.gd`: 127, 128, 129
 - `scripts/scout_body.gd`: 127, 128, 129
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
-- `scripts/sewer_lizard.gd`: 58, 60, 92
+- `scripts/sewer_lizard.gd`: 58, 60, 92, 130
 - `scripts/shard_door.gd`: 18, 79, 120, 128
 - `scripts/shield_hitbox.gd`: 68, 69
 - `scripts/skeleton_eyes.gd`: 13

@@ -210,7 +210,8 @@ func _build_switches() -> Control:
 			_player.call("heal", float(_player.get("max_health"))))
 	full.custom_minimum_size.y = 32
 	col.add_child(full)
-	for entry in [[&"health_potion", 5, "5 health potions"], [&"live_rat", 1, "Live rat"],
+	for entry in [[&"health_potion", 5, "5 health potions"], [&"small_health_potion", 5, "5 small health potions"],
+			[&"live_rat", 1, "Live rat"],
 			[&"robot_rat", 1, "Robot rat"], [&"gold_crystal", 10, "10 gold crystals"]]:
 		var id: StringName = entry[0]
 		var n: int = entry[1]

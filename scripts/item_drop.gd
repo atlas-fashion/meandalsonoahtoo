@@ -380,7 +380,7 @@ func _visual_bounds_y() -> float:
 ## How each kind lies: a potion on its side, a bone flat, a skull upright.
 static func _rest_tilt(item: StringName) -> Vector3:
 	match item:
-		&"health_potion":
+		&"health_potion", &"small_health_potion":
 			return Vector3(0.0, 0.0, PI * 0.5)
 		&"bone_fragment":
 			return Vector3(PI * 0.5, 0.0, 0.0)
@@ -500,6 +500,8 @@ func _make_visual(item: StringName) -> Node3D:
 	match item:
 		&"health_potion":
 			_add_model(holder, POTION_MODEL, 0.22, Vector3.UP)
+		&"small_health_potion":
+			_add_model(holder, POTION_MODEL, 0.155, Vector3.UP)
 		&"skeleton_skull":
 			_add_model(holder, SKULL_MODEL, 0.2, Vector3.RIGHT)
 		&"bone_fragment":

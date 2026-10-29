@@ -43,6 +43,9 @@ static func paint(c: CanvasItem, id: StringName, rect: Rect2, tint := Color.WHIT
 			_axe(c, o, s, tint)
 		&"health_potion":
 			_potion(c, o, s, tint)
+		&"small_health_potion":
+			# The same flask, smaller, standing on the same line.
+			_potion(c, o + Vector2(0.15, 0.24) * s, s * 0.7, tint)
 		&"coins":
 			_coins(c, o, s, tint)
 		&"bone_fragment":

@@ -55,6 +55,13 @@ const ITEMS := {
 		"kind": "Consumable",
 		"desc": "A flask of something green and faintly glowing. Bitter, warm, and it closes wounds.",
 		"quote": "Bitter as the grave, warm as a hearth."},
+	# Half a potion (note 130): what the sewer lizards drop. Half the healing,
+	# drunk in half the time (resources/small_health_potion.tres).
+	&"small_health_potion": {"name": "Small Health Potion", "stack": 20, "single": true,
+		"color": Color(0.55, 0.95, 0.4),
+		"kind": "Consumable",
+		"desc": "A stoppered vial, half the size of a proper flask, found on the sewer lizards. Half the mending, and gone in half the time.",
+		"quote": "A mouthful, and back to it."},
 	&"coins": {"name": "Coins", "stack": 9999, "color": Color(1.0, 0.78, 0.25),
 		"kind": "Treasure",
 		"desc": "Old gold and loose jewels, pried from chests and the bone cages.",
