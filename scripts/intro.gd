@@ -561,12 +561,13 @@ func _arrive() -> void:
 
 
 func _walk_all() -> void:
-	var left := players.size()
+	# In an array: a lambda captures a local by value, so it would count down its own copy.
+	var left := [players.size()]
 	var done := func() -> void:
-		left -= 1
+		left[0] -= 1
 	for p in players:
 		p.connect("scene_walk_finished", done, CONNECT_ONE_SHOT)
-	while left > 0:
+	while left[0] > 0:
 		await _frame()
 
 

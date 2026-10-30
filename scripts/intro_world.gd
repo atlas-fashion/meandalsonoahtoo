@@ -472,7 +472,13 @@ func _build_ruins() -> void:
 	marks["crown"] = Vector3(0, top, 0)
 	# The gate: the brick kit's arch, the path running through it along Z.
 	var gate := ground(0, -24, -0.15)
-	_brick("arch", _xf(gate, 0.0, Vector3(0.0, 0.0, 0.02)))
+	var arch := _brick("arch", _xf(gate, 0.0, Vector3(0.0, 0.0, 0.02)), false)
+	# Its two legs only (brick_level.gd `_arch_collision`): one box round the whole
+	# mesh would fill the opening.
+	var leg := BrickLevel.ARCH_OUTER - BrickLevel.ARCH_INNER + 0.2
+	for s: float in [-1.0, 1.0]:
+		_solid_box(arch, AABB(Vector3(s * (BrickLevel.ARCH_INNER + leg * 0.5) - leg * 0.5, 0.0, -BrickLevel.ARCH_DEPTH * 0.5),
+			Vector3(leg, BrickLevel.ARCH_LEG_HEIGHT, BrickLevel.ARCH_DEPTH)))
 	marks["gate"] = gate + Vector3(0, 0, 2.5)
 	# Walls run off either side of the gate, broken down here and there.
 	for s: float in [-1.0, 1.0]:
