@@ -272,6 +272,8 @@ var aggro_box_origin = null
 	&"health_potion": 0.3,
 	&"skeleton_skull": 0.05,
 }
+## Dropped on every death, before the rolls (note 131: the lizards' small heal).
+@export var sure_drops: Array[StringName] = []
 
 ## Logs every hit to the console. Off by default: when the game runs from the
 ## editor, each print is sent over the debugger socket and redrawn in the Output
@@ -1971,6 +1973,8 @@ func _grant_drop() -> void:
 	var parent := get_parent()
 	if parent == null:
 		return
+	for item in sure_drops:
+		ITEM_DROP.spawn(parent, global_position + Vector3(0.0, 1.1, 0.0), item, 1)
 	for i in randi_range(drop_rolls_min, drop_rolls_max):
 		var item := _roll_drop()
 		if item != &"":

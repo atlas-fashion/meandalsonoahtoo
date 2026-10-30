@@ -199,6 +199,10 @@ func _maze() -> Node:
 
 ## Never mid-scene, dead, hidden or getting up.
 func _safe() -> bool:
+	# Never in the intro (note 131): the game is created once it is over.
+	var maze := _maze()
+	if maze != null and maze.get("intro_running") == true:
+		return false
 	# Co-op: safe only if it is for both players.
 	var all := Coop.all()
 	if all.is_empty():

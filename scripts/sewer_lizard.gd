@@ -81,8 +81,10 @@ func _init() -> void:
 	display_name = "SEWER LIZARD"
 	drop_rolls_min = 0
 	drop_rolls_max = 1
-	# The small health potion (note 130), in place of the 8% chance of a full one.
-	drop_odds = {&"bone_fragment": 0.3, &"small_health_potion": 0.3}
+	# The small health potion (note 130), in place of the 8% chance of a full one
+	# -- and every time (note 131, the user: "every single time you kill one").
+	drop_odds = {&"bone_fragment": 0.3}
+	sure_drops = [&"small_health_potion"]
 
 
 # --- The body ---------------------------------------------------------------------

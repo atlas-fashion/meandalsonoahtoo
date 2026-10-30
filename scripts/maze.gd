@@ -11,6 +11,11 @@ extends Node3D
 
 signal level_built
 
+## The intro outside the dungeon (note 131): a new game starts in it.
+const INTRO := preload("res://scripts/intro.gd")
+## While it runs: the dungeon hidden, nothing saved (save_system.gd `_safe`).
+var intro_running := false
+
 const OPEN := 0
 const WALL := 1
 
@@ -667,7 +672,11 @@ func _ready() -> void:
 	level_built.emit()
 	if Sandbox.active:
 		_open_sandbox_menu()
-	if Saves.slot >= 0 and not save.has("seed"):
+	if INTRO.wanted(save):
+		# A new game starts outside, on the hill of Vardia (note 131); the intro
+		# ends on the cell floor with the wake below, and creates the game.
+		INTRO.begin(self)
+	elif Saves.slot >= 0 and not save.has("seed"):
 		# A new game: the player wakes on the cell floor and gets up, as after a
 		# death. Only from the title (a slot) -- the benchmark and harnesses
 		# start standing.

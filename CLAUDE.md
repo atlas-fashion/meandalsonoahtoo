@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 130), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 131), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -339,6 +339,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   move's own clock (hit windows, parry cues, an end), never synced to
   enemy.gd's wind-up timer (note 74). Rigs with 60 fps clips import at
   `animation/fps=60` (at 30 Godot resamples and swings limbs across the gaps).
+- Before the dungeon: `intro.gd` (note 131: a new game starts on the forested hill of Vardia; story, 24 lessons, kidnapped into the cell; `-- --intro` / `-- --no-intro`), with `intro_world.gd`, `intro_lessons.gd`, `intro_sentinel.gd`, and the stand-ins `intro_flora.gd`, `intro_figure.gd`, `intro_post.gd`.
 - After the surgeon: `boss_abduction.gd` (note 128: bagged, carried to the
   boss hall, a scout hooks the sack off; `_long_scene` is where the long
   cutscene goes; then the fight), started by maze.gd `take_to_the_boss`.
@@ -527,6 +528,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 128 | 2026-10-29 | Bagged and carried to the boss: once the surgeon is dead and his claw kept, a sack over the head, carried to the throne hall, a scripted scout hooks it off with its spear; `_long_scene` (boss_abduction.gd) is the placeholder for the long cutscene; then the fight. The great door wants no shards (E opens it once the surgery is done) | [docs/notes/128-bagged-and-carried-to-the-boss.md](docs/notes/128-bagged-and-carried-to-the-boss.md) |
 | 129 | 2026-10-29 | The scout tuned: 160 health (enforcer 240), hunts at 5.5 m/s, every move at TEMPO 1.25 (the swipe's sweep at 1x), shorter pauses; the tri-stab drives each stab onto them (1-3 m, opened from 3.4 m); two-move chains now and then (never three); it punishes openings, steps out of swings, circles a raised guard to the side, dashes at someone backing off | [docs/notes/129-scout-tuning.md](docs/notes/129-scout-tuning.md) |
 | 130 | 2026-10-29 | The small health potion: 20 health (half) in 1.5 s (half; `ConsumableType.drink_scale`), a smaller flask on the floor, in the hand and as an icon; the sewer lizards drop it (0.3 a roll) instead of the full one | [docs/notes/130-small-health-potion.md](docs/notes/130-small-health-potion.md) |
+| 131 | 2026-10-30 | The intro outside the dungeon (stand-ins until Higgsfield can generate): the knight's hilt, the study, the forested hill of Vardia; 24 lessons teach every control; the sentinel; kidnapped at the altar, waking in the cell. Lizards always drop the small heal | [docs/notes/131-intro-vardia-lessons-kidnapped-lizards-always-heal.md](docs/notes/131-intro-vardia-lessons-kidnapped-lizards-always-heal.md) |
 
 ## Notes by source file
 
@@ -562,7 +564,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120, 122, 126
-- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93, 120
+- `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93, 120, 131
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92, 115, 116
 - `scripts/enforcer_react.gd`: 52, 56, 59, 72
@@ -575,6 +577,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/hud.gd`: 6.19, 24, 79, 84
 - `scripts/interact.gd`: 6.18, 79
+- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131
 - `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111, 130
 - `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
@@ -582,7 +585,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122
@@ -603,7 +606,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/rat_model.gd`: 77
 - `scripts/respawn_anchor.gd`: 8b, 32, 79
 - `scripts/robot_rat.gd`: 77
-- `scripts/save_system.gd`: 19, 60, 79
+- `scripts/save_system.gd`: 19, 60, 79, 131
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127
@@ -612,7 +615,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
-- `scripts/sewer_lizard.gd`: 58, 60, 92, 130
+- `scripts/sewer_lizard.gd`: 58, 60, 92, 130, 131
 - `scripts/shard_door.gd`: 18, 79, 120, 128
 - `scripts/shield_hitbox.gd`: 68, 69
 - `scripts/skeleton_eyes.gd`: 13
@@ -642,6 +645,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/energy_beam.gdshader`: 45
 - `shaders/floor_dirt.gdshader`: 121
 - `shaders/ghost.gdshader`: 11
+- `shaders/intro_foliage.gdshader`, `shaders/intro_terrain.gdshader`: 131
 - `shaders/lunge_lines.gdshader`: 10
 - `shaders/sewer_mist.gdshader`: 121
 - `shaders/sewer_stone.gdshader`: 55, 121
