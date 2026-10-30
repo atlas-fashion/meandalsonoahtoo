@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 131), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 132), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -529,6 +529,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 129 | 2026-10-29 | The scout tuned: 160 health (enforcer 240), hunts at 5.5 m/s, every move at TEMPO 1.25 (the swipe's sweep at 1x), shorter pauses; the tri-stab drives each stab onto them (1-3 m, opened from 3.4 m); two-move chains now and then (never three); it punishes openings, steps out of swings, circles a raised guard to the side, dashes at someone backing off | [docs/notes/129-scout-tuning.md](docs/notes/129-scout-tuning.md) |
 | 130 | 2026-10-29 | The small health potion: 20 health (half) in 1.5 s (half; `ConsumableType.drink_scale`), a smaller flask on the floor, in the hand and as an icon; the sewer lizards drop it (0.3 a roll) instead of the full one | [docs/notes/130-small-health-potion.md](docs/notes/130-small-health-potion.md) |
 | 131 | 2026-10-30 | The intro outside the dungeon (stand-ins until Higgsfield can generate): the knight's hilt, the study, the forested hill of Vardia; 24 lessons teach every control; the sentinel; kidnapped at the altar, waking in the cell. Lizards always drop the small heal | [docs/notes/131-intro-vardia-lessons-kidnapped-lizards-always-heal.md](docs/notes/131-intro-vardia-lessons-kidnapped-lizards-always-heal.md) |
+| 132 | 2026-10-30 | The intro was a black screen from the title (the HUD's black held over it, on a higher layer): it lifts that sheet itself, after its own black is drawn; quitting to the title mid-intro leaves nothing on the root and stops the intro; "Below. With the others." over the black | [docs/notes/132-intro-black-screen-from-the-title.md](docs/notes/132-intro-black-screen-from-the-title.md) |
 
 ## Notes by source file
 
@@ -577,7 +578,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/hud.gd`: 6.19, 24, 79, 84
 - `scripts/interact.gd`: 6.18, 79
-- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131
+- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132
 - `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111, 130
 - `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130

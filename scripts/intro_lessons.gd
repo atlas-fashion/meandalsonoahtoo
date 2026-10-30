@@ -167,6 +167,9 @@ func close() -> void:
 		var layer: CanvasLayer = _per[p].get("layer")
 		if layer != null and is_instance_valid(layer):
 			layer.queue_free()
+	_per.clear()
+	if _read_sub != null and is_instance_valid(_read_sub):
+		_read_sub.queue_free()
 	if _prompt != null and is_instance_valid(_prompt):
 		_prompt.queue_free()
 
@@ -343,6 +346,7 @@ func _hits_since(t: Dictionary, weapon: StringName) -> int:
 # --- The standing stone -------------------------------------------------------------
 
 var _reading := false
+var _read_sub: CanvasLayer
 
 
 func _update_prompt() -> void:
@@ -368,6 +372,7 @@ func _read(_who: Node) -> void:
 	_reading = true
 	_prompt.visible = false
 	var sub := Subtitles.open(self)
+	_read_sub = sub
 	await sub.say("THE STONE", "Here the people of Vardia kept the Hollow Flame.", 0.035, 1.4)
 	await sub.say("THE STONE", "No hand but the Crown's may bear it. Whoever takes it from this place takes the Crown's enemies with it.", 0.03, 2.2)
 	sub.call("close")

@@ -113,7 +113,8 @@ Then `Saves.request("new game")`, as before.
   limit at the altar, so the ending was run alone, jumping to the altar lesson.
 - **Co-op** was never run.
 - **A real new game from the title** (`Saves.slot` >= 0): every run used `--intro`
-  with slot -1, so the "new game" save after the wake did not run.
+  with slot -1, so the "new game" save after the wake did not run. It was a black
+  screen; see note 132.
 - **Keyboard and mouse:** the harness played on pad events; the look lesson
   was driven by rotating the player.
 - **The two wheels' menus:** the harness used `select_slot` and `use_consumable`,

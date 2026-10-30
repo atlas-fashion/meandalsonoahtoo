@@ -66,6 +66,7 @@ var _skip_held := 0.0
 var _in_story := false
 var _sub: CanvasLayer
 var _bars: CanvasLayer
+var _bags := []
 var _shot_from := Transform3D()
 var _shot_to := Transform3D()
 var _shot_t := 0.0
@@ -112,10 +113,15 @@ func _run() -> void:
 			hud.visible = false
 			_huds_hidden.append(hud)
 	# Two frames for the black to be up before the long build.
-	await get_tree().process_frame
-	await get_tree().process_frame
+	await _frame()
+	await _frame()
 	_hide_dungeon(true)
 	_coins(false)
+	# From the title the HUD holds its own black over the level's build (hud.gd),
+	# on a layer above everything here. Only now: a new ColorRect is not drawn on
+	# its first frame, and without this black the cell shows through the stall.
+	for hud in Coop.huds():
+		hud.call("fade_black", 0.0, 0.0)
 	world = World.new()
 	add_child(world)
 	world.call("build")
@@ -158,11 +164,30 @@ func _process(delta: float) -> void:
 			(_cams[p] as Camera3D).global_transform = xf
 
 
+## One frame of a scene. The pause menu is open throughout, so they can leave for
+## the title mid-intro: this node is then out of the tree but not yet freed, and
+## would run the rest of the intro with no tree. It stops here, on a signal that
+## will never come.
+func _frame(physics := false) -> void:
+	await (get_tree().physics_frame if physics else get_tree().process_frame)
+	if not is_inside_tree():
+		await finished
+
+
+## Left for the title: what the intro put on the root would stay over the title.
+func _exit_tree() -> void:
+	if lessons != null:
+		lessons.call("close")
+	for n in [_black_layer, _bars, _sub] + _bags + _cams.values():
+		if is_instance_valid(n):
+			n.queue_free()
+
+
 ## Waits `seconds` (paused with the game), or less once the story is skipped.
 func _beat(seconds: float) -> void:
 	var left := seconds
 	while left > 0.0 and not (_in_story and _skip):
-		await get_tree().process_frame
+		await _frame()
 		if not get_tree().paused:
 			left -= get_process_delta_time()
 
@@ -313,7 +338,7 @@ func _say(speaker: String, text: String, per_char := 0.04, hold := 1.5) -> void:
 		done[0] = true
 	run.call()
 	while not done[0] and not (_in_story and _skip):
-		await get_tree().process_frame
+		await _frame()
 
 
 func _end_subs() -> void:
@@ -322,9 +347,7 @@ func _end_subs() -> void:
 		_sub = null
 		# Let a line cut short by a skip finish its timers before it goes.
 		s.visible = false
-		get_tree().create_timer(12.0).timeout.connect(func() -> void:
-			if is_instance_valid(s):
-				s.queue_free())
+		get_tree().create_timer(12.0).timeout.connect(s.queue_free)
 
 
 ## A cinematic camera for every player, current; `xf` where it starts.
@@ -508,7 +531,7 @@ func _arrive() -> void:
 	_cameras_off()
 	if not skipped:
 		await _fade(1.0, 0.6)
-	await get_tree().physics_frame
+	await _frame(true)
 	await _fade(0.0, 1.0)
 	if not skipped:
 		for i in players.size():
@@ -544,7 +567,7 @@ func _walk_all() -> void:
 	for p in players:
 		p.connect("scene_walk_finished", done, CONNECT_ONE_SHOT)
 	while left > 0:
-		await get_tree().process_frame
+		await _frame()
 
 
 func _search() -> void:
@@ -633,6 +656,8 @@ func _taken() -> void:
 	for e in eyes:
 		e.queue_free()
 	_sub = Subtitles.open(self)
+	# Heard in the dark: over our black (layer 45).
+	_sub.layer = 46
 	await _sub.say("???", "Below. With the others.", 0.06, 1.6)
 	_end_subs()
 	await _beat(0.8)
@@ -676,6 +701,7 @@ func _bag(p: Node) -> Array:
 	var layer := CanvasLayer.new()
 	layer.layer = 38
 	Coop.ui_root(p).add_child(layer)
+	_bags.append(layer)
 	var size := layer.get_viewport().get_visible_rect().size
 	var mat := ShaderMaterial.new()
 	mat.shader = BAG_SHADER
@@ -727,7 +753,7 @@ func _finish() -> void:
 	for p in players:
 		if p.has_method("wake_up"):
 			p.call("wake_up")
-	await get_tree().process_frame
+	await _frame()
 	_black_layer.queue_free()
 	Saves.request("new game")
 	print("[intro] done: into the cell")
