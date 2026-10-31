@@ -1,7 +1,7 @@
 extends "res://scripts/prosthetic.gd"
 
-## The sword skeleton, rebuilt in Blender (note 135): very tall and gaunt, rusted
-## scale plate eaten through over sinew and bone, a long serrated blade. The
+## The sword skeleton (notes 135, 136): the user's rusty metal golem, very tall and
+## gaunt, riveted plate over bone, the right forearm ending in a long blade. The
 ## numbers and the AI are the sword hand's (prosthetic.gd, enemy.gd); this file
 ## only changes what it looks like doing them.
 ##
@@ -10,6 +10,7 @@ extends "res://scripts/prosthetic.gd"
 ##
 ##   idle, idle_fight, walk, run, turn_l, turn_r   chosen each tick (`_locomote`)
 ##   slash_1/2/3, heavy, and each again with _s    one clip is the whole blow
+##   haul, idle_haul                               the blade dragged behind
 ##   stagger_b/f/l/r                               thrown by a blow (`_flinch`)
 ##   death_b/f/s                                   by where the last blow came from
 ##
@@ -40,8 +41,10 @@ const CYCLES: Array[StringName] = [&"walk", &"run"]
 const STILL: Array[StringName] = [&"idle", &"idle_fight"]
 ## A taller capsule than enemy.tscn's: the head is up there to be hit.
 const HEIGHT := 2.1
+## How near it walks up to someone: its whole arm is the weapon.
+const STOP_AT := 1.0
 ## The amber eyes, in the skeleton's own space (+Y up, +Z its front).
-const EYE_POINTS: Array[Vector3] = [Vector3(0.031, 2.092, 0.086), Vector3(-0.031, 2.092, 0.086)]
+const EYE_POINTS: Array[Vector3] = [Vector3(-0.037, 2.035, 0.305), Vector3(0.031, 2.047, 0.277)]
 ## Where a blow's step should leave it from the player, centre to centre.
 const STANDOFF := 1.3
 ## The longest share of a clip's own step it will stretch or shrink to.
@@ -91,6 +94,7 @@ func _init() -> void:
 	hand = &"blade"
 	walk_anim_speed = WALK_SPEED
 	run_anim_speed = RUN_SPEED
+	stop_distance = STOP_AT
 
 
 ## The model goes in before the @onready lookups run.
@@ -143,7 +147,7 @@ func _setup_animations() -> void:
 	if anim == null:
 		return
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-	for looping: StringName in [&"idle", &"idle_fight", &"walk", &"run", &"turn_l", &"turn_r"]:
+	for looping: StringName in [&"idle", &"idle_fight", &"walk", &"run", &"turn_l", &"turn_r", &"haul", &"idle_haul"]:
 		anim.get_animation(looping).loop_mode = Animation.LOOP_LINEAR
 	_lift_roots()
 	var found := find_children("*", "Skeleton3D", true, false)
@@ -311,6 +315,9 @@ func _start_blow() -> void:
 	var player := _resolve_player()
 	if player != null:
 		need = Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length() - STANDOFF
+		# What the speed it comes in at will carry it anyway.
+		var coming := Vector2(velocity.x, velocity.z).length()
+		need -= coming * coming * 0.5 / CARRY_DECEL
 	if need < LONG_STEP:
 		clip = StringName(String(clip) + "_s")
 	var whole := _root_at(clip, 99.0)
@@ -394,31 +401,25 @@ func _tend_react() -> void:
 		_react.set("look_target", null)
 
 
-## Hauling a cart (convoy.gd): the walk, its arms on the handles, and the blade
-## carried up out of the way.
+## Hauling a cart (convoy.gd): the clip drags the blade behind it, clear of the cart.
+## There is no right hand to take a handle, so only the left arm is posed: the
+## right arm keeps the clip's pose, whatever convoy.gd asks of it.
 func _haul_anim(delta: float) -> void:
 	if anim == null:
 		return
-	var want := &"walk" if haul_speed > 0.15 else &"idle"
+	var want := &"haul" if haul_speed > 0.15 else &"idle_haul"
 	if anim.current_animation != want:
 		_switch(want, 1.0, BLEND_MOVE)
-	anim.speed_scale = clampf(haul_speed / WALK_SPEED, 0.5, 1.9) if want == &"walk" else 1.0
+	anim.speed_scale = clampf(haul_speed / WALK_SPEED, 0.5, 1.9) if want == &"haul" else 1.0
 	_advance_anim(delta)
+	var upper := _sk.find_bone("upper_arm.R")
+	var fore := _sk.find_bone("forearm.R")
+	var held := [_sk.get_bone_pose_rotation(upper), _sk.get_bone_pose_rotation(fore)]
 	if hauled_by.has_method("pose_hauler"):
 		hauled_by.call("pose_hauler", self)
-	_shoulder_blade()
+	_sk.set_bone_pose_rotation(upper, held[0])
+	_sk.set_bone_pose_rotation(fore, held[1])
 	_anim_stepped = false
-
-
-func _shoulder_blade() -> void:
-	var h := _sk.find_bone("hand.R")
-	var b := _sk.find_bone("blade")
-	if h < 0 or b < 0:
-		return
-	var pose := _sk.get_bone_global_pose(h)
-	var along := _sk.get_bone_global_pose(b).basis.y.normalized()
-	pose.basis = Basis(Quaternion(along, Vector3(0.1, 0.9, -0.42).normalized())) * pose.basis
-	_sk.set_bone_global_pose(h, pose)
 
 
 # --- Death ----------------------------------------------------------------------------

@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dtf60a2hrbecm"
-path.s3tc="res://.godot/imported/sword_skeleton_col.png-38c09a6a0eebbf77fa246e854ec81104.s3tc.ctex"
+uid="uid://dhv1d5j2ajcji"
+path.s3tc="res://.godot/imported/sword_skeleton_col.jpg-65064f8f44f6cddbc4b9c12d1c353530.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "58ea786c3785a7c8247bb7b15e5f9e80"
+"md5": "608fd7c5c1be2089a9180677d8806bb9"
 }
 
 [deps]
 
-source_file="res://models/sword_skeleton_col.png"
-dest_files=["res://.godot/imported/sword_skeleton_col.png-38c09a6a0eebbf77fa246e854ec81104.s3tc.ctex"]
+source_file="res://models/sword_skeleton_col.jpg"
+dest_files=["res://.godot/imported/sword_skeleton_col.jpg-65064f8f44f6cddbc4b9c12d1c353530.s3tc.ctex"]
 
 [params]
 
@@ -41,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1

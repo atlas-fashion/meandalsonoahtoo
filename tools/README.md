@@ -598,24 +598,29 @@ says false, delete its files in `.godot/imported/` and import again.
 
 ---
 
-# The sword skeleton (2026-10-30, Blender, note 135)
+# The sword skeleton (2026-10-30, Blender, notes 135, 136)
 
 ```
 blender -b --factory-startup -P tools/build_sword_skeleton.py                          # model, bake
-blender -b --factory-startup -P tools/build_sword_skeleton.py -- --no-bake             # keep the maps
-blender -b --factory-startup -P tools/build_sword_skeleton.py -- --preview <dir>       # Cycles renders, nothing saved
+blender -b --factory-startup -P tools/build_sword_skeleton.py -- --no-bake             # keep the normal map
 blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py   # clips, export
 blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py -- --check
 blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py -- --sheet <dir> [clip,clip]
 godot --headless --import --path .
 ```
 
-`build_sword_skeleton.py` needs no source and writes
-`models/source/sword_skeleton/sword_skeleton.blend` and its maps, in about a minute.
+`build_sword_skeleton.py` reads the user's Tripo model,
+`models/source/sword_skeleton/rusty metal golem 3d model.glb`, and writes
+`models/source/sword_skeleton/sword_skeleton.blend` and its maps, in a minute and a
+half. Keep that .glb under `models/source/`: it is 2 million triangles.
 It leaves the .blend without clips, so run `anim_sword_skeleton.py` after it, always:
 that adds the clips and exports `models/sword_skeleton.glb`. To change only an
-animation, run just the second one. `--check` prints each clip's worst jolt and
-exports nothing; `--sheet` renders strips of poses and exports nothing.
+animation, run just the second one. `--check` prints each clip's worst jolt, each arm's
+roll and, for a blow, the blade's path and how far its edge is off the cut, and exports
+nothing; `--sheet` renders strips of poses and exports nothing.
+
+The arms are joint angles (note 136): a roll is a key, never something an IK solve
+falls into. Run `--check` after touching a blow and read the `[roll]` line.
 
 The clip names and their lengths are read by `scripts/sword_skeleton.gd`, and
 `LIGHT` / `HEAVY` must stay equal to the timers in `enemy.gd` and `prosthetic.gd`.

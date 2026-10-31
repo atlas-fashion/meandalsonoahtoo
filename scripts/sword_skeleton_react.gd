@@ -22,6 +22,9 @@ const CHAIN := [
 	[&"upper_arm.R", &"clavicle.R", "arm_r", 1.0],
 ]
 const THIGHS := [[&"thigh.L", &"shin.L", &"foot.L"], [&"thigh.R", &"shin.R", &"foot.R"]]
+## Where the skull looks as it was modelled, in skeleton space (+Z the body's
+## front): turned to its left of the body and stooped.
+const HEAD_REST_FACE := Vector3(0.45, -0.34, 0.83)
 ## How far the head turns, and how fast it comes on.
 const LOOK_MAX := 1.15
 const LOOK_EASE := 3.5
@@ -57,7 +60,7 @@ func _find_bones(sk: Skeleton3D) -> void:
 	var k := sk.get_bone_global_rest(_ids[&"shin.L"]).origin
 	var f := sk.get_bone_global_rest(_ids[&"foot.L"]).origin
 	_leg = h.distance_to(k) + k.distance_to(f)
-	_head_face = sk.get_bone_global_rest(_ids[&"head"]).basis.inverse() * Vector3.BACK
+	_head_face = sk.get_bone_global_rest(_ids[&"head"]).basis.inverse() * HEAD_REST_FACE.normalized()
 
 
 func _track_of(a: Animation, bone_id: int) -> Array:

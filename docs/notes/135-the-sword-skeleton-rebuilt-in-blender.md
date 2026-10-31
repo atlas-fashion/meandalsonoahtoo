@@ -1,5 +1,8 @@
 ## 135. The sword skeleton rebuilt in Blender: a new body and every animation baked (2026-10-30)
 
+**Note 136 replaced this body and its blows with the user's rusty metal golem.** The
+game side below (root motion, inertialized switches, the numbers) still stands.
+
 Noah gave a concept image: very tall and gaunt, a patchwork of rusted scale plate
 eaten through with holes over maroon sinew and tan bone, a small bald skull in a
 mask of vertical slits, amber eyes, a long serrated blade, a bare-bone claw. The
