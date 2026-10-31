@@ -17,6 +17,8 @@ extends "res://scripts/prosthetic.gd"
 ##   out_1/2/3/h[s]_walk/run, out_g_walk/run       off out of a blow, or the guard
 ##   haul, idle_haul                               the blade dragged behind
 ##   stagger_b/f/l/r                               thrown by a blow (`_flinch`)
+##   strafe_l/r/f/b                                moving on guard, facing them (note 140)
+##   reel                                          parried (`reel_from`, note 140)
 ##   death_b/f/s                                   by where the last blow came from
 ##
 ## Every change of clip is inertialized (enforcer_react.gd `crossfade`, under
@@ -42,6 +44,12 @@ extends "res://scripts/prosthetic.gd"
 ## critically damped spring (`_turn_model`), and stood still that turning is what
 ## plays turn_l and turn_r. A turn too big for that is a pivot: the body waits and the
 ## clip's own turn, the `root` track's x, brings the model round on planted feet.
+##
+## The fight (note 140): close in it does not stand and swing. It circles on guard
+## (`_chase`, `_circle`) until it has a reason to go in: a blow ready and an opening, their
+## back, or the wait it set itself after the last exchange. Proels after the same player
+## spread out round them and take turns (`_take_turn`): one blow at a time, the next
+## going to whoever they are looking at least. None walks through another (`_keep_clear`).
 
 const MODEL := preload("res://models/sword_skeleton.glb")
 const REACT := preload("res://scripts/sword_skeleton_react.gd")
@@ -138,6 +146,55 @@ const TURN_SPRING_BLOW := 20.0
 const TURN_SPRING_LOADED := 6.0
 ## Under this it stands; over it, the turning shows in the feet.
 const TURN_SHOWS := 0.75
+## Moving on guard. What the strafe clips are authored for (tools/anim_sword_skeleton.py
+## `STRAFE_V`), the share of a clip it starts them at, with both feet nearest the
+## stance, and under what speed it just stands. It starts and stops heavily.
+const STRAFE_SPEED := 1.5
+const STRAFES: Array[StringName] = [&"strafe_l", &"strafe_r", &"strafe_f", &"strafe_b"]
+const STRAFE_FROM_GUARD := 0.3
+const STRAFE_STOP := 0.3
+const STRAFE_ACCEL := 10.0
+## Round a raised guard, faster, and for how long before it goes in anyway.
+const FLANK_SPEED := 2.2
+const FLANK_TIME := 1.6
+## How far it circles, edge to edge: alone, just out of reach; with others on them, a
+## step further out while one of them has them. Further than the slack beyond that it runs.
+const RING_CLOSE := 1.7
+const RING_WAIT := 2.7
+const RING_SLACK := 1.6
+## After an exchange it circles this share of the time, for this long.
+const CIRCLE_SHARE := 0.65
+const CIRCLE_LEAST := 0.7
+const CIRCLE_MOST := 2.2
+## How long it goes one way round, and how often it stops a moment instead.
+const WAY_LEAST := 0.9
+const WAY_MOST := 2.2
+const WAY_STAND := 0.3
+## Behind them, by this far off where they face: it does not wait for anything else.
+const BEHIND := 1.9
+## Stepping back out of a swing, when one starts this near.
+const EVADE_GAP := 2.0
+const EVADE_CHANCE := 0.5
+const EVADE_TIME := 0.42
+const EVADE_SPEED := 2.6
+## Parried: tools/anim_sword_skeleton.py `REEL`, which steps back `REEL_BACK`, 1.08 m. A
+## parried proel is wary: it circles this long before it goes in again.
+const REEL_TIME := 1.5
+const REEL_WARY := 0.8
+## Turns: the gap between one proel's swing ending and the next taking its turn, how long
+## one has to get to them, and how soon a parried one's fellows may step in.
+const TURN_GAP := 0.35
+const TURN_CLOSE := 2.2
+const TURN_PARRIED := 0.2
+## Keeping apart: how often it looks for its fellows and how far, how near one may come,
+## centre to centre, in a fight and walking about, and how hard they are parted, m/s at
+## touching. Its share of that in a blow: the one not swinging gets out of the way.
+const PACK_EVERY := 0.25
+const PACK_REACH := 12.0
+const SPACE_FIGHT := 1.7
+const SPACE_WALK := 1.2
+const SPACE_PUSH := 3.4
+const SPACE_IN_BLOW := 0.25
 ## How long a clip may take to settle in. A change of pace is slow; a blow, a
 ## telegraph the player reads, is quick.
 const BLEND_MOVE := 0.34
@@ -153,6 +210,8 @@ static var _roots := {}
 static var _yaws := {}
 static var _glow_hot: StandardMaterial3D
 static var _glow_out: StandardMaterial3D
+## Whose turn it is at each player: instance id -> {who, free_at}.
+static var _turns := {}
 
 var _model: Node3D = null
 var _sk: Skeleton3D = null
@@ -186,7 +245,28 @@ var _pivot_from := 0.0
 var _pivot_scale := 1.0
 ## Their swing: going now, and when it last ended.
 var _their_swing := false
+var _swing_began := false
 var _swing_ended_at := -INF
+## Circling them this tick, on guard; which way round (+1 is `_tangent`'s way); when it
+## next thinks again about that; stopped a moment; when it means to go in.
+var _circling := false
+var _way := 1.0
+var _way_until := 0.0
+var _way_stand := false
+var _circle_until := 0.0
+var _in_ring := false
+var _flank_until := -1.0
+var _evade_until := 0.0
+var _evade_dir := Vector3.ZERO
+var _reeling := false
+var _reel_until := 0.0
+## Its turn: when it must have got to them by, when it last had one, when it last wanted one.
+var _closing_until := 0.0
+var _last_turn := -INF
+var _wanted_at := -INF
+## The other proels near it, untyped: one may be freed before the next look.
+var _pack: Array = []
+var _next_pack := 0.0
 
 
 func _init() -> void:
@@ -220,6 +300,8 @@ func _enter_tree() -> void:
 
 func _ready() -> void:
 	super()
+	add_to_group(&"proels")
+	_next_pack = _now() + randf() * PACK_EVERY
 	_shown_yaw = rotation.y
 	# Whoever placed it may turn it after it enters the tree.
 	_settle_yaw.call_deferred()
@@ -247,7 +329,7 @@ func _setup_animations() -> void:
 	if anim == null:
 		return
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-	for looping: StringName in [&"idle", &"idle_fight", &"walk", &"run", &"turn_l", &"turn_r", &"turn_gl", &"turn_gr", &"haul", &"idle_haul"]:
+	for looping: StringName in [&"idle", &"idle_fight", &"walk", &"run", &"turn_l", &"turn_r", &"turn_gl", &"turn_gr", &"haul", &"idle_haul", &"strafe_l", &"strafe_r", &"strafe_f", &"strafe_b"]:
 		anim.get_animation(looping).loop_mode = Animation.LOOP_LINEAR
 	_lift_roots()
 	var found := find_children("*", "Skeleton3D", true, false)
@@ -327,6 +409,48 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void
 	super(amount, _from_direction)
 
 
+## Reeling is not shoved about: the opening lasts its own length.
+func apply_knockback(impulse: Vector3, stun_time := 0.25) -> void:
+	if _reeling:
+		return
+	super(impulse, stun_time)
+
+
+## Parried (player.gd `_on_guarded`, note 140): no throw. Whatever it was doing is over,
+## and it reels back on its own feet, as far as the clip steps (`_slide`), stunned for
+## the length of it. Its fellows may step in at once.
+func reel_from(away: Vector3) -> void:
+	if _dying or caged:
+		return
+	if anim == null:
+		super.apply_knockback(away * 3.0, REEL_TIME)
+		return
+	_knockback = Vector3.ZERO
+	_attack_connected = true
+	if state != State.CHASE:
+		_enter_chase()
+	var now := _now()
+	_hand_on(now + TURN_PARRIED)
+	_closing_until = 0.0
+	_stun_until = maxf(_stun_until, now + REEL_TIME)
+	_reel_until = now + REEL_TIME
+	_reeling = true
+	_cooldowns[Attack.NORMAL] = maxf(_ready_at(Attack.NORMAL), _reel_until)
+	_cooldowns[Attack.SLAM] = maxf(_ready_at(Attack.SLAM), _reel_until)
+	_circle_until = _reel_until + REEL_WARY
+	_face(-away)
+	_switch(&"reel", 1.0, BLEND_HIT)
+	_blow = &"reel"
+	_blow_t = 0.0
+	_blow_scale = 1.0
+	_carry = Vector3.ZERO
+
+
+func _end_reel() -> void:
+	_reeling = false
+	_blow = &""
+
+
 ## Thrown by a blow: a stumble the way it was thrown.
 func _flinch(impulse: Vector3, _time: float) -> void:
 	if _dying or anim == null:
@@ -353,6 +477,8 @@ func _play_state_anim(which: StringName, _duration: float) -> void:
 		ANIM_WINDUP:
 			_start_blow()
 		ANIM_IDLE:
+			if _blow != &"":
+				_after_exchange()
 			_blow = &""
 			_next = &""
 			_out = false
@@ -392,7 +518,10 @@ func _update_locomotion() -> void:
 	if speed < PIVOT_SPEED and absf(off) > PIVOT_FROM and not caged and _shown_close():
 		_start_pivot(off)
 		return
-	if speed >= to_run:
+	if _circling and engaged and speed > STRAFE_STOP:
+		want = _strafe_clip(moving)
+		rate = clampf(speed / STRAFE_SPEED, 0.6, 1.75)
+	elif speed >= to_run:
 		want = &"run"
 		rate = clampf(speed / RUN_SPEED, 0.6, 1.5)
 	elif speed > to_walk:
@@ -432,8 +561,8 @@ func _update_locomotion() -> void:
 ## Is the rig in the fighting stance at the end of this clip? Every blow ends there.
 static func _on_guard(clip: StringName) -> bool:
 	var name_ := String(clip)
-	return clip == &"idle_fight" or clip == &"turn_gl" or clip == &"turn_gr" or name_.begins_with("gpivot") \
-		or name_.begins_with("slash") or name_.begins_with("heavy") or name_.begins_with("link")
+	return clip == &"idle_fight" or clip == &"turn_gl" or clip == &"turn_gr" or clip == &"reel" or name_.begins_with("gpivot") \
+		or name_.begins_with("slash") or name_.begins_with("heavy") or name_.begins_with("link") or name_.begins_with("strafe")
 
 
 ## Puts `clip` on the rig, the old pose decaying into it. Walk and run take over
@@ -454,6 +583,8 @@ func _switch(clip: StringName, rate: float, blend: float) -> void:
 			at = 0.52
 	elif clip == &"turn_gl" or clip == &"turn_gr":
 		at = TURN_FROM_GUARD
+	elif clip in STRAFES:
+		at = STRAFE_FROM_GUARD
 	if _react != null:
 		_react.call("crossfade", blend)
 	_rate = rate
@@ -658,10 +789,15 @@ func _press_on(player: Node3D) -> float:
 
 
 ## The light or the heavy, when both are ready: whichever ends it, or gets through a guard.
+## Nothing at all unless it is its turn.
 func _pick_attack(gap: float, now: float) -> int:
 	var kind := super(gap, now)
 	var player := _resolve_player()
-	if kind < 0 or player == null or now < _ready_at(Attack.SLAM) or now < _ready_at(Attack.NORMAL):
+	if kind < 0 or player == null:
+		return kind
+	if not _take_turn(player, now):
+		return -1
+	if now < _ready_at(Attack.SLAM) or now < _ready_at(Attack.NORMAL):
 		return kind
 	var guarded := _guarded(player)
 	if _finishes(player, attack_damage, guarded):
@@ -679,6 +815,7 @@ func _watch_player() -> void:
 	var swinging: bool = player.get("_attacking") == true
 	if _their_swing and not swinging:
 		_swing_ended_at = _now()
+	_swing_began = swinging and not _their_swing
 	_their_swing = swinging
 	if state == State.CHASE and engaged and _flat_to(player) <= CHAIN_REACH and _open(player):
 		_cooldowns[Attack.NORMAL] = minf(_ready_at(Attack.NORMAL), _now())
@@ -689,9 +826,283 @@ func _on_blow_landed(player: Node3D, kind: int) -> void:
 	_result = &"blocked" if _guarded(player) else &"hit"
 
 
+# --- The fight ------------------------------------------------------------------------
+#
+# Close in it is on guard and on the move. It goes in when a blow is ready and there is
+# something to go in for; the rest of the time it circles, to where a guard does not
+# cover, or to where a fellow is not. Out of sight, on another level or far off, the
+# ordinary hunt (enemy.gd) brings it up.
+
+func _chase(delta: float, now: float, player: Node3D, flat: Vector3, _distance: float, gap: float) -> bool:
+	_circling = false
+	if _out:
+		return false
+	var fellows := _fellows(player)
+	var ring := RING_CLOSE if fellows == 0 else RING_WAIT
+	var seen := now + sight_memory - _seen_until < 0.4
+	if gap > ring + RING_SLACK or not seen or absf(player.global_position.y - global_position.y) > 1.2:
+		_in_ring = false
+		return false
+	if not _in_ring:
+		_in_ring = true
+		# Coming up on them it may go straight in, or size them up first.
+		if randf() < 0.5:
+			_circle_until = maxf(_circle_until, now + randf_range(CIRCLE_LEAST, CIRCLE_MOST * 0.7))
+	# Going in: enemy.gd's chase brings it to reach and `_pick_attack` swings.
+	if _my_turn(player):
+		return false
+	var n := flat.normalized() if flat.length_squared() > 0.0001 else -global_basis.z
+	# A swing starting is no time to walk in: it steps out, and comes back as it lands.
+	if _swing_began and gap < EVADE_GAP and randf() < EVADE_CHANCE:
+		_evade_until = now + EVADE_TIME
+		_evade_dir = (-n + _tangent(n) * randf_range(-0.6, 0.6)).normalized()
+	var front := _guarded(player)
+	if front and _flank_until < 0.0:
+		_flank_until = now + FLANK_TIME
+	elif not front:
+		_flank_until = -1.0
+	if now >= _evade_until and _wants_blow(now, player, front) and _take_turn(player, now):
+		return false
+	_circling = true
+	_face(flat)
+	if now < _evade_until:
+		velocity.x = move_toward(velocity.x, _evade_dir.x * EVADE_SPEED, acceleration * delta)
+		velocity.z = move_toward(velocity.z, _evade_dir.z * EVADE_SPEED, acceleration * delta)
+		_slide()
+		return true
+	_circle(delta, now, player, n, gap, ring, fellows, front)
+	return true
+
+
+## Something to go in for, with a blow ready.
+func _wants_blow(now: float, player: Node3D, front: bool) -> bool:
+	if now < minf(_ready_at(Attack.NORMAL), _ready_at(Attack.SLAM)):
+		return false
+	if _open(player) or _behind(player):
+		return true
+	# Round a raised guard first, for as long as that is worth it.
+	if front and now < _flank_until:
+		return false
+	return now >= _circle_until or _nearly_dead(player)
+
+
+## How far off where they face it stands: 0 dead ahead of them, PI at their back.
+func _off_their_face(player: Node3D) -> float:
+	var facing := -player.global_basis.z
+	var to_it := global_position - player.global_position
+	facing.y = 0.0
+	to_it.y = 0.0
+	if facing.length_squared() < 1e-4 or to_it.length_squared() < 1e-4:
+		return 0.0
+	return facing.angle_to(to_it)
+
+
+func _behind(player: Node3D) -> bool:
+	return _off_their_face(player) > BEHIND
+
+
+## Which way round them `_way` +1 means, from `n`, the way to them.
+func _tangent(n: Vector3) -> Vector3:
+	return Vector3(-n.z, 0.0, n.x)
+
+
+## One tick on guard: round them and at its distance from them. Which way is thought
+## about now and then; a fellow too near on the ring is seen to as soon as it is noticed.
+func _circle(delta: float, now: float, player: Node3D, n: Vector3, gap: float, ring: float, fellows: int, front: bool) -> void:
+	var away := _spread_way(player, n, fellows)
+	if away != 0.0:
+		_way = away
+		_way_stand = false
+		_way_until = maxf(_way_until, now + 0.3)
+	elif now >= _way_until:
+		_way_until = now + randf_range(WAY_LEAST, WAY_MOST)
+		_way_stand = randf() < WAY_STAND and not front
+		if front or fellows > 0:
+			_way = _blind_way(player, n)
+		elif randf() < 0.55:
+			_way = -_way
+	var speed := FLANK_SPEED if front and now < _flank_until else STRAFE_SPEED
+	var want := _tangent(n) * _way * (0.0 if _way_stand else speed)
+	want += n * clampf(gap - ring, -1.0, 1.0) * STRAFE_SPEED
+	if want.length() > speed * 1.3:
+		want = want.normalized() * speed * 1.3
+	velocity.x = move_toward(velocity.x, want.x, STRAFE_ACCEL * delta)
+	velocity.z = move_toward(velocity.z, want.z, STRAFE_ACCEL * delta)
+	_slide()
+	if is_on_wall() and now >= _way_until - WAY_LEAST + 0.5:
+		_way = -_way
+		_way_until = now + WAY_LEAST
+
+
+## The way round that takes it from where they face. A guard covers only the front
+## (player.gd `_guard`), and they can only watch one of them.
+func _blind_way(player: Node3D, n: Vector3) -> float:
+	var facing := -player.global_basis.z
+	return 1.0 if facing.z * -n.x - facing.x * -n.z >= 0.0 else -1.0
+
+
+## The way round away from the fellow nearest it round the player, if one is nearer than
+## their share of the circle, else 0.
+func _spread_way(player: Node3D, n: Vector3, fellows: int) -> float:
+	if fellows == 0:
+		return 0.0
+	var mine := atan2(-n.x, -n.z)
+	var nearest := PI
+	for o in _pack:
+		if _with_me(o, player):
+			var to: Vector3 = o.global_position - player.global_position
+			var a := wrapf(atan2(to.x, to.z) - mine, -PI, PI)
+			if absf(a) < absf(nearest):
+				nearest = a
+	if absf(nearest) >= minf(TAU / float(fellows + 1) * 0.75, 1.5):
+		return 0.0
+	return -1.0 if nearest > 0.0 else 1.0
+
+
+## The strafe clip for the way it is going. A clip keeps playing until the
+## other axis is clearly more of the speed, so a diagonal does not flicker between two.
+func _strafe_clip(moving: Vector3) -> StringName:
+	var ahead := moving.dot(-global_basis.z)
+	var side := moving.dot(-global_basis.x)
+	var now := anim.current_animation
+	var keep_side := 1.4 if now == &"strafe_l" or now == &"strafe_r" else 1.0
+	var keep_line := 1.4 if now == &"strafe_f" or now == &"strafe_b" else 1.0
+	if absf(side) * keep_side >= absf(ahead) * keep_line:
+		return &"strafe_l" if side > 0.0 else &"strafe_r"
+	return &"strafe_f" if ahead > 0.0 else &"strafe_b"
+
+
+## After a blow, unless it has them or something opens up first, it gets back on guard
+## and works round them for a while.
+func _after_exchange() -> void:
+	if _reeling:
+		return
+	_flank_until = -1.0
+	var wait := randf_range(CIRCLE_LEAST, CIRCLE_MOST) if randf() < CIRCLE_SHARE else 0.0
+	_circle_until = maxf(_circle_until, _now() + wait)
+
+
+# --- Taking turns ---------------------------------------------------------------------
+#
+# One proel at a time goes in on a player. The turn runs from when it sets off until its
+# chain is done with, then the next may take it; a blow is telegraphed long before it
+# lands, so the second is coming as the first is getting its blade back. Each asks for
+# itself; any others asking at that moment are weighed against it (`_turn_score`).
+
+func _fellows(player: Node3D) -> int:
+	var n := 0
+	for o in _pack:
+		if _with_me(o, player):
+			n += 1
+	return n
+
+
+## Untyped: `o` may have been freed since the last look.
+func _with_me(o, player: Node3D) -> bool:
+	return is_instance_valid(o) and o.get("_dying") != true and o.get("engaged") == true and o.get("_player") == player
+
+
+## Is it going in, or in the middle of it? A stun ends a turn.
+func on_turn() -> bool:
+	if _dying or is_stunned():
+		return false
+	if state == State.WINDUP or state == State.ATTACK:
+		return true
+	if state == State.RECOVER:
+		return _next != &"" or (_may_go_on() and not _chain_asked)
+	return _now() < _closing_until
+
+
+func _my_turn(player: Node3D) -> bool:
+	var turn = _turns.get(player.get_instance_id())
+	return turn != null and turn["who"] == self and on_turn()
+
+
+func _take_turn(player: Node3D, now: float) -> bool:
+	if _my_turn(player):
+		return true
+	_wanted_at = now
+	var turn = _turns.get(player.get_instance_id())
+	if turn != null:
+		var who = turn["who"]
+		if is_instance_valid(who) and who.call("on_turn"):
+			return false
+		if now < float(turn["free_at"]):
+			return false
+	var mine := turn_score(player, now)
+	for o in _pack:
+		if _with_me(o, player) and now - float(o.get("_wanted_at")) < 0.2 and float(o.call("turn_score", player, now)) > mine:
+			return false
+	_turns[player.get_instance_id()] = {"who": self, "free_at": 0.0}
+	_closing_until = now + TURN_CLOSE
+	_last_turn = now
+	return true
+
+
+## Who goes next: the one it has been longest since, the one furthest from where they
+## are looking, and the one nearest.
+func turn_score(player: Node3D, now: float) -> float:
+	return minf(now - _last_turn, 6.0) * 0.4 + _off_their_face(player) / PI * 2.0 - _flat_to(player) * 0.25
+
+
+## The turn may pass to another from `at`.
+func _hand_on(at: float) -> void:
+	var player := _player
+	if player == null or not is_instance_valid(player):
+		return
+	var turn = _turns.get(player.get_instance_id())
+	if turn != null and turn["who"] == self:
+		turn["free_at"] = at
+
+
+# --- Keeping apart --------------------------------------------------------------------
+
+func _look_for_fellows(now: float) -> void:
+	if now < _next_pack:
+		return
+	_next_pack = now + PACK_EVERY
+	_pack.clear()
+	if caged or hauled_by != null:
+		return
+	for node in get_tree().get_nodes_in_group(&"proels"):
+		var o := node as Node3D
+		if o != self and o.get("_dying") != true and o.get("caged") != true and o.get("_dormant") != true \
+				and global_position.distance_squared_to(o.global_position) < PACK_REACH * PACK_REACH:
+			_pack.append(o)
+
+
+## No walking into a fellow, and two too near are eased apart. The capsules are far
+## narrower than the body and its blade, and on the march a patrol's members do not
+## collide at all (patrol.gd). The parting is a move of its own, not `velocity`, which
+## would keep it and add to it every tick. Returns the move to make after the slide.
+func _keep_clear() -> Vector3:
+	var parted := Vector3.ZERO
+	var space := SPACE_FIGHT if engaged else SPACE_WALK
+	for o in _pack:
+		if not is_instance_valid(o) or o.get("_dying") == true:
+			continue
+		var from: Vector3 = global_position - o.global_position
+		if absf(from.y) > 1.5:
+			continue
+		from.y = 0.0
+		var d := from.length()
+		if d >= space:
+			continue
+		var away := from / d if d > 0.01 else Vector3(cos(rotation.y), 0.0, sin(rotation.y))
+		var inward := -Vector3(velocity.x, 0.0, velocity.z).dot(away)
+		if inward > 0.0:
+			var lose := inward * minf((1.0 - d / space) * 4.0, 1.0)
+			velocity.x += away.x * lose
+			velocity.z += away.z * lose
+		parted += away * (1.0 - d / space) * SPACE_PUSH
+	var in_blow := _blow != &"" and not _out
+	return parted * (SPACE_IN_BLOW if in_blow else 1.0)
+
+
 # --- Blows ----------------------------------------------------------------------------
 
 func _start_blow() -> void:
+	_closing_until = 0.0
 	if _next != &"":
 		_start_link()
 		return
@@ -741,6 +1152,7 @@ func _windup_for(kind: int) -> float:
 func _enter_recover() -> void:
 	super()
 	_chain_asked = false
+	_hand_on(_now() + TURN_GAP)
 	if not _may_go_on():
 		_rest()
 
@@ -871,18 +1283,24 @@ func _slide() -> void:
 		fwd = fwd.normalized()
 		velocity.x = fwd.x * step / dt + _carry.x
 		velocity.z = fwd.z * step / dt + _carry.z
+	var parted := _keep_clear()
 	super()
+	if parted != Vector3.ZERO:
+		move_and_collide(parted * get_physics_process_delta_time())
 
 
 # --- Each tick ------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
+	if _reeling and _now() >= _reel_until:
+		_end_reel()
 	super(delta)
 	if _dying:
 		_advance_anim(delta)
 		return
 	if _dormant or _model == null:
 		return
+	_look_for_fellows(_now())
 	_turn_model(delta)
 	_tend_chain(delta)
 	_watch_player()
@@ -971,6 +1389,7 @@ func _haul_anim(delta: float) -> void:
 
 ## It falls the way the blow would throw it, lies there, and goes.
 func _fold_up() -> void:
+	_reeling = false
 	_blow = &""
 	_next = &""
 	_model.rotation.z = 0.0

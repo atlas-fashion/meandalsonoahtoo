@@ -2492,7 +2492,11 @@ func _on_guarded(parry: bool, blow: Vector3, attacker: Node3D, blow_damage := 0.
 			var away := attacker.global_position - global_position
 			away.y = 0.0
 			away = away.normalized() if away.length_squared() > 0.0001 else -global_basis.z
-			attacker.apply_knockback(away * parry_push, parry_stun)
+			# A proel takes it on its own feet (note 140): no throw.
+			if attacker.has_method("reel_from"):
+				attacker.call("reel_from", away)
+			else:
+				attacker.apply_knockback(away * parry_push, parry_stun)
 		# Its own blow, turned back on it. After the shove, so a blow that kills
 		# it does not shove a corpse.
 		if attacker != null and is_instance_valid(attacker) and attacker.has_method("take_damage") \

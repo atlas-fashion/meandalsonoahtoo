@@ -1523,6 +1523,124 @@ def out_clip(src, t0, L0, g, gait_fn, stride=1.75):
     return fn, T
 
 
+# --- Moving on guard ----------------------------------------------------------------------
+#
+# Circling someone (note 140): the body faces them and the feet go wherever it is going.
+# A foot is the walk's own (`foot_at`), run along the way it is going from where the
+# fighting stance has it, so the right foot stays ahead and the left behind, each on its
+# own line, and they pass each other as a walk's do. The hips and feet turn a share of
+# the way toward the going, and the chest turns back by as much: the blade stays on them.
+
+STRAFE_V = 1.5      # sword_skeleton.gd STRAFE_SPEED
+STRAFE_T = 1.0
+STRAFE_S = 0.6
+STRAFE_HIP = 0.33
+STRAFE_FOOT = 0.42
+
+
+def strafe(deg):
+    """`deg`: the way it goes, 90 to its left, -90 to its right, 0 straight at them."""
+    T, S = STRAFE_T, STRAFE_S
+    s = STRAFE_V * T * S
+    th = rad(deg)
+    dx, dy = math.sin(th), -math.cos(th)
+    side = abs(math.sin(th))
+    heel, toe = 16.0 - 9.0 * side, 28.0 - 12.0 * side
+    hip = deg * STRAFE_HIP
+    fy = deg * STRAFE_FOOT
+    # Going ahead the two lines close up: the stance's stagger is no use to a walk.
+    al = (STANCE["l"][0], STANCE["l"][1] * (0.4 + 0.6 * side))
+    ar = (STANCE["r"][0], STANCE["r"][1] * (0.4 + 0.6 * side))
+    # The hips go over whichever foot is down, across the way it is going.
+    nx, ny = -dy, dx
+    if (al[0] - ar[0]) * nx + (al[1] - ar[1]) * ny < 0.0:
+        nx, ny = -nx, -ny
+
+    def foot(a, phi, yaw):
+        y, z, pitch, tb = foot_at(phi, T, S, s, heel, toe, 0.16, 0.56, 0.07, 0.0)
+        return (V(a[0] - dx * y, a[1] - dy * y, z), pitch, yaw, 0.0, tb)
+
+    def fn(t, _L):
+        phi = (t / T) % 1.0
+        c, sn = math.cos, math.sin
+        sp = fight_base(t, T)
+        sp.foot_l = foot(al, phi, STANCE["yl"] + fy)
+        sp.foot_r = foot(ar, phi + 0.5, STANCE["yr"] + fy)
+        shift = 0.032 * sn(TAU * (phi + 0.04))
+        p = sp.pelvis
+        sp.pelvis = V(p.x + nx * shift, p.y + ny * shift, p.z - 0.014 * c(2.0 * TAU * (phi + 0.02)))
+        swing = 6.0 * c(TAU * (phi + 0.01))
+        sp.pelvis_q = rz(rad(16.0 + hip - swing)) @ rx(rad(7.0 + 3.0 * c(th))) @ ry(rad(3.0 * sn(th) - 2.5 * sn(TAU * (phi + 0.05))))
+        a = sp.spine
+        sp.spine = (a[0] + 1.2 * c(2.0 * TAU * (phi - 0.1)), a[1] - hip + swing * 0.8, a[2] + 1.8 * sn(TAU * (phi + 0.05)))
+        sp.neck = (sp.neck[0], sp.neck[1] - swing * 0.2, sp.neck[2])
+        # Both arms ride it a beat late, the blade later: it weighs more.
+        r = sp.arm_r
+        sag = c(TAU * (phi - 0.2))
+        sp.arm_r = (r[0] + 2.0 * sag, r[1] + 1.5 * sn(TAU * (phi - 0.2)), r[2] - 2.5 * sag)
+        sp.hand_r = wrist(GUARD["wr"][0] + 1.5 * c(TAU * (phi - 0.3)), GUARD["wr"][1], 0.0)
+        l = sp.arm_l
+        sp.arm_l = (l[0] - 6.0 * c(TAU * (phi - 0.08)), l[1] + 2.0 * sn(TAU * phi), l[2] + 4.0 * c(TAU * (phi - 0.14)))
+        sp.curl = 0.5 + 0.06 * sn(TAU * (phi + 0.1))
+        return sp
+
+    return fn, T
+
+
+def strafe_back():
+    """Backing off on guard: the guarded walk played backward, so the toe lands first."""
+    fwd, T = strafe(0.0)
+
+    def fn(t, L):
+        return fwd((L - t) % L, L)
+
+    return fn, T
+
+
+# --- Parried ------------------------------------------------------------------------------
+#
+# The blade is turned back on it (note 140): the arm is flung wide and the chest goes back
+# after it, and it reels back in two steps and a third, buckling. It stands hunched a
+# moment with the blade hanging, the clang still in the arm, then hauls the guard back up.
+# A blow's clock, so it ends on idle_fight's first frame at no speed.
+
+REEL = 1.5          # sword_skeleton.gd REEL_TIME
+REEL_BACK = 1.08
+
+
+def reel():
+    bl = Blow(1.3, 1.1)
+    b = _b()
+    back = REEL_BACK
+    bl.key("root", [(0.0, 0.0), (0.12, -0.12), (0.3, -0.38), (0.52, -0.74), (0.78, -1.0), (1.0, -back), (1.3, -back)])
+    bl.feet("l", [(0.04, 0.3, (0.2, 0.84), 24.0, 0.07), (0.62, 0.86, (STANCE["l"][0], STANCE["l"][1] + back), STANCE["yl"], 0.05)])
+    bl.feet("r", [(0.18, 0.5, (-0.17, 0.4), -10.0, 0.07), (0.9, 1.16, (STANCE["r"][0], STANCE["r"][1] + back), STANCE["yr"], 0.04)])
+    bl.key("pelvis", [(0.0, b["p"]), (0.14, (0.02, 0.1, 1.22)), (0.34, (0.01, 0.08, 1.19)), (0.6, (-0.02, -0.03, 1.15)), (0.85, (0.0, -0.04, 1.17)), (1.1, (0.01, -0.01, 1.22)), (1.3, b["p"])])
+    bl.key("pq", [(0.0, b["pq"]), (0.14, (-8.0, 30.0, -4.0)), (0.34, (-4.0, 26.0, -6.0)), (0.6, (16.0, 10.0, 4.0)), (0.85, (14.0, 6.0, -3.0)), (1.1, (9.0, 14.0, 0.0)), (1.3, b["pq"])])
+    bl.key("spine", [(0.0, b["spine"]), (0.14, (-16.0, 14.0, -4.0)), (0.34, (-10.0, 10.0, -6.0)), (0.6, (20.0, -4.0, 6.0)), (0.85, (18.0, -10.0, -4.0)), (1.1, (11.0, -8.0, 0.0)), (1.3, b["spine"])])
+    bl.key("neck", [(0.0, b["neck"]), (0.18, (-10.0, 2.0, 0.0)), (0.4, (-4.0, 0.0, 3.0)), (0.62, (8.0, -6.0, 0.0)), (0.9, (6.0, 4.0, -2.0)), (1.3, b["neck"])])
+    bl.key("head", [(0.0, b["head"]), (0.2, (-34.0, 0.0, -6.0)), (0.42, (-26.0, 6.0, 6.0)), (0.64, (-6.0, -8.0, 0.0)), (0.86, (-8.0, 10.0, -3.0)), (1.05, (-14.0, -6.0, 2.0)), (1.3, b["head"])])
+    # Swing, out, roll: wide, then hanging, then hauled up. The elbow is opened by the blow.
+    bl.key("arm", [(0.0, b["arm"]), (0.14, (52.0, 58.0, 4.0)), (0.34, (30.0, 66.0, 2.0)), (0.6, (24.0, 48.0, 6.0)), (0.85, (20.0, 38.0, 8.0)), (1.1, (22.0, 28.0, 10.0)), (1.3, b["arm"])])
+    bl.key("elbow", [(0.0, b["el"]), (0.14, 34.0), (0.34, 28.0), (0.6, 30.0), (0.85, 40.0), (1.1, 60.0), (1.3, b["el"])])
+    bl.key("wrist", [(0.0, b["wrist"]), (0.14, (-16.0, -10.0, 0.0)), (0.6, (-6.0, -8.0, 0.0)), (1.3, b["wrist"])])
+    bl.key("arm_l", [(0.0, b["al"]), (0.16, (8.0, 58.0, 30.0)), (0.4, (-6.0, 50.0, 22.0)), (0.62, (18.0, 34.0, 34.0)), (0.9, (26.0, 26.0, 52.0)), (1.3, b["al"])])
+    bl.key("curl", [(0.0, 0.5), (0.14, 0.2), (0.6, 0.85), (1.3, 0.5)])
+    bl.key("clav_r", [(0.0, (0.0, 0.0)), (0.14, (5.0, -4.0)), (0.6, (-6.0, 3.0)), (1.3, (0.0, 0.0))])
+    bl.key("clav_l", [(0.0, (0.0, 0.0)), (0.16, (4.0, -3.0)), (0.6, (-4.0, 2.0)), (1.3, (0.0, 0.0))])
+    keyed = blow_clip(bl)
+
+    def fn(t, L):
+        sp = keyed(t, L)
+        # The clang, ringing out through the arm.
+        ring = smr(t, 0.1, 0.22) * (1.0 - smr(t, 0.5, 1.0)) * math.sin(TAU * 11.0 * t)
+        r = sp.arm_r
+        sp.arm_r = (r[0], r[1], r[2] + 1.6 * ring)
+        return sp
+
+    return fn, bl.L
+
+
 # --- Bake -----------------------------------------------------------------------------
 
 CLIPS = []
@@ -1573,6 +1691,9 @@ def make_clips():
             once(name + side + "b", pivot(s, 180, guard))
     for d in "bflr":
         once("stagger_" + d, stagger(d))
+    for tag, fn_len in (("l", strafe(90.0)), ("r", strafe(-90.0)), ("f", strafe(0.0)), ("b", strafe_back())):
+        loop("strafe_" + tag, fn_len[0], fn_len[1])
+    once("reel", reel())
     once("death_b", death_back())
     once("death_f", death_fwd())
     once("death_s", death_side())
@@ -1721,7 +1842,7 @@ def bake_clip(arm, name, fn, L, loop_):
         rootz.append(-sp.root.y)
         # A leg stretched past its reach leaves its planted foot behind.
         stretch = max(stretch, (s.P["foot.L"] - sp.foot_l[0]).length, (s.P["foot.R"] - sp.foot_r[0]).length)
-        if base in BLOWS or name.startswith(("link_", "out_", "gpivot_", "pivot_")):
+        if base in BLOWS or name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel")):
             edge_at = s.P["blade"] + (tip - s.P["blade"]) * 0.2
             for b0, b1, thick in CLEAR:
                 gap = seg_gap(edge_at, tip, s.P[b0], s.P[b1]) - thick
@@ -1746,7 +1867,7 @@ def bake_clip(arm, name, fn, L, loop_):
         pace_report(name, tips, w, w + a)
         reach_report(name, elbows, tips, rootz, w, w + a)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
-    if name.startswith(("link_", "out_", "gpivot_", "pivot_")):
+    if name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel")):
         v = [(tips[i + 1] - tips[i]).length * FPS for i in range(len(tips) - 1)]
         print("[pace]  %-12s tip mean %.1f peak %.1f m/s @ %.2f" % (name, sum(v) / len(v), max(v), v.index(max(v)) / FPS), flush=True)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
@@ -1856,6 +1977,11 @@ def seam_report():
             base = fight_base if name.startswith("g") else (lambda: idle(0.0, 6.0))
             b = seen_at(lambda _t, _L: base(), 0.0, 1.0)
             print("[pivot] %-12s %.2f s   starts %.4f, ends %.4f off the stance, turned %.1f degrees" % (name, L, worst_gap(seen_at(fn, 0.0, L), b)[0], worst_gap(seen_at(fn, L, L), b)[0], math.degrees(fn(L, L).root.x)), flush=True)
+    for name, (fn, L) in fns.items():
+        if name.startswith("strafe_"):
+            print("[strafe] %-11s loop %.4f (%s), feet at the stance's distance from %.3f, ankle low %.3f" % (name, worst_gap(seen_at(fn, 0.0, L), seen_at(fn, L - 1e-6, L))[0], worst_gap(seen_at(fn, 0.0, L), seen_at(fn, L - 1e-6, L))[1], min((solve(fn(i * L / 60.0, L)).P["foot.L"] - solve(fn(i * L / 60.0, L)).P["foot.R"]).length for i in range(60)), min(fn(i * L / 60.0, L).foot_l[0].z for i in range(60))), flush=True)
+        if name == "reel":
+            print("[reel]  %.2f s   starts %.4f off the guard, ends %.4f (%s), back %.2f m, tip speed at -0.3 .. -0.05 s: %s" % (L, worst_gap(seen_at(fn, 0.0, L), guard)[0], worst_gap(seen_at(fn, L, L), guard)[0], worst_gap(seen_at(fn, L, L), guard)[1], fn(L, L).root.y, " ".join("%.1f" % ((seen_at(fn, L - a + 1.0 / FPS, L)["tip"] - seen_at(fn, L - a, L)["tip"]).length * FPS) for a in (0.3, 0.2, 0.1, 0.05))), flush=True)
 
 
 def sheet(arm, actions, out_dir, only, count=9):
