@@ -626,7 +626,10 @@ The clip names and their lengths are read by `scripts/sword_skeleton.gd`, and
 `LIGHT` / `HEAVY` must stay equal to `BLADE_*` and `HEAVY_*` in `prosthetic.gd`, or the
 ATTACK window slides off the swing. After touching a blow, read `[reach]` (it must land
 inside the window) and `[pace]` as well. A blow's weight is timing, and the end of a
-swing is judged in world space: note 137.
+swing is judged in world space: note 137. `LINK`, `LINK_OUT` and `LINK_IN` must stay equal
+to `LINK_TIME`, `CHAIN_OUT` and `CHAIN_IN` in `sword_skeleton.gd`. Read `[seam]` (a blow ends
+on idle_fight's first frame, at no speed) and `[link]` (a link joins its two blows in place
+and speed, and needs no blend): note 138.
 `models/sword_skeleton.glb.import` must keep `animation/fps=60`, and the three maps
 `compress/mode=2`, as the scout's. After replacing a map, delete
 `.godot/imported/sword_skeleton*` and the three extracted maps, then import.

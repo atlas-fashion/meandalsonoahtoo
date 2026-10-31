@@ -1,4 +1,4 @@
-﻿"""Every animation of the sword skeleton (notes 135, 136), and the export.
+"""Every animation of the sword skeleton (notes 135, 136), and the export.
 
     blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py
     blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py -- --check
@@ -32,7 +32,8 @@ stay exactly where they are put.
     wind-up, swing and recovery, on enemy.gd's own clock (LIGHT and HEAVY), so
     nothing has to blend inside a blow. Their weight is timing (note 137): a long
     lift, a short swing, and a swing that does not stop where the blow ends. The
-    beats are set out above `slash_1`.
+    beats are set out above `slash_1`. A LINK (note 138) takes one blow's recovery
+    into another's wind-up, so a chain of them does not blend either.
 
 `root` is the root motion: where the body goes. The game takes that track out
 of the clip and moves the CharacterBody3D by it, so a planted foot stays planted
@@ -66,8 +67,12 @@ TAU = math.tau
 # The light slice's and the heavy's three phases: wind-up, swing, recovery. These are
 # prosthetic.gd's BLADE_* and HEAVY_* and sword_skeleton.gd plays them at 1x, so the
 # swing here is enemy.gd's ATTACK state and the blade can only hurt in it. Change both.
-LIGHT = (0.9, 0.24, 1.0)
-HEAVY = (1.25, 0.3, 1.45)
+LIGHT = (0.9, 0.24, 1.3)
+HEAVY = (1.25, 0.3, 1.85)
+# How much of each recovery is keyed; the last of those keys is stretched to fill it,
+# running down to a stand (`Blow.clock`, note 138).
+LIGHT_KEYED, LIGHT_SETTLE = 1.0, 0.7
+HEAVY_KEYED, HEAVY_SETTLE = 1.45, 1.05
 # The speeds the locomotion clips are authored for (sword_skeleton.gd).
 WALK_V = 1.55
 RUN_V = 4.6
@@ -598,10 +603,30 @@ class Blow:
     """A blow's channels, each keyed on its own times. The feet are in the
     WORLD: root motion is taken off them, so a planted foot stands still."""
 
-    def __init__(self, length):
-        self.L = length
+    def __init__(self, keyed, settle=None):
+        """`keyed`: where the last key is. `settle`: from here the clip's clock runs
+        down to a stand, so the end takes twice the time the keys gave it."""
+        self.keyed = keyed
+        self.settle = keyed if settle is None else settle
+        self.L = self.settle + 2.0 * (keyed - self.settle)
         self.ch = {}
         self.foot_keys = {}
+
+    def clock(self, t):
+        """Key time at clip time `t`. The keys drive the blade home and stop it at the
+        last one, however fast it is going, and every channel gets there together. So
+        the keys' own time slows at a steady rate from `settle` to nothing at the end:
+        each joint comes to rest as a heavy thing does, with no last-moment stop."""
+        if t <= self.settle or self.keyed <= self.settle:
+            return t
+        u = min(1.0, (t - self.settle) / (self.L - self.settle))
+        return self.settle + (self.keyed - self.settle) * (2.0 * u - u * u)
+
+    def pace(self, t):
+        """How fast `clock` is running at clip time `t`: 1, down to 0 at the end."""
+        if t <= self.settle or self.keyed <= self.settle:
+            return 1.0
+        return max(0.0, 1.0 - (t - self.settle) / (self.L - self.settle))
 
     def key(self, name, keys):
         self.ch[name] = track(keys)
@@ -645,27 +670,31 @@ class Blow:
 
 def blow_clip(bl):
     def fn(t, L):
+        # The blurs narrow with the clock, or a blow would stop short of the guard
+        # by what they take off the last key.
+        g = bl.pace(t)
+        t = bl.clock(t)
         ch = bl.ch
         sp = fight_base()
         rooty = ch["root"](t)
         sp.root = V(0, -rooty, 0)
-        p = blur(ch["pelvis"], t, 0.03)
+        p = blur(ch["pelvis"], t, 0.03 * g)
         sp.pelvis = V(p[0], p[1], p[2])
         # Blurred too: at the end of a 2 m lever the hips and chest are as sharp
         # as anything the arm does.
-        q = blur(ch["pq"], t, 0.04)
+        q = blur(ch["pq"], t, 0.04 * g)
         sp.pelvis_q = rz(rad(q[1])) @ rx(rad(q[0])) @ ry(rad(q[2]))
-        sp.spine = blur(ch["spine"], t, 0.04)
+        sp.spine = blur(ch["spine"], t, 0.04 * g)
         sp.neck = ch["neck"](t)
         sp.head = ch["head"](t)
         # Hardly at all: a wider tent than this takes the speed off the swing,
         # and the speed is the blow.
-        a = blur(ch["arm"], t, 0.025)
-        sp.arm_r = (a[0], a[1], blur(ch["elbow"], t, 0.025))
+        a = blur(ch["arm"], t, 0.025 * g)
+        sp.arm_r = (a[0], a[1], blur(ch["elbow"], t, 0.025 * g))
         sp.roll_r = a[2]
-        w = blur(ch["wrist"], t, 0.03)
+        w = blur(ch["wrist"], t, 0.03 * g)
         sp.hand_r = wrist(*w)
-        al = blur(ch["arm_l"], t, 0.05)
+        al = blur(ch["arm_l"], t, 0.05 * g)
         sp.arm_l = (al[0], al[1], al[2])
         sp.roll_l = GUARD["rl"]
         sp.curl = ch["curl"](t)
@@ -675,14 +704,16 @@ def blow_clip(bl):
         sp.foot_r = bl.foot("r", t, rooty)
         return sp
 
+    fn.bl = bl
     return fn
 
 
 def _b():
+    """The guard a blow leaves from and comes home to: idle_fight's own first frame, to
+    the degree, so the clip that takes over has nothing to move."""
     b = fight_base()
-    g = GUARD
-    return dict(p=(b.pelvis.x, b.pelvis.y, b.pelvis.z), pq=(7.0, 16.0, 0.0), spine=(9.0, -8.0, 0.0), neck=(0.0, -3.0, 0.0), head=(-17.0, -3.0, 0.0),
-                arm=(g["arm"][0], g["arm"][1], g["roll"]), el=g["arm"][2], wrist=g["wr"], al=g["al"])
+    return dict(p=(b.pelvis.x, b.pelvis.y, b.pelvis.z), pq=(7.0, 16.0, 0.0), spine=b.spine, neck=b.neck, head=b.head,
+                arm=(b.arm_r[0], b.arm_r[1], b.roll_r), el=b.arm_r[2], wrist=GUARD["wr"], al=b.arm_l)
 
 
 # Each blow below runs the same six beats, and each channel takes them late of the
@@ -706,11 +737,11 @@ def slash_1(k=1.0):
     """Light: hauled back over its right shoulder, then down across the body. It does
     not stop at the left hip: the arm runs on past it and the chest bends after it.
     The right foot stamps in under the blow; the left is dragged up after."""
-    w, a, r = LIGHT
+    w, a, _r = LIGHT
     A, B = w, w + a
-    E = A + a + r
+    E = B + LIGHT_KEYED
     n = _b()
-    bl = Blow(E)
+    bl = Blow(E, B + LIGHT_SETTLE)
     bl.key("root", [(0.0, 0.0), (A - 0.2, 0.0), (A, 0.22 * k), (A + 0.1, 0.56 * k), (B, 0.64 * k), (B + 0.3, 0.68 * k), (E, 0.68 * k)])
     bl.key("pelvis", [(0.0, n["p"]), (0.15, (0.012, 0.03, 1.205)), (0.42, (0.03, 0.08, 1.235)), (A - 0.16, (0.04, 0.11, 1.27)), (A + 0.02, (0.02, 0.0, 1.25)), (A + 0.12, (-0.03, -0.12, 1.19)),
                       (B + 0.03, (-0.05, -0.16, 1.15)), (B + 0.3, (-0.06, -0.15, 1.14)), (B + 0.6, (-0.04, -0.12, 1.16)), (B + 0.85, (-0.01, -0.04, 1.22)), (E, n["p"])])
@@ -734,9 +765,9 @@ def slash_1(k=1.0):
     bl.key("curl", [(0.0, 0.5), (A, 0.25), (A + 0.16, 0.7), (B + 0.5, 0.6), (E, 0.5)])
     # The right foot goes in under the blow; the left is dragged up by what the
     # blow carried on with.
-    bl.feet("r", [(A - 0.14, A + 0.11, (-0.16, -0.26 - 0.68 * k), -8.0, 0.03 + 0.045 * k)])
+    bl.feet("r", [(A - 0.14, A + 0.11, (-0.15, -0.26 - 0.68 * k), -8.0, 0.03 + 0.045 * k)])
     bl.feet("l", [(A + 0.15, B + 0.42, (0.17, 0.22 - 0.68 * k), 22.0, 0.025 + 0.025 * k)])
-    return blow_clip(bl), E
+    return blow_clip(bl), bl.L
 
 
 def slash_2(k=1.0):
@@ -744,11 +775,11 @@ def slash_2(k=1.0):
     and the upper arm rolled in, then the elbow opens and the blade comes up across the
     body and out high on its right. It rises on past the blow until its own weight
     stops it, hangs there, and is let back down."""
-    w, a, r = LIGHT
+    w, a, _r = LIGHT
     A, B = w, w + a
-    E = A + a + r
+    E = B + LIGHT_KEYED
     n = _b()
-    bl = Blow(E)
+    bl = Blow(E, B + LIGHT_SETTLE)
     bl.key("root", [(0.0, 0.0), (A - 0.18, 0.0), (A, 0.2 * k), (A + 0.11, 0.5 * k), (B, 0.57 * k), (B + 0.3, 0.6 * k), (E, 0.6 * k)])
     bl.key("pelvis", [(0.0, n["p"]), (0.2, (0.02, 0.01, 1.205)), (A - 0.08, (0.04, 0.03, 1.19)), (A + 0.02, (0.03, 0.0, 1.195)), (A + 0.13, (0.0, -0.1, 1.21)), (B + 0.03, (-0.05, -0.13, 1.25)),
                       (B + 0.3, (-0.05, -0.13, 1.27)), (B + 0.62, (-0.04, -0.11, 1.24)), (B + 0.82, (-0.01, -0.04, 1.215)), (E, n["p"])])
@@ -767,20 +798,22 @@ def slash_2(k=1.0):
     bl.key("wrist", [(0.0, n["wrist"]), (0.2, (-4.0, 0.0, 0.0)), (A - 0.1, (-14.0, 0.0, 0.0)), (A + 0.1, (-13.0, 0.0, 0.0)), (A + 0.22, (-6.0, 0.0, 0.0)), (B + 0.14, (-14.0, 0.0, 0.0)), (B + 0.5, (-12.0, 0.0, 0.0)), (E, n["wrist"])])
     bl.key("arm_l", [(0.0, n["al"]), (A - 0.3, (-4.0, 44.0, 44.0)), (A + 0.06, (-10.0, 50.0, 40.0)), (A + 0.2, (24.0, 32.0, 66.0)), (B + 0.1, (48.0, 22.0, 84.0)), (B + 0.6, (40.0, 22.0, 78.0)), (E, n["al"])])
     bl.key("curl", [(0.0, 0.5), (A, 0.65), (A + 0.16, 0.3), (B + 0.5, 0.42), (E, 0.5)])
-    bl.feet("l", [(A - 0.14, A + 0.11, (0.09 + 0.08 * (1.0 - k), 0.22 - 0.8 * k), 28.0, 0.03 + 0.045 * k)])
-    bl.feet("r", [(B + 0.14, B + 0.54, (-0.15, -0.26 - 0.6 * k), -7.0, 0.025 + 0.025 * k)])
-    return blow_clip(bl), E
+    # The left goes past where the stance wants it, so it shuffles back as the right
+    # comes up: both done by LINK_OUT, and the foot does not skate home in the idle.
+    bl.feet("l", [(A - 0.14, A + 0.11, (0.09 + 0.08 * (1.0 - k), 0.22 - 0.8 * k), 28.0, 0.03 + 0.045 * k), (B + 0.34, B + 0.5, (0.17, 0.22 - 0.6 * k), 22.0, 0.02)])
+    bl.feet("r", [(B + 0.06, B + 0.36, (-0.15, -0.26 - 0.6 * k), -7.0, 0.025 + 0.025 * k)])
+    return blow_clip(bl), bl.L
 
 
 def slash_3(k=1.0):
     """Light: the overhead. Heaved straight up until the blade lies down its back, then
     down the middle, the elbow opening late. It misses the floor by a hand and runs on
     low past the forward foot, the body folding after it, and has to be levered back."""
-    w, a, r = LIGHT
+    w, a, _r = LIGHT
     A, B = w, w + a
-    E = A + a + r
+    E = B + LIGHT_KEYED
     n = _b()
-    bl = Blow(E)
+    bl = Blow(E, B + LIGHT_SETTLE)
     bl.key("root", [(0.0, 0.0), (A - 0.18, 0.0), (A, 0.18 * k), (A + 0.1, 0.44 * k), (B, 0.5 * k), (B + 0.3, 0.54 * k), (E, 0.54 * k)])
     bl.key("pelvis", [(0.0, n["p"]), (0.15, (0.0, 0.03, 1.2)), (0.42, (0.0, 0.08, 1.24)), (A - 0.12, (0.0, 0.11, 1.28)), (A + 0.02, (0.0, 0.05, 1.26)), (A + 0.12, (-0.01, -0.1, 1.21)),
                       (B + 0.03, (-0.02, -0.16, 1.12)), (B + 0.26, (-0.03, -0.17, 1.1)), (B + 0.58, (-0.03, -0.14, 1.12)), (B + 0.84, (-0.01, -0.05, 1.19)), (E, n["p"])])
@@ -799,9 +832,9 @@ def slash_3(k=1.0):
     bl.key("wrist", [(0.0, n["wrist"]), (0.2, (-2.0, 0.0, 0.0)), (A - 0.1, (-18.0, 0.0, 0.0)), (A + 0.1, (-18.0, 0.0, 0.0)), (A + 0.2, (2.0, 0.0, 0.0)), (B + 0.12, (8.0, 0.0, 0.0)), (B + 0.55, (4.0, 0.0, 0.0)), (E, n["wrist"])])
     bl.key("arm_l", [(0.0, n["al"]), (A, (52.0, 26.0, 88.0)), (A + 0.15, (20.0, 30.0, 56.0)), (B + 0.1, (-14.0, 36.0, 34.0)), (B + 0.6, (-6.0, 34.0, 42.0)), (E, n["al"])])
     bl.key("curl", [(0.0, 0.5), (A, 0.2), (A + 0.16, 0.75), (B + 0.5, 0.62), (E, 0.5)])
-    bl.feet("r", [(A - 0.14, A + 0.11, (-0.14, -0.26 - 0.54 * k), -6.0, 0.03 + 0.04 * k)])
+    bl.feet("r", [(A - 0.14, A + 0.11, (-0.15, -0.26 - 0.54 * k), -6.0, 0.03 + 0.04 * k)])
     bl.feet("l", [(A + 0.18, B + 0.46, (0.17, 0.22 - 0.54 * k), 22.0, 0.025 + 0.025 * k)])
-    return blow_clip(bl), E
+    return blow_clip(bl), bl.L
 
 
 def heavy(k=1.0):
@@ -811,11 +844,11 @@ def heavy(k=1.0):
     stamped, the hips leading, the elbow opening last. Then it cannot stop it: the
     blade drags it round past the blow, the right foot staggers to catch it, and it
     stands bent over the arm before it can drag the thing home."""
-    w, a, r = HEAVY
+    w, a, _r = HEAVY
     A, B = w, w + a
-    E = A + a + r
+    E = B + HEAVY_KEYED
     n = _b()
-    bl = Blow(E)
+    bl = Blow(E, B + HEAVY_SETTLE)
     bl.key("root", [(0.0, 0.0), (0.3, -0.03), (A - 0.3, -0.1), (A - 0.04, -0.09), (A + 0.14, 0.2 * k), (B, 0.42 * k), (B + 0.3, 0.5 * k), (B + 0.6, 0.52 * k), (E, 0.52 * k)])
     bl.key("pelvis", [(0.0, n["p"]), (0.2, (-0.01, 0.03, 1.2)), (0.52, (-0.04, 0.09, 1.22)), (0.76, (-0.04, 0.1, 1.2)), (A - 0.14, (-0.06, 0.13, 1.16)), (A + 0.02, (-0.05, 0.09, 1.155)), (A + 0.14, (0.0, 0.0, 1.16)),
                       (B, (0.06, -0.12, 1.15)), (B + 0.3, (0.07, -0.14, 1.14)), (B + 0.75, (0.05, -0.12, 1.16)), (B + 1.05, (0.02, -0.05, 1.2)), (E, n["p"])])
@@ -838,7 +871,142 @@ def heavy(k=1.0):
     # round after the blade and the left has to shuffle back under it.
     bl.feet("l", [(0.3, 0.68, (0.2, 0.1), 24.0, 0.04), (A - 0.1, A + 0.14, (0.22, 0.1 - 0.46 * k), 32.0, 0.03 + 0.04 * k), (B + 0.76, B + 1.16, (0.17, 0.22 - 0.52 * k), 22.0, 0.025 + 0.025 * k)])
     bl.feet("r", [(B + 0.08, B + 0.5, (-0.15, -0.26 - 0.52 * k), -7.0, 0.03 + 0.03 * k)])
-    return blow_clip(bl), E
+    return blow_clip(bl), bl.L
+
+
+# --- Chains ---------------------------------------------------------------------------
+#
+# A blow can go on into another (note 138): the swing's carry is the next wind-up's
+# start. A LINK is a short clip from one blow, part way through its recovery, to
+# another, part way through its wind-up; the game swaps clips at those moments with
+# nothing to blend. Which is why a link depends on neither blow's step: by LINK_OUT
+# every light has its feet back in the stance, and every blow is still in it at
+# LINK_IN.
+#
+# Each channel keeps to its own blow as long as it can, so the weight still goes through
+# the body in order: hips first, then chest and shoulder, the arm next, and the elbow
+# last. Between those times it runs a quintic from the one track to the other, its
+# position and speed matching at both ends; the speed the arm carries in is kept, so it
+# swings on a little before it turns.
+
+LINK = 0.75                 # sword_skeleton.gd LINK_TIME
+LINK_OUT = 0.62             # after the swing's end; ... CHAIN_OUT
+# How long before its swing each blow is joined; ... CHAIN_IN.
+LINK_IN = {"slash_1": 0.22, "slash_2": 0.22, "slash_3": 0.22, "heavy": 0.28}
+LINKS = (("slash_1", "slash_2", "link_1_2"), ("slash_2", "slash_1", "link_2_1"), ("slash_2", "slash_3", "link_2_3"), ("slash_2", "heavy", "link_2_h"), ("slash_3", "slash_2", "link_3_2"))
+# When each channel leaves the old track and is on the new one, s into the link.
+HANDOVER = dict(root=(0.0, LINK), pelvis=(0.04, 0.58), pq=(0.05, 0.6), spine=(0.06, 0.62), neck=(0.12, 0.66), head=(0.14, 0.68), clav_r=(0.08, 0.64), clav_l=(0.08, 0.62),
+                arm=(0.1, 0.72), elbow=(0.16, 0.72), wrist=(0.16, 0.7), arm_l=(0.06, 0.64), curl=(0.12, 0.62))
+
+
+def splice(f0, t0, f1, t1, s0, s1):
+    """`f0` from `t0` until `s0`, `f1` to `t1` from `s1`, and a quintic between them
+    that starts and ends at their speeds, with no acceleration of its own."""
+
+    def vals(v):
+        return list(v) if isinstance(v, tuple) else [v]
+
+    e = 1.0 / 120.0
+    p0 = vals(f0(t0 + s0))
+    v0 = [(a - b) / (2.0 * e) for a, b in zip(vals(f0(t0 + s0 + e)), vals(f0(t0 + s0 - e)))]
+    p1 = vals(f1(t1 - LINK + s1))
+    v1 = [(a - b) / (2.0 * e) for a, b in zip(vals(f1(t1 - LINK + s1 + e)), vals(f1(t1 - LINK + s1 - e)))]
+    h = s1 - s0
+    tup = isinstance(f0(t0), tuple)
+
+    def at(t):
+        if t <= s0:
+            return f0(t0 + t)
+        if t >= s1:
+            return f1(t1 - LINK + t)
+        u = (t - s0) / h
+        u3, u4, u5 = u ** 3, u ** 4, u ** 5
+        out = []
+        for d in range(len(p0)):
+            a = p0[d] + v0[d] * h * u
+            # What is left to go, by the standard basis with zero end acceleration.
+            k = p1[d] - p0[d] - v0[d] * h
+            m = (v1[d] - v0[d]) * h
+            out.append(a + k * (10.0 * u3 - 15.0 * u4 + 6.0 * u5) + m * (-4.0 * u3 + 7.0 * u4 - 3.0 * u5))
+        return tuple(out) if tup else out[0]
+
+    return at
+
+
+BLOW_FNS = {}
+
+
+def link_clip(a, b):
+    """From blow `a` at LINK_OUT to blow `b` at LINK_IN before its swing."""
+    A = BLOW_FNS[a](1.0)[0].bl
+    Bb = BLOW_FNS[b](1.0)[0].bl
+    w, s, _r = HEAVY if a == "heavy" else LIGHT
+    t0 = w + s + LINK_OUT
+    w, s, _r = HEAVY if b == "heavy" else LIGHT
+    t1 = w - LINK_IN[b]
+    bl = Blow(LINK)
+    for name, (s0, s1) in HANDOVER.items():
+        if name == "root":
+            continue
+        bl.ch[name] = splice(A.ch[name], t0, Bb.ch[name], t1, s0, s1)
+    # The world the feet stand in starts at this link's root; the heavy has stepped back
+    # by the time it is joined, and its left foot gone back with it.
+    bl.ch["root"] = track([(0.0, 0.0), (LINK, Bb.ch["root"](t1))])
+    if b == "heavy":
+        bl.feet("l", [(0.06, 0.44, (0.2, 0.1), 24.0, 0.04)])
+    fn = blow_clip(bl)
+    fn.out = (a, t0, b, t1)
+    return fn, LINK
+
+
+# --- Standing down, and turning on guard -------------------------------------------------
+
+def lerp(a, b, e):
+    return tuple(x + (y - x) * e for x, y in zip(a, b))
+
+
+def mj(u):
+    """Minimum jerk."""
+    u = max(0.0, min(1.0, u))
+    return u * u * u * (10.0 + u * (-15.0 + 6.0 * u))
+
+
+def relax():
+    """Nobody left to fight: out of the guard and into the idle, on its own feet. The
+    two stances are a stride apart, and without this the feet skate it."""
+    L = 1.4
+    bl = Blow(L)
+    bl.feet("r", [(0.14, 0.56, (-0.2, -0.09), -12.0, 0.035)])
+    bl.feet("l", [(0.5, 0.94, (0.2, 0.03), 13.0, 0.035)])
+
+    def fn(t, _L):
+        a = fight_base()
+        b = idle(0.0, 6.0)
+        sp = Spec()
+        # The hips go first and the blade is let down last.
+        hips = mj(t / 1.0)
+        body = mj((t - 0.1) / 1.05)
+        arm = mj((t - 0.16) / 1.2)
+        sp.pelvis = a.pelvis.lerp(b.pelvis, hips)
+        sp.pelvis_q = a.pelvis_q.slerp(b.pelvis_q, hips)
+        sp.spine = lerp(a.spine, b.spine, body)
+        sp.neck = lerp(a.neck, b.neck, body)
+        sp.head = lerp(a.head, b.head, body)
+        sp.clav_l = lerp(a.clav_l, b.clav_l, body)
+        sp.clav_r = lerp(a.clav_r, b.clav_r, body)
+        sp.arm_l = lerp(a.arm_l, b.arm_l, arm)
+        sp.arm_r = lerp(a.arm_r, b.arm_r, arm)
+        sp.roll_l = a.roll_l + (b.roll_l - a.roll_l) * arm
+        sp.roll_r = a.roll_r + (b.roll_r - a.roll_r) * arm
+        sp.hand_l = a.hand_l.slerp(b.hand_l, arm)
+        sp.hand_r = a.hand_r.slerp(b.hand_r, arm)
+        sp.curl = a.curl + (b.curl - a.curl) * arm
+        sp.spread = a.spread + (b.spread - a.spread) * arm
+        sp.foot_l = bl.foot("l", t, 0.0)
+        sp.foot_r = bl.foot("r", t, 0.0)
+        return sp
+
+    return fn, L
 
 
 # --- Hit and fall ---------------------------------------------------------------------
@@ -1035,6 +1203,45 @@ def turn(sgn):
     return fn, T
 
 
+def turn_guard(sgn):
+    """`turn`, on guard: the same steps taken from the fighting stance, the blade kept
+    up. The other way the arm drops to the idle's and comes back up as the turn ends."""
+    T = 0.9
+    sweep = math.degrees(TURN_RATE) * T * 0.5
+
+    def fn(t, L):
+        sp = fight_base(t, L)
+        phi = t / T
+        for side, base, off, st in (("l", STANCE["yl"], 0.0, STANCE["l"]), ("r", STANCE["yr"], 0.5, STANCE["r"])):
+            p = (phi + off) % 1.0
+            stance = 0.52
+            if p < stance:
+                u = p / stance
+                a = sgn * sweep * (0.5 - u)
+                lift = 0.0
+            else:
+                u = (p - stance) / (1.0 - stance)
+                e = sm(u)
+                a = sgn * sweep * (-0.5 + e)
+                lift = 0.05 * math.sin(math.pi * u)
+            pos = rz(rad(a)) @ V(st[0], st[1], 0.0)
+            ft = (V(pos.x, pos.y, ANKLE + lift), -10.0 * lift / 0.05, base + a, 0.0, 0.0)
+            if side == "l":
+                sp.foot_l = ft
+            else:
+                sp.foot_r = ft
+        q = sgn * 5.0
+        sp.pelvis_q = rz(rad(16.0 + q)) @ rx(rad(7.0))
+        s = sp.spine
+        sp.spine = (s[0], s[1] + sgn * 5.0, s[2])
+        n, h = sp.neck, sp.head
+        sp.neck = (n[0], n[1] + sgn * 6.0, n[2])
+        sp.head = (h[0], h[1] + sgn * 8.0, h[2])
+        return sp
+
+    return fn, T
+
+
 # --- Bake -----------------------------------------------------------------------------
 
 CLIPS = []
@@ -1058,11 +1265,18 @@ def make_clips():
     a, b = turn(1.0), turn(-1.0)
     loop("turn_l", a[0], a[1])
     loop("turn_r", b[0], b[1])
+    a, b = turn_guard(1.0), turn_guard(-1.0)
+    loop("turn_gl", a[0], a[1])
+    loop("turn_gr", b[0], b[1])
+    once("relax", relax())
     for k, tag in ((1.0, ""), (SHORT, "_s")):
         once("slash_1" + tag, slash_1(k))
         once("slash_2" + tag, slash_2(k))
         once("slash_3" + tag, slash_3(k))
         once("heavy" + tag, heavy(k))
+    BLOW_FNS.update(slash_1=slash_1, slash_2=slash_2, slash_3=slash_3, heavy=heavy)
+    for a, b, name in LINKS:
+        once(name, link_clip(a, b))
     for d in "bflr":
         once("stagger_" + d, stagger(d))
     once("death_b", death_back())
@@ -1213,7 +1427,7 @@ def bake_clip(arm, name, fn, L, loop_):
         rootz.append(-sp.root.y)
         # A leg stretched past its reach leaves its planted foot behind.
         stretch = max(stretch, (s.P["foot.L"] - sp.foot_l[0]).length, (s.P["foot.R"] - sp.foot_r[0]).length)
-        if base in BLOWS:
+        if base in BLOWS or name.startswith("link_"):
             edge_at = s.P["blade"] + (tip - s.P["blade"]) * 0.2
             for b0, b1, thick in CLEAR:
                 gap = seg_gap(edge_at, tip, s.P[b0], s.P[b1]) - thick
@@ -1237,6 +1451,10 @@ def bake_clip(arm, name, fn, L, loop_):
         blow_report(name, tips, grips, edges, w, w + a, rootz)
         pace_report(name, tips, w, w + a)
         reach_report(name, elbows, tips, rootz, w, w + a)
+        print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
+    if name.startswith("link_"):
+        v = [(tips[i + 1] - tips[i]).length * FPS for i in range(len(tips) - 1)]
+        print("[pace]  %-12s tip mean %.1f peak %.1f m/s @ %.2f" % (name, sum(v) / len(v), max(v), v.index(max(v)) / FPS), flush=True)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
     # Quaternion continuity, frame to frame.
     for b, qs in data.items():
@@ -1272,6 +1490,56 @@ def bake_clip(arm, name, fn, L, loop_):
             curve_of(path, b, k, [v[k] for v in vals])
     act.frame_range = (0.0, float(n))
     return act
+
+
+SEEN = ("head", "hand.L", "hand.R", "foot.L", "foot.R", "pelvis", "chest")
+
+
+def seen_at(fn, t, L):
+    s = solve(fn(t, L))
+    return {b: s.P[b] for b in SEEN} | {"tip": s.P["blade"] + s.G["blade"] @ (TIP_REST - RH["blade"])}
+
+
+def worst_gap(a, b):
+    return max(((a[k] - b[k]).length, k) for k in a)
+
+
+def seam_report():
+    """The joins, by what shows: a blow's end against the first frame of idle_fight,
+    how fast the tip is still going as it gets there, and each link against the clips
+    on either side of it, in place and in speed, on both of a blow's steps."""
+    fns = {c[0]: (c[1], c[2]) for c in CLIPS}
+    guard = seen_at(idle_fight, 0.0, 2.2)
+    for name, (fn, L) in fns.items():
+        base = name[:-2] if name.endswith("_s") else name
+        if base not in BLOWS:
+            continue
+        gap = worst_gap(seen_at(fn, L, L), guard)
+        speed = []
+        for ago in (0.4, 0.3, 0.2, 0.1, 0.05):
+            a, b = seen_at(fn, L - ago, L), seen_at(fn, L - ago + 1.0 / FPS, L)
+            speed.append("%.1f" % ((b["tip"] - a["tip"]).length * FPS))
+        print("[seam]  %-12s end to guard %.4f (%s), tip speed at -0.4 .. -0.05 s: %s" % (name, gap[0], gap[1], " ".join(speed)), flush=True)
+    dt = 1.0 / FPS
+    for a, b, name in LINKS:
+        fn = fns[name][0]
+        w, s, _r = LIGHT
+        t0 = w + s + LINK_OUT
+        w, _s, _r = HEAVY if b == "heavy" else LIGHT
+        t1 = w - LINK_IN[b]
+        for tag in ("", "_s"):
+            fa, la = fns[a + tag]
+            fb, lb = fns[b + tag]
+            out = worst_gap(seen_at(fa, t0, la), seen_at(fn, 0.0, LINK))
+            into = worst_gap(seen_at(fn, LINK, LINK), seen_at(fb, t1, lb))
+
+            def speed(f, t, L):
+                p, q = seen_at(f, t - dt, L), seen_at(f, t + dt, L)
+                return {k: (q[k] - p[k]) * (0.5 / dt) for k in p}
+
+            vo = worst_gap(speed(fa, t0, la), speed(fn, 0.0, LINK))
+            vi = worst_gap(speed(fn, LINK, LINK), speed(fb, t1, lb))
+            print("[link]  %-10s %-9s out %.4f (%s) speed %.3f (%s)   in %.4f (%s) speed %.3f (%s)" % (name, a + tag + ">" + b + tag, out[0], out[1], vo[0], vo[1], into[0], into[1], vi[0], vi[1]), flush=True)
 
 
 def sheet(arm, actions, out_dir, only, count=9):
@@ -1363,6 +1631,7 @@ def main():
             continue
         actions[name] = bake_clip(arm, name, fn, L, loop_)
     if "--check" in argv:
+        seam_report()
         return
     if sheet_dir:
         sheet(arm, actions, sheet_dir, only)

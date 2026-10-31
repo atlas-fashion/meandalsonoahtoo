@@ -8,15 +8,23 @@ extends "res://scripts/prosthetic.gd"
 ## models/sword_skeleton.glb carries every clip, baked by
 ## tools/anim_sword_skeleton.py, and plays them all at 1x on their own clocks:
 ##
-##   idle, idle_fight, walk, run, turn_l, turn_r   chosen each tick (`_locomote`)
+##   idle, idle_fight, walk, run, turn_l, turn_r   chosen each tick (`_update_locomotion`)
+##   turn_gl, turn_gr, relax                       turning on guard; out of the guard
 ##   slash_1/2/3, heavy, and each again with _s    one clip is the whole blow
+##   link_1_2, 2_1, 2_3, 2_h, 3_2                  one blow's recovery into the next
 ##   haul, idle_haul                               the blade dragged behind
 ##   stagger_b/f/l/r                               thrown by a blow (`_flinch`)
 ##   death_b/f/s                                   by where the last blow came from
 ##
 ## Every change of clip is inertialized (enforcer_react.gd `crossfade`, under
 ## sword_skeleton_react.gd), and walk and run share a phase, so one takes over
-## from the other mid-stride. A blow is one clip, so nothing blends inside it.
+## from the other mid-stride. A blow is one clip, so nothing blends inside it, and
+## it ends on the first frame of idle_fight.
+##
+## Chains (note 138): now and then a light blow goes on into a second, and that into
+## a third. A blow runs as usual until CHAIN_OUT in its recovery; there the clip is
+## swapped for a link, which runs to CHAIN_IN in the next blow's wind-up, and there
+## for that blow. Those are the same pose at the same speed, so nothing has to blend.
 ##
 ## Root motion: each clip's `root` track is lifted out once and kept as a curve
 ## (`_roots`). During a blow the body moves by that curve, scaled to reach the
@@ -39,6 +47,25 @@ const TURN_RATE := 1.745
 const LIGHTS: Array[StringName] = [&"slash_1", &"slash_2", &"slash_3"]
 const CYCLES: Array[StringName] = [&"walk", &"run"]
 const STILL: Array[StringName] = [&"idle", &"idle_fight"]
+const TURNS: Array[StringName] = [&"turn_l", &"turn_r", &"turn_gl", &"turn_gr"]
+## Into a turn on guard here, with both feet nearest where the stance has them.
+const TURN_FROM_GUARD := 0.26
+## A chain. tools/anim_sword_skeleton.py `LINK`, `LINK_OUT` and `LINK_IN` are these
+## same times, baked into the clips: change both. What can follow what is by where
+## the blade ends up: slash_1 ends low on its left, where the backhand starts; the
+## backhand ends high on its right, where the others start. The heavy only ever ends one.
+const LINK_TIME := 0.75
+const CHAIN_OUT := BLADE_WINDUP + BLADE_SWING + 0.62
+const CHAIN_IN := {&"slash_1": 0.68, &"slash_2": 0.68, &"slash_3": 0.68, &"heavy": 0.97}
+const CHAIN_NEXT := {&"slash_1": [&"slash_2"], &"slash_2": [&"slash_1", &"slash_3", &"heavy"], &"slash_3": [&"slash_2"]}
+const LINK_TAG := {&"slash_1": "1", &"slash_2": "2", &"slash_3": "3", &"heavy": "h"}
+## How often a light blow goes on to a second, and that on to a third.
+const CHAIN_SHARE := 0.4
+const CHAIN_THIRD := 0.4
+## Further off than this, centre to centre, it lets the blow finish.
+const CHAIN_REACH := 2.6
+## Blown after a chain: this much longer until the next blow, for each one it added.
+const CHAIN_REST := 0.7
 ## A taller capsule than enemy.tscn's: the head is up there to be hit.
 const HEIGHT := 2.1
 ## How near it walks up to someone: its whole arm is the weapon.
@@ -89,6 +116,11 @@ var _last_light := &""
 var _last_blow := Vector3.ZERO
 var _last_amount := 0.0
 var _rate := 1.0
+var _turn_k := TURN_SPRING
+## The chain: blows it may still add, blows it has added, and the one it is going to.
+var _chain_left := 0
+var _chained := 0
+var _next := &""
 
 
 func _init() -> void:
@@ -149,7 +181,7 @@ func _setup_animations() -> void:
 	if anim == null:
 		return
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-	for looping: StringName in [&"idle", &"idle_fight", &"walk", &"run", &"turn_l", &"turn_r", &"haul", &"idle_haul"]:
+	for looping: StringName in [&"idle", &"idle_fight", &"walk", &"run", &"turn_l", &"turn_r", &"turn_gl", &"turn_gr", &"haul", &"idle_haul"]:
 		anim.get_animation(looping).loop_mode = Animation.LOOP_LINEAR
 	_lift_roots()
 	var found := find_children("*", "Skeleton3D", true, false)
@@ -248,6 +280,9 @@ func _play_state_anim(which: StringName, _duration: float) -> void:
 			_start_blow()
 		ANIM_IDLE:
 			_blow = &""
+			_next = &""
+			_chain_left = 0
+			_rest()
 		# The blow's clip carries on through its swing and its recovery.
 		_:
 			if state == State.ATTACK:
@@ -274,9 +309,20 @@ func _update_locomotion() -> void:
 	elif speed > to_walk:
 		want = &"walk"
 		rate = clampf(speed / WALK_SPEED, 0.55, 1.65)
-	elif absf(_yaw_v) > TURN_SHOWS * (0.7 if now == &"turn_l" or now == &"turn_r" else 1.0):
-		want = &"turn_l" if _yaw_v > 0.0 else &"turn_r"
+	elif absf(_yaw_v) > TURN_SHOWS * (0.7 if now in TURNS else 1.0):
+		var left := _yaw_v > 0.0
+		if engaged:
+			want = &"turn_gl" if left else &"turn_gr"
+		else:
+			want = &"turn_l" if left else &"turn_r"
 		rate = clampf(absf(_yaw_v) / TURN_RATE, 0.6, 1.6)
+	# Nobody left to fight: the two stances are a stride apart, so it steps out of
+	# the guard rather than skating.
+	if want == &"idle":
+		if now == &"relax":
+			return
+		if now != &"idle" and _on_guard(anim.assigned_animation):
+			want = &"relax"
 	if now != want:
 		_switch(want, rate, BLEND_MOVE)
 		return
@@ -285,17 +331,27 @@ func _update_locomotion() -> void:
 	anim.speed_scale = _rate
 
 
+## Is the rig in the fighting stance at the end of this clip? Every blow ends there.
+static func _on_guard(clip: StringName) -> bool:
+	var name_ := String(clip)
+	return clip == &"idle_fight" or clip == &"turn_gl" or clip == &"turn_gr" \
+		or name_.begins_with("slash") or name_.begins_with("heavy") or name_.begins_with("link")
+
+
 ## Puts `clip` on the rig, the old pose decaying into it. Walk and run take over
-## at the same point of the stride; out of a stand, on the right foot, which is
-## the one ahead.
+## at the same point of the stride; out of a stand or a blow, on the right foot,
+## which is the one ahead. `assigned_animation`, not `current_animation`: a blow's
+## clip may have run out the tick before.
 func _switch(clip: StringName, rate: float, blend: float) -> void:
-	var now := StringName(anim.current_animation)
+	var now := StringName(anim.assigned_animation)
 	var at := -1.0
 	if clip in CYCLES:
 		if now in CYCLES:
 			at = anim.current_animation_position / anim.get_animation(now).length
-		elif now in STILL:
+		elif now in STILL or _on_guard(now):
 			at = 0.52
+	elif clip == &"turn_gl" or clip == &"turn_gr":
+		at = TURN_FROM_GUARD
 	if _react != null:
 		_react.call("crossfade", blend)
 	_rate = rate
@@ -310,12 +366,19 @@ func _switch(clip: StringName, rate: float, blend: float) -> void:
 # --- Blows ----------------------------------------------------------------------------
 
 func _start_blow() -> void:
+	if _next != &"":
+		_start_link()
+		return
 	var clip := &"heavy"
+	_chained = 0
+	_chain_left = 0
 	if attack_kind != Attack.SLAM:
 		var from := LIGHTS.duplicate()
 		from.erase(_last_light)
 		clip = from[randi() % from.size()]
 		_last_light = clip
+		if randf() < CHAIN_SHARE:
+			_chain_left = 2 if randf() < CHAIN_THIRD else 1
 	var need := 0.3
 	var player := _resolve_player()
 	if player != null:
@@ -342,6 +405,100 @@ func _measure_step() -> void:
 	var need := Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length() - STANDOFF
 	var left := _root_at(_blow, 99.0) - _root_at(_blow, _blow_t)
 	_blow_scale = clampf(need / maxf(left, 0.01), STEP_MIN, STEP_MAX)
+
+
+## The wind-up of a blow in a chain is what is left of the link and of its own.
+func _windup_for(kind: int) -> float:
+	if _next == &"":
+		return super(kind)
+	var swing_at: float = HEAVY_WINDUP if _next == &"heavy" else BLADE_WINDUP
+	return LINK_TIME + swing_at - float(CHAIN_IN[_next]) - (anim.current_animation_position - CHAIN_OUT)
+
+
+func _enter_recover() -> void:
+	super()
+	if _chain_left <= 0:
+		_rest()
+
+
+## A chain cost it: both blows wait longer than they would after one.
+func _rest() -> void:
+	if _chained <= 0:
+		return
+	var until := _now() + _cooldown_of(Attack.NORMAL) + CHAIN_REST * float(_chained)
+	_cooldowns[Attack.NORMAL] = maxf(_ready_at(Attack.NORMAL), until)
+	_cooldowns[Attack.SLAM] = maxf(_ready_at(Attack.SLAM), until)
+	_chained = 0
+
+
+## Each tick: at CHAIN_OUT the blow goes on, if it is going to; at the end of a link
+## the next blow takes over. Just before the link's end, which its clip stops at.
+func _tend_chain(delta: float) -> void:
+	if anim == null or _blow == &"":
+		return
+	if _next != &"" and state == State.WINDUP:
+		if not anim.is_playing():
+			_join(LINK_TIME)
+		elif anim.current_animation_position >= LINK_TIME - delta * 1.5:
+			_join(anim.current_animation_position)
+	elif state == State.RECOVER and _chain_left > 0 and anim.is_playing() \
+			and anim.current_animation_position >= CHAIN_OUT:
+		_go_on()
+
+
+func _go_on() -> void:
+	var base := StringName(String(_blow).trim_suffix("_s"))
+	var from: Array = CHAIN_NEXT.get(base, []).duplicate()
+	if _now() < _ready_at(Attack.SLAM):
+		from.erase(&"heavy")
+	var player := _resolve_player()
+	var near := player != null and engaged and not is_stunned() \
+		and Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length() <= CHAIN_REACH
+	if not near or from.is_empty():
+		_chain_left = 0
+		_rest()
+		return
+	_next = from[randi() % from.size()]
+	_chain_left = 0 if _next == &"heavy" else _chain_left - 1
+	_chained += 1
+	if _next != &"heavy":
+		_last_light = _next
+	# The state's own wind-up, telegraph and all. `_start_blow` sees `_next`.
+	_enter_windup(Attack.SLAM if _next == &"heavy" else Attack.NORMAL)
+
+
+func _start_link() -> void:
+	var from := StringName(String(_blow).trim_suffix("_s"))
+	var clip := StringName("link_%s_%s" % [LINK_TAG[from], LINK_TAG[_next]])
+	var over := anim.current_animation_position - CHAIN_OUT
+	_put_on(clip, over)
+	_blow_scale = 1.0
+
+
+## The link is over: the next blow, from where the link leaves it, on the step that
+## suits where they are now.
+func _join(t: float) -> void:
+	var clip := _next
+	var player := _resolve_player()
+	if player != null:
+		var need := Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length() - STANDOFF
+		if need < LONG_STEP:
+			clip = StringName(String(clip) + "_s")
+	else:
+		clip = StringName(String(clip) + "_s")
+	_put_on(clip, float(CHAIN_IN[_next]) + t - LINK_TIME)
+	_next = &""
+
+
+## The swap itself. No crossfade: the two clips are the same pose at the same speed
+## here, and `crossfade` would take a frame's movement for an offset and hold it.
+func _put_on(clip: StringName, t: float) -> void:
+	_rate = 1.0
+	anim.speed_scale = 1.0
+	anim.play(clip, 0.0, 1.0)
+	anim.seek(t, true)
+	_blow = clip
+	_blow_t = t
 
 
 ## How far forward the clip's root has come at `t`.
@@ -385,15 +542,19 @@ func _physics_process(delta: float) -> void:
 	if _dormant or _model == null:
 		return
 	_turn_model(delta)
+	_tend_chain(delta)
 	_tend_react()
 
 
 ## The model's heading chases the body's on a spring, so a snapped `_face` reads
-## as a turn. `_yaw_v`, its speed, is what the turning clips are played by.
+## as a turn. `_yaw_v`, its speed, is what the turning clips are played by. The swing
+## takes hold at once; anything else eases in, or the end of a blow shows as a lurch.
 func _turn_model(delta: float) -> void:
-	var k := TURN_SPRING
+	var want := TURN_SPRING
 	if _blow != &"":
-		k = TURN_SPRING_BLOW if state == State.ATTACK else TURN_SPRING_LOADED
+		want = TURN_SPRING_BLOW if state == State.ATTACK else TURN_SPRING_LOADED
+	_turn_k = want if want == TURN_SPRING_BLOW else move_toward(_turn_k, want, delta * 20.0)
+	var k := _turn_k
 	var off := wrapf(rotation.y - _shown_yaw, -PI, PI)
 	_yaw_v += (k * k * off - 2.0 * k * _yaw_v) * delta
 	_shown_yaw = wrapf(_shown_yaw + _yaw_v * delta, -PI, PI)
@@ -414,7 +575,13 @@ func _tend_react() -> void:
 		if engaged and not is_stunned():
 			want = player.global_position + Vector3(0.0, 1.5, 0.0)
 		_react.set("look_target", want)
-		_react.set("look_strength", 1.0 if state == State.CHASE or state == State.WINDUP else 0.45)
+		var look := 0.45
+		if state == State.CHASE or state == State.WINDUP:
+			look = 1.0
+		elif state == State.RECOVER:
+			# Back on them by the time the blow is over, not all at once after it.
+			look = lerpf(0.45, 1.0, smoothstep(0.4, 1.0, 1.0 - (_state_until - _now()) / maxf(_recover_len, 0.01)))
+		_react.set("look_strength", look)
 	else:
 		_react.set("look_target", null)
 
@@ -445,6 +612,8 @@ func _haul_anim(delta: float) -> void:
 ## It falls the way the blow would throw it, lies there, and goes.
 func _fold_up() -> void:
 	_blow = &""
+	_next = &""
+	_chain_left = 0
 	var clip := &"death_s"
 	var b := Vector3(_last_blow.x, 0.0, _last_blow.z)
 	if b.length_squared() > 0.01:
