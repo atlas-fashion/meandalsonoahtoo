@@ -1975,4 +1975,6 @@ def main():
     log("wrote", OUT)
 
 
-main()
+# tools/build_sword_skeleton.py borrows the modelling helpers above.
+if __name__ == "__main__":
+    main()

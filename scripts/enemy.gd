@@ -405,7 +405,7 @@ func _ready() -> void:
 
 	# Each enemy needs its own material copy, otherwise one flashing would flash
 	# all of them.
-	if mesh != null:
+	if mesh != null and _own_material():
 		var active := mesh.get_active_material(0)
 		if active is StandardMaterial3D:
 			_material = (active as StandardMaterial3D).duplicate()
@@ -417,9 +417,22 @@ func _ready() -> void:
 	_play_state_anim(ANIM_IDLE, 0.0)
 	preload("res://scripts/enemy_health_bar.gd").attach(self)
 	# Glowing yellow eyes in the sockets (none on a rig without a head bone).
-	_eyes = preload("res://scripts/skeleton_eyes.gd").attach(self)
+	_eyes = _hang_eyes()
 	if armed:
-		_sword = preload("res://scripts/skeleton_sword.gd").arm(self, weapon)
+		_sword = _arm()
+
+
+## Whether this one flashes a material of its own (no, for a body of several).
+func _own_material() -> bool:
+	return true
+
+
+func _hang_eyes() -> Node3D:
+	return preload("res://scripts/skeleton_eyes.gd").attach(self)
+
+
+func _arm() -> Node3D:
+	return preload("res://scripts/skeleton_sword.gd").arm(self, weapon)
 
 
 func _physics_process(delta: float) -> void:
@@ -1929,10 +1942,7 @@ func _die() -> void:
 		Coop.announce_all("%s HAS FALLEN" % display_name)
 
 	if death_burst == null:
-		# An ordinary enemy just folds up and goes.
-		var quick := create_tween()
-		quick.tween_property(self, "scale", Vector3.ONE * 0.01, 0.35).set_ease(Tween.EASE_IN)
-		quick.tween_callback(queue_free)
+		_fold_up()
 		return
 
 	# A champion buckles first: it drops to its knees, sways, then collapses and
@@ -1946,6 +1956,13 @@ func _die() -> void:
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	tween.tween_callback(_burst)
 	tween.tween_callback(queue_free)
+
+
+## An ordinary enemy just folds up and goes.
+func _fold_up() -> void:
+	var quick := create_tween()
+	quick.tween_property(self, "scale", Vector3.ONE * 0.01, 0.35).set_ease(Tween.EASE_IN)
+	quick.tween_callback(queue_free)
 
 
 ## Spawned into the parent rather than as a child, because this node frees

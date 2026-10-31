@@ -72,9 +72,14 @@ var _next_ward := 0.0
 ## An enemy.tscn instance with this script and `which` hand, ready to place.
 static func make(scene: PackedScene, which: StringName) -> CharacterBody3D:
 	var e: CharacterBody3D = scene.instantiate()
-	e.set_script(load("res://scripts/prosthetic.gd"))
+	e.set_script(script_for(which))
 	e.set("hand", which)
 	return e
+
+
+## The sword hand has a body of its own (sword_skeleton.gd, note 135).
+static func script_for(which: StringName) -> Script:
+	return load("res://scripts/sword_skeleton.gd" if which == &"blade" else "res://scripts/prosthetic.gd")
 
 
 func _init() -> void:

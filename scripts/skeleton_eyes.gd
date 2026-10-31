@@ -20,14 +20,46 @@ const SPREAD_FRAC := 0.22
 const DEPTH := 0.035
 const EYE_RADIUS := 0.017
 const HALO_SIZE := 0.11
+## Round eyes that are part of the model.
+const SMALL_HALO := 0.06
 
 static var _cache := {}
 static var _ball: SphereMesh
 static var _halo: QuadMesh
+static var _small_halo: QuadMesh
 
 
 ## Hangs the eyes on the rig under `root`. Returns the node holding them (hide
 ## it to put them out), or null if there is no skinned skeleton with a head.
+## `attach_at` hangs only the halos, at points known in the skeleton's own space:
+## for a model whose eyes are part of it (sword_skeleton.gd).
+static func attach_at(root: Node, points: Array[Vector3]) -> Node3D:
+	var skeletons := root.find_children("*", "Skeleton3D", true, false)
+	if skeletons.is_empty():
+		return null
+	var sk := skeletons[0] as Skeleton3D
+	var head := sk.find_bone("head")
+	if head < 0:
+		return null
+	_make_meshes()
+	if _small_halo == null:
+		_small_halo = QuadMesh.new()
+		_small_halo.size = Vector2(SMALL_HALO, SMALL_HALO)
+		_small_halo.material = _halo.material
+	var to_head := sk.get_bone_global_rest(head).affine_inverse()
+	var holder := BoneAttachment3D.new()
+	holder.name = "Eyes"
+	holder.bone_name = "head"
+	sk.add_child(holder)
+	for p in points:
+		var halo := MeshInstance3D.new()
+		halo.mesh = _small_halo
+		halo.position = to_head * p
+		halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		holder.add_child(halo)
+	return holder
+
+
 static func attach(root: Node) -> Node3D:
 	var skeletons := root.find_children("*", "Skeleton3D", true, false)
 	if skeletons.is_empty():

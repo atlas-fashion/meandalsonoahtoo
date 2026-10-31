@@ -107,6 +107,8 @@ var stagger_clip: Dictionary = STAGGER
 ## Stay on between blends, so every switch knows how the rig was moving (its
 ## last two poses). Off, a switch from a still layer starts from rest.
 var keep_tracking := false
+## See `_inertia`.
+var free_velocity := false
 
 var _bone := {}
 var _ready_bones := false
@@ -487,10 +489,17 @@ func shown_position(bone: int) -> Variant:
 
 
 ## The quintic for an offset `x0` (>= 0) moving at `v0`, settling within `t1`.
-static func _inertia(x0: float, v0: float, t1: float) -> Array:
+## `free` (`free_velocity`) keeps the speed whole and lets it swing through, and
+## starts with no acceleration of its own, for a rig with a long blade on the end:
+## capping a small offset's speed shows as a kick at the tip, however gentle at
+## the joint, and so does Bollo's opening acceleration (20 x0 / t1^2, against
+## 5.8 x0 / t1^2 at the peak of this one).
+static func _inertia(x0: float, v0: float, t1: float, free := false) -> Array:
 	t1 = maxf(t1, 1e-3)
 	var a0 := 0.0
-	if v0 > 0.0:
+	if free:
+		a0 = 0.0
+	elif v0 > 0.0:
 		# Moving AWAY from the new pose. Bollo zeroes this velocity to rule out
 		# overshoot -- which stopped every such bone dead at the switch (seen:
 		# the first swipe out of a full crawl froze for a frame). Kept instead,
@@ -530,6 +539,17 @@ static func _rotvec_of(q: Quaternion) -> Vector3:
 	return q.get_axis() * ang
 
 
+## Where the new clip's bone was one history step before the switch: the offset's
+## speed is the old pose's against the new clip's, not against a clip standing
+## still. By default it is taken as still.
+func _rot_before(_bone_id: int, now: Quaternion) -> Quaternion:
+	return now
+
+
+func _pos_before(_bone_id: int, now: Vector3) -> Vector3:
+	return now
+
+
 func _begin_offsets(sk: Skeleton3D) -> void:
 	_pending = false
 	_rot_off.clear()
@@ -541,18 +561,18 @@ func _begin_offsets(sk: Skeleton3D) -> void:
 		var src_r := sk.get_bone_pose_rotation(i)
 		var inv := src_r.inverse()
 		var x := _rotvec_of((_from_rot[i] as Quaternion) * inv)
-		var xp := _rotvec_of((_from_prev_rot[i] as Quaternion) * inv)
+		var xp := _rotvec_of((_from_prev_rot[i] as Quaternion) * _rot_before(i, src_r).inverse())
 		var len := x.length()
 		if len > 1e-5:
 			var axis := x / len
-			_rot_off[i] = [axis, _inertia(len, (x - xp).dot(axis) / dt, _fade_len)]
+			_rot_off[i] = [axis, _inertia(len, (x - xp).dot(axis) / dt, _fade_len, free_velocity)]
 		var src_p := sk.get_bone_pose_position(i)
 		var d: Vector3 = (_from_pos[i] as Vector3) - src_p
-		var dp: Vector3 = (_from_prev_pos[i] as Vector3) - src_p
+		var dp: Vector3 = (_from_prev_pos[i] as Vector3) - _pos_before(i, src_p)
 		var dl := d.length()
 		if dl > 1e-6:
 			var dir := d / dl
-			_pos_off[i] = [dir, _inertia(dl, (d - dp).dot(dir) / dt, _fade_len)]
+			_pos_off[i] = [dir, _inertia(dl, (d - dp).dot(dir) / dt, _fade_len, free_velocity)]
 
 
 func _blend_clips(sk: Skeleton3D, delta: float) -> void:

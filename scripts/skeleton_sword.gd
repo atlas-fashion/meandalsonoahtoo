@@ -20,24 +20,23 @@ extends Node3D
 ## blended onto the clip's pose, and re-applied to its own result the blend
 ## would compound.
 ##
-## PROSTHESES (2026-10-20, prosthetic.gd; note 93): `kind` &"blade" (the sword
-## hand), &"drill" or &"hammer" is not held but IS the hand -- the hand bone is
+## PROSTHESES (2026-10-20, prosthetic.gd; note 93): `kind` &"drill" or &"hammer"
+## is not held but IS the hand -- the hand bone is
 ## shrunk to nothing (the rig's clips carry no scale tracks, so it stays so) and
 ## the tool is strapped to the wrist in an iron cuff, carried along the forearm
 ## and turned only part way toward the swing (`PROSTHESIS_TURN`). The drill's
-## bit spins, fast while it attacks. The heavy slice is a move of its own
-## (`Move.SWEEP`): a flat sweep across the front at chest height.
+## bit spins, fast while it attacks. The sword hand has a rig of its own now
+## (sword_skeleton.gd, note 135); sword_skeleton_blade.gd keeps only `strike`.
 
 const BLADE_FROM := 0.1
 const BLADE_TO := 1.0
 const PICK_TO := 0.82
-## The sword hand's blade, the drill's bit and the hammer's head, from the wrist.
-const PROS_BLADE_TO := 1.05
+## The drill's bit and the hammer's head, from the wrist.
 const DRILL_TO := 0.62
 const HAMMER_TO := 0.86
 ## How far a prosthesis turns from the forearm toward the swing's blade line.
 const PROSTHESIS_TURN := 0.45
-const PROSTHESES := [&"blade", &"drill", &"hammer"]
+const PROSTHESES := [&"drill", &"hammer"]
 ## The drill's bit, radians a second: idling, and while it attacks.
 const BIT_IDLE := 7.0
 const BIT_FAST := 46.0
@@ -126,8 +125,6 @@ func reach() -> float:
 	match kind:
 		&"pick":
 			return PICK_TO
-		&"blade":
-			return PROS_BLADE_TO
 		&"drill":
 			return DRILL_TO
 		&"hammer":
@@ -437,31 +434,7 @@ static func _mesh(weapon: StringName) -> ArrayMesh:
 		add.call(eye, Transform3D(Basis(), Vector3(0.0, 0.75, 0.0)), dark)
 	elif weapon in PROSTHESES:
 		_cuff(add, dark, leather)
-		if weapon == &"blade":
-			# A long blade forged straight out of the cuff: no guard, no grip.
-			var flat := Basis().scaled(Vector3(1.0, 1.0, 0.2))
-			var root := CylinderMesh.new()
-			root.top_radius = 0.034
-			root.bottom_radius = 0.042
-			root.height = 0.1
-			root.radial_segments = 4
-			root.rings = 1
-			add.call(root, Transform3D(flat, Vector3(0.0, 0.17, 0.0)), dark)
-			var blade := CylinderMesh.new()
-			blade.top_radius = 0.02
-			blade.bottom_radius = 0.036
-			blade.height = PROS_BLADE_TO - 0.22 - 0.1
-			blade.radial_segments = 4
-			blade.rings = 1
-			add.call(blade, Transform3D(flat, Vector3(0.0, 0.22 + blade.height * 0.5, 0.0)), iron)
-			var point := CylinderMesh.new()
-			point.top_radius = 0.0
-			point.bottom_radius = 0.02
-			point.height = 0.1
-			point.radial_segments = 4
-			point.rings = 1
-			add.call(point, Transform3D(flat, Vector3(0.0, PROS_BLADE_TO - 0.05, 0.0)), iron)
-		elif weapon == &"drill":
+		if weapon == &"drill":
 			# The motor housing; the bit (`drill_bit_mesh`) is a node of its
 			# own so it can spin.
 			var housing := CylinderMesh.new()

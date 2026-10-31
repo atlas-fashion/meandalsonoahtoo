@@ -4778,15 +4778,16 @@ func _spawn_pack(tile: Vector2i, flying: bool, count: int, hands: Array[StringNa
 			if hands[i] == &"crossbow":
 				enemy.set_script(ARCHER_SCRIPT)
 			else:
-				enemy.set_script(PROSTHETIC)
+				enemy.set_script(PROSTHETIC.script_for(hands[i]))
 				enemy.set("hand", hands[i])
 		elif i in archers:
 			# Before it enters the tree: its numbers are set in its _init.
 			enemy.set_script(ARCHER_SCRIPT)
 		elif not flying:
 			# Every other skeleton wears a hand of its own (prosthetic.gd).
-			enemy.set_script(PROSTHETIC)
-			enemy.set("hand", &"shield" if shield and i == 0 else _melee_hand())
+			var kind: StringName = &"shield" if shield and i == 0 else _melee_hand()
+			enemy.set_script(PROSTHETIC.script_for(kind))
+			enemy.set("hand", kind)
 		# Spread inside the tile rather than stacking on its centre: bodies
 		# that spawn exactly overlapping shove each other apart hard enough to
 		# launch the pile.

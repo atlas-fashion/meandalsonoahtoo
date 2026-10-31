@@ -595,3 +595,33 @@ frame in the script is X right, Y forward, Z up.
 The five extracted maps keep VRAM compression in their committed `.import` files.
 After a change, check that those files still say `"vram_texture": true`; if one
 says false, delete its files in `.godot/imported/` and import again.
+
+---
+
+# The sword skeleton (2026-10-30, Blender, note 135)
+
+```
+blender -b --factory-startup -P tools/build_sword_skeleton.py                          # model, bake
+blender -b --factory-startup -P tools/build_sword_skeleton.py -- --no-bake             # keep the maps
+blender -b --factory-startup -P tools/build_sword_skeleton.py -- --preview <dir>       # Cycles renders, nothing saved
+blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py   # clips, export
+blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py -- --check
+blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py -- --sheet <dir> [clip,clip]
+godot --headless --import --path .
+```
+
+`build_sword_skeleton.py` needs no source and writes
+`models/source/sword_skeleton/sword_skeleton.blend` and its maps, in about a minute.
+It leaves the .blend without clips, so run `anim_sword_skeleton.py` after it, always:
+that adds the clips and exports `models/sword_skeleton.glb`. To change only an
+animation, run just the second one. `--check` prints each clip's worst jolt and
+exports nothing; `--sheet` renders strips of poses and exports nothing.
+
+The clip names and their lengths are read by `scripts/sword_skeleton.gd`, and
+`LIGHT` / `HEAVY` must stay equal to the timers in `enemy.gd` and `prosthetic.gd`.
+`models/sword_skeleton.glb.import` must keep `animation/fps=60`, and the three maps
+`compress/mode=2`, as the scout's. After replacing a map, delete
+`.godot/imported/sword_skeleton*` and the three extracted maps, then import.
+
+Blender's frame in the script is X its left, -Y its front, Z up: the old rig's axes
+once exported.
