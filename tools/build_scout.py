@@ -1952,6 +1952,8 @@ def main():
         set_preview_scene([body, spear], preview, "model")
         return
     bpy.context.view_layer.update()
+    # No scout.blend1 beside it.
+    bpy.context.preferences.filepaths.save_version = 0
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(SRC, "scout.blend"), compress=True)
     bpy.ops.object.select_all(action='DESELECT')
     arm.select_set(True)
