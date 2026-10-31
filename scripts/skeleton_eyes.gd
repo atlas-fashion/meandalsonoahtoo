@@ -26,14 +26,16 @@ const SMALL_HALO := 0.06
 static var _cache := {}
 static var _ball: SphereMesh
 static var _halo: QuadMesh
-static var _small_halo: QuadMesh
+## Colour, strength and size -> a model's own halo (`attach_at`).
+static var _small_halos := {}
 
 
 ## Hangs the eyes on the rig under `root`. Returns the node holding them (hide
 ## it to put them out), or null if there is no skinned skeleton with a head.
 ## `attach_at` hangs only the halos, at points known in the skeleton's own space:
-## for a model whose eyes are part of it (sword_skeleton.gd).
-static func attach_at(root: Node, points: Array[Vector3]) -> Node3D:
+## for a model whose eyes are part of it (sword_skeleton.gd), which says what colour
+## and how strong and wide its glow is.
+static func attach_at(root: Node, points: Array[Vector3], colour := COLOUR, strength := 0.55, size := SMALL_HALO) -> Node3D:
 	var skeletons := root.find_children("*", "Skeleton3D", true, false)
 	if skeletons.is_empty():
 		return null
@@ -42,10 +44,12 @@ static func attach_at(root: Node, points: Array[Vector3]) -> Node3D:
 	if head < 0:
 		return null
 	_make_meshes()
-	if _small_halo == null:
-		_small_halo = QuadMesh.new()
-		_small_halo.size = Vector2(SMALL_HALO, SMALL_HALO)
-		_small_halo.material = _halo.material
+	var key := [colour, strength, size]
+	if not _small_halos.has(key):
+		var quad := QuadMesh.new()
+		quad.size = Vector2(size, size)
+		quad.material = _halo_material(colour, strength)
+		_small_halos[key] = quad
 	var to_head := sk.get_bone_global_rest(head).affine_inverse()
 	var holder := BoneAttachment3D.new()
 	holder.name = "Eyes"
@@ -53,7 +57,7 @@ static func attach_at(root: Node, points: Array[Vector3]) -> Node3D:
 	sk.add_child(holder)
 	for p in points:
 		var halo := MeshInstance3D.new()
-		halo.mesh = _small_halo
+		halo.mesh = _small_halos[key]
 		halo.position = to_head * p
 		halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		holder.add_child(halo)
@@ -155,13 +159,19 @@ static func _make_meshes() -> void:
 	_ball.radial_segments = 8
 	_ball.rings = 4
 	_ball.material = core
-	# A soft glow round each, so they read from down a corridor.
+	_halo = QuadMesh.new()
+	_halo.size = Vector2(HALO_SIZE, HALO_SIZE)
+	_halo.material = _halo_material(COLOUR, 0.55)
+
+
+## A soft glow round each, so they read from down a corridor.
+static func _halo_material(colour: Color, strength: float) -> StandardMaterial3D:
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	glow.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	glow.albedo_color = Color(COLOUR.r, COLOUR.g * 0.85, COLOUR.b, 0.55)
+	glow.albedo_color = Color(colour.r, colour.g * 0.85, colour.b, strength)
 	var grad := GradientTexture2D.new()
 	grad.fill = GradientTexture2D.FILL_RADIAL
 	grad.fill_from = Vector2(0.5, 0.5)
@@ -171,6 +181,4 @@ static func _make_meshes() -> void:
 	g.set_color(1, Color(1, 1, 1, 0))
 	grad.gradient = g
 	glow.albedo_texture = grad
-	_halo = QuadMesh.new()
-	_halo.size = Vector2(HALO_SIZE, HALO_SIZE)
-	_halo.material = glow
+	return glow

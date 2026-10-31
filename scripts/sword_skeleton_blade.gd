@@ -1,6 +1,6 @@
 extends "res://scripts/skeleton_sword.gd"
 
-## The sword skeleton's blade (sword_skeleton.gd, notes 135, 136). skeleton_sword.gd
+## The Proel swordsman's blade (sword_skeleton.gd, notes 135, 136). skeleton_sword.gd
 ## poses an arm and hangs a model on it; here the clip does both, and the blade is
 ## part of the skinned mesh on the rig's `blade` bone. Only the sweep is kept: a
 ## blow lands where the real blade passes through the player, wherever the clip

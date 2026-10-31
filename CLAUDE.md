@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 138), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 139), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -256,7 +256,7 @@ hand-edit; rebuild it whenever the gate module is rebuilt.
 which models it from nothing in Blender. Rebuild, never hand-edit; its bones must
 stay exactly `BONES` in `scripts/scout_body.gd`. See note 134.
 
-`models/sword_skeleton.glb` (the sword skeleton) is a build artifact from
+`models/sword_skeleton.glb` (the Proel swordsman) is a build artifact from
 `tools/build_sword_skeleton.py` then `tools/anim_sword_skeleton.py`, which cut down
 and rig the user's Tripo golem (`models/source/sword_skeleton/`) and animate it in
 Blender. Rebuild, never hand-edit; always run the second after the first. See note
@@ -332,7 +332,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `hand_torch.gd`, `held_potion.gd`,
   `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt).
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
-  hands; `skeleton_shield.gd`; note 93), `sword_skeleton.gd` (the sword hand: the user's
+  hands; `skeleton_shield.gd`; note 93), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
   notes 135-138; its combos are baked links, note 138), `enemy.gd` (skeleton; base class; also the boss via
   `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` (the crossbow hand) + `arrow.gd`, `crier.gd`
@@ -549,6 +549,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 136 | 2026-10-30 | The sword skeleton is the user's rusty metal golem (`tools/build_sword_skeleton.py` cuts the 1.94M-triangle Tripo model to 42k, keeps its 4096 maps, bakes the normal map, 34 bones, watershed weights along the surface); the blade grows out of its forearm, so every clip rebuilt as joint angles, 23 clips: the forearm a pure hinge, no wrist turn, the upper arm's roll keyed and read back by `--check`; the sweep from the elbow; worst switch 0.062 at the tip; 16 in a fight 139 fps, +16 MB | [docs/notes/136-the-sword-skeleton-is-the-rusty-metal-golem.md](docs/notes/136-the-sword-skeleton-is-the-rusty-metal-golem.md) |
 | 137 | 2026-10-30 | The sword skeleton's blows have weight: light 0.90 / 0.24 / 1.00 s, heavy 1.25 / 0.30 / 1.45 s (`prosthetic.gd` `BLADE_*` `HEAVY_*`, the same in the anim script); six beats (load, haul, hang, swing, carry, heave), the elbow on its own track; the carry solved from world directions, or the blade ends behind the body; the step measured again as the swing starts; walk, run and every other clip byte-identical; `--check` gained `[pace]`, `[reach]`, `[clear]` | [docs/notes/137-the-sword-skeletons-blows-have-weight.md](docs/notes/137-the-sword-skeletons-blows-have-weight.md) |
 | 138 | 2026-10-31 | The sword skeleton's combos and a soft landing: 40% of lights chain to 2-3 blows through 5 baked links (`link_1_2` ...), swapped with no blend; every blow's clock runs down to a stand (recovery 1.0 -> 1.3 s, heavy 1.45 -> 1.85 s, the same cadence) and ends on idle_fight's first frame, tip 6 -> 0.06 m/s; `relax` out of the guard, `turn_gl`/`turn_gr` on guard; walk, run and 13 other clips byte-identical | [docs/notes/138-sword-skeleton-combos-and-a-soft-landing.md](docs/notes/138-sword-skeleton-combos-and-a-soft-landing.md) |
+| 139 | 2026-10-31 | The sword skeletons are Proel swordsmen (name only; code ids stay, `&"blade"` is in the saves). Out of a blow in stride: 18 `out_*` clips start as the blow stands and end on the gait's first frame, no blend, from 0.32-0.52 s after the swing; 8 `pivot_*` / `gpivot_*` turns of 90 and 180 degrees on planted feet, the turn in `root` x; a lean into turns; `idle_fight` 6.6 s and alive; red eyes at half the light; chains weighed at `CHAIN_OUT` on the result, their health, armour and guard, and which blow can catch them. Walk, run, every blow and link byte-identical | [docs/notes/139-proel-swordsmen.md](docs/notes/139-proel-swordsmen.md) |
 
 ## Notes by source file
 
@@ -583,7 +584,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
-- `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120, 122, 126
+- `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120, 122, 126, 139
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93, 120, 131, 135
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92, 115, 116
@@ -617,7 +618,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pause_menu.gd`: 19
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130
 - `scripts/portcullis.gd`: 6.18
-- `scripts/prosthetic.gd`: 93, 135, 137, 138
+- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79
@@ -629,7 +630,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/save_system.gd`: 19, 60, 79, 131
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130
-- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
@@ -638,7 +639,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sewer_lizard.gd`: 58, 60, 92, 130, 131
 - `scripts/shard_door.gd`: 18, 79, 120, 128
 - `scripts/shield_hitbox.gd`: 68, 69
-- `scripts/skeleton_eyes.gd`: 13, 135
+- `scripts/skeleton_eyes.gd`: 13, 135, 139
 - `scripts/skeleton_sword.gd`: 24, 93, 135
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
@@ -653,7 +654,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111, 128
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
-- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138
+- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
 - `scripts/wood_door.gd`: 6.18, 79
@@ -678,7 +679,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/torch_flame.gdshader`: 6.18, 19
 - `shaders/vine_leaf.gdshader`: 6.18
 - `shaders/water_drip.gdshader`: 39, 121
-- `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138
+- `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139
 - `tools/benchmark.gd`: 6.11, 33, 112
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75

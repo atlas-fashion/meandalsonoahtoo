@@ -598,7 +598,7 @@ says false, delete its files in `.godot/imported/` and import again.
 
 ---
 
-# The sword skeleton (2026-10-30, Blender, notes 135, 136)
+# The Proel swordsman (2026-10-30, Blender, notes 135, 136, 139; its files keep the name sword_skeleton)
 
 ```
 blender -b --factory-startup -P tools/build_sword_skeleton.py                          # model, bake
@@ -629,7 +629,10 @@ inside the window) and `[pace]` as well. A blow's weight is timing, and the end 
 swing is judged in world space: note 137. `LINK`, `LINK_OUT` and `LINK_IN` must stay equal
 to `LINK_TIME`, `CHAIN_OUT` and `CHAIN_IN` in `sword_skeleton.gd`. Read `[seam]` (a blow ends
 on idle_fight's first frame, at no speed) and `[link]` (a link joins its two blows in place
-and speed, and needs no blend): note 138.
+and speed, and needs no blend): note 138. `OUT_AT` must stay equal to the same name in
+`sword_skeleton.gd`. `[out]` reads an `out` clip against the blow it leaves and the gait it
+joins, and `[pivot]` a turn against its stance: note 139. A pivot's `root` x is its turn,
+in radians. The eyes' colour is `light_eyes`, which the anim script sets too.
 `models/sword_skeleton.glb.import` must keep `animation/fps=60`, and the three maps
 `compress/mode=2`, as the scout's. After replacing a map, delete
 `.godot/imported/sword_skeleton*` and the three extracted maps, then import.

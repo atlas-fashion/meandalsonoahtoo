@@ -1,4 +1,5 @@
-"""Every animation of the sword skeleton (notes 135, 136), and the export.
+"""Every animation of the Proel swordsman (notes 135, 136, 139), and the export. The
+names in the files are its old ones: sword_skeleton.
 
     blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py
     blender -b models/source/sword_skeleton/sword_skeleton.blend -P tools/anim_sword_skeleton.py -- --check
@@ -58,7 +59,7 @@ from mathutils import Matrix, Quaternion, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from build_sword_skeleton import BONES, FINGERS, PARENT, PIN_KNEE_L, PIN_KNEE_R, ROOT, SEG, SRC, V
+from build_sword_skeleton import BONES, FINGERS, PARENT, PIN_KNEE_L, PIN_KNEE_R, ROOT, SEG, SRC, V, light_eyes
 
 OUT = os.path.join(ROOT, "models", "sword_skeleton.glb")
 FPS = 60
@@ -593,8 +594,52 @@ def fight_base(t=0.0, L=2.2):
     return sp
 
 
+FIGHT_L = 6.6
+
+
 def idle_fight(t, L):
-    return fight_base(t, L)
+    """The guard, alive (note 139): blown from the blow, the chest heaving and slowing,
+    the weight going from foot to foot, the blade sagging and hauled back up a beat
+    behind it, the claw working, the head looking about, a foot shifted and put back.
+    `on` is 0 at both ends at no speed, so a blow still lands on the guard itself, and
+    everything here may run at any period. The wrist flexes and never turns."""
+    sp = fight_base(t, 2.2)
+    if t <= 0.0 or t >= L:
+        return sp
+    on = sm(t / 0.7) * sm((L - t) / 0.7)
+    blown = 1.0 - 0.62 * sm((t - 1.0) / 2.8)
+    s = math.sin
+    br = s(TAU * t / 1.25) * blown
+    weight = s(TAU * t / 4.4)
+    weight2 = s(TAU * t / 2.9 + 0.7)
+    # The blade comes after the body that holds it up.
+    sag = s(TAU * (t - 0.3) / 4.4 + 0.9)
+    look = s(TAU * t / 5.1 + 0.4)
+    p = sp.pelvis
+    sp.pelvis = V(p.x + on * 0.04 * weight, p.y + on * 0.02 * weight2, p.z - on * (0.012 * br + 0.016 * weight * weight))
+    sp.pelvis_q = rz(rad(16.0 + on * 6.0 * weight)) @ rx(rad(7.0 + on * 1.4 * br)) @ ry(rad(on * 2.6 * weight))
+    a = sp.spine
+    sp.spine = (a[0] + on * (3.0 * br + 1.3 * weight2), a[1] + on * (-6.0 * weight + 3.0 * sag), a[2] + on * -3.6 * weight)
+    sp.neck = (sp.neck[0] - on * 1.2 * br, sp.neck[1] + on * 5.0 * look, on * 1.6 * weight)
+    sp.head = (sp.head[0] + on * (-1.5 * br + 1.6 * s(TAU * t / 3.7)), sp.head[1] + on * 7.0 * s(TAU * t / 5.1 + 0.9), on * 2.4 * s(TAU * t / 6.3 + 1.7))
+    sp.clav_l = (on * 3.0 * br, on * 1.6 * weight2)
+    sp.clav_r = (on * (3.4 * br - 1.6 * sag), on * 3.0 * sag)
+    r = sp.arm_r
+    sp.arm_r = (r[0] + on * (6.0 * sag + 1.0 * br), r[1] + on * 4.0 * s(TAU * t / 3.1 + 2.0), r[2] - on * 8.0 * sag)
+    sp.roll_r += on * 2.0 * sag
+    sp.hand_r = wrist(GUARD["wr"][0] + on * 5.0 * s(TAU * t / 3.3 + 2.4), GUARD["wr"][1] + on * 3.0 * s(TAU * t / 4.1), 0.0)
+    l = sp.arm_l
+    sp.arm_l = (l[0] + on * 7.0 * weight2, l[1] + on * 6.0 * sag, l[2] + on * 10.0 * s(TAU * t / 3.9 + 1.1))
+    sp.curl = 0.5 + on * (0.16 * s(TAU * t / 2.3) + 0.05 * s(TAU * t / 0.83))
+    sp.spread = 1.0 - on * 0.3 * (1.0 + s(TAU * t / 3.1))
+    # The feet get tired too: one is shifted and put back, then the other. Short of
+    # the stance's own length, so a blow from here does not start with a skate.
+    st_r, st_l = (STANCE["r"][0], STANCE["r"][1], STANCE["yr"]), (STANCE["l"][0], STANCE["l"][1], STANCE["yl"])
+    x, y, z, yaw, pitch, toe = step_foot(st_r, ((2.5, 2.95, (-0.13, -0.33, -9.0), 0.03), (5.3, 5.75, st_r, 0.03)), t)
+    sp.foot_r = (V(x, y, z), pitch, yaw, 0.0, toe)
+    x, y, z, yaw, pitch, toe = step_foot(st_l, ((3.65, 4.05, (0.2, 0.28, 25.0), 0.03), (4.75, 5.15, st_l, 0.03)), t)
+    sp.foot_l = (V(x, y, z), pitch, yaw, 0.0, toe)
+    return sp
 
 
 # --- Blows ----------------------------------------------------------------------------
@@ -1242,6 +1287,242 @@ def turn_guard(sgn):
     return fn, T
 
 
+def sole(pitch):
+    """The ankle's height with a foot pitched this far and its heel or ball on the floor."""
+    a = rad(pitch)
+    return ANKLE * math.cos(a) + (BALL if a > 0.0 else HEEL) * math.sin(a)
+
+
+def step_foot(start, steps, t):
+    """Where a foot is on the floor at `t`: (x, y, z, yaw, pitch, toe). `start` (x, y,
+    yaw) and each of `steps`, (t0, t1, (x, y, yaw), lift), are in the WORLD the root
+    stood in at the start, and a step runs round the middle of the body, so a turn of
+    180 degrees does not bring a foot through the other leg."""
+    x, y, yaw = start
+    z, pitch, toe = ANKLE, 0.0, 0.0
+    for t0, t1, to, lift in steps:
+        if t >= t1:
+            x, y, yaw = to
+        elif t > t0:
+            u = (t - t0) / (t1 - t0)
+            e = sm(u)
+            a0, a1 = math.atan2(y, x), math.atan2(to[1], to[0])
+            sweep = (a1 - a0 + math.pi) % TAU - math.pi
+            r0, r1 = math.hypot(x, y), math.hypot(to[0], to[1])
+            r, a = r0 + (r1 - r0) * e, a0 + sweep * e
+            x, y = r * math.cos(a), r * math.sin(a)
+            yaw = yaw + (to[2] - yaw) * e
+            pitch = 14.0 * (1.0 - sm(u / 0.4)) * sm(u / 0.14) - 12.0 * sm((u - 0.72) / 0.28)
+            z = lift * math.sin(math.pi * u) ** 1.1 + sole(pitch)
+            toe = -5.0 * math.sin(math.pi * u)
+        if t1 <= t < t1 + 0.1:
+            pitch = -12.0 * (1.0 - sm((t - t1) / 0.1))
+            z = sole(pitch)
+    return x, y, z, yaw, pitch, toe
+
+
+def pivot(sgn, deg, guard):
+    """A real turn on the spot (note 139): the head goes first, then the chest, then the
+    hips, the blade dragged round after them, and the feet are picked up and set down
+    on the floor. `root` x is the whole turn, in radians: the game takes that track
+    out with the step (sword_skeleton.gd `_lift_roots`) and turns the model by it. Each
+    foot's place below is on the floor, turned back by the root at that moment, so a
+    planted foot does not move. It comes back to the stance it left."""
+    T = {(90, False): 0.86, (180, False): 1.2, (90, True): 0.72, (180, True): 0.98}[(deg, guard)]
+    whole = sgn * deg
+
+    def base():
+        return fight_base() if guard else idle(0.0, 6.0)
+
+    b = base()
+    home = {"l": b.foot_l, "r": b.foot_r}
+    inside, outside = ("l", "r") if sgn > 0 else ("r", "l")
+
+    def at(side, turned):
+        """The stance's place for this foot, with the body turned this far."""
+        q = rz(rad(turned)) @ home[side][0]
+        return (q.x, q.y, home[side][2] + turned)
+
+    if deg == 90:
+        plan = {inside: [(0.02 * T, 0.52 * T, at(inside, whole), 0.05)], outside: [(0.42 * T, T - 0.11, at(outside, whole), 0.05)]}
+    else:
+        plan = {inside: [(0.0, 0.4 * T, at(inside, whole * 0.55), 0.05), (0.66 * T, T - 0.11, at(inside, whole), 0.05)], outside: [(0.3 * T, 0.76 * T, at(outside, whole), 0.055)]}
+
+    def fn(t, _L):
+        sp = base()
+        u = t / T
+        turned = whole * mj((u - 0.06) / 0.9)
+        sp.root = V(rad(turned), 0, 0)
+        size = math.sqrt(deg / 90.0)
+
+        def bell(w):
+            return math.sin(math.pi * max(0.0, min(1.0, w))) ** 2
+
+        lead, mid, late = bell(u * 1.2), bell(u), bell((u - 0.15) / 0.85)
+        p = sp.pelvis
+        sp.pelvis = V(p.x + sgn * 0.02 * math.sin(TAU * u), p.y, p.z - 0.022 * size * math.sin(TAU * u) ** 2)
+        sp.pelvis_q = rz(rad(sgn * 5.0 * size * mid)) @ sp.pelvis_q
+        a = sp.spine
+        sp.spine = (a[0] + 2.0 * mid, a[1] + sgn * 12.0 * size * mid, a[2] + sgn * 2.0 * mid)
+        sp.neck = (sp.neck[0], sp.neck[1] + sgn * 10.0 * size * lead, sp.neck[2])
+        sp.head = (sp.head[0], sp.head[1] + sgn * 18.0 * size * lead, sp.head[2])
+        # Hung out at the end of its arm, the blade is the last to come.
+        r = sp.arm_r
+        sp.arm_r = (r[0] + 4.0 * late, r[1] + sgn * 9.0 * size * late, r[2] + 8.0 * late)
+        l = sp.arm_l
+        sp.arm_l = (l[0], l[1] + 7.0 * mid, l[2] + 6.0 * mid)
+        sp.curl += 0.12 * mid
+        q = rz(rad(-turned))
+        for side in "lr":
+            f = home[side]
+            s0 = (f[0].x, f[0].y, f[2])
+            x, y, z, yaw, pitch, toe = step_foot(s0, plan[side], t)
+            ank = q @ V(x, y, 0.0)
+            ft = (V(ank.x, ank.y, z), pitch, yaw - turned, 0.0, toe)
+            if side == "l":
+                sp.foot_l = ft
+            else:
+                sp.foot_r = ft
+        return sp
+
+    return fn, T
+
+
+# --- Out of a blow, into the walk or the run ---------------------------------------------
+#
+# The player has gone: it goes after them, in stride, with no blend (note 139). An OUT
+# clip takes over from a blow once the carry is spent, and ends on the first frame of the
+# walk or the run at that clip's own speed, so the game swaps clips at both ends.
+#
+#   the arm      each channel crossfades from the blow, still running on its own clock,
+#                to the gait, also running, by a minimum-jerk weight: nothing has to stop
+#                at either end. Hips and head first, the elbow last, as in a link.
+#   the right    is planted, ahead, in every blow by OUT_AT. It is left where it stands,
+#                and rolls off the ball as the body goes over it, by the gait's own
+#                `stance_foot`: that is the first stride.
+#   the root     is what that foot says it must be. It starts from nothing and has
+#                reached the gait's speed by the moment the foot leaves the floor.
+#   the left     whatever it was doing (the carry drags it up from behind) it goes on,
+#                through, and lands where the gait strikes: phase 0 of the clip.
+
+# When a blow can break off, by its clip's clock: just past the carry, the right foot
+# down. sword_skeleton.gd OUT_AT.
+OUT_AT = dict(slash_1=LIGHT[0] + LIGHT[1] + 0.32, slash_2=LIGHT[0] + LIGHT[1] + 0.38, slash_3=LIGHT[0] + LIGHT[1] + 0.32, heavy=HEAVY[0] + HEAVY[1] + 0.52)
+# The first stride, against the time it would take at the gait's own speed. A blow that
+# leaves the blade high wants longer to get it down: slash_2's comes from over its shoulder.
+OUT_STRIDE = dict(slash_1=2.1, slash_2=2.9, slash_3=2.1, heavy=2.5)
+# How far through the clip each part hands over.
+OUT_MIX =dict(pelvis=(0.0, 0.8), pq=(0.0, 0.85), spine=(0.04, 0.9), neck=(0.0, 0.7), head=(0.0, 0.72), clav=(0.05, 0.9), arm=(0.1, 1.0), elbow=(0.18, 1.0), wrist=(0.18, 1.0), arm_l=(0.0, 0.85), curl=(0.1, 0.8))
+
+
+def gait_foot(g, phi, side):
+    """A foot of the gait at phase `phi`, as `gait` has it."""
+    sgn = 1.0 if side == "l" else -1.0
+    y, z, p, toe = foot_at(phi + (0.0 if side == "l" else 0.5), g["T"], g["S"], g["s"], g["heel"], g["toe"], g["pf"], g["pr"], g["lift"], g.get("y0", 0.0), g.get("sw_pitch", 0.0))
+    return (V(sgn * g["width"], y, z), p, sgn * 9.0, 0.0, toe)
+
+
+def foot_vals(f):
+    return (f[0].x, f[0].y, f[0].z, f[1], f[2], f[4])
+
+
+def out_clip(src, t0, L0, g, gait_fn, stride=1.75):
+    """From `src`, the blow's clip, at `t0`, to phase 0 of the gait `g`."""
+    s, S, Tg, y0 = g["s"], g["S"], g["T"], g.get("y0", 0.0)
+    speed = s / (S * Tg)
+    a = src(t0, L0)
+    p0 = (a.foot_r[0].y - y0 + s * 0.5) / s
+    if S < 0.5:
+        # The run: the foot is off the floor a flight before the left comes down.
+        d = s * (1.0 - p0)
+        flight = (1.5 - S) % 1.0 * Tg
+        T = round((stride * d / speed + flight) * FPS) / FPS
+        Tr = T - flight
+    else:
+        # The walk: still on it, heel coming up.
+        d = s * (0.5 / S - p0)
+        Tr = T = round(max(0.62, 1.6 * d / speed) * FPS) / FPS
+
+    def root_at(x):
+        if x >= Tr:
+            return d + speed * (x - Tr)
+        u = x / Tr
+        return d * (3.0 * u * u - 2.0 * u * u * u) + speed * Tr * (u * u * u - u * u)
+
+    dt = 1.0 / FPS
+    start = foot_vals(a.foot_l)
+    before = foot_vals(src(t0 - dt, L0).foot_l) if t0 > 0.0 else start
+    v0 = [(p - q) / dt for p, q in zip(start, before)]
+    end = foot_vals(gait_foot(g, 1.0, "l"))
+    prior = foot_vals(gait_foot(g, 1.0 - dt / Tg, "l"))
+    v1 = [(p - q) / dt for p, q in zip(end, prior)]
+
+    def left(x):
+        u = min(1.0, x / T)
+        u2, u3 = u * u, u * u * u
+        h00, h10, h01, h11 = 2 * u3 - 3 * u2 + 1, u3 - 2 * u2 + u, -2 * u3 + 3 * u2, u3 - u2
+        c = [h00 * p + h10 * T * v + h01 * q + h11 * T * w for p, v, q, w in zip(start, v0, end, v1)]
+        z = c[2] + g["lift"] * 0.9 * math.sin(math.pi * u) ** 2
+        return (V(c[0], c[1], z), c[3], c[4], 0.0, c[5])
+
+    def right(x):
+        p = p0 + root_at(x) / s
+        last = gait_foot(g, 1.0 + (x - T) / Tg, "r")
+        w = mj(x / T)
+        if p >= 1.0:
+            foot = last
+        else:
+            y, z, pitch, toe = stance_foot(p, s, g["heel"], g["toe"], g["pf"], g["pr"])
+            foot = (V(0.0, y + y0, z), pitch, 0.0, 0.0, toe)
+        on = src(t0 + x, L0).foot_r
+        # A foot just down settles flat, as it was going to.
+        e = mj(x / 0.14)
+        pitch = on[1] + (foot[1] - on[1]) * e
+        z = on[0].z + (foot[0].z - on[0].z) * e
+        return (V(a.foot_r[0].x + (last[0].x - a.foot_r[0].x) * w, foot[0].y, z), pitch, a.foot_r[2] + (last[2] - a.foot_r[2]) * w, 0.0, foot[4])
+
+    def mix(name, x):
+        lo, hi = OUT_MIX[name]
+        return mj((x / T - lo) / (hi - lo))
+
+    def fn(x, _L):
+        b = src(t0 + x, L0)
+        n = gait_fn((x - T) % Tg, Tg) if x < T else gait_fn(0.0, Tg)
+        sp = Spec()
+        sp.root = V(0, -root_at(x), 0)
+        w = mix("pelvis", x)
+        sp.pelvis = b.pelvis.lerp(n.pelvis, w)
+        sp.pelvis_q = b.pelvis_q.slerp(n.pelvis_q, mix("pq", x))
+        w = mix("spine", x)
+        # It throws its weight forward to get going.
+        push = math.sin(math.pi * x / T) ** 2
+        sp.spine = lerp(b.spine, n.spine, w)
+        sp.spine = (sp.spine[0] + 7.0 * push, sp.spine[1], sp.spine[2])
+        sp.neck = lerp(b.neck, n.neck, mix("neck", x))
+        sp.head = lerp(b.head, n.head, mix("head", x))
+        w = mix("clav", x)
+        sp.clav_l = lerp(b.clav_l, n.clav_l, w)
+        sp.clav_r = lerp(b.clav_r, n.clav_r, w)
+        w = mix("arm", x)
+        e = mix("elbow", x)
+        sp.arm_r = (b.arm_r[0] + (n.arm_r[0] - b.arm_r[0]) * w, b.arm_r[1] + (n.arm_r[1] - b.arm_r[1]) * w, b.arm_r[2] + (n.arm_r[2] - b.arm_r[2]) * e)
+        sp.roll_r = b.roll_r + (n.roll_r - b.roll_r) * w
+        sp.hand_r = b.hand_r.slerp(n.hand_r, mix("wrist", x))
+        w = mix("arm_l", x)
+        sp.arm_l = lerp(b.arm_l, n.arm_l, w)
+        sp.roll_l = b.roll_l + (n.roll_l - b.roll_l) * w
+        sp.hand_l = b.hand_l.slerp(n.hand_l, w)
+        w = mix("curl", x)
+        sp.curl = b.curl + (n.curl - b.curl) * w
+        sp.spread = b.spread + (n.spread - b.spread) * w
+        sp.foot_l = left(x)
+        sp.foot_r = right(x)
+        return sp
+
+    fn.out = (src, t0, L0, gait_fn, Tg)
+    return fn, T
+
+
 # --- Bake -----------------------------------------------------------------------------
 
 CLIPS = []
@@ -1257,7 +1538,7 @@ def make_clips():
         CLIPS.append((name, fn_len[0], fn_len[1], False))
 
     loop("idle", idle, 6.0)
-    loop("idle_fight", idle_fight, 2.2)
+    loop("idle_fight", idle_fight, FIGHT_L)
     loop("walk", walk, WALK_G["T"])
     loop("run", run, RUN_G["T"])
     loop("haul", haul, WALK_G["T"])
@@ -1277,6 +1558,19 @@ def make_clips():
     BLOW_FNS.update(slash_1=slash_1, slash_2=slash_2, slash_3=slash_3, heavy=heavy)
     for a, b, name in LINKS:
         once(name, link_clip(a, b))
+    gaits = (("walk", WALK_G, walk), ("run", RUN_G, run))
+    for blow, tag in (("slash_1", "1"), ("slash_2", "2"), ("slash_3", "3"), ("heavy", "h")):
+        for k, sh in ((1.0, ""), (SHORT, "s")):
+            fn, L = BLOW_FNS[blow](k)
+            for gname, g, gfn in gaits:
+                once("out_%s%s_%s" % (tag, sh, gname), out_clip(fn, OUT_AT[blow], L, g, gfn, OUT_STRIDE[blow]))
+    # Out of the guard, standing, the same way.
+    for gname, g, gfn in gaits:
+        once("out_g_" + gname, out_clip(lambda _t, _L: fight_base(), 0.0, 2.2, g, gfn))
+    for s, side in ((1.0, "l"), (-1.0, "r")):
+        for guard, name in ((False, "pivot_"), (True, "gpivot_")):
+            once(name + side, pivot(s, 90, guard))
+            once(name + side + "b", pivot(s, 180, guard))
     for d in "bflr":
         once("stagger_" + d, stagger(d))
     once("death_b", death_back())
@@ -1427,7 +1721,7 @@ def bake_clip(arm, name, fn, L, loop_):
         rootz.append(-sp.root.y)
         # A leg stretched past its reach leaves its planted foot behind.
         stretch = max(stretch, (s.P["foot.L"] - sp.foot_l[0]).length, (s.P["foot.R"] - sp.foot_r[0]).length)
-        if base in BLOWS or name.startswith("link_"):
+        if base in BLOWS or name.startswith(("link_", "out_", "gpivot_", "pivot_")):
             edge_at = s.P["blade"] + (tip - s.P["blade"]) * 0.2
             for b0, b1, thick in CLEAR:
                 gap = seg_gap(edge_at, tip, s.P[b0], s.P[b1]) - thick
@@ -1452,7 +1746,7 @@ def bake_clip(arm, name, fn, L, loop_):
         pace_report(name, tips, w, w + a)
         reach_report(name, elbows, tips, rootz, w, w + a)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
-    if name.startswith("link_"):
+    if name.startswith(("link_", "out_", "gpivot_", "pivot_")):
         v = [(tips[i + 1] - tips[i]).length * FPS for i in range(len(tips) - 1)]
         print("[pace]  %-12s tip mean %.1f peak %.1f m/s @ %.2f" % (name, sum(v) / len(v), max(v), v.index(max(v)) / FPS), flush=True)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
@@ -1540,6 +1834,28 @@ def seam_report():
             vo = worst_gap(speed(fa, t0, la), speed(fn, 0.0, LINK))
             vi = worst_gap(speed(fn, LINK, LINK), speed(fb, t1, lb))
             print("[link]  %-10s %-9s out %.4f (%s) speed %.3f (%s)   in %.4f (%s) speed %.3f (%s)" % (name, a + tag + ">" + b + tag, out[0], out[1], vo[0], vo[1], into[0], into[1], vi[0], vi[1]), flush=True)
+
+    def speed_of(f, t, L, e=0.5 / FPS):
+        p, q = seen_at(f, t - e, L), seen_at(f, t + e, L)
+        return {k: (q[k] - p[k]) * (0.5 / e) for k in p}
+
+    for name, (fn, L) in fns.items():
+        if not name.startswith("out_"):
+            continue
+        src, t0, L0, gfn, Tg = fn.out
+        if t0 > 0.0:
+            at_start = worst_gap(seen_at(src, t0, L0), seen_at(fn, 0.0, L))
+            vs = worst_gap(speed_of(src, t0 + 1.0 / FPS, L0), speed_of(fn, 1.0 / FPS, L))
+        else:
+            at_start, vs = (0.0, "-"), (0.0, "-")
+        at_end = worst_gap(seen_at(fn, L, L), seen_at(gfn, 0.0, Tg))
+        ve = worst_gap(speed_of(fn, L - 1.0 / FPS, L), speed_of(gfn, Tg - 1.0 / FPS, Tg))
+        print("[out]   %-12s %.2f s   from the blow %.4f (%s) speed %.3f (%s)   into the gait %.4f (%s) speed %.3f (%s)" % (name, L, at_start[0], at_start[1], vs[0], vs[1], at_end[0], at_end[1], ve[0], ve[1]), flush=True)
+    for name, (fn, L) in fns.items():
+        if "pivot_" in name:
+            base = fight_base if name.startswith("g") else (lambda: idle(0.0, 6.0))
+            b = seen_at(lambda _t, _L: base(), 0.0, 1.0)
+            print("[pivot] %-12s %.2f s   starts %.4f, ends %.4f off the stance, turned %.1f degrees" % (name, L, worst_gap(seen_at(fn, 0.0, L), b)[0], worst_gap(seen_at(fn, L, L), b)[0], math.degrees(fn(L, L).root.x)), flush=True)
 
 
 def sheet(arm, actions, out_dir, only, count=9):
@@ -1637,6 +1953,7 @@ def main():
         sheet(arm, actions, sheet_dir, only)
         return
     arm.animation_data.action = None
+    light_eyes(bpy.data.materials["SkelGlow"])
     # The exporter takes every action of the rig, one clip each, by name.
     sc.frame_start = 0
     sc.frame_end = 200

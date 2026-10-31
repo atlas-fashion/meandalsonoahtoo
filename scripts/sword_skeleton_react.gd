@@ -1,6 +1,6 @@
 extends "res://scripts/enforcer_react.gd"
 
-## The sword skeleton's layer over its clips (sword_skeleton.gd, note 135):
+## The Proel swordsman's layer over its clips (sword_skeleton.gd, note 135):
 ## enforcer_react.gd's inertialized `crossfade` and its hit reactions, on this
 ## rig's longer chain. There the torso is one bone with the head and shoulders on
 ## it; here a rock of the torso is shared down the spine, the head is turned on

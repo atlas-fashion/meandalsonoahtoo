@@ -37,7 +37,7 @@ const RAT_SCRIPT := preload("res://scripts/rat.gd")
 
 ## What the menu offers: id -> label. Kept in this order.
 const KINDS := [
-	[&"skeleton_blade", "Sword skeleton"],
+	[&"skeleton_blade", "Proel swordsman"],
 	[&"skeleton_drill", "Drill skeleton"],
 	[&"skeleton_hammer", "Hammer skeleton"],
 	[&"skeleton_shield", "Shield skeleton"],

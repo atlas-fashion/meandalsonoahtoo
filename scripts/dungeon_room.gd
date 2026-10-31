@@ -77,8 +77,8 @@ const PRISONER_SCALE := 0.94
 ## through them into the dark, and the type is loose in the maze
 ## (maze.gd `release_hand`). Empty for the plain prison.
 var hand: StringName = &""
-const HAND_NAMES := {&"blade": "SWORD", &"hammer": "HAMMER", &"shield": "SHIELD",
-	&"crossbow": "CROSSBOW", &"drill": "DRILL"}
+const HAND_NAMES := {&"blade": "PROEL SWORDSMEN", &"hammer": "HAMMER HANDS", &"shield": "SHIELD HANDS",
+	&"crossbow": "CROSSBOW HANDS", &"drill": "DRILL HANDS"}
 const BACK_DOOR_W := 1.2
 const BACK_DOOR_H := 2.3
 ## How far the back door's slab slides up its rails.
@@ -158,7 +158,7 @@ static func build(holder: Node3D, level, room_: Dictionary, kind_: StringName, s
 
 func title() -> String:
 	if kind == &"prison" and hand != &"":
-		return "CONTAINMENT: %s HANDS" % HAND_NAMES.get(hand, String(hand).to_upper())
+		return "CONTAINMENT: %s" % HAND_NAMES.get(hand, String(hand).to_upper() + " HANDS")
 	return String(TITLES[kind][0]) if kind != &"vacant" else "CHEST ROOM"
 
 
@@ -1890,7 +1890,7 @@ func _open_back_doors() -> void:
 	var hud := _hud()
 	if hud != null and hud.has_method("announce"):
 		hud.announce("THE BACK DOORS GRIND OPEN",
-			"The %s hands are loose in the maze." % String(HAND_NAMES.get(hand, "")).to_lower())
+			"The %s are loose in the maze." % String(HAND_NAMES.get(hand, "")).to_lower())
 	var delay := 0.0
 	for cell in _cells:
 		_lift_back_door(cell, delay, false)

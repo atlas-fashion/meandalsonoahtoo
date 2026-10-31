@@ -80,7 +80,7 @@ SPINE_2 = V(-0.01, -0.02, 1.52)
 CHEST = V(-0.02, -0.03, 1.66)
 NECK = V(-0.01, -0.05, 1.87)
 HEAD = V(-0.02, -0.16, 2.0)
-# The amber eyes: where they sit in their sockets. The skull is turned 28 degrees
+# The red eyes: where they sit in their sockets. The skull is turned 28 degrees
 # to its left of the body (the source's front), and it stoops.
 EYES = (V(-0.037, -0.305, 2.035), V(0.031, -0.277, 2.047))
 
@@ -198,6 +198,15 @@ def decimate(hi):
     me.shade_smooth()
     log("low: %d tris, %d verts" % (len(me.polygons), len(me.vertices)))
     return low
+
+
+def light_eyes(glow):
+    """The eyes' colour (note 139): a dull red, under the bloom. The anim script sets
+    it again, so changing it here needs no rebuild of the model."""
+    q = next(n for n in glow.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    q.inputs["Base Color"].default_value = (0.22, 0.012, 0.008, 1.0)
+    q.inputs["Emission Color"].default_value = (1.0, 0.035, 0.018, 1.0)
+    q.inputs["Emission Strength"].default_value = 0.8
 
 
 def add_eyes(low):
@@ -321,9 +330,7 @@ def final_materials():
     glow = bpy.data.materials.new("SkelGlow")
     glow.use_nodes = True
     q = next(n for n in glow.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
-    q.inputs["Base Color"].default_value = (0.4, 0.2, 0.02, 1.0)
-    q.inputs["Emission Color"].default_value = (1.0, 0.54, 0.09, 1.0)
-    q.inputs["Emission Strength"].default_value = 1.7
+    light_eyes(glow)
     q.inputs["Roughness"].default_value = 0.3
     return mat, glow
 

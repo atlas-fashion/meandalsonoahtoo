@@ -148,7 +148,7 @@ func _apply_hand() -> void:
 			attack_damage = 9.0
 			knockback_resistance = 0.3
 		_:
-			display_name = "SWORD SKELETON"
+			display_name = "PROEL SWORDSMAN"
 			max_health = 100.0
 			move_speed = 4.6
 			normal_cooldown = 1.6
