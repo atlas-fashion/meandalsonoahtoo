@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 133), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 134), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -252,6 +252,10 @@ see `tools/README.md`.
 `tools/build_gate_door.py`, cut out of `module_gate.glb`. Rebuild, never
 hand-edit; rebuild it whenever the gate module is rebuilt.
 
+`models/scout.glb` (the scout) is a build artifact from `tools/build_scout.py`,
+which models it from nothing in Blender. Rebuild, never hand-edit; its bones must
+stay exactly `BONES` in `scripts/scout_body.gd`. See note 134.
+
 `models/kit/module_*.glb` are build artifacts from `tools/build_modules.py`,
 cut from the raw `models/kit/mod_*.glb` Tripo returned. Never hand-edit them;
 rebuild and re-run `tools/verify_modules.py`.
@@ -330,6 +334,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   `convoy.gd`, `collector.gd` (rounds up loose skeletons, note 120), `scout.gd` (the spearman
   robot that roams hunting the player; its body, rig and every animation are
   procedural in `scout_body.gd`: planted-foot gait, IK, springs, mantle cloth;
+  its model is `models/scout.glb`, note 134;
   note 127); helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
   `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`, `shield_hitbox.gd`
   (bone hitboxes: both enforcers' shields, the decrepit's left foot; hit windows; notes 68-69). Clip changes on the
@@ -531,6 +536,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 131 | 2026-10-30 | The intro outside the dungeon (stand-ins until Higgsfield can generate): the knight's hilt, the study, the forested hill of Vardia; 24 lessons teach every control; the sentinel; kidnapped at the altar, waking in the cell. Lizards always drop the small heal | [docs/notes/131-intro-vardia-lessons-kidnapped-lizards-always-heal.md](docs/notes/131-intro-vardia-lessons-kidnapped-lizards-always-heal.md) |
 | 132 | 2026-10-30 | The intro was a black screen from the title (the HUD's black held over it, on a higher layer): it lifts that sheet itself, after its own black is drawn; quitting to the title mid-intro leaves nothing on the root and stops the intro; "Below. With the others." over the black | [docs/notes/132-intro-black-screen-from-the-title.md](docs/notes/132-intro-black-screen-from-the-title.md) |
 | 133 | 2026-10-30 | The intro stopped for good on the walk up the hill (a lambda counted down its own copy of `left`, only with the story watched); the gate arch was one solid box, opening included, so "Walk up to the gate" could not finish; the whole intro played unskipped from the title on keys and mouse | [docs/notes/133-intro-stopped-on-the-walk-and-at-the-gate.md](docs/notes/133-intro-stopped-on-the-walk-and-at-the-gate.md) |
+| 134 | 2026-10-30 | The scout modelled in Blender (`tools/build_scout.py`, no source file: lathed, plated and baked in code; rust, grime and worn edges baked from a procedural material; 34k triangles, 2048 atlas, the mantle's own 1024 maps with torn alpha), loaded onto the same rig: every animation untouched, the mantle cut back so the pauldrons show; 80.4 -> 80.6 fps, +23 MB video memory | [docs/notes/134-the-scout-modelled-in-blender.md](docs/notes/134-the-scout-modelled-in-blender.md) |
 
 ## Notes by source file
 
@@ -612,8 +618,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127
-- `scripts/scout.gd`: 127, 128, 129
-- `scripts/scout_body.gd`: 127, 128, 129
+- `scripts/scout.gd`: 127, 128, 129, 134
+- `scripts/scout_body.gd`: 127, 128, 129, 134
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
@@ -669,6 +675,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_potion.py`: 6.19
 - `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18
+- `tools/build_scout.py`: 134
 - `tools/build_sewer_kit.py`: 54, 55
 - `tools/build_surgery_kit.py`: 95, 96, 98, 99, 100, 102
 - `tools/build_surgeon.py`: 99

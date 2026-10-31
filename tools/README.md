@@ -572,3 +572,26 @@ model's height before fitting (the lift cage's chains and pulley, 0.745). Find
 the fraction from a height profile of the raw (vertex extent per band). After
 rebuilding a piece, check its textures' `.import` files: a rebuild can come back
 with mipmaps off and a new uid -- `git checkout` them and reimport.
+
+# The scout (2026-10-30, Blender, note 134)
+
+```
+blender -b --factory-startup -P tools/build_scout.py                       # model, bake, export
+blender -b --factory-startup -P tools/build_scout.py -- --no-bake          # keep the maps
+blender -b --factory-startup -P tools/build_scout.py -- --preview <dir>    # Cycles renders, no export
+godot --headless --import --path .
+```
+
+`tools/build_scout.py` needs no source: it builds everything in Python, about 2
+minutes with OptiX. It writes `models/source/scout/scout.blend` (low and high
+meshes, rig, materials), the maps beside it, and `models/scout.glb`. `--no-bake`
+keeps both the plate maps and the mantle's, so a change to `cloth_maps` needs a
+full run, and any change to the geometry moves the UVs, so it needs one too.
+
+The rig belongs to `scripts/scout_body.gd`: same bone names, same rests, and the
+mantle's strand formulas are copied from it. Change them in both. Blender's
+frame in the script is X right, Y forward, Z up.
+
+The five extracted maps keep VRAM compression in their committed `.import` files.
+After a change, check that those files still say `"vram_texture": true`; if one
+says false, delete its files in `.godot/imported/` and import again.

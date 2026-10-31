@@ -8,11 +8,12 @@ extends Node3D
 ## round the neck and shoulders; a long ringed spear with a barbed head held low
 ## in both hands.
 ##
-## Built here from primitives into ONE skinned mesh (three surfaces: the plate,
-## the cloth, the glow) on a 31-bone rig, cached and shared by every scout, and
-## the spear as a second mesh. Every plate is rigid on its bone (a machine of
-## plates needs no soft skin); the mantle's hanging part is skinned to seven
-## two-bone strands.
+## The model is models/scout.glb, made in Blender by tools/build_scout.py (note
+## 134): ONE skinned mesh (three surfaces: the plate, the cloth, the glow) on a
+## 31-bone rig, cached and shared by every scout, and the spear as a second
+## mesh. Every plate is rigid on its bone (a machine of plates needs no soft
+## skin); the mantle's hanging part is skinned to seven two-bone strands. That
+## build's bones must stay exactly the rig laid out here in BONES.
 ##
 ## ANIMATED PROCEDURALLY, every frame (`_process`), nothing baked:
 ##   * the FEET are planted in the world and step: a foot lifts when it has
@@ -43,9 +44,7 @@ extends Node3D
 ## The scout (scout.gd) only says what is going on: how fast it moves, how
 ## alert it is, which move it is in and how far through, what to look at.
 
-const ARMOUR := 0
-const CLOTH := 1
-const GLOW := 2
+const MODEL := "res://models/scout.glb"
 
 enum { HIPS, SPINE, CHEST, NECK, HEAD, UARM_R, FARM_R, HAND_R, UARM_L, FARM_L, HAND_L,
 	THIGH_R, SHIN_R, FOOT_R, THIGH_L, SHIN_L, FOOT_L, CLOAK0 }
@@ -98,23 +97,10 @@ const HIPS_SPEED := 1.8
 ## degrees (0 straight behind).
 const STRANDS := 7
 const STRAND_SPAN := 120.0
-const CLOAK_COLS := 25
-const CLOAK_SPAN := 150.0
-const CLOAK_ROWS := 5
 
-const BRASS := Color(0.56, 0.41, 0.2)
-const IRON := Color(0.27, 0.25, 0.22)
-const DARK := Color(0.12, 0.11, 0.1)
-const RUST := Color(0.42, 0.19, 0.08)
-const STEEL := Color(0.58, 0.56, 0.52)
-const LEATHER := Color(0.22, 0.13, 0.07)
-const GLASS := Color(0.02, 0.03, 0.04)
-const CLOTH_COL := Color(0.11, 0.1, 0.09)
 ## The enforcer's crystal colour (enforcer.gd reads it off its material).
 const EYE_COLOUR := Color(0.0, 0.91, 1.0)
 const EYE_ENERGY := 3.2
-## The head is built a little larger than life, about the top of the neck.
-const HEAD_SCALE := 1.16
 
 # --- The poses -------------------------------------------------------------------
 ##
@@ -274,7 +260,9 @@ var _dead_side := 1.0
 static var _mesh: ArrayMesh = null
 static var _skin: Skin = null
 static var _spear_mesh: ArrayMesh = null
-static var _mats := {}
+## Which surface of the body is the glow, and its look (its own copy per scout).
+static var _glow_surface := 0
+static var _glow_mat: StandardMaterial3D = null
 ## Each strand's root, mid and bottom at rest (model space), and length.
 static var _strand_rest: Array = []
 static var _parents := PackedInt32Array()
@@ -282,7 +270,7 @@ static var _parents := PackedInt32Array()
 
 func _ready() -> void:
 	if _mesh == null:
-		_build_meshes()
+		_load_model()
 	_skel = Skeleton3D.new()
 	_skel.name = "Rig"
 	add_child(_skel)
@@ -305,8 +293,8 @@ func _ready() -> void:
 	_mesh_inst.skeleton = NodePath("..")
 	# The rig reaches well outside its rest box (a lunge, the fall).
 	_mesh_inst.custom_aabb = AABB(Vector3(-1.4, -0.3, -2.4), Vector3(2.8, 2.6, 4.2))
-	_eye_mat = (_mats[&"glow"] as StandardMaterial3D).duplicate() as StandardMaterial3D
-	_mesh_inst.set_surface_override_material(GLOW, _eye_mat)
+	_eye_mat = _glow_mat.duplicate() as StandardMaterial3D
+	_mesh_inst.set_surface_override_material(_glow_surface, _eye_mat)
 	_spear = MeshInstance3D.new()
 	_spear.name = "Spear"
 	_spear.mesh = _spear_mesh
@@ -1174,561 +1162,39 @@ static func _cloak_hang(th: float, f: float, length: float) -> Vector3:
 	return _cloak_edge(th) + Vector3(sin(th) * 0.045 * f, -length * f, cos(th) * 0.06 * f)
 
 
-static func _build_meshes() -> void:
-	_make_materials()
-	var b := _Builder.new()
-	_build_head(b)
-	_build_torso(b)
-	for s in [1.0, -1.0]:
-		_build_arm(b, s)
-		_build_leg(b, s)
-	_build_cloak(b)
-	_mesh = b.commit()
-	for i in 3:
-		_mesh.surface_set_material(i, _mats[[&"armour", &"cloth", &"glow"][i]])
-	_skin = Skin.new()
+## The Blender model: its body and spear meshes, and which surface glows.
+static func _load_model() -> void:
+	var root := (load(MODEL) as PackedScene).instantiate()
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.skin != null:
+			_mesh = mi.mesh
+			_skin = _binds(mi.skin)
+		else:
+			_spear_mesh = mi.mesh
+	root.free()
+	for i in _mesh.get_surface_count():
+		var m := _mesh.surface_get_material(i)
+		if m != null and m.resource_name == "ScoutGlow":
+			_glow_surface = i
+	_glow_mat = StandardMaterial3D.new()
+	_glow_mat.albedo_color = Color(0.02, 0.12, 0.14)
+	_glow_mat.emission_enabled = true
+	_glow_mat.emission = EYE_COLOUR
+	_glow_mat.emission_energy_multiplier = EYE_ENERGY
+	_glow_mat.roughness = 0.2
+
+
+## The model's bind order with this rig's rests. The exporter hangs a bone chain
+## off a root turned to Y-up, so its own binds are not this rig's (every rest
+## orientation the identity).
+static func _binds(from: Skin) -> Skin:
+	var rest := {}
 	for i in _bone_count():
 		var def: Array = _bone_def(i)
-		_skin.add_named_bind(def[0], Transform3D(Basis.IDENTITY, def[2]).affine_inverse())
-	var sb := _Builder.new()
-	_build_spear(sb)
-	_spear_mesh = sb.commit_plain()
-	_spear_mesh.surface_set_material(0, _mats[&"armour"])
-
-
-static func _make_materials() -> void:
-	var tex := _plate_textures()
-	var grime: Texture2D = tex[0]
-	var bump: Texture2D = tex[1]
-	var weave: Texture2D = tex[2]
-	var armour := StandardMaterial3D.new()
-	armour.vertex_color_use_as_albedo = true
-	armour.albedo_texture = grime
-	armour.metallic = 0.45
-	armour.roughness = 0.58
-	armour.normal_enabled = true
-	armour.normal_texture = bump
-	armour.normal_scale = 1.0
-	armour.uv1_scale = Vector3(3.0, 3.0, 3.0)
-	_mats[&"armour"] = armour
-	var cloth := StandardMaterial3D.new()
-	cloth.vertex_color_use_as_albedo = true
-	cloth.albedo_texture = weave
-	cloth.roughness = 1.0
-	cloth.metallic = 0.0
-	cloth.cull_mode = BaseMaterial3D.CULL_DISABLED
-	cloth.uv1_scale = Vector3(1.0, 1.0, 1.0)
-	_mats[&"cloth"] = cloth
-	var glow := StandardMaterial3D.new()
-	glow.albedo_color = Color(0.02, 0.12, 0.14)
-	glow.emission_enabled = true
-	glow.emission = EYE_COLOUR
-	glow.emission_energy_multiplier = EYE_ENERGY
-	glow.roughness = 0.2
-	_mats[&"glow"] = glow
-
-
-## The plate's detail, drawn here (no image files): rivets in rows -- domed
-## heads, each with a dark ring round it -- along the seams between plates,
-## pitting and grime between; its height as a normal map; and a coarse weave
-## for the mantle, streaked and stained. [albedo, normal, cloth].
-static func _plate_textures() -> Array:
-	const N := 128
-	var albedo := Image.create(N, N, false, Image.FORMAT_RGBA8)
-	var height := Image.create(N, N, false, Image.FORMAT_RGBA8)
-	var weave := Image.create(N, N, false, Image.FORMAT_RGBA8)
-	var noise := FastNoiseLite.new()
-	noise.seed = 4127
-	noise.frequency = 0.09
-	noise.fractal_octaves = 3
-	var pits := FastNoiseLite.new()
-	pits.seed = 911
-	pits.frequency = 0.35
-	# Rivets on a 32 px grid, every other row shifted half a pitch; plate seams
-	# run between the rows.
-	const PITCH := 32.0
-	for y in N:
-		for x in N:
-			var row := floori(float(y) / PITCH)
-			var sx := fposmod(float(x) + (PITCH * 0.5 if row % 2 == 1 else 0.0), PITCH) - PITCH * 0.5
-			var sy := fposmod(float(y), PITCH) - PITCH * 0.5
-			var r := Vector2(sx, sy).length()
-			var h := 0.5
-			var shade := 1.0
-			if r < 4.2:
-				h = 0.5 + 0.45 * sqrt(maxf(1.0 - (r / 4.2) * (r / 4.2), 0.0))
-				shade = 1.12 - 0.3 * (r / 4.2)
-			elif r < 5.6:
-				h = 0.44
-				shade = 0.62
-			# The seam: a dark groove where one plate laps over the next.
-			var seam := absf(fposmod(float(y) + PITCH * 0.5, PITCH) - PITCH * 0.5)
-			if seam < 1.2:
-				h = minf(h, 0.3)
-				shade = minf(shade, 0.55)
-			elif seam < 2.6:
-				h = minf(h, 0.58)
-			var n := noise.get_noise_2d(float(x), float(y))
-			var pit := pits.get_noise_2d(float(x), float(y))
-			h += pit * 0.06
-			shade *= 0.86 + 0.14 * n - (0.18 if pit > 0.45 else 0.0)
-			albedo.set_pixel(x, y, Color(shade, shade, shade))
-			height.set_pixel(x, y, Color(h, h, h))
-			var w := 0.8 + 0.12 * sin(float(x) * 1.6) * sin(float(y) * 1.6) + 0.22 * n
-			w *= 0.85 + 0.15 * absf(sin(float(x) * 0.21 + n * 3.0))
-			weave.set_pixel(x, y, Color(w, w * 0.97, w * 0.93))
-	height.bump_map_to_normal_map(6.0)
-	albedo.generate_mipmaps()
-	height.generate_mipmaps()
-	weave.generate_mipmaps()
-	return [ImageTexture.create_from_image(albedo), ImageTexture.create_from_image(height),
-		ImageTexture.create_from_image(weave)]
-
-
-static func _bw(bone: int) -> Array:
-	return [[bone, 1.0]]
-
-
-static func _build_head(b: _Builder) -> void:
-	var H := _bw(HEAD)
-	var pivot := Vector3(0.0, 1.58, 0.0)
-	b.pre = Transform3D(Basis.from_scale(Vector3.ONE * HEAD_SCALE), pivot - pivot * HEAD_SCALE)
-	# The domed helmet-head and its face.
-	b.sphere(ARMOUR, 0.155, Transform3D(Basis.from_scale(Vector3(1.0, 0.94, 1.02)), Vector3(0.0, 1.71, 0.0)), H, BRASS, 0.5)
-	b.cyl(ARMOUR, 0.148, 0.118, 0.13, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.645, 0.0)), H, IRON, 0.45)
-	# The brow band, the crown ridge, seams of rivets.
-	b.torus(ARMOUR, 0.149, 0.166, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.737, 0.0)), H, IRON, 0.5)
-	b.sphere(ARMOUR, 0.03, Transform3D(Basis.from_scale(Vector3(0.7, 0.8, 5.2)), Vector3(0.0, 1.848, 0.01)), H, IRON, 0.5)
-	for k in 18:
-		var a := TAU * float(k) / 18.0
-		if absf(angle_difference(a, PI)) < 0.6:
-			continue
-		var dir := Vector3(sin(a), 0.0, cos(a))
-		b.rivet(Vector3(0.0, 1.737, 0.0) + dir * 0.165, dir, H)
-	for k in 7:
-		var z := -0.11 + 0.037 * float(k)
-		var y := 1.71 + sqrt(maxf(0.155 * 0.155 - z * z, 0.0)) * 0.94 + 0.012
-		b.rivet(Vector3(0.024, y, z), Vector3(0.3, 1.0, 0.0).normalized(), H)
-		b.rivet(Vector3(-0.024, y, z), Vector3(-0.3, 1.0, 0.0).normalized(), H)
-	for k in 12:
-		var a := TAU * float(k) / 12.0
-		var dir := Vector3(sin(a), 0.0, cos(a))
-		b.rivet(Vector3(0.0, 1.598, 0.0) + dir * 0.122, dir, H)
-	# The goggles: brass housings, iron bezels, dark glass, a cyan ring and a pupil.
-	for s in [1.0, -1.0]:
-		var c := Vector3(s * 0.064, 1.7, -0.14)
-		var along_z := Basis(Vector3.RIGHT, PI * 0.5)
-		b.cyl(ARMOUR, 0.056, 0.058, 0.075, Transform3D(along_z, c), H, BRASS, 0.45)
-		b.torus(ARMOUR, 0.046, 0.062, Transform3D(along_z, c + Vector3(0.0, 0.0, -0.038)), H, IRON, 0.35)
-		b.cyl(ARMOUR, 0.047, 0.047, 0.006, Transform3D(along_z, c + Vector3(0.0, 0.0, -0.034)), H, GLASS, 0.0)
-		b.torus(GLOW, 0.025, 0.036, Transform3D(along_z, c + Vector3(0.0, 0.0, -0.039)), H, Color.WHITE, 0.0)
-		b.sphere(GLOW, 0.012, Transform3D(Basis.IDENTITY, c + Vector3(0.0, 0.0, -0.037)), H, Color.WHITE, 0.0)
-		for k in 4:
-			var a := TAU * float(k) / 4.0 + PI * 0.25
-			b.rivet(c + Vector3(cos(a) * 0.054, sin(a) * 0.054, -0.044), Vector3.FORWARD, H)
-		# The ear gears.
-		var ear := Vector3(s * 0.158, 1.69, 0.01)
-		var along_x := Basis(Vector3.FORWARD, PI * 0.5)
-		b.cyl(ARMOUR, 0.05, 0.05, 0.034, Transform3D(along_x, ear), H, BRASS, 0.55)
-		b.cyl(ARMOUR, 0.022, 0.022, 0.054, Transform3D(along_x, ear), H, IRON, 0.4)
-		b.gear_teeth(ear, Vector3(s, 0.0, 0.0), 0.056, 10, H)
-	# The antennae.
-	var tilt := Basis(Vector3.RIGHT, 0.16)
-	b.cyl(ARMOUR, 0.014, 0.016, 0.03, Transform3D(tilt, Vector3(0.05, 1.855, 0.04)), H, IRON, 0.4)
-	b.cyl(ARMOUR, 0.0055, 0.0055, 0.3, Transform3D(tilt, Vector3(0.05, 1.855, 0.04) + tilt * Vector3(0.0, 0.15, 0.0)), H, STEEL, 0.3)
-	b.sphere(ARMOUR, 0.013, Transform3D(Basis.IDENTITY, Vector3(0.05, 1.855, 0.04) + tilt * Vector3(0.0, 0.3, 0.0)), H, BRASS, 0.3)
-	var tilt2 := Basis(Vector3.FORWARD, -0.62) * Basis(Vector3.RIGHT, 0.3)
-	b.cyl(ARMOUR, 0.012, 0.014, 0.025, Transform3D(tilt2, Vector3(-0.06, 1.835, 0.05)), H, IRON, 0.4)
-	b.cyl(ARMOUR, 0.005, 0.005, 0.15, Transform3D(tilt2, Vector3(-0.06, 1.835, 0.05) + tilt2 * Vector3(0.0, 0.075, 0.0)), H, STEEL, 0.3)
-	# The grimacing slot of a mouth, its teeth, the jaw plate and the cheeks.
-	b.box(ARMOUR, Vector3(0.108, 0.024, 0.03), Transform3D(Basis.IDENTITY, Vector3(0.0, 1.618, -0.127)), H, DARK, 0.0)
-	for s in [1.0, -1.0]:
-		b.box(ARMOUR, Vector3(0.03, 0.016, 0.03), Transform3D(Basis(Vector3.FORWARD, s * -0.45), Vector3(s * 0.066, 1.611, -0.122)), H, DARK, 0.0)
-	for k in 6:
-		b.box(ARMOUR, Vector3(0.008, 0.026, 0.012), Transform3D(Basis.IDENTITY, Vector3(-0.045 + 0.018 * float(k), 1.618, -0.138)), H, STEEL, 0.3)
-	b.box(ARMOUR, Vector3(0.17, 0.036, 0.11), Transform3D(Basis.IDENTITY, Vector3(0.0, 1.585, -0.055)), H, IRON, 0.45)
-	for s in [1.0, -1.0]:
-		b.box(ARMOUR, Vector3(0.02, 0.07, 0.09), Transform3D(Basis(Vector3.UP, s * 0.5), Vector3(s * 0.118, 1.63, -0.07)), H, BRASS, 0.5)
-	b.pre = Transform3D.IDENTITY
-	# The neck: an iron column, ribbed.
-	var N := _bw(NECK)
-	b.cyl(ARMOUR, 0.056, 0.06, 0.12, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.535, 0.0)), N, DARK, 0.3)
-	for y in [1.515, 1.55]:
-		b.torus(ARMOUR, 0.052, 0.068, Transform3D(Basis.IDENTITY, Vector3(0.0, y, 0.0)), N, IRON, 0.4)
-
-
-static func _build_torso(b: _Builder) -> void:
-	var C := _bw(CHEST)
-	var S := _bw(SPINE)
-	var P := _bw(HIPS)
-	# Chest: an iron barrel, a brass breastplate over it, the gorget.
-	b.sphere(ARMOUR, 0.22, Transform3D(Basis.from_scale(Vector3(1.0, 0.86, 0.74)), Vector3(0.0, 1.34, 0.0)), C, IRON, 0.5)
-	b.sphere(ARMOUR, 0.2, Transform3D(Basis.from_scale(Vector3(0.94, 0.88, 0.62)), Vector3(0.0, 1.33, -0.04)), C, BRASS, 0.55)
-	b.sphere(ARMOUR, 0.02, Transform3D(Basis.from_scale(Vector3(0.8, 8.0, 1.0)), Vector3(0.0, 1.33, -0.163)), C, IRON, 0.5)
-	b.cyl(ARMOUR, 0.12, 0.155, 0.07, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.475, 0.0)), C, BRASS, 0.5)
-	b.torus(ARMOUR, 0.11, 0.132, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.512, 0.0)), C, IRON, 0.45)
-	# The back: its plate and the power box on it.
-	b.sphere(ARMOUR, 0.2, Transform3D(Basis.from_scale(Vector3(0.94, 0.84, 0.6)), Vector3(0.0, 1.34, 0.05)), C, IRON, 0.55)
-	b.box(ARMOUR, Vector3(0.22, 0.22, 0.1), Transform3D(Basis.IDENTITY, Vector3(0.0, 1.31, 0.17)), C, IRON, 0.6)
-	for s in [1.0, -1.0]:
-		b.cyl(ARMOUR, 0.016, 0.016, 0.2, Transform3D(Basis.IDENTITY, Vector3(s * 0.07, 1.33, 0.225)), C, BRASS, 0.5)
-	for k in 11:
-		var a := lerpf(-1.25, 1.25, float(k) / 10.0) + PI
-		var dir := Vector3(sin(a), 0.0, cos(a))
-		b.rivet(Vector3(dir.x * 0.18, 1.2, dir.z * 0.115) + Vector3(0.0, 0.0, -0.01), dir, C)
-		b.rivet(Vector3(dir.x * 0.14, 1.46, dir.z * 0.15 - 0.005), (dir + Vector3.UP * 0.6).normalized(), C)
-	for k in 5:
-		b.rivet(Vector3(0.0, 1.24 + 0.045 * float(k), -0.175 + 0.008 * float(k)), Vector3.FORWARD, C)
-	# The abdomen: overlapping lames over a dark core.
-	b.cyl(ARMOUR, 0.13, 0.13, 0.24, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.12, 0.0)), S, DARK, 0.3)
-	var lames := [[1.205, [[CHEST, 0.5], [SPINE, 0.5]], BRASS], [1.155, S, IRON], [1.105, [[SPINE, 0.5], [HIPS, 0.5]], BRASS]]
-	for l in lames:
-		b.cyl(ARMOUR, 0.188, 0.176, 0.056, Transform3D(Basis.from_scale(Vector3(1.0, 1.0, 0.76)), Vector3(0.0, l[0], 0.0)), l[1], l[2], 0.55)
-		for k in 5:
-			var a := lerpf(-0.9, 0.9, float(k) / 4.0) + PI
-			var dir := Vector3(sin(a), 0.0, cos(a))
-			b.rivet(Vector3(dir.x * 0.18, float(l[0]) - 0.015, dir.z * 0.137), dir, l[1])
-	# The hips: the pelvis block, the belt, its buckle and pouches.
-	b.cyl(ARMOUR, 0.17, 0.16, 0.13, Transform3D(Basis.from_scale(Vector3(1.0, 1.0, 0.8)), Vector3(0.0, 0.99, 0.0)), P, IRON, 0.5)
-	b.torus(ARMOUR, 0.162, 0.19, Transform3D(Basis.from_scale(Vector3(1.0, 1.0, 0.8)), Vector3(0.0, 1.035, 0.0)), P, LEATHER, 0.1)
-	b.box(ARMOUR, Vector3(0.07, 0.06, 0.02), Transform3D(Basis.IDENTITY, Vector3(0.0, 1.035, -0.153)), P, BRASS, 0.4)
-	b.box(ARMOUR, Vector3(0.08, 0.09, 0.05), Transform3D(Basis(Vector3.UP, 0.4), Vector3(0.15, 0.99, -0.08)), P, LEATHER, 0.1)
-	b.box(ARMOUR, Vector3(0.07, 0.08, 0.05), Transform3D(Basis(Vector3.UP, -1.2), Vector3(-0.165, 0.995, 0.03)), P, LEATHER, 0.1)
-	b.box(ARMOUR, Vector3(0.1, 0.12, 0.03), Transform3D(Basis(Vector3.RIGHT, 0.15), Vector3(0.0, 0.915, -0.135)), P, BRASS, 0.5)
-	# The tassets: plates hung over the hips, half on the thigh beneath.
-	for s in [1.0, -1.0]:
-		var tw := [[HIPS, 0.5], [THIGH_R if s > 0.0 else THIGH_L, 0.5]]
-		var front := Basis(Vector3.UP, s * -0.35) * Basis(Vector3.RIGHT, 0.14)
-		b.box(ARMOUR, Vector3(0.15, 0.19, 0.016), Transform3D(front, Vector3(s * 0.1, 0.88, -0.142)), tw, BRASS, 0.6)
-		b.box(ARMOUR, Vector3(0.14, 0.08, 0.016), Transform3D(front, Vector3(s * 0.102, 0.77, -0.152)), tw, IRON, 0.6)
-		b.rivet(Vector3(s * 0.065, 0.965, -0.154), Vector3.FORWARD, tw)
-		b.rivet(Vector3(s * 0.135, 0.965, -0.13), Vector3(s * 0.4, 0.0, -1.0).normalized(), tw)
-		var outer := Basis(Vector3.FORWARD, s * 0.2)
-		b.box(ARMOUR, Vector3(0.016, 0.18, 0.15), Transform3D(outer, Vector3(s * 0.182, 0.9, 0.0)), tw, IRON, 0.6)
-	b.box(ARMOUR, Vector3(0.24, 0.16, 0.016), Transform3D(Basis(Vector3.RIGHT, -0.15), Vector3(0.0, 0.9, 0.145)), P, IRON, 0.6)
-
-
-static func _build_arm(b: _Builder, s: float) -> void:
-	var r := s > 0.0
-	var U := _bw(UARM_R if r else UARM_L)
-	var F := _bw(FARM_R if r else FARM_L)
-	var Hd := _bw(HAND_R if r else HAND_L)
-	var pw := [[CHEST, 0.5], [UARM_R if r else UARM_L, 0.5]]
-	var x := s * 0.21
-	# The pauldron: a great rounded dome and two lames.
-	b.sphere(ARMOUR, 0.13, Transform3D(Basis.from_scale(Vector3(1.0, 0.62, 1.1)), Vector3(s * 0.25, 1.465, 0.0)), pw, BRASS, 0.55)
-	b.cyl(ARMOUR, 0.128, 0.132, 0.036, Transform3D(Basis.from_scale(Vector3(1.0, 1.0, 1.06)), Vector3(s * 0.265, 1.43, 0.0)), pw, IRON, 0.6)
-	b.cyl(ARMOUR, 0.112, 0.118, 0.034, Transform3D(Basis.from_scale(Vector3(1.0, 1.0, 1.06)), Vector3(s * 0.27, 1.396, 0.0)), pw, BRASS, 0.6)
-	for k in 9:
-		var a := TAU * float(k) / 9.0
-		var dir := Vector3(cos(a) * 1.05, 0.0, sin(a) * 1.12).normalized()
-		b.rivet(Vector3(s * 0.25 + cos(a) * 0.132, 1.44, sin(a) * 0.141), (dir + Vector3.UP * 0.3).normalized(), pw)
-	# Upper arm and its plate.
-	b.cyl(ARMOUR, 0.05, 0.05, 0.3, Transform3D(Basis.IDENTITY, Vector3(x, 1.3, 0.0)), U, DARK, 0.3)
-	b.cyl(ARMOUR, 0.066, 0.06, 0.15, Transform3D(Basis.IDENTITY, Vector3(x, 1.235, 0.0)), U, IRON, 0.55)
-	b.rivet(Vector3(x + s * 0.057, 1.25, 0.0), Vector3(s, 0.0, 0.0), U)
-	b.rivet(Vector3(x, 1.25, -0.057), Vector3.FORWARD, U)
-	# The elbow: a gear joint and its cop.
-	b.sphere(ARMOUR, 0.05, Transform3D(Basis.IDENTITY, Vector3(x, 1.14, 0.0)), F, IRON, 0.4)
-	b.cyl(ARMOUR, 0.056, 0.056, 0.022, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(x + s * 0.045, 1.14, 0.0)), F, BRASS, 0.5)
-	b.gear_teeth(Vector3(x + s * 0.045, 1.14, 0.0), Vector3(s, 0.0, 0.0), 0.061, 10, F)
-	b.sphere(ARMOUR, 0.045, Transform3D(Basis.from_scale(Vector3(0.9, 1.0, 1.3)), Vector3(x, 1.14, 0.04)), F, BRASS, 0.5)
-	# The vambrace.
-	b.cyl(ARMOUR, 0.068, 0.054, 0.23, Transform3D(Basis.IDENTITY, Vector3(x, 0.995, 0.0)), F, BRASS, 0.6)
-	for y in [1.085, 0.925]:
-		b.torus(ARMOUR, 0.058, 0.072, Transform3D(Basis.IDENTITY, Vector3(x, y, 0.0)), F, IRON, 0.5)
-	for k in 3:
-		b.rivet(Vector3(x + s * 0.055, 1.05 - 0.05 * float(k), 0.0), Vector3(s, 0.0, 0.0), F)
-	# The gauntlet, closed on the shaft (which runs fore and aft through it).
-	b.cyl(ARMOUR, 0.05, 0.05, 0.04, Transform3D(Basis.IDENTITY, Vector3(x, 0.85, 0.0)), Hd, BRASS, 0.5)
-	b.box(ARMOUR, Vector3(0.095, 0.105, 0.105), Transform3D(Basis.IDENTITY, Vector3(x, 0.79, 0.0)), Hd, IRON, 0.5)
-	b.box(ARMOUR, Vector3(0.03, 0.09, 0.105), Transform3D(Basis.IDENTITY, Vector3(x - s * 0.045, 0.785, 0.0)), Hd, DARK, 0.4)
-
-
-static func _build_leg(b: _Builder, s: float) -> void:
-	var r := s > 0.0
-	var T := _bw(THIGH_R if r else THIGH_L)
-	var Sh := _bw(SHIN_R if r else SHIN_L)
-	var Ft := _bw(FOOT_R if r else FOOT_L)
-	var x := s * 0.11
-	# Thigh and its cuisse.
-	b.cyl(ARMOUR, 0.088, 0.072, 0.4, Transform3D(Basis.IDENTITY, Vector3(x, 0.72, 0.0)), T, DARK, 0.3)
-	b.sphere(ARMOUR, 0.082, Transform3D(Basis.from_scale(Vector3(1.0, 2.3, 0.72)), Vector3(x, 0.73, -0.05)), T, BRASS, 0.55)
-	for k in 3:
-		b.rivet(Vector3(x, 0.83 - 0.08 * float(k), -0.108), Vector3.FORWARD, T)
-	# The knee: a gear joint, its cop.
-	b.sphere(ARMOUR, 0.058, Transform3D(Basis.IDENTITY, Vector3(x, 0.5, 0.0)), Sh, IRON, 0.4)
-	b.cyl(ARMOUR, 0.06, 0.06, 0.022, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(x + s * 0.052, 0.5, 0.0)), Sh, BRASS, 0.5)
-	b.gear_teeth(Vector3(x + s * 0.052, 0.5, 0.0), Vector3(s, 0.0, 0.0), 0.065, 11, Sh)
-	b.sphere(ARMOUR, 0.058, Transform3D(Basis.from_scale(Vector3(1.0, 1.05, 0.72)), Vector3(x, 0.5, -0.048)), Sh, BRASS, 0.55)
-	# The greave.
-	b.cyl(ARMOUR, 0.074, 0.056, 0.37, Transform3D(Basis.IDENTITY, Vector3(x, 0.29, 0.0)), Sh, IRON, 0.6)
-	b.sphere(ARMOUR, 0.024, Transform3D(Basis.from_scale(Vector3(1.0, 7.5, 1.0)), Vector3(x, 0.3, -0.06)), Sh, BRASS, 0.5)
-	b.torus(ARMOUR, 0.056, 0.07, Transform3D(Basis.IDENTITY, Vector3(x, 0.15, 0.0)), Sh, BRASS, 0.5)
-	for k in 3:
-		b.rivet(Vector3(x + s * 0.066, 0.4 - 0.09 * float(k), 0.0), Vector3(s, 0.0, 0.0), Sh)
-	# The sabaton.
-	b.cyl(ARMOUR, 0.05, 0.052, 0.05, Transform3D(Basis.IDENTITY, Vector3(x, 0.105, 0.0)), Ft, BRASS, 0.5)
-	b.box(ARMOUR, Vector3(0.11, 0.08, 0.18), Transform3D(Basis.IDENTITY, Vector3(x, 0.044, -0.045)), Ft, IRON, 0.55)
-	b.box(ARMOUR, Vector3(0.096, 0.05, 0.07), Transform3D(Basis(Vector3.RIGHT, -0.22), Vector3(x, 0.032, -0.155)), Ft, BRASS, 0.55)
-	b.box(ARMOUR, Vector3(0.08, 0.06, 0.06), Transform3D(Basis.IDENTITY, Vector3(x, 0.036, 0.045)), Ft, IRON, 0.5)
-
-
-static func _build_cloak(b: _Builder) -> void:
-	_strands_rest()
-	var C := _bw(CHEST)
-	var rows := CLOAK_ROWS + 2
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 6151
-	var base := b.count[CLOTH]
-	var st: SurfaceTool = b.st[CLOTH]
-	for c in CLOAK_COLS:
-		var u := float(c) / float(CLOAK_COLS - 1)
-		var th := deg_to_rad(lerpf(-CLOAK_SPAN, CLOAK_SPAN, u))
-		var length := _cloak_len(th)
-		# Ragged: teeth and tatters along the hem.
-		var hem := 1.0 - rng.randf_range(0.0, 0.2) - (0.13 if c % 2 == 1 else 0.0)
-		# Which two strands hold this column, and how much of each.
-		var sf := clampf((rad_to_deg(th) + STRAND_SPAN) / (2.0 * STRAND_SPAN) * float(STRANDS - 1), 0.0, float(STRANDS - 1))
-		var k0 := mini(floori(sf), STRANDS - 2)
-		var w1 := clampf(sf - float(k0), 0.0, 1.0)
-		for r in rows:
-			var p: Vector3
-			var bones: Array
-			if r == 0:
-				p = Vector3(sin(th) * 0.14, lerpf(1.6, 1.545, clampf((absf(rad_to_deg(th)) - 110.0) / 40.0, 0.0, 1.0)), cos(th) * 0.13 + 0.012)
-				bones = C
-			else:
-				var f := float(r - 1) / float(CLOAK_ROWS)
-				if r == rows - 1:
-					f *= hem
-				elif r == rows - 2:
-					f *= lerpf(1.0, hem, 0.3)
-				p = _cloak_hang(th, f, length)
-				var chest_w := maxf(0.0, 1.0 - f * 3.0)
-				var wa := clampf(1.0 - (f - 0.3) / 0.4, 0.0, 1.0)
-				var a0 := CLOAK0 + 2 * k0
-				var a1 := CLOAK0 + 2 * (k0 + 1)
-				var rest := 1.0 - chest_w
-				if chest_w > 0.0:
-					bones = [[CHEST, chest_w], [a0, rest * (1.0 - w1)], [a1, rest * w1]]
-				else:
-					bones = [[a0, wa * (1.0 - w1)], [a0 + 1, (1.0 - wa) * (1.0 - w1)],
-						[a1, wa * w1], [a1 + 1, (1.0 - wa) * w1]]
-			b.raw_vertex(CLOTH, p, Vector3.UP, Vector2(u * 3.0, float(r) / float(rows - 1)), bones,
-				CLOTH_COL * rng.randf_range(0.8, 1.15))
-	for c in CLOAK_COLS - 1:
-		for r in rows - 1:
-			var i0 := base + c * rows + r
-			var i1 := i0 + rows
-			st.add_index(i0)
-			st.add_index(i1)
-			st.add_index(i0 + 1)
-			st.add_index(i1)
-			st.add_index(i1 + 1)
-			st.add_index(i0 + 1)
-	# The hood, fallen back and bunched behind the neck.
-	b.sphere(CLOTH, 0.12, Transform3D(Basis.from_scale(Vector3(1.25, 0.62, 0.85)), Vector3(0.0, 1.585, 0.13)), C, CLOTH_COL * 1.1, 0.0)
-	b.sphere(CLOTH, 0.08, Transform3D(Basis.from_scale(Vector3(1.6, 0.55, 0.9)), Vector3(0.0, 1.62, 0.07)), C, CLOTH_COL, 0.0)
-
-
-static func _build_spear(b: _Builder) -> void:
-	var none: Array = []
-	var along := Basis(Vector3.RIGHT, PI * 0.5)
-	# A cone's point toward the spear's point (-Z).
-	var fwd := Basis(Vector3.RIGHT, -PI * 0.5)
-	# The shaft, ringed its whole length.
-	var shaft_len := SPEAR_BUTT + 1.4
-	b.cyl(ARMOUR, 0.02, 0.02, shaft_len, Transform3D(along, Vector3(0.0, 0.0, (SPEAR_BUTT - 1.4) * 0.5)), none, DARK, 0.4)
-	var z := SPEAR_BUTT - 0.06
-	while z > -1.38:
-		b.torus(ARMOUR, 0.019, 0.026, Transform3D(along, Vector3(0.0, 0.0, z)), none, BRASS, 0.5)
-		z -= 0.14
-	# The butt cap and its spike.
-	b.cyl(ARMOUR, 0.027, 0.027, 0.06, Transform3D(along, Vector3(0.0, 0.0, SPEAR_BUTT - 0.03)), none, IRON, 0.5)
-	b.cyl(ARMOUR, 0.0, 0.024, 0.07, Transform3D(along, Vector3(0.0, 0.0, SPEAR_BUTT + 0.035)), none, IRON, 0.5)
-	# The socket and its binding.
-	b.cyl(ARMOUR, 0.032, 0.022, 0.13, Transform3D(fwd, Vector3(0.0, 0.0, -1.43)), none, IRON, 0.55)
-	b.torus(ARMOUR, 0.028, 0.038, Transform3D(along, Vector3(0.0, 0.0, -1.47)), none, BRASS, 0.5)
-	# The head: a long leaf of a blade, flat, four-edged.
-	var flat := Basis.from_scale(Vector3(1.0, 1.0, 0.26))
-	b.cyl(ARMOUR, 0.0, 0.065, 0.32, Transform3D(fwd * flat, Vector3(0.0, 0.0, -1.64)), none, STEEL, 0.25, 4)
-	b.cyl(ARMOUR, 0.065, 0.03, 0.06, Transform3D(fwd * flat, Vector3(0.0, 0.0, -1.46)), none, STEEL, 0.25, 4)
-	# Side prongs flaring forward, and barbs hooked back -- halberd fashion.
-	for s in [1.0, -1.0]:
-		var prong := Basis(Vector3.UP, -s * 0.62) * fwd * flat
-		b.cyl(ARMOUR, 0.0, 0.034, 0.2, Transform3D(prong, Vector3(s * 0.06, 0.0, -1.55)), none, STEEL, 0.35, 4)
-		var barb := Basis(Vector3.UP, -s * 2.3) * fwd * flat
-		b.cyl(ARMOUR, 0.0, 0.026, 0.12, Transform3D(barb, Vector3(s * 0.07, 0.0, -1.47)), none, STEEL, 0.4, 4)
-		for k in 3:
-			var tooth := Basis(Vector3.UP, -s * 0.9) * fwd * flat
-			b.cyl(ARMOUR, 0.0, 0.012, 0.035, Transform3D(tooth, Vector3(s * (0.05 - 0.013 * float(k)), 0.0, -1.6 - 0.05 * float(k))), none, STEEL, 0.3, 4)
-
-
-## Puts primitive meshes together into one skinned mesh, a surface per material.
-class _Builder:
-	var st: Array[SurfaceTool] = []
-	var count: Array[int] = [0, 0, 0]
-	## Put before every part's own transform (the head's scale).
-	var pre := Transform3D.IDENTITY
-	var noise := FastNoiseLite.new()
-
-	func _init() -> void:
-		for i in 3:
-			var s := SurfaceTool.new()
-			s.set_skin_weight_count(SurfaceTool.SKIN_4_WEIGHTS)
-			s.begin(Mesh.PRIMITIVE_TRIANGLES)
-			st.append(s)
-		noise.seed = 127
-		noise.frequency = 1.0
-		noise.fractal_octaves = 3
-
-	func sphere(surf: int, r: float, xf: Transform3D, bones: Array, col: Color, rust: float) -> void:
-		var m := SphereMesh.new()
-		m.radius = r
-		m.height = r * 2.0
-		m.radial_segments = 14 if r > 0.05 else 8
-		m.rings = 8 if r > 0.05 else 5
-		put(surf, m.get_mesh_arrays(), xf, bones, col, rust)
-
-	func cyl(surf: int, top: float, bottom: float, h: float, xf: Transform3D, bones: Array, col: Color,
-			rust: float, sides := 0) -> void:
-		var m := CylinderMesh.new()
-		m.top_radius = top
-		m.bottom_radius = bottom
-		m.height = h
-		m.radial_segments = sides if sides > 0 else (14 if maxf(top, bottom) > 0.04 else 8)
-		m.rings = 1
-		put(surf, m.get_mesh_arrays(), xf, bones, col, rust)
-
-	func torus(surf: int, inner: float, outer: float, xf: Transform3D, bones: Array, col: Color, rust: float) -> void:
-		var m := TorusMesh.new()
-		m.inner_radius = inner
-		m.outer_radius = outer
-		m.rings = 18
-		m.ring_segments = 6
-		put(surf, m.get_mesh_arrays(), xf, bones, col, rust)
-
-	func box(surf: int, size: Vector3, xf: Transform3D, bones: Array, col: Color, rust: float) -> void:
-		var m := BoxMesh.new()
-		m.size = size
-		put(surf, m.get_mesh_arrays(), xf, bones, col, rust)
-
-	## A rivet head on a plate at `p`, its face along `n`.
-	func rivet(p: Vector3, n: Vector3, bones: Array) -> void:
-		var m := SphereMesh.new()
-		m.radius = 0.0085
-		m.height = 0.0085
-		m.is_hemisphere = true
-		m.radial_segments = 6
-		m.rings = 2
-		var y := n.normalized()
-		var x := y.cross(Vector3.FORWARD if absf(y.z) < 0.9 else Vector3.RIGHT).normalized()
-		var z := x.cross(y)
-		put(ARMOUR, m.get_mesh_arrays(), Transform3D(Basis(x, y, z), p), bones, IRON * 1.15, 0.3)
-
-	## Teeth round a gear's rim: `n` teeth at radius `r` round the axis `axis`.
-	func gear_teeth(centre: Vector3, axis: Vector3, r: float, n: int, bones: Array) -> void:
-		var a := axis.normalized()
-		var u := a.cross(Vector3.UP if absf(a.y) < 0.9 else Vector3.RIGHT).normalized()
-		var v := a.cross(u)
-		for k in n:
-			var ang := TAU * float(k) / float(n)
-			var dir := u * cos(ang) + v * sin(ang)
-			var y := dir
-			var x := a
-			var z := x.cross(y)
-			box(ARMOUR, Vector3(0.018, 0.016, 0.014), Transform3D(Basis(x, y, z), centre + dir * r), bones, BRASS, 0.5)
-
-	func raw_vertex(surf: int, p: Vector3, n: Vector3, uv: Vector2, bones: Array, col: Color) -> void:
-		var s: SurfaceTool = st[surf]
-		s.set_normal(n)
-		s.set_uv(uv)
-		s.set_color(col)
-		_set_bones(s, bones)
-		s.add_vertex(p)
-		count[surf] += 1
-
-	func _set_bones(s: SurfaceTool, bones: Array) -> void:
-		var bi := PackedInt32Array([0, 0, 0, 0])
-		var bw := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
-		var total := 0.0
-		for k in mini(bones.size(), 4):
-			bi[k] = int(bones[k][0])
-			bw[k] = float(bones[k][1])
-			total += bw[k]
-		if bones.is_empty():
-			bw[0] = 1.0
-		elif total > 0.0:
-			for k in 4:
-				bw[k] /= total
-		s.set_bones(bi)
-		s.set_weights(bw)
-
-	func put(surf: int, arr: Array, xf_part: Transform3D, bones: Array, col: Color, rust: float) -> void:
-		var xf := pre * xf_part
-		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-		var norms: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
-		var uvs = arr[Mesh.ARRAY_TEX_UV]
-		var idx = arr[Mesh.ARRAY_INDEX]
-		var nb := xf.basis.inverse().transposed()
-		var flip := xf.basis.determinant() < 0.0
-		var s: SurfaceTool = st[surf]
-		var base: int = count[surf]
-		for i in verts.size():
-			var p := xf * verts[i]
-			s.set_normal((nb * norms[i]).normalized())
-			s.set_uv(uvs[i] if uvs != null and i < (uvs as PackedVector2Array).size() else Vector2.ZERO)
-			s.set_color(_tint(col, p, rust))
-			_set_bones(s, bones)
-			s.add_vertex(p)
-		if idx == null or (idx as PackedInt32Array).is_empty():
-			for i in verts.size():
-				s.add_index(base + i)
-		else:
-			var ix := idx as PackedInt32Array
-			for t in range(0, ix.size(), 3):
-				if flip:
-					s.add_index(base + ix[t])
-					s.add_index(base + ix[t + 2])
-					s.add_index(base + ix[t + 1])
-				else:
-					s.add_index(base + ix[t])
-					s.add_index(base + ix[t + 1])
-					s.add_index(base + ix[t + 2])
-		count[surf] += verts.size()
-
-	## Rust in patches (a noise over where the vertex sits) and grime lower down.
-	func _tint(col: Color, p: Vector3, rust: float) -> Color:
-		if rust <= 0.0:
-			return col
-		var n := noise.get_noise_3dv(p * 9.0)
-		var r := smoothstep(-0.05, 0.45, n) * rust
-		var c := col.lerp(RUST, r)
-		var g := noise.get_noise_3dv(p * 23.0 + Vector3(17.0, 3.0, 5.0))
-		c = c.lerp(c * 0.55, smoothstep(0.2, 0.7, g) * 0.6)
-		return c * lerpf(0.78, 1.0, clampf(p.y / 1.7, 0.0, 1.0))
-
-	func commit() -> ArrayMesh:
-		var mesh := ArrayMesh.new()
-		st[CLOTH].generate_normals()
-		for i in 3:
-			if count[i] == 0:
-				raw_vertex(i, Vector3.ZERO, Vector3.UP, Vector2.ZERO, [[0, 1.0]], Color.BLACK)
-				raw_vertex(i, Vector3.ZERO, Vector3.UP, Vector2.ZERO, [[0, 1.0]], Color.BLACK)
-				raw_vertex(i, Vector3.ZERO, Vector3.UP, Vector2.ZERO, [[0, 1.0]], Color.BLACK)
-				for k in 3:
-					st[i].add_index(k)
-			st[i].generate_tangents()
-			st[i].commit(mesh)
-		return mesh
-
-	## The spear: no skin, one surface.
-	func commit_plain() -> ArrayMesh:
-		st[ARMOUR].generate_tangents()
-		var arrays := st[ARMOUR].commit_to_arrays()
-		arrays[Mesh.ARRAY_BONES] = null
-		arrays[Mesh.ARRAY_WEIGHTS] = null
-		var mesh := ArrayMesh.new()
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		return mesh
+		rest[def[0]] = def[2]
+	var out := Skin.new()
+	for i in from.get_bind_count():
+		var bone := String(from.get_bind_name(i))
+		out.add_named_bind(bone, Transform3D(Basis.IDENTITY, rest[bone]).affine_inverse())
+	return out
