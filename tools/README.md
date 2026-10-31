@@ -634,6 +634,8 @@ and speed, and needs no blend): note 138. `OUT_AT` must stay equal to the same n
 joins, and `[pivot]` a turn against its stance: note 139. A pivot's `root` x is its turn,
 in radians. `[strafe]` reads a strafe's loop and `[reel]` the reel against the guard: note 140.
 `REEL` and `STRAFE_V` must stay equal to `REEL_TIME` and `STRAFE_SPEED` in `sword_skeleton.gd`.
+The hunting gaits are `WALK_LOW`, `RUN_LOW`, `WALK_HIGH`, `RUN_HIGH`, `STRAFE_LOW` and `STRAFE_HIGH`: a new one
+needs its clip names in `CYCLES`, `STRAFES` and `STYLES` in `sword_skeleton.gd`. Note 141.
 The eyes' colour is `light_eyes`, which the anim script sets too.
 `models/sword_skeleton.glb.import` must keep `animation/fps=60`, and the three maps
 `compress/mode=2`, as the scout's. After replacing a map, delete

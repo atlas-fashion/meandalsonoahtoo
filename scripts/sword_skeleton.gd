@@ -18,6 +18,7 @@ extends "res://scripts/prosthetic.gd"
 ##   haul, idle_haul                               the blade dragged behind
 ##   stagger_b/f/l/r                               thrown by a blow (`_flinch`)
 ##   strafe_l/r/f/b                                moving on guard, facing them (note 140)
+##   walk, run, strafe_*, out_*_run + _low or _high  its own gait, after someone (note 141)
 ##   reel                                          parried (`reel_from`, note 140)
 ##   death_b/f/s                                   by where the last blow came from
 ##
@@ -50,6 +51,10 @@ extends "res://scripts/prosthetic.gd"
 ## back, or the wait it set itself after the last exchange. Proels after the same player
 ## spread out round them and take turns (`_take_turn`): one blow at a time, the next
 ## going to whoever they are looking at least. None walks through another (`_keep_clear`).
+##
+## Its gait (note 141): going after someone a proel moves one of three ways, `_style`, and
+## proels on the same player take different ones (`_share_gaits`). Walking about, it is
+## plain walk and run, whatever its style.
 
 const MODEL := preload("res://models/sword_skeleton.glb")
 const REACT := preload("res://scripts/sword_skeleton_react.gd")
@@ -61,7 +66,9 @@ const WALK_SPEED := 1.55
 const RUN_SPEED := 4.6
 const TURN_RATE := 1.745
 const LIGHTS: Array[StringName] = [&"slash_1", &"slash_2", &"slash_3"]
-const CYCLES: Array[StringName] = [&"walk", &"run"]
+const CYCLES: Array[StringName] = [&"walk", &"run", &"walk_low", &"run_low", &"walk_high", &"run_high"]
+## The gaits it can hunt in: what is added to a clip's name.
+const STYLES: Array[String] = ["", "_low", "_high"]
 const STILL: Array[StringName] = [&"idle", &"idle_fight"]
 const TURNS: Array[StringName] = [&"turn_l", &"turn_r", &"turn_gl", &"turn_gr"]
 ## Into a turn on guard here, with both feet nearest where the stance has them.
@@ -150,7 +157,7 @@ const TURN_SHOWS := 0.75
 ## `STRAFE_V`), the share of a clip it starts them at, with both feet nearest the
 ## stance, and under what speed it just stands. It starts and stops heavily.
 const STRAFE_SPEED := 1.5
-const STRAFES: Array[StringName] = [&"strafe_l", &"strafe_r", &"strafe_f", &"strafe_b"]
+const STRAFES: Array[StringName] = [&"strafe_l", &"strafe_r", &"strafe_f", &"strafe_b", &"strafe_l_low", &"strafe_r_low", &"strafe_f_low", &"strafe_b_low", &"strafe_l_high", &"strafe_r_high", &"strafe_f_high", &"strafe_b_high"]
 const STRAFE_FROM_GUARD := 0.3
 const STRAFE_STOP := 0.3
 const STRAFE_ACCEL := 10.0
@@ -267,6 +274,10 @@ var _wanted_at := -INF
 ## The other proels near it, untyped: one may be freed before the next look.
 var _pack: Array = []
 var _next_pack := 0.0
+## Its gait on the hunt, one of STYLES, and that gait's two clips.
+var _style := ""
+var _run_clip := &"run"
+var _walk_clip := &"walk"
 
 
 func _init() -> void:
@@ -302,6 +313,7 @@ func _ready() -> void:
 	super()
 	add_to_group(&"proels")
 	_next_pack = _now() + randf() * PACK_EVERY
+	_set_style(STYLES[randi() % STYLES.size()])
 	_shown_yaw = rotation.y
 	# Whoever placed it may turn it after it enters the tree.
 	_settle_yaw.call_deferred()
@@ -329,7 +341,7 @@ func _setup_animations() -> void:
 	if anim == null:
 		return
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-	for looping: StringName in [&"idle", &"idle_fight", &"walk", &"run", &"turn_l", &"turn_r", &"turn_gl", &"turn_gr", &"haul", &"idle_haul", &"strafe_l", &"strafe_r", &"strafe_f", &"strafe_b"]:
+	for looping: StringName in [&"idle", &"idle_fight", &"turn_l", &"turn_r", &"turn_gl", &"turn_gr", &"haul", &"idle_haul"] + CYCLES + STRAFES:
 		anim.get_animation(looping).loop_mode = Animation.LOOP_LINEAR
 	_lift_roots()
 	var found := find_children("*", "Skeleton3D", true, false)
@@ -508,12 +520,14 @@ func _update_locomotion() -> void:
 	var now := anim.current_animation
 	var want := &"idle_fight" if engaged else &"idle"
 	var rate := 1.0
+	var run_clip := _run_clip if engaged else &"run"
+	var walk_clip := _walk_clip if engaged else &"walk"
 	# A little either way of each threshold, so it does not chatter.
-	var to_run := run_anim_threshold * (0.85 if now == &"run" else 1.0)
+	var to_run := run_anim_threshold * (0.85 if now == run_clip else 1.0)
 	# Going for someone, it does not bother to walk first.
 	if engaged:
 		to_run = minf(to_run, 1.4)
-	var to_walk := 0.15 if now == &"walk" else 0.3
+	var to_walk := 0.15 if now == walk_clip else 0.3
 	var off := wrapf(rotation.y - _shown_yaw, -PI, PI)
 	if speed < PIVOT_SPEED and absf(off) > PIVOT_FROM and not caged and _shown_close():
 		_start_pivot(off)
@@ -522,10 +536,10 @@ func _update_locomotion() -> void:
 		want = _strafe_clip(moving)
 		rate = clampf(speed / STRAFE_SPEED, 0.6, 1.75)
 	elif speed >= to_run:
-		want = &"run"
+		want = run_clip
 		rate = clampf(speed / RUN_SPEED, 0.6, 1.5)
 	elif speed > to_walk:
-		want = &"walk"
+		want = walk_clip
 		rate = clampf(speed / WALK_SPEED, 0.55, 1.65)
 	elif absf(_yaw_v) > TURN_SHOWS * (0.7 if now in TURNS else 1.0):
 		var left := _yaw_v > 0.0
@@ -545,7 +559,7 @@ func _update_locomotion() -> void:
 	if want in CYCLES and now not in CYCLES and _on_guard(anim.assigned_animation) and _shown_close():
 		if _react != null:
 			_react.call("crossfade", BLEND_OUT)
-		_put_on(StringName("out_g_run" if engaged else "out_g_walk"), 0.0)
+		_put_on(StringName("out_g_run" + _style if engaged else "out_g_walk"), 0.0)
 		_blow_scale = 1.0
 		_carry = Vector3.ZERO
 		_out = true
@@ -640,7 +654,7 @@ func _leave(t: float) -> void:
 	_enter_chase()
 	if absf(off) > OUT_TURN:
 		return
-	var clip := "out_%s%s_%s" % [LINK_TAG[base], "s" if name_.ends_with("_s") else "", "run" if engaged else "walk"]
+	var clip := "out_%s%s_%s" % [LINK_TAG[base], "s" if name_.ends_with("_s") else "", "run" + _style if engaged else "walk"]
 	if late > 0.04 and _react != null:
 		_react.call("crossfade", BLEND_OUT)
 		late = 0.0
@@ -660,7 +674,9 @@ func _tend_out() -> void:
 	# A tick short of it: `_slide` reads the clip, and a clip that has stopped has no speed.
 	if anim.is_playing() and anim.current_animation_position + get_physics_process_delta_time() * 1.5 < anim.current_animation_length:
 		return
-	var gait := &"run" if String(_blow).ends_with("run") else &"walk"
+	# An `out` clip's name ends in the gait it joins: out_1s_run_low, out_g_walk.
+	var name_ := String(_blow)
+	var gait := StringName(name_.substr(name_.find("_run") + 1)) if name_.contains("_run") else &"walk"
 	_out = false
 	_blow = &""
 	_rate = 1.0
@@ -964,12 +980,12 @@ func _spread_way(player: Node3D, n: Vector3, fellows: int) -> float:
 func _strafe_clip(moving: Vector3) -> StringName:
 	var ahead := moving.dot(-global_basis.z)
 	var side := moving.dot(-global_basis.x)
-	var now := anim.current_animation
-	var keep_side := 1.4 if now == &"strafe_l" or now == &"strafe_r" else 1.0
-	var keep_line := 1.4 if now == &"strafe_f" or now == &"strafe_b" else 1.0
+	var now := String(anim.current_animation)
+	var keep_side := 1.4 if now.begins_with("strafe_l") or now.begins_with("strafe_r") else 1.0
+	var keep_line := 1.4 if now.begins_with("strafe_f") or now.begins_with("strafe_b") else 1.0
 	if absf(side) * keep_side >= absf(ahead) * keep_line:
-		return &"strafe_l" if side > 0.0 else &"strafe_r"
-	return &"strafe_f" if ahead > 0.0 else &"strafe_b"
+		return StringName(("strafe_l" if side > 0.0 else "strafe_r") + _style)
+	return StringName(("strafe_f" if ahead > 0.0 else "strafe_b") + _style)
 
 
 ## After a blow, unless it has them or something opens up first, it gets back on guard
@@ -1069,6 +1085,36 @@ func _look_for_fellows(now: float) -> void:
 		if o != self and o.get("_dying") != true and o.get("caged") != true and o.get("_dormant") != true \
 				and global_position.distance_squared_to(o.global_position) < PACK_REACH * PACK_REACH:
 			_pack.append(o)
+	if engaged:
+		_share_gaits()
+
+
+func _set_style(style: String) -> void:
+	_style = style
+	_run_clip = StringName("run" + style)
+	_walk_clip = StringName("walk" + style)
+
+
+## Two after one player do not move alike: of a pair with the same gait the newer takes the
+## gait fewest of them have, if that is any better. With more of them than gaits it stays.
+func _share_gaits() -> void:
+	var player := _player
+	if player == null or not is_instance_valid(player):
+		return
+	var used := {}
+	var shared := false
+	for o in _pack:
+		if _with_me(o, player):
+			var theirs: String = o.get("_style")
+			used[theirs] = int(used.get(theirs, 0)) + 1
+			shared = shared or (theirs == _style and o.get_instance_id() < get_instance_id())
+	if not shared:
+		return
+	var best := _style
+	for style in STYLES:
+		if int(used.get(style, 0)) < int(used.get(best, 0)):
+			best = style
+	_set_style(best)
 
 
 ## No walking into a fellow, and two too near are eased apart. The capsules are far

@@ -503,6 +503,20 @@ RUN_G = dict(T=0.74, S=0.3, s=RUN_V * 0.74 * 0.3, heel=8.0, toe=40.0, pf=0.14, p
              plean=9.0, cyaw=17.0, lean=11.0, lean_b=2.2, neck=-6.0, headp=-22.0, nod=2.4, aswing=36.0, a0=8.0, aout=11.0, ael=68.0, ael_s=12.0, rswing=9.0, r0=16.0,
              rout=20.0, rroll=14.0, rel=56.0, rel_s=5.0, bp=4.0, bpa=4.0, by=-8.0, curl=0.6, cf=8.0, run=True, y0=0.05, sw_pitch=14.0, surge=0.01, hip_y=-0.03)
 
+# Going after someone, a proel has one of three gaits, so a pack does not move as one (note
+# 141). Walk and run are the first and stay as they are. Each foot covers the ground at the
+# same speed; what differs is the build of the stride and how the blade is carried.
+# LOW: bent and long in the stride, the head out in front, the blade swept back and away.
+WALK_LOW = dict(WALK_G, T=1.38, S=0.66, s=WALK_V * 1.38 * 0.66, z=1.235, lift=0.05, width=0.14, sway=0.04, proll=5.5, plean=7.0, lean=13.0, neck=-3.0, headp=-21.0,
+                aswing=11.0, a0=13.0, aout=17.0, ael=38.0, rswing=4.0, r0=-24.0, rout=24.0, rroll=4.0, rel=12.0, rel_s=2.0, bp=-30.0, bpa=2.0, by=-4.0, curl=0.55)
+RUN_LOW = dict(RUN_G, T=0.84, S=0.27, s=RUN_V * 0.84 * 0.27, z=1.15, lift=0.13, width=0.11, bob=0.024, plean=14.0, lean=19.0, lean_b=3.0, neck=-11.0, headp=-30.0,
+               aswing=44.0, a0=16.0, aout=15.0, ael=58.0, rswing=6.0, r0=-30.0, rout=26.0, rroll=4.0, rel=14.0, rel_s=4.0, bp=-34.0, bpa=3.0, by=-4.0, curl=0.72, out_wide=46.0, out_el=36.0)
+# HIGH: upright and quick, the shoulders rolling, the blade held up beside its head.
+WALK_HIGH = dict(WALK_G, T=1.02, S=0.6, s=WALK_V * 1.02 * 0.6, z=1.3, lift=0.075, width=0.115, proll=3.5, plean=1.0, lean=1.5, pyaw=11.0, cyaw=14.0, neck=2.0, headp=-9.0,
+                 aswing=10.0, a0=24.0, aout=20.0, ael=68.0, ael_s=5.0, rswing=3.0, r0=44.0, rout=30.0, rroll=0.0, rel=104.0, rel_s=2.0, bp=6.0, bpa=2.0, by=-6.0, curl=0.5)
+RUN_HIGH = dict(RUN_G, T=0.66, S=0.33, s=RUN_V * 0.66 * 0.33, z=1.235, lift=0.15, bob=0.034, pyaw=17.0, proll=5.0, plean=5.0, lean=5.0, lean_b=1.6, cyaw=24.0, neck=-1.0, headp=-13.0,
+                aswing=22.0, a0=30.0, aout=19.0, ael=84.0, ael_s=8.0, rswing=5.0, r0=48.0, rout=32.0, rroll=0.0, rel=108.0, rel_s=3.0, bp=8.0, bpa=3.0, by=-6.0, curl=0.5)
+
 
 def walk(t, L):
     sp = Spec()
@@ -514,6 +528,15 @@ def run(t, L):
     sp = Spec()
     gait(sp, t / L, RUN_G)
     return sp
+
+
+def gait_fn(g):
+    def fn(t, L):
+        sp = Spec()
+        gait(sp, t / L, g)
+        return sp
+
+    return fn
 
 
 def trailing(sp):
@@ -1506,6 +1529,9 @@ def out_clip(src, t0, L0, g, gait_fn, stride=1.75):
         w = mix("arm", x)
         e = mix("elbow", x)
         sp.arm_r = (b.arm_r[0] + (n.arm_r[0] - b.arm_r[0]) * w, b.arm_r[1] + (n.arm_r[1] - b.arm_r[1]) * w, b.arm_r[2] + (n.arm_r[2] - b.arm_r[2]) * e)
+        # A blade going from in front to behind it goes round the outside, or it goes through
+        # the leg and the floor (the low gait, note 141).
+        sp.arm_r = (sp.arm_r[0], sp.arm_r[1] + g.get("out_wide", 0.0) * push, sp.arm_r[2] + g.get("out_el", 0.0) * push)
         sp.roll_r = b.roll_r + (n.roll_r - b.roll_r) * w
         sp.hand_r = b.hand_r.slerp(n.hand_r, mix("wrist", x))
         w = mix("arm_l", x)
@@ -1536,11 +1562,16 @@ STRAFE_T = 1.0
 STRAFE_S = 0.6
 STRAFE_HIP = 0.33
 STRAFE_FOOT = 0.42
+# The hunting gaits' own guards (note 141), over the fighting stance: longer or quicker
+# steps, how far down it is, how far over, and the two arms' angles added to the guard's.
+STRAFE_LOW = dict(T=1.22, S=0.62, lift=0.055, dz=-0.055, lean=7.0, head=-6.0, arm=(-14.0, 8.0, -30.0), wrist=-6.0, arm_l=(-8.0, 6.0, -14.0), curl=0.12)
+STRAFE_HIGH = dict(T=0.82, S=0.58, lift=0.09, dz=0.03, lean=-4.0, head=3.0, arm=(24.0, 8.0, 34.0), wrist=4.0, arm_l=(8.0, 2.0, 8.0), curl=-0.05)
 
 
-def strafe(deg):
+def strafe(deg, st=None):
     """`deg`: the way it goes, 90 to its left, -90 to its right, 0 straight at them."""
-    T, S = STRAFE_T, STRAFE_S
+    T, S = (st["T"], st["S"]) if st else (STRAFE_T, STRAFE_S)
+    lift = st["lift"] if st else 0.07
     s = STRAFE_V * T * S
     th = rad(deg)
     dx, dy = math.sin(th), -math.cos(th)
@@ -1557,13 +1588,20 @@ def strafe(deg):
         nx, ny = -nx, -ny
 
     def foot(a, phi, yaw):
-        y, z, pitch, tb = foot_at(phi, T, S, s, heel, toe, 0.16, 0.56, 0.07, 0.0)
+        y, z, pitch, tb = foot_at(phi, T, S, s, heel, toe, 0.16, 0.56, lift, 0.0)
         return (V(a[0] - dx * y, a[1] - dy * y, z), pitch, yaw, 0.0, tb)
 
     def fn(t, _L):
         phi = (t / T) % 1.0
         c, sn = math.cos, math.sin
         sp = fight_base(t, T)
+        if st:
+            sp.pelvis = sp.pelvis + V(0.0, 0.0, st["dz"])
+            sp.spine = (sp.spine[0] + st["lean"], sp.spine[1], sp.spine[2])
+            sp.head = (sp.head[0] + st["head"], sp.head[1], sp.head[2])
+            sp.arm_r = tuple(a + b for a, b in zip(sp.arm_r, st["arm"]))
+            sp.arm_l = tuple(a + b for a, b in zip(sp.arm_l, st["arm_l"]))
+            sp.hand_r = wrist(GUARD["wr"][0] + st["wrist"], GUARD["wr"][1], 0.0)
         sp.foot_l = foot(al, phi, STANCE["yl"] + fy)
         sp.foot_r = foot(ar, phi + 0.5, STANCE["yr"] + fy)
         shift = 0.032 * sn(TAU * (phi + 0.04))
@@ -1578,18 +1616,18 @@ def strafe(deg):
         r = sp.arm_r
         sag = c(TAU * (phi - 0.2))
         sp.arm_r = (r[0] + 2.0 * sag, r[1] + 1.5 * sn(TAU * (phi - 0.2)), r[2] - 2.5 * sag)
-        sp.hand_r = wrist(GUARD["wr"][0] + 1.5 * c(TAU * (phi - 0.3)), GUARD["wr"][1], 0.0)
+        sp.hand_r = wrist(GUARD["wr"][0] + (st["wrist"] if st else 0.0) + 1.5 * c(TAU * (phi - 0.3)), GUARD["wr"][1], 0.0)
         l = sp.arm_l
         sp.arm_l = (l[0] - 6.0 * c(TAU * (phi - 0.08)), l[1] + 2.0 * sn(TAU * phi), l[2] + 4.0 * c(TAU * (phi - 0.14)))
-        sp.curl = 0.5 + 0.06 * sn(TAU * (phi + 0.1))
+        sp.curl = 0.5 + (st["curl"] if st else 0.0) + 0.06 * sn(TAU * (phi + 0.1))
         return sp
 
     return fn, T
 
 
-def strafe_back():
+def strafe_back(st=None):
     """Backing off on guard: the guarded walk played backward, so the toe lands first."""
-    fwd, T = strafe(0.0)
+    fwd, T = strafe(0.0, st)
 
     def fn(t, L):
         return fwd((L - t) % L, L)
@@ -1697,6 +1735,19 @@ def make_clips():
     once("death_b", death_back())
     once("death_f", death_fwd())
     once("death_s", death_side())
+    # The hunting gaits (note 141). Only a proel after someone uses them, and an `out` clip
+    # takes one after someone, so only their runs have `out` clips.
+    for tag, wg, rg, st in (("_low", WALK_LOW, RUN_LOW, STRAFE_LOW), ("_high", WALK_HIGH, RUN_HIGH, STRAFE_HIGH)):
+        loop("walk" + tag, gait_fn(wg), wg["T"])
+        rfn = gait_fn(rg)
+        loop("run" + tag, rfn, rg["T"])
+        for blow, btag in (("slash_1", "1"), ("slash_2", "2"), ("slash_3", "3"), ("heavy", "h")):
+            for k, sh in ((1.0, ""), (SHORT, "s")):
+                fn, L = BLOW_FNS[blow](k)
+                once("out_%s%s_run%s" % (btag, sh, tag), out_clip(fn, OUT_AT[blow], L, rg, rfn, OUT_STRIDE[blow]))
+        once("out_g_run" + tag, out_clip(lambda _t, _L: fight_base(), 0.0, 2.2, rg, rfn))
+        for way, fn_len in (("l", strafe(90.0, st)), ("r", strafe(-90.0, st)), ("f", strafe(0.0, st)), ("b", strafe_back(st))):
+            loop("strafe_" + way + tag, fn_len[0], fn_len[1])
 
 
 def spin_about_z(q0, q1):
@@ -1842,7 +1893,7 @@ def bake_clip(arm, name, fn, L, loop_):
         rootz.append(-sp.root.y)
         # A leg stretched past its reach leaves its planted foot behind.
         stretch = max(stretch, (s.P["foot.L"] - sp.foot_l[0]).length, (s.P["foot.R"] - sp.foot_r[0]).length)
-        if base in BLOWS or name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel")):
+        if base in BLOWS or name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel", "walk_", "run_")):
             edge_at = s.P["blade"] + (tip - s.P["blade"]) * 0.2
             for b0, b1, thick in CLEAR:
                 gap = seg_gap(edge_at, tip, s.P[b0], s.P[b1]) - thick
@@ -1867,7 +1918,7 @@ def bake_clip(arm, name, fn, L, loop_):
         pace_report(name, tips, w, w + a)
         reach_report(name, elbows, tips, rootz, w, w + a)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
-    if name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel")):
+    if name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel", "walk_", "run_")):
         v = [(tips[i + 1] - tips[i]).length * FPS for i in range(len(tips) - 1)]
         print("[pace]  %-12s tip mean %.1f peak %.1f m/s @ %.2f" % (name, sum(v) / len(v), max(v), v.index(max(v)) / FPS), flush=True)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)

@@ -8,7 +8,7 @@ extends "res://scripts/enemy.gd"
 ##              you from range like the old skeleton's charge, bit spinning.
 ##   &"blade"   the SWORD hand: cannot dash. A light slice (the old cut, quick,
 ##              often) and a heavy slice -- a long wind-up, then a flat sweep
-##              across the whole front for twice the damage.
+##              across the whole front for nearly twice the damage.
 ##   &"hammer"  the HAMMER hand: slow on its feet, a long wind-up, an overhead
 ##              smash for 30 that knocks the player off their feet unless the
 ##              guard is up. Hard to shove.
@@ -34,7 +34,7 @@ const HANDS: Array[StringName] = [&"drill", &"blade", &"hammer", &"shield"]
 const BLADE_WINDUP := 0.9
 const BLADE_SWING := 0.24
 const BLADE_RECOVER := 1.3
-const HEAVY_DAMAGE := 26.0
+const HEAVY_DAMAGE := 36.0
 const HEAVY_WINDUP := 1.25
 const HEAVY_SWING := 0.3
 const HEAVY_RECOVER := 1.85
@@ -152,7 +152,7 @@ func _apply_hand() -> void:
 			max_health = 100.0
 			move_speed = 4.6
 			normal_cooldown = 1.6
-			attack_damage = 12.0
+			attack_damage = 20.0
 			windup_time = BLADE_WINDUP
 			normal_duration = BLADE_SWING
 			recover_time = BLADE_RECOVER
