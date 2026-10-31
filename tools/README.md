@@ -623,7 +623,10 @@ The arms are joint angles (note 136): a roll is a key, never something an IK sol
 falls into. Run `--check` after touching a blow and read the `[roll]` line.
 
 The clip names and their lengths are read by `scripts/sword_skeleton.gd`, and
-`LIGHT` / `HEAVY` must stay equal to the timers in `enemy.gd` and `prosthetic.gd`.
+`LIGHT` / `HEAVY` must stay equal to `BLADE_*` and `HEAVY_*` in `prosthetic.gd`, or the
+ATTACK window slides off the swing. After touching a blow, read `[reach]` (it must land
+inside the window) and `[pace]` as well. A blow's weight is timing, and the end of a
+swing is judged in world space: note 137.
 `models/sword_skeleton.glb.import` must keep `animation/fps=60`, and the three maps
 `compress/mode=2`, as the scout's. After replacing a map, delete
 `.godot/imported/sword_skeleton*` and the three extracted maps, then import.

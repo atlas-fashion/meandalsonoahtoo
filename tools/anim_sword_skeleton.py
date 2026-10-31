@@ -30,7 +30,9 @@ stay exactly where they are put.
     the BLOWS are keyed, a chain of late starts from the floor up: step, hips,
     chest, shoulder, then elbow, then wrist. One clip is the whole blow:
     wind-up, swing and recovery, on enemy.gd's own clock (LIGHT and HEAVY), so
-    nothing has to blend inside a blow.
+    nothing has to blend inside a blow. Their weight is timing (note 137): a long
+    lift, a short swing, and a swing that does not stop where the blow ends. The
+    beats are set out above `slash_1`.
 
 `root` is the root motion: where the body goes. The game takes that track out
 of the clip and moves the CharacterBody3D by it, so a planted foot stays planted
@@ -61,9 +63,11 @@ OUT = os.path.join(ROOT, "models", "sword_skeleton.glb")
 FPS = 60
 TAU = math.tau
 
-# enemy.gd / prosthetic.gd: the light slice's and the heavy's three phases.
-LIGHT = (0.45, 0.32, 0.70)
-HEAVY = (0.85, 0.42, 0.95)
+# The light slice's and the heavy's three phases: wind-up, swing, recovery. These are
+# prosthetic.gd's BLADE_* and HEAVY_* and sword_skeleton.gd plays them at 1x, so the
+# swing here is enemy.gd's ATTACK state and the blade can only hurt in it. Change both.
+LIGHT = (0.9, 0.24, 1.0)
+HEAVY = (1.25, 0.3, 1.45)
 # The speeds the locomotion clips are authored for (sword_skeleton.gd).
 WALK_V = 1.55
 RUN_V = 4.6
@@ -645,21 +649,23 @@ def blow_clip(bl):
         sp = fight_base()
         rooty = ch["root"](t)
         sp.root = V(0, -rooty, 0)
-        p = ch["pelvis"](t)
+        p = blur(ch["pelvis"], t, 0.03)
         sp.pelvis = V(p[0], p[1], p[2])
         # Blurred too: at the end of a 2 m lever the hips and chest are as sharp
         # as anything the arm does.
-        q = blur(ch["pq"], t, 0.05)
+        q = blur(ch["pq"], t, 0.04)
         sp.pelvis_q = rz(rad(q[1])) @ rx(rad(q[0])) @ ry(rad(q[2]))
-        sp.spine = blur(ch["spine"], t, 0.05)
+        sp.spine = blur(ch["spine"], t, 0.04)
         sp.neck = ch["neck"](t)
         sp.head = ch["head"](t)
-        a = blur(ch["arm"], t, 0.07)
-        sp.arm_r = (a[0], a[1], a[3])
+        # Hardly at all: a wider tent than this takes the speed off the swing,
+        # and the speed is the blow.
+        a = blur(ch["arm"], t, 0.025)
+        sp.arm_r = (a[0], a[1], blur(ch["elbow"], t, 0.025))
         sp.roll_r = a[2]
-        w = blur(ch["wrist"], t, 0.05)
+        w = blur(ch["wrist"], t, 0.03)
         sp.hand_r = wrist(*w)
-        al = blur(ch["arm_l"], t, 0.06)
+        al = blur(ch["arm_l"], t, 0.05)
         sp.arm_l = (al[0], al[1], al[2])
         sp.roll_l = GUARD["rl"]
         sp.curl = ch["curl"](t)
@@ -676,124 +682,162 @@ def _b():
     b = fight_base()
     g = GUARD
     return dict(p=(b.pelvis.x, b.pelvis.y, b.pelvis.z), pq=(7.0, 16.0, 0.0), spine=(9.0, -8.0, 0.0), neck=(0.0, -3.0, 0.0), head=(-17.0, -3.0, 0.0),
-                arm=(g["arm"][0], g["arm"][1], g["roll"], g["arm"][2]), wrist=g["wr"], al=g["al"])
+                arm=(g["arm"][0], g["arm"][1], g["roll"]), el=g["arm"][2], wrist=g["wr"], al=g["al"])
 
+
+# Each blow below runs the same six beats, and each channel takes them late of the
+# one under it, so the weight goes through the body the way a real one does:
+#
+#   the load    it sags into the blow before it lifts: hips down, the blade dips
+#   the haul    hips and legs drive the blade up, chest and shoulder after, the arm
+#               slowing into the top; the shoulder hikes with the effort
+#   the hang    the arm all but stopped at the top while the hips have already
+#               gone: the stretch between them is what the swing lets go
+#   the swing   hips, chest, shoulder, then the elbow, which stays shut until the
+#               arm has its speed; the blade goes last and fastest. The ATTACK
+#               window is this and nothing else
+#   the carry   nothing stops it: the swing's speed runs off over the next third of
+#               a second, the arm going on past the blow and pulling the chest, the
+#               shoulder and the trailing foot after it
+#   the heave   hung out at the end of the arm; the body comes back first and the
+#               blade is dragged home after it
 
 def slash_1(k=1.0):
-    """Light: raised back over its right shoulder, then down across the body to its
-    left hip. The right foot drives forward through the blow; the left comes up
-    after it."""
+    """Light: hauled back over its right shoulder, then down across the body. It does
+    not stop at the left hip: the arm runs on past it and the chest bends after it.
+    The right foot stamps in under the blow; the left is dragged up after."""
     w, a, r = LIGHT
     A, B = w, w + a
     E = A + a + r
     n = _b()
     bl = Blow(E)
-    bl.key("root", [(0.0, 0.0), (0.28, 0.0), (A + 0.03, 0.14 * k), (A + 0.17, 0.52 * k), (B + 0.1, 0.62 * k), (E, 0.62 * k)])
-    bl.key("pelvis", [(0.0, n["p"]), (0.2, (0.02, 0.05, 1.24)), (A - 0.05, (0.03, 0.09, 1.26)), (A + 0.12, (-0.03, -0.1, 1.19)), (B + 0.03, (-0.05, -0.15, 1.16)),
-                      (B + 0.3, (-0.02, -0.06, 1.21)), (E, n["p"])])
-    bl.key("pq", [(0.0, n["pq"]), (A - 0.04, (2.0, -22.0, -3.0)), (A + 0.13, (12.0, 16.0, 3.0)), (B + 0.04, (18.0, 40.0, 5.0)), (B + 0.34, (12.0, 22.0, 2.0)), (E, n["pq"])])
-    bl.key("spine", [(0.0, n["spine"]), (0.08, (10.0, -2.0, 0.0)), (A, (-10.0, -30.0, 9.0)), (A + 0.15, (14.0, 12.0, -9.0)), (B + 0.05, (26.0, 36.0, -14.0)),
-                     (B + 0.34, (16.0, 12.0, -5.0)), (E, n["spine"])])
-    bl.key("neck", [(0.0, n["neck"]), (A, (-4.0, 14.0, -4.0)), (A + 0.16, (-3.0, -4.0, 4.0)), (B + 0.1, (-9.0, -16.0, 6.0)), (E, n["neck"])])
-    bl.key("head", [(0.0, n["head"]), (A, (-14.0, 13.0, -5.0)), (A + 0.18, (-16.0, -6.0, 4.0)), (B + 0.12, (-20.0, -18.0, 6.0)), (E, n["head"])])
-    bl.key("clav_r", [(0.0, (0.0, 0.0)), (A, (12.0, -7.0)), (A + 0.13, (2.0, 10.0)), (B, (-4.0, 16.0)), (E, (0.0, 0.0))])
-    bl.key("clav_l", [(0.0, (0.0, 0.0)), (A, (3.0, 6.0)), (B, (2.0, -8.0)), (E, (0.0, 0.0))])
-    # swing, out, roll, elbow.
-    bl.key("arm", [(0.0, n["arm"]), (0.2, (74.0, 34.0, 2.0, 62.0)), (A - 0.05, (112.0, 36.0, -14.0, 92.0)), (A + 0.02, (114.0, 36.0, -16.0, 94.0)), (A + 0.1, (92.0, 26.0, -2.0, 78.0)),
-                   (A + 0.18, (66.0, 8.0, 16.0, 50.0)), (A + 0.26, (48.0, -12.0, 34.0, 24.0)), (B + 0.04, (38.0, -26.0, 48.0, 12.0)), (B + 0.14, (34.0, -30.0, 52.0, 18.0)),
-                   (B + 0.4, (28.0, -8.0, 34.0, 46.0)), (E, n["arm"])])
-    bl.key("wrist", [(0.0, n["wrist"]), (0.2, (-8.0, -4.0, 0.0)), (A, (-16.0, 0.0, 0.0)), (A + 0.12, (-8.0, 0.0, 0.0)), (A + 0.22, (10.0, 0.0, 0.0)), (B + 0.1, (8.0, 0.0, 0.0)), (E, n["wrist"])])
-    bl.key("arm_l", [(0.0, n["al"]), (A - 0.05, (46.0, 24.0, 82.0)), (A + 0.14, (10.0, 34.0, 50.0)), (B + 0.06, (-14.0, 38.0, 36.0)), (B + 0.4, (12.0, 28.0, 52.0)), (E, n["al"])])
-    bl.key("curl", [(0.0, 0.5), (A, 0.25), (A + 0.16, 0.7), (B + 0.3, 0.45), (E, 0.5)])
-    # The right foot goes in under the blow; the left is dragged up after it.
-    bl.feet("r", [(A - 0.05, A + 0.19, (-0.16, -0.26 - 0.62 * k), -8.0, 0.03 + 0.045 * k)])
-    bl.feet("l", [(B + 0.1, B + 0.42, (0.17, 0.22 - 0.62 * k), 22.0, 0.025 + 0.025 * k)])
+    bl.key("root", [(0.0, 0.0), (A - 0.2, 0.0), (A, 0.22 * k), (A + 0.1, 0.56 * k), (B, 0.64 * k), (B + 0.3, 0.68 * k), (E, 0.68 * k)])
+    bl.key("pelvis", [(0.0, n["p"]), (0.15, (0.012, 0.03, 1.205)), (0.42, (0.03, 0.08, 1.235)), (A - 0.16, (0.04, 0.11, 1.27)), (A + 0.02, (0.02, 0.0, 1.25)), (A + 0.12, (-0.03, -0.12, 1.19)),
+                      (B + 0.03, (-0.05, -0.16, 1.15)), (B + 0.3, (-0.06, -0.15, 1.14)), (B + 0.6, (-0.04, -0.12, 1.16)), (B + 0.85, (-0.01, -0.04, 1.22)), (E, n["p"])])
+    bl.key("pq", [(0.0, n["pq"]), (0.15, (10.0, 12.0, -1.0)), (A - 0.2, (0.0, -26.0, -3.0)), (A - 0.04, (2.0, -14.0, -2.0)), (A + 0.1, (12.0, 16.0, 3.0)), (B, (17.0, 30.0, 5.0)), (B + 0.12, (19.0, 36.0, 6.0)),
+                  (B + 0.34, (20.0, 40.0, 6.0)), (B + 0.6, (18.0, 36.0, 5.0)), (B + 0.85, (11.0, 22.0, 2.0)), (E, n["pq"])])
+    bl.key("spine", [(0.0, n["spine"]), (0.15, (13.0, -6.0, 0.0)), (0.46, (1.0, -18.0, 5.0)), (A - 0.08, (-10.0, -31.0, 9.0)), (A + 0.02, (-8.0, -27.0, 8.0)), (A + 0.13, (14.0, 8.0, -9.0)),
+                     (B, (24.0, 18.0, -13.0)), (B + 0.1, (28.0, 22.0, -15.0)), (B + 0.26, (30.0, 24.0, -16.0)), (B + 0.54, (29.0, 22.0, -14.0)), (B + 0.82, (20.0, 10.0, -6.0)), (E, n["spine"])])
+    bl.key("neck", [(0.0, n["neck"]), (A, (-4.0, 14.0, -4.0)), (A + 0.16, (-3.0, -4.0, 4.0)), (B + 0.2, (-10.0, -18.0, 6.0)), (B + 0.8, (-5.0, -8.0, 2.0)), (E, n["neck"])])
+    bl.key("head", [(0.0, n["head"]), (A, (-14.0, 13.0, -5.0)), (A + 0.18, (-16.0, -6.0, 4.0)), (B + 0.22, (-22.0, -20.0, 6.0)), (B + 0.85, (-19.0, -8.0, 2.0)), (E, n["head"])])
+    # Up with the effort of the lift, and dragged down and forward by what it
+    # threw.
+    bl.key("clav_r", [(0.0, (0.0, 0.0)), (0.15, (-3.0, 2.0)), (A - 0.1, (13.0, -7.0)), (A + 0.1, (2.0, 10.0)), (B + 0.05, (-6.0, 18.0)), (B + 0.45, (-9.0, 21.0)), (B + 0.8, (-4.0, 10.0)), (E, (0.0, 0.0))])
+    bl.key("clav_l", [(0.0, (0.0, 0.0)), (A, (3.0, 6.0)), (B, (2.0, -8.0)), (B + 0.5, (2.0, -10.0)), (E, (0.0, 0.0))])
+    # swing, out, roll.
+    bl.key("arm", [(0.0, n["arm"]), (0.15, (20.0, 26.0, 13.0)), (0.42, (56.0, 33.0, 5.0)), (A - 0.14, (101.0, 36.0, -6.0)), (A - 0.04, (111.0, 36.0, -9.0)), (A + 0.02, (113.0, 36.0, -9.0)),
+                   (A + 0.1, (105.0, 33.0, -4.0)), (A + 0.15, (88.0, 22.0, 3.0)), (A + 0.19, (74.0, 11.0, 10.0)), (B, (75.0, 3.0, 18.0)), (B + 0.06, (91.0, -2.0, 28.0)), (B + 0.12, (101.0, -9.0, 38.0)),
+                   (B + 0.2, (108.0, -15.0, 46.0)), (B + 0.32, (114.0, -19.0, 50.0)), (B + 0.5, (115.0, -22.0, 52.0)), (B + 0.66, (106.0, -20.0, 49.0)), (B + 0.86, (64.0, -4.0, 34.0)), (E, n["arm"])])
+    bl.key("elbow", [(0.0, n["el"]), (0.2, 64.0), (0.5, 78.0), (A - 0.06, 93.0), (A + 0.1, 92.0), (A + 0.15, 74.0), (A + 0.2, 46.0), (B, 28.0), (B + 0.08, 14.0), (B + 0.2, 10.0), (B + 0.4, 13.0), (B + 0.66, 20.0), (B + 0.86, 46.0), (E, n["el"])])
+    bl.key("wrist", [(0.0, n["wrist"]), (0.2, (-2.0, -4.0, 0.0)), (A - 0.1, (-14.0, 0.0, 0.0)), (A + 0.1, (-16.0, 0.0, 0.0)), (A + 0.2, (2.0, 0.0, 0.0)), (B + 0.12, (12.0, 0.0, 0.0)), (B + 0.5, (10.0, 0.0, 0.0)), (B + 0.8, (-4.0, 0.0, 0.0)), (E, n["wrist"])])
+    bl.key("arm_l", [(0.0, n["al"]), (A - 0.08, (46.0, 24.0, 82.0)), (A + 0.14, (10.0, 36.0, 50.0)), (B + 0.1, (-24.0, 48.0, 30.0)), (B + 0.62, (-22.0, 50.0, 30.0)), (E, n["al"])])
+    bl.key("curl", [(0.0, 0.5), (A, 0.25), (A + 0.16, 0.7), (B + 0.5, 0.6), (E, 0.5)])
+    # The right foot goes in under the blow; the left is dragged up by what the
+    # blow carried on with.
+    bl.feet("r", [(A - 0.14, A + 0.11, (-0.16, -0.26 - 0.68 * k), -8.0, 0.03 + 0.045 * k)])
+    bl.feet("l", [(A + 0.15, B + 0.42, (0.17, 0.22 - 0.68 * k), 22.0, 0.025 + 0.025 * k)])
     return blow_clip(bl), E
 
 
 def slash_2(k=1.0):
-    """Light: the backhand. The arm wound across to the left hip, the elbow forward
-    and the upper arm rolled in, then the elbow opens and the blade comes up across
-    the body and out high on its right."""
+    """Light: the backhand. The arm dragged across to the left hip, the elbow forward
+    and the upper arm rolled in, then the elbow opens and the blade comes up across the
+    body and out high on its right. It rises on past the blow until its own weight
+    stops it, hangs there, and is let back down."""
     w, a, r = LIGHT
     A, B = w, w + a
     E = A + a + r
     n = _b()
     bl = Blow(E)
-    bl.key("root", [(0.0, 0.0), (0.3, 0.0), (A + 0.04, 0.16 * k), (A + 0.18, 0.48 * k), (B + 0.1, 0.56 * k), (E, 0.56 * k)])
-    bl.key("pelvis", [(0.0, n["p"]), (A - 0.04, (0.04, 0.03, 1.2)), (A + 0.13, (0.0, -0.1, 1.21)), (B + 0.03, (-0.05, -0.13, 1.25)), (B + 0.34, (-0.01, -0.03, 1.22)), (E, n["p"])])
-    bl.key("pq", [(0.0, n["pq"]), (A - 0.05, (12.0, 38.0, 3.0)), (A + 0.12, (8.0, 2.0, -2.0)), (B + 0.05, (3.0, -30.0, -5.0)), (B + 0.36, (5.0, -4.0, -2.0)), (E, n["pq"])])
-    bl.key("spine", [(0.0, n["spine"]), (A, (18.0, 34.0, -9.0)), (A + 0.15, (8.0, -6.0, 5.0)), (B + 0.04, (-6.0, -34.0, 12.0)), (B + 0.36, (6.0, -14.0, 3.0)), (E, n["spine"])])
-    bl.key("neck", [(0.0, n["neck"]), (A, (-2.0, -18.0, 3.0)), (A + 0.17, (0.0, 2.0, -3.0)), (B + 0.1, (0.0, 16.0, -5.0)), (E, n["neck"])])
-    bl.key("head", [(0.0, n["head"]), (A, (-20.0, -17.0, 4.0)), (A + 0.18, (-16.0, 3.0, -2.0)), (B + 0.12, (-13.0, 15.0, -4.0)), (E, n["head"])])
-    bl.key("clav_r", [(0.0, (0.0, 0.0)), (A, (-3.0, 14.0)), (B, (10.0, 2.0)), (E, (0.0, 0.0))])
-    bl.key("clav_l", [(0.0, (0.0, 0.0)), (A, (2.0, -6.0)), (B, (2.0, 7.0)), (E, (0.0, 0.0))])
-    bl.key("arm", [(0.0, n["arm"]), (0.2, (26.0, -6.0, 46.0, 62.0)), (A - 0.05, (26.0, -32.0, 76.0, 70.0)), (A + 0.02, (26.0, -34.0, 78.0, 72.0)), (A + 0.1, (36.0, -14.0, 84.0, 56.0)),
-                   (A + 0.18, (50.0, 16.0, 86.0, 28.0)), (A + 0.26, (66.0, 40.0, 84.0, 12.0)), (B + 0.04, (80.0, 56.0, 76.0, 12.0)), (B + 0.14, (86.0, 60.0, 68.0, 18.0)),
-                   (B + 0.4, (60.0, 40.0, 26.0, 50.0)), (E, n["arm"])])
-    bl.key("wrist", [(0.0, n["wrist"]), (0.2, (-6.0, 0.0, 0.0)), (A, (-14.0, 0.0, 0.0)), (A + 0.12, (-6.0, 0.0, 0.0)), (A + 0.22, (-8.0, 0.0, 0.0)), (B + 0.1, (-12.0, 0.0, 0.0)), (E, n["wrist"])])
-    bl.key("arm_l", [(0.0, n["al"]), (A, (-8.0, 34.0, 44.0)), (A + 0.14, (24.0, 30.0, 66.0)), (B + 0.05, (46.0, 22.0, 84.0)), (B + 0.4, (32.0, 22.0, 70.0)), (E, n["al"])])
-    bl.key("curl", [(0.0, 0.5), (A, 0.65), (A + 0.16, 0.3), (B + 0.3, 0.5), (E, 0.5)])
-    bl.feet("l", [(A - 0.08, A + 0.2, (0.09 + 0.08 * (1.0 - k), 0.22 - 0.74 * k), 28.0, 0.03 + 0.045 * k)])
-    bl.feet("r", [(B + 0.04, B + 0.36, (-0.15, -0.26 - 0.56 * k), -7.0, 0.025 + 0.025 * k)])
+    bl.key("root", [(0.0, 0.0), (A - 0.18, 0.0), (A, 0.2 * k), (A + 0.11, 0.5 * k), (B, 0.57 * k), (B + 0.3, 0.6 * k), (E, 0.6 * k)])
+    bl.key("pelvis", [(0.0, n["p"]), (0.2, (0.02, 0.01, 1.205)), (A - 0.08, (0.04, 0.03, 1.19)), (A + 0.02, (0.03, 0.0, 1.195)), (A + 0.13, (0.0, -0.1, 1.21)), (B + 0.03, (-0.05, -0.13, 1.25)),
+                      (B + 0.3, (-0.05, -0.13, 1.27)), (B + 0.62, (-0.04, -0.11, 1.24)), (B + 0.82, (-0.01, -0.04, 1.215)), (E, n["p"])])
+    bl.key("pq", [(0.0, n["pq"]), (0.2, (10.0, 26.0, 1.0)), (A - 0.1, (12.0, 38.0, 3.0)), (A + 0.02, (11.0, 28.0, 2.0)), (A + 0.12, (8.0, 2.0, -2.0)), (B + 0.05, (3.0, -30.0, -5.0)),
+                  (B + 0.3, (2.0, -38.0, -6.0)), (B + 0.62, (3.0, -30.0, -4.0)), (B + 0.85, (5.0, -2.0, -2.0)), (E, n["pq"])])
+    bl.key("spine", [(0.0, n["spine"]), (0.2, (13.0, 8.0, -2.0)), (A - 0.04, (18.0, 34.0, -9.0)), (A + 0.15, (8.0, -6.0, 5.0)), (B + 0.05, (-6.0, -34.0, 12.0)), (B + 0.26, (-10.0, -42.0, 14.0)),
+                     (B + 0.6, (-5.0, -36.0, 12.0)), (B + 0.85, (6.0, -14.0, 3.0)), (E, n["spine"])])
+    bl.key("neck", [(0.0, n["neck"]), (A, (-2.0, -18.0, 3.0)), (A + 0.17, (0.0, 2.0, -3.0)), (B + 0.2, (0.0, 18.0, -5.0)), (B + 0.8, (0.0, 6.0, -1.0)), (E, n["neck"])])
+    bl.key("head", [(0.0, n["head"]), (A, (-20.0, -17.0, 4.0)), (A + 0.18, (-16.0, 3.0, -2.0)), (B + 0.22, (-13.0, 17.0, -4.0)), (B + 0.85, (-15.0, 5.0, -1.0)), (E, n["head"])])
+    bl.key("clav_r", [(0.0, (0.0, 0.0)), (0.2, (-3.0, 6.0)), (A - 0.06, (-5.0, 15.0)), (A + 0.1, (-1.0, 9.0)), (B + 0.05, (10.0, 2.0)), (B + 0.3, (14.0, 0.0)), (B + 0.8, (5.0, 1.0)), (E, (0.0, 0.0))])
+    bl.key("clav_l", [(0.0, (0.0, 0.0)), (A, (2.0, -6.0)), (B, (2.0, 7.0)), (B + 0.5, (2.0, 8.0)), (E, (0.0, 0.0))])
+    bl.key("arm", [(0.0, n["arm"]), (0.13, (22.0, 22.0, 16.0)), (0.4, (24.0, -6.0, 46.0)), (A - 0.14, (25.0, -30.0, 72.0)), (A - 0.04, (26.0, -35.0, 77.0)), (A + 0.03, (26.0, -36.0, 78.0)),
+                   (A + 0.08, (31.0, -28.0, 81.0)), (A + 0.13, (42.0, -7.0, 84.0)), (A + 0.18, (55.0, 18.0, 85.0)), (B, (72.0, 42.0, 83.0)), (B + 0.08, (84.0, 56.0, 79.0)),
+                   (B + 0.2, (92.0, 63.0, 73.0)), (B + 0.34, (94.0, 65.0, 68.0)), (B + 0.46, (93.0, 64.0, 64.0)), (B + 0.62, (84.0, 59.0, 52.0)), (B + 0.8, (62.0, 48.0, 36.0)), (E, n["arm"])])
+    bl.key("elbow", [(0.0, n["el"]), (0.3, 64.0), (A - 0.1, 73.0), (A + 0.08, 75.0), (A + 0.14, 60.0), (A + 0.2, 32.0), (B + 0.04, 15.0), (B + 0.14, 9.0), (B + 0.36, 13.0), (B + 0.6, 30.0), (B + 0.84, 56.0), (E, n["el"])])
+    bl.key("wrist", [(0.0, n["wrist"]), (0.2, (-4.0, 0.0, 0.0)), (A - 0.1, (-14.0, 0.0, 0.0)), (A + 0.1, (-13.0, 0.0, 0.0)), (A + 0.22, (-6.0, 0.0, 0.0)), (B + 0.14, (-14.0, 0.0, 0.0)), (B + 0.5, (-12.0, 0.0, 0.0)), (E, n["wrist"])])
+    bl.key("arm_l", [(0.0, n["al"]), (A - 0.3, (-4.0, 44.0, 44.0)), (A + 0.06, (-10.0, 50.0, 40.0)), (A + 0.2, (24.0, 32.0, 66.0)), (B + 0.1, (48.0, 22.0, 84.0)), (B + 0.6, (40.0, 22.0, 78.0)), (E, n["al"])])
+    bl.key("curl", [(0.0, 0.5), (A, 0.65), (A + 0.16, 0.3), (B + 0.5, 0.42), (E, 0.5)])
+    bl.feet("l", [(A - 0.14, A + 0.11, (0.09 + 0.08 * (1.0 - k), 0.22 - 0.8 * k), 28.0, 0.03 + 0.045 * k)])
+    bl.feet("r", [(B + 0.14, B + 0.54, (-0.15, -0.26 - 0.6 * k), -7.0, 0.025 + 0.025 * k)])
     return blow_clip(bl), E
 
 
 def slash_3(k=1.0):
-    """Light: the overhead. Straight up, the blade down its back, then down the
-    middle, the elbow opening late and the body folding after it."""
+    """Light: the overhead. Heaved straight up until the blade lies down its back, then
+    down the middle, the elbow opening late. It misses the floor by a hand and runs on
+    low past the forward foot, the body folding after it, and has to be levered back."""
     w, a, r = LIGHT
     A, B = w, w + a
     E = A + a + r
     n = _b()
     bl = Blow(E)
-    bl.key("root", [(0.0, 0.0), (0.3, 0.0), (A + 0.03, 0.14 * k), (A + 0.16, 0.42 * k), (B + 0.08, 0.5 * k), (E, 0.5 * k)])
-    bl.key("pelvis", [(0.0, n["p"]), (A - 0.05, (0.0, 0.1, 1.27)), (A + 0.12, (-0.01, -0.1, 1.22)), (B + 0.02, (-0.02, -0.16, 1.12)), (B + 0.34, (-0.01, -0.05, 1.19)), (E, n["p"])])
-    bl.key("pq", [(0.0, n["pq"]), (A - 0.05, (-3.0, 4.0, 0.0)), (A + 0.14, (14.0, 12.0, 0.0)), (B + 0.04, (24.0, 16.0, 0.0)), (B + 0.36, (12.0, 14.0, 0.0)), (E, n["pq"])])
-    bl.key("spine", [(0.0, n["spine"]), (A, (-20.0, -10.0, 4.0)), (A + 0.15, (20.0, -2.0, -3.0)), (B + 0.05, (40.0, 2.0, -5.0)), (B + 0.34, (20.0, -4.0, -2.0)), (E, n["spine"])])
-    bl.key("neck", [(0.0, n["neck"]), (A, (2.0, 0.0, 0.0)), (A + 0.17, (-10.0, 0.0, 0.0)), (B + 0.08, (-20.0, 0.0, 0.0)), (E, n["neck"])])
-    bl.key("head", [(0.0, n["head"]), (A, (-8.0, 2.0, 0.0)), (A + 0.18, (-22.0, 0.0, 0.0)), (B + 0.1, (-30.0, 0.0, 0.0)), (E, n["head"])])
-    bl.key("clav_r", [(0.0, (0.0, 0.0)), (A, (14.0, -3.0)), (B, (-4.0, 13.0)), (E, (0.0, 0.0))])
-    bl.key("clav_l", [(0.0, (0.0, 0.0)), (A, (6.0, 2.0)), (B, (-2.0, 6.0)), (E, (0.0, 0.0))])
-    bl.key("arm", [(0.0, n["arm"]), (0.2, (88.0, 24.0, 6.0, 62.0)), (A - 0.05, (134.0, 14.0, 2.0, 92.0)), (A + 0.02, (136.0, 14.0, 0.0, 94.0)), (A + 0.1, (118.0, 10.0, 0.0, 84.0)),
-                   (A + 0.18, (90.0, 6.0, 2.0, 54.0)), (A + 0.26, (74.0, 4.0, 4.0, 22.0)), (B + 0.04, (78.0, 2.0, 6.0, 14.0)), (B + 0.14, (76.0, 2.0, 6.0, 22.0)), (B + 0.4, (46.0, 14.0, 10.0, 50.0)), (E, n["arm"])])
-    bl.key("wrist", [(0.0, n["wrist"]), (0.2, (-6.0, 0.0, 0.0)), (A, (-20.0, 0.0, 0.0)), (A + 0.12, (-6.0, 0.0, 0.0)), (A + 0.22, (12.0, 0.0, 0.0)), (B + 0.1, (6.0, 0.0, 0.0)), (E, n["wrist"])])
-    bl.key("arm_l", [(0.0, n["al"]), (A, (52.0, 26.0, 88.0)), (A + 0.15, (20.0, 30.0, 56.0)), (B + 0.06, (-12.0, 34.0, 34.0)), (B + 0.4, (14.0, 26.0, 52.0)), (E, n["al"])])
-    bl.key("curl", [(0.0, 0.5), (A, 0.2), (A + 0.16, 0.75), (B + 0.3, 0.45), (E, 0.5)])
-    bl.feet("r", [(A - 0.04, A + 0.18, (-0.14, -0.26 - 0.5 * k), -6.0, 0.03 + 0.04 * k)])
-    bl.feet("l", [(B + 0.08, B + 0.4, (0.17, 0.22 - 0.5 * k), 22.0, 0.025 + 0.025 * k)])
+    bl.key("root", [(0.0, 0.0), (A - 0.18, 0.0), (A, 0.18 * k), (A + 0.1, 0.44 * k), (B, 0.5 * k), (B + 0.3, 0.54 * k), (E, 0.54 * k)])
+    bl.key("pelvis", [(0.0, n["p"]), (0.15, (0.0, 0.03, 1.2)), (0.42, (0.0, 0.08, 1.24)), (A - 0.12, (0.0, 0.11, 1.28)), (A + 0.02, (0.0, 0.05, 1.26)), (A + 0.12, (-0.01, -0.1, 1.21)),
+                      (B + 0.03, (-0.02, -0.16, 1.12)), (B + 0.26, (-0.03, -0.17, 1.1)), (B + 0.58, (-0.03, -0.14, 1.12)), (B + 0.84, (-0.01, -0.05, 1.19)), (E, n["p"])])
+    bl.key("pq", [(0.0, n["pq"]), (0.15, (10.0, 12.0, 0.0)), (A - 0.14, (-4.0, 4.0, 0.0)), (A - 0.02, (-2.0, 5.0, 0.0)), (A + 0.12, (14.0, 12.0, 0.0)), (B + 0.04, (23.0, 20.0, 0.0)), (B + 0.16, (26.0, 30.0, 1.0)), (B + 0.34, (27.0, 38.0, 2.0)),
+                  (B + 0.58, (24.0, 34.0, 2.0)), (B + 0.85, (12.0, 20.0, 1.0)), (E, n["pq"])])
+    bl.key("spine", [(0.0, n["spine"]), (0.15, (14.0, -6.0, 0.0)), (A - 0.06, (-22.0, -10.0, 4.0)), (A + 0.03, (-19.0, -9.0, 4.0)), (A + 0.14, (20.0, -2.0, -3.0)), (B + 0.04, (38.0, 4.0, -5.0)),
+                     (B + 0.16, (42.0, 14.0, -7.0)), (B + 0.34, (43.0, 22.0, -8.0)), (B + 0.58, (40.0, 18.0, -6.0)), (B + 0.85, (20.0, 2.0, -2.0)), (E, n["spine"])])
+    bl.key("neck", [(0.0, n["neck"]), (A, (2.0, 0.0, 0.0)), (A + 0.17, (-10.0, 0.0, 0.0)), (B + 0.2, (-22.0, 0.0, 0.0)), (B + 0.85, (-8.0, 0.0, 0.0)), (E, n["neck"])])
+    bl.key("head", [(0.0, n["head"]), (A, (-8.0, 2.0, 0.0)), (A + 0.18, (-22.0, 0.0, 0.0)), (B + 0.24, (-32.0, 0.0, 0.0)), (B + 0.85, (-22.0, 0.0, 0.0)), (E, n["head"])])
+    bl.key("clav_r", [(0.0, (0.0, 0.0)), (0.15, (-3.0, 2.0)), (A - 0.08, (15.0, -3.0)), (A + 0.1, (4.0, 6.0)), (B + 0.05, (-5.0, 14.0)), (B + 0.45, (-8.0, 17.0)), (B + 0.82, (-3.0, 8.0)), (E, (0.0, 0.0))])
+    bl.key("clav_l", [(0.0, (0.0, 0.0)), (A, (6.0, 2.0)), (B, (-2.0, 6.0)), (B + 0.5, (-3.0, 7.0)), (E, (0.0, 0.0))])
+    bl.key("arm", [(0.0, n["arm"]), (0.15, (20.0, 25.0, 13.0)), (0.42, (74.0, 25.0, 8.0)), (A - 0.14, (127.0, 16.0, 3.0)), (A - 0.04, (134.0, 14.0, 1.0)), (A + 0.03, (135.0, 14.0, 0.0)),
+                   (A + 0.08, (127.0, 12.0, 0.0)), (A + 0.13, (104.0, 9.0, 1.0)), (A + 0.18, (84.0, 6.0, 3.0)), (B, (78.0, 3.0, 5.0)), (B + 0.08, (78.0, -8.0, 7.0)), (B + 0.2, (80.0, -18.0, 9.0)),
+                   (B + 0.36, (82.0, -24.0, 10.0)), (B + 0.58, (78.0, -22.0, 10.0)), (B + 0.85, (46.0, 4.0, 11.0)), (E, n["arm"])])
+    bl.key("elbow", [(0.0, n["el"]), (0.2, 64.0), (0.5, 80.0), (A - 0.08, 93.0), (A + 0.09, 94.0), (A + 0.14, 74.0), (A + 0.19, 38.0), (B, 22.0), (B + 0.12, 18.0), (B + 0.34, 22.0), (B + 0.6, 28.0), (B + 0.85, 50.0), (E, n["el"])])
+    bl.key("wrist", [(0.0, n["wrist"]), (0.2, (-2.0, 0.0, 0.0)), (A - 0.1, (-18.0, 0.0, 0.0)), (A + 0.1, (-18.0, 0.0, 0.0)), (A + 0.2, (2.0, 0.0, 0.0)), (B + 0.12, (8.0, 0.0, 0.0)), (B + 0.55, (4.0, 0.0, 0.0)), (E, n["wrist"])])
+    bl.key("arm_l", [(0.0, n["al"]), (A, (52.0, 26.0, 88.0)), (A + 0.15, (20.0, 30.0, 56.0)), (B + 0.1, (-14.0, 36.0, 34.0)), (B + 0.6, (-6.0, 34.0, 42.0)), (E, n["al"])])
+    bl.key("curl", [(0.0, 0.5), (A, 0.2), (A + 0.16, 0.75), (B + 0.5, 0.62), (E, 0.5)])
+    bl.feet("r", [(A - 0.14, A + 0.11, (-0.14, -0.26 - 0.54 * k), -6.0, 0.03 + 0.04 * k)])
+    bl.feet("l", [(A + 0.18, B + 0.46, (0.17, 0.22 - 0.54 * k), 22.0, 0.025 + 0.025 * k)])
     return blow_clip(bl), E
 
 
 def heavy(k=1.0):
-    """The heavy slice: a long wind-up, the whole body coiled back on its right
-    leg, the upper arm rolled in so the elbow's bend lies flat and the blade trails
-    behind at chest height; then flat across the whole front, the left foot planted,
-    the hips leading, the elbow opening last; and it overbalances after it and has
-    to catch itself."""
+    """The heavy slice: a long heave back in two pushes, the whole body coiled onto its
+    right leg, the upper arm rolled in so the elbow's bend lies flat and the blade
+    trails behind at chest height; then flat across the whole front, the left foot
+    stamped, the hips leading, the elbow opening last. Then it cannot stop it: the
+    blade drags it round past the blow, the right foot staggers to catch it, and it
+    stands bent over the arm before it can drag the thing home."""
     w, a, r = HEAVY
     A, B = w, w + a
     E = A + a + r
     n = _b()
     bl = Blow(E)
-    bl.key("root", [(0.0, 0.0), (0.2, -0.03), (A - 0.2, -0.1), (A, -0.07), (A + 0.16, 0.22 * k), (B, 0.42 * k), (B + 0.3, 0.46 * k), (E, 0.46 * k)])
-    bl.key("pelvis", [(0.0, n["p"]), (0.3, (-0.03, 0.07, 1.21)), (A - 0.06, (-0.06, 0.13, 1.16)), (A + 0.14, (0.0, 0.0, 1.16)), (B, (0.06, -0.12, 1.15)), (B + 0.34, (0.03, -0.08, 1.18)), (E, n["p"])])
-    bl.key("pq", [(0.0, n["pq"]), (0.3, (8.0, -18.0, 2.0)), (A - 0.06, (9.0, -46.0, 4.0)), (A + 0.13, (8.0, 4.0, 0.0)), (B - 0.04, (10.0, 56.0, -5.0)), (B + 0.34, (10.0, 42.0, -3.0)), (E, n["pq"])])
-    bl.key("spine", [(0.0, n["spine"]), (0.36, (10.0, -32.0, 8.0)), (A, (5.0, -62.0, 11.0)), (A + 0.17, (12.0, -8.0, -3.0)), (B, (18.0, 50.0, -14.0)), (B + 0.3, (16.0, 34.0, -10.0)), (B + 0.62, (12.0, 8.0, -3.0)),
-                     (E, n["spine"])])
-    bl.key("neck", [(0.0, n["neck"]), (A, (0.0, 34.0, -5.0)), (A + 0.2, (-2.0, 6.0, 2.0)), (B + 0.05, (-5.0, -24.0, 7.0)), (B + 0.5, (-2.0, -10.0, 2.0)), (E, n["neck"])])
-    bl.key("head", [(0.0, n["head"]), (A, (-16.0, 30.0, -6.0)), (A + 0.22, (-17.0, 4.0, 2.0)), (B + 0.05, (-18.0, -24.0, 8.0)), (B + 0.5, (-17.0, -9.0, 2.0)), (E, n["head"])])
-    bl.key("clav_r", [(0.0, (0.0, 0.0)), (A, (4.0, -15.0)), (A + 0.16, (1.0, 5.0)), (B, (2.0, 20.0)), (E, (0.0, 0.0))])
-    bl.key("clav_l", [(0.0, (0.0, 0.0)), (A, (2.0, 12.0)), (B, (1.0, -12.0)), (E, (0.0, 0.0))])
-    bl.key("arm", [(0.0, n["arm"]), (0.3, (56.0, 52.0, 52.0, 84.0)), (A - 0.14, (64.0, 74.0, 84.0, 104.0)), (A + 0.02, (66.0, 78.0, 86.0, 108.0)), (A + 0.1, (74.0, 62.0, 86.0, 84.0)), (A + 0.19, (80.0, 34.0, 84.0, 44.0)),
-                   (A + 0.28, (82.0, 4.0, 80.0, 16.0)), (B, (80.0, -20.0, 76.0, 10.0)), (B + 0.12, (76.0, -30.0, 72.0, 14.0)), (B + 0.4, (58.0, -14.0, 56.0, 34.0)), (B + 0.7, (40.0, 12.0, 30.0, 60.0)), (E, n["arm"])])
-    bl.key("wrist", [(0.0, n["wrist"]), (0.3, (-8.0, 6.0, 0.0)), (A, (-18.0, 12.0, 0.0)), (A + 0.14, (-6.0, 14.0, 0.0)), (A + 0.28, (8.0, 14.0, 0.0)), (B + 0.2, (6.0, 10.0, 0.0)), (E, n["wrist"])])
-    bl.key("arm_l", [(0.0, n["al"]), (A, (62.0, 18.0, 70.0)), (A + 0.18, (26.0, 30.0, 58.0)), (B, (-16.0, 40.0, 34.0)), (B + 0.45, (10.0, 30.0, 50.0)), (E, n["al"])])
-    bl.key("curl", [(0.0, 0.5), (A, 0.2), (A + 0.2, 0.7), (B + 0.3, 0.45), (E, 0.5)])
-    # Back onto the right leg, then the left stamps forward and the right
-    # drags round after the blade.
-    bl.feet("l", [(0.14, 0.4, (0.2, 0.1), 24.0, 0.04), (A - 0.08, A + 0.16, (0.22, 0.1 - 0.4 * k), 32.0, 0.03 + 0.04 * k), (B + 0.42, B + 0.76, (0.17, 0.22 - 0.46 * k), 22.0, 0.025 + 0.025 * k)])
-    bl.feet("r", [(B + 0.06, B + 0.4, (-0.15, -0.26 - 0.46 * k), -7.0, 0.03 + 0.03 * k)])
+    bl.key("root", [(0.0, 0.0), (0.3, -0.03), (A - 0.3, -0.1), (A - 0.04, -0.09), (A + 0.14, 0.2 * k), (B, 0.42 * k), (B + 0.3, 0.5 * k), (B + 0.6, 0.52 * k), (E, 0.52 * k)])
+    bl.key("pelvis", [(0.0, n["p"]), (0.2, (-0.01, 0.03, 1.2)), (0.52, (-0.04, 0.09, 1.22)), (0.76, (-0.04, 0.1, 1.2)), (A - 0.14, (-0.06, 0.13, 1.16)), (A + 0.02, (-0.05, 0.09, 1.155)), (A + 0.14, (0.0, 0.0, 1.16)),
+                      (B, (0.06, -0.12, 1.15)), (B + 0.3, (0.07, -0.14, 1.14)), (B + 0.75, (0.05, -0.12, 1.16)), (B + 1.05, (0.02, -0.05, 1.2)), (E, n["p"])])
+    bl.key("pq", [(0.0, n["pq"]), (0.2, (9.0, 8.0, 1.0)), (0.56, (8.0, -22.0, 2.0)), (0.8, (8.0, -28.0, 3.0)), (A - 0.12, (9.0, -46.0, 4.0)), (A + 0.05, (9.0, -36.0, 4.0)), (A + 0.2, (8.0, 8.0, 0.0)), (B - 0.02, (10.0, 44.0, -5.0)),
+                  (B + 0.28, (11.0, 56.0, -6.0)), (B + 0.75, (11.0, 48.0, -4.0)), (B + 1.05, (9.0, 26.0, -1.0)), (E, n["pq"])])
+    bl.key("spine", [(0.0, n["spine"]), (0.2, (13.0, -8.0, 1.0)), (0.56, (10.0, -34.0, 8.0)), (0.82, (9.0, -40.0, 9.0)), (A - 0.04, (5.0, -62.0, 11.0)), (A + 0.09, (6.0, -54.0, 10.0)), (A + 0.22, (12.0, -4.0, -3.0)), (B, (17.0, 36.0, -13.0)),
+                     (B + 0.22, (20.0, 44.0, -15.0)), (B + 0.75, (19.0, 36.0, -11.0)), (B + 1.05, (13.0, 12.0, -4.0)), (E, n["spine"])])
+    bl.key("neck", [(0.0, n["neck"]), (A, (0.0, 34.0, -5.0)), (A + 0.2, (-2.0, 6.0, 2.0)), (B + 0.15, (-6.0, -28.0, 7.0)), (B + 0.8, (-3.0, -14.0, 3.0)), (E, n["neck"])])
+    bl.key("head", [(0.0, n["head"]), (A, (-16.0, 30.0, -6.0)), (A + 0.22, (-17.0, 4.0, 2.0)), (B + 0.15, (-20.0, -28.0, 8.0)), (B + 0.8, (-18.0, -12.0, 2.0)), (E, n["head"])])
+    bl.key("clav_r", [(0.0, (0.0, 0.0)), (0.2, (-3.0, 3.0)), (A - 0.06, (6.0, -15.0)), (A + 0.14, (1.0, 5.0)), (B, (0.0, 20.0)), (B + 0.5, (-5.0, 24.0)), (B + 1.0, (-2.0, 8.0)), (E, (0.0, 0.0))])
+    bl.key("clav_l", [(0.0, (0.0, 0.0)), (A, (2.0, 12.0)), (B, (1.0, -12.0)), (B + 0.6, (1.0, -14.0)), (E, (0.0, 0.0))])
+    bl.key("arm", [(0.0, n["arm"]), (0.2, (25.0, 21.0, 18.0)), (0.56, (50.0, 48.0, 54.0)), (0.82, (56.0, 58.0, 68.0)), (A - 0.14, (64.0, 74.0, 83.0)), (A - 0.03, (66.0, 78.0, 86.0)), (A + 0.04, (67.0, 79.0, 87.0)),
+                   (A + 0.12, (69.0, 75.0, 87.0)), (A + 0.17, (75.0, 63.0, 86.0)), (A + 0.21, (84.0, 48.0, 84.0)), (A + 0.25, (95.0, 35.0, 82.0)), (B, (109.0, 26.0, 79.0)), (B + 0.06, (110.0, 12.0, 76.0)),
+                   (B + 0.14, (111.0, 1.0, 73.0)), (B + 0.26, (112.0, -7.0, 71.0)), (B + 0.46, (110.0, -11.0, 68.0)), (B + 0.72, (95.0, -6.0, 60.0)), (B + 1.05, (46.0, 12.0, 32.0)), (E, n["arm"])])
+    bl.key("elbow", [(0.0, n["el"]), (0.56, 84.0), (0.82, 90.0), (A - 0.08, 106.0), (A + 0.12, 108.0), (A + 0.18, 84.0), (A + 0.24, 48.0), (B, 22.0), (B + 0.08, 10.0), (B + 0.2, 8.0), (B + 0.4, 11.0), (B + 0.75, 30.0), (B + 1.05, 58.0), (E, n["el"])])
+    bl.key("wrist", [(0.0, n["wrist"]), (0.3, (-8.0, 6.0, 0.0)), (A - 0.1, (-18.0, 12.0, 0.0)), (A + 0.12, (-16.0, 14.0, 0.0)), (A + 0.26, (2.0, 14.0, 0.0)), (B + 0.2, (10.0, 12.0, 0.0)), (B + 0.8, (6.0, 8.0, 0.0)), (E, n["wrist"])])
+    bl.key("arm_l", [(0.0, n["al"]), (A, (62.0, 18.0, 70.0)), (A + 0.18, (26.0, 30.0, 58.0)), (B + 0.1, (-20.0, 42.0, 34.0)), (B + 0.8, (-8.0, 36.0, 42.0)), (E, n["al"])])
+    bl.key("curl", [(0.0, 0.5), (A, 0.2), (A + 0.2, 0.7), (B + 0.6, 0.6), (E, 0.5)])
+    # Back onto the right leg, then the left stamps forward; the right is dragged
+    # round after the blade and the left has to shuffle back under it.
+    bl.feet("l", [(0.3, 0.68, (0.2, 0.1), 24.0, 0.04), (A - 0.1, A + 0.14, (0.22, 0.1 - 0.46 * k), 32.0, 0.03 + 0.04 * k), (B + 0.76, B + 1.16, (0.17, 0.22 - 0.52 * k), 22.0, 0.025 + 0.025 * k)])
+    bl.feet("r", [(B + 0.08, B + 0.5, (-0.15, -0.26 - 0.52 * k), -7.0, 0.03 + 0.03 * k)])
     return blow_clip(bl), E
 
 
@@ -1077,6 +1121,66 @@ def blow_report(name, tips, grips, edges, A, B, root_of):
         name, min(zs), max(zs), far, max((tips[i + 1] - tips[i]).length * FPS for i in range(len(tips) - 1)), sum(lead) / max(len(lead), 1), max(lead) if lead else 0.0), flush=True)
 
 
+def pace_report(name, tips, A, B):
+    """The blow's weight as speeds of the tip: slow up, fast down, and how long the
+    swing takes to run off after the ATTACK window shuts."""
+    v = [(tips[i + 1] - tips[i]).length * FPS for i in range(len(tips) - 1)]
+    a, b = int(A * FPS), int(B * FPS)
+
+    def part(i, j):
+        s = v[i:j]
+        return sum(s) / max(len(s), 1), max(s)
+
+    up, swing, rec = part(0, a), part(a, b), part(b, len(v))
+    peak = max(v)
+    at = v.index(peak) / FPS
+    # After the window: how long until it has shed nine tenths of the peak, and how
+    # far the tip has gone on by then.
+    i = b
+    while i < len(v) and v[i] > peak * 0.1:
+        i += 1
+    carried = sum(v[b:i]) / FPS
+    print("[pace]  %-12s wind-up %.1f (peak %.1f)  swing %.1f (peak %.1f @ A%+.2f)  recovery %.1f (peak %.1f)  carried on %.2f s, %.2f m, at B %.0f%% of peak" % (
+        name, up[0], up[1], swing[0], swing[1], at - A, rec[0], rec[1], (i - b) / FPS, carried, 100.0 * v[min(b, len(v) - 1)] / peak), flush=True)
+
+
+def seg_gap(a, b, c, d, n=8):
+    """The gap between segments ab and cd, near enough: `ab` sampled onto `cd`."""
+    u = d - c
+    uu = max(u.dot(u), 1e-9)
+    best = 9.0
+    for i in range(n + 1):
+        p = a + (b - a) * (i / n)
+        s = max(0.0, min(1.0, (p - c).dot(u) / uu))
+        best = min(best, (p - (c + u * s)).length)
+    return best
+
+
+# What the blade must not go through: bone to bone, and how thick it is there.
+CLEAR = (("pelvis", "chest", 0.2), ("chest", "head", 0.13), ("thigh.L", "shin.L", 0.1), ("shin.L", "foot.L", 0.08), ("thigh.R", "shin.R", 0.1), ("shin.R", "foot.R", 0.08),
+         ("upper_arm.L", "forearm.L", 0.07), ("forearm.L", "hand.L", 0.06))
+# Where the blow is meant to land: the game stops its step this far from them,
+# centre to centre (sword_skeleton.gd STANDOFF), and the sweep's test capsule.
+STANDOFF = 1.3
+TARGET_LOW, TARGET_HIGH, TARGET_R = 0.25, 1.55, 0.42
+
+
+def reach_report(name, elbows, tips, rootz, A, B):
+    """When the blade (elbow to point, as the game sweeps it) goes through someone
+    standing where the step ends. It has to be inside the ATTACK window."""
+    end = rootz[-1]
+    low, high = V(0, -STANDOFF, TARGET_LOW), V(0, -STANDOFF, TARGET_HIGH)
+    first, best = None, (9.0, 0)
+    for i in range(int(A * FPS), int(B * FPS) + 1):
+        off = V(0, -rootz[i] + end, 0)
+        gap = seg_gap(elbows[i] + off, tips[i] + off, low, high)
+        if gap < best[0]:
+            best = (gap, i)
+        if gap < TARGET_R and first is None:
+            first = i
+    print("[reach] %-12s %s, window A+0 .. A%+.2f, nearest in it %.2f m at A%+.2f" % (name, "lands at A%+.2f" % (first / FPS - A) if first is not None else "MISSES", B - A, best[0], best[1] / FPS - A), flush=True)
+
+
 def bake_clip(arm, name, fn, L, loop_):
     n = int(round(L * FPS))
     frames = n + 1
@@ -1086,6 +1190,8 @@ def bake_clip(arm, name, fn, L, loop_):
     roots, pelvs = [], []
     tracks = {}
     tips, grips, edges, rootz, low_tip = [], [], [], [], 9.0
+    high_tip, elbows, stretch, near = 0.0, [], 0.0, (9.0, "", 0)
+    base = name[:-2] if name.endswith("_s") else name
     lq = {"upper_arm.R": [], "upper_arm.L": [], "hand.R": []}
     for f in range(frames):
         t = f / FPS
@@ -1099,10 +1205,20 @@ def bake_clip(arm, name, fn, L, loop_):
         tip = s.P["blade"] + s.G["blade"] @ (TIP_REST - RH["blade"])
         tracks.setdefault("tip", []).append(tip)
         low_tip = min(low_tip, tip.z)
+        high_tip = max(high_tip, tip.z)
         tips.append(tip)
         grips.append(s.P["blade"].copy())
+        elbows.append(s.P["forearm.R"].copy())
         edges.append(s.G["blade"] @ BLADE_EDGE)
         rootz.append(-sp.root.y)
+        # A leg stretched past its reach leaves its planted foot behind.
+        stretch = max(stretch, (s.P["foot.L"] - sp.foot_l[0]).length, (s.P["foot.R"] - sp.foot_r[0]).length)
+        if base in BLOWS:
+            edge_at = s.P["blade"] + (tip - s.P["blade"]) * 0.2
+            for b0, b1, thick in CLEAR:
+                gap = seg_gap(edge_at, tip, s.P[b0], s.P[b1]) - thick
+                if gap < near[0]:
+                    near = (gap, b0, f)
         for b in lq:
             lq[b].append(s.L[b].copy())
         roots.append(s.root_loc)
@@ -1114,12 +1230,14 @@ def bake_clip(arm, name, fn, L, loop_):
             dv = ((pts[i] - pts[i - 1]) - (pts[i - 1] - pts[i - 2])).length
             if dv > worst[0]:
                 worst = (dv, b, i)
-    print("[check] %-12s %.4f  %s @ %d   lowest tip %.2f" % (name, worst[0], worst[1], worst[2], low_tip), flush=True)
+    print("[check] %-12s %.4f  %s @ %d   tip %.2f..%.2f   foot off its mark %.3f" % (name, worst[0], worst[1], worst[2], low_tip, high_tip, stretch), flush=True)
     roll_report(name, lq, L)
-    base = name[:-2] if name.endswith("_s") else name
     if base in BLOWS:
         w, a, _r = HEAVY if base == "heavy" else LIGHT
         blow_report(name, tips, grips, edges, w, w + a, rootz)
+        pace_report(name, tips, w, w + a)
+        reach_report(name, elbows, tips, rootz, w, w + a)
+        print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
     # Quaternion continuity, frame to frame.
     for b, qs in data.items():
         for i in range(1, len(qs)):
@@ -1185,11 +1303,16 @@ def sheet(arm, actions, out_dir, only, count=9):
         arm.animation_data.action = act
         arm.animation_data.action_slot = act.slots[0]
         L = act.frame_range[1]
+        at_frames = [L * i / (count - 1) for i in range(count)]
+        base = name[:-2] if name.endswith("_s") else name
+        if base in BLOWS:
+            # A blow's beats, not even steps: most of its frames are the slow ones.
+            w, a, r = HEAVY if base == "heavy" else LIGHT
+            at_frames = [FPS * x for x in (0.0, w * 0.2, w * 0.55, w, w + a * 0.5, w + a, w + a + 0.2, w + a + r * 0.5, w + a + r * 0.8)]
         strip = []
         for view, loc in (("side", V(6.6, -0.5, 1.3)), ("q", V(-3.6, -5.6, 1.5))):
             row = []
-            for i in range(count):
-                f = L * i / (count - 1)
+            for f in at_frames:
                 sc.frame_set(int(round(f)))
                 bpy.context.view_layer.update()
                 root = arm.pose.bones["root"].matrix.translation.copy()

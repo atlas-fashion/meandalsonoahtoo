@@ -27,10 +27,17 @@ extends "res://scripts/enemy.gd"
 const SHIELD := preload("res://scripts/skeleton_shield.gd")
 const HANDS: Array[StringName] = [&"drill", &"blade", &"hammer", &"shield"]
 
-## The sword hand's heavy slice.
+## The sword hand's two blows, wind-up, swing and recovery. The blade is its whole
+## arm: a long heave, a short swing that is all the ATTACK window there is, and a long
+## time getting it back (note 137). tools/anim_sword_skeleton.py `LIGHT` and `HEAVY`
+## are these same numbers, baked into the clips: change both.
+const BLADE_WINDUP := 0.9
+const BLADE_SWING := 0.24
+const BLADE_RECOVER := 1.0
 const HEAVY_DAMAGE := 26.0
-const HEAVY_WINDUP := 0.85
-const HEAVY_RECOVER := 0.95
+const HEAVY_WINDUP := 1.25
+const HEAVY_SWING := 0.3
+const HEAVY_RECOVER := 1.45
 ## Of the moments both slices are ready, how often it chooses the heavy one.
 const HEAVY_SHARE := 0.4
 ## The drill's dash hits harder than its jab.
@@ -146,9 +153,12 @@ func _apply_hand() -> void:
 			move_speed = 4.6
 			normal_cooldown = 1.6
 			attack_damage = 12.0
+			windup_time = BLADE_WINDUP
+			normal_duration = BLADE_SWING
+			recover_time = BLADE_RECOVER
 			# The heavy slice is SLAM: a short planted step, not a charge.
 			slam_speed = 2.5
-			slam_duration = 0.42
+			slam_duration = HEAVY_SWING
 			slam_cooldown = 4.5
 
 

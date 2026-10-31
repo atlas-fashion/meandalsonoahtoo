@@ -54,9 +54,11 @@ const STEP_MAX := 1.25
 const LONG_STEP := 0.32
 ## The body's speed going into a blow is shed at this, m/s/s.
 const CARRY_DECEL := 15.0
-## How stiff the model's heading spring is, walking about and in a blow.
+## How stiff the model's heading spring is, walking about, in the swing, and with the
+## weight of the blade up or still out at the end of its arm, when it comes round slowly.
 const TURN_SPRING := 11.0
 const TURN_SPRING_BLOW := 20.0
+const TURN_SPRING_LOADED := 6.0
 ## Under this it stands; over it, the turning shows in the feet.
 const TURN_SHOWS := 0.75
 ## How long a clip may take to settle in. A change of pace is slow; a blow, a
@@ -247,6 +249,9 @@ func _play_state_anim(which: StringName, _duration: float) -> void:
 		ANIM_IDLE:
 			_blow = &""
 		# The blow's clip carries on through its swing and its recovery.
+		_:
+			if state == State.ATTACK:
+				_measure_step()
 
 
 func _update_locomotion() -> void:
@@ -328,6 +333,17 @@ func _start_blow() -> void:
 	_blow_t = 0.0
 
 
+## The wind-up is long enough for them to have moved. The step is all still to come
+## when the swing starts, so it is measured again from where they are now.
+func _measure_step() -> void:
+	var player := _resolve_player()
+	if player == null or _blow == &"":
+		return
+	var need := Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length() - STANDOFF
+	var left := _root_at(_blow, 99.0) - _root_at(_blow, _blow_t)
+	_blow_scale = clampf(need / maxf(left, 0.01), STEP_MIN, STEP_MAX)
+
+
 ## How far forward the clip's root has come at `t`.
 static func _root_at(clip: StringName, t: float) -> float:
 	var curve: PackedFloat32Array = _roots.get(clip, PackedFloat32Array())
@@ -375,7 +391,9 @@ func _physics_process(delta: float) -> void:
 ## The model's heading chases the body's on a spring, so a snapped `_face` reads
 ## as a turn. `_yaw_v`, its speed, is what the turning clips are played by.
 func _turn_model(delta: float) -> void:
-	var k := TURN_SPRING_BLOW if _blow != &"" else TURN_SPRING
+	var k := TURN_SPRING
+	if _blow != &"":
+		k = TURN_SPRING_BLOW if state == State.ATTACK else TURN_SPRING_LOADED
 	var off := wrapf(rotation.y - _shown_yaw, -PI, PI)
 	_yaw_v += (k * k * off - 2.0 * k * _yaw_v) * delta
 	_shown_yaw = wrapf(_shown_yaw + _yaw_v * delta, -PI, PI)
