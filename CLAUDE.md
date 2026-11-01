@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 147), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 148), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -558,6 +558,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 145 | 2026-10-31 | The flinch planted: 0.5 s at a tenth of walking pace and stopped hard (`flinch_time`, `flinch_move_scale`, `FLINCH_PLANT`), on one clock with the attacks, so the moment they can move they can swing. Supersedes note 143's second at half speed | [docs/notes/145-flinch-planted.md](docs/notes/145-flinch-planted.md) |
 | 146 | 2026-10-31 | The proels' leap, a jump slam to close the gap: `jump_slam` from a stand, `leap_run`, `_low`, `_high` off the run in stride with no blend (the capsule stays on the floor, the clip does the height, the flight stretched to fit); 30 and a knockdown, the point's strike a shock on the floor; committed in the air; parried it goes over on its back (`thrown`) and is up in 2.05 s; rays and a floor check on the way; every old clip byte for byte identical | [docs/notes/146-the-proels-leap.md](docs/notes/146-the-proels-leap.md) |
 | 147 | 2026-10-31 | The sewer lizards spit in bursts: one rear-up, 4 gobs 0.12 s apart, then 2.8 s of rest (`BURST`, `BURST_GAP`, `BURST_REST`; was one gob a second) | [docs/notes/147-sewer-lizards-spit-in-bursts.md](docs/notes/147-sewer-lizards-spit-in-bursts.md) |
+| 148 | 2026-10-31 | The proels strike half again as fast (`BLOW_TEMPO` / `TEMPO` 1.15 -> 1.725, re-baked) and run one blow into the next: chain far more often, rest less, circle less between exchanges; `[reach]` sweeps between frames | [docs/notes/148-proels-strike-half-again-as-fast.md](docs/notes/148-proels-strike-half-again-as-fast.md) |
 
 ## Notes by source file
 
@@ -626,7 +627,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pause_menu.gd`: 19
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145
 - `scripts/portcullis.gd`: 6.18
-- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146
+- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79

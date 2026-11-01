@@ -33,7 +33,7 @@ const HANDS: Array[StringName] = [&"drill", &"blade", &"hammer", &"shield"]
 ## `LIGHT`, `HEAVY` and `TEMPO` are these same numbers, baked into the clips: change both.
 ## BLOW_TEMPO is how much faster than they are keyed they play (note 142): one number, so
 ## the wind-up, the swing and the recovery keep their proportions.
-const BLOW_TEMPO := 1.15
+const BLOW_TEMPO := 1.725  # 1.15 (note 142) x 1.5 (note 148): the short swordsman
 const BLADE_WINDUP := 0.9 / BLOW_TEMPO
 const BLADE_SWING := 0.24 / BLOW_TEMPO
 const BLADE_RECOVER := 1.3 / BLOW_TEMPO

@@ -93,17 +93,19 @@ const CHAIN_IN := {&"slash_1": 0.68 / BLOW_TEMPO, &"slash_2": 0.68 / BLOW_TEMPO,
 const CHAIN_NEXT := {&"slash_1": [&"slash_2"], &"slash_2": [&"slash_1", &"slash_3", &"heavy"], &"slash_3": [&"slash_2"]}
 const LINK_TAG := {&"slash_1": "1", &"slash_2": "2", &"slash_3": "3", &"heavy": "h"}
 ## How often a light blow goes on to a second with nothing to go on, when the last one
-## landed or was blocked, and how much less likely each blow added makes the next.
-const CHAIN_SHARE := 0.4
-const CHAIN_ON_HIT := 0.75
-const CHAIN_ON_GUARD := 0.5
+## landed or was blocked, and how much less likely each blow added makes the next. Note
+## 148 (the user: "seamless like the enforcer attacks"): far more often than note 138's
+## 0.4 / 0.75 / 0.5, so a blow mostly runs on into the next through its link.
+const CHAIN_SHARE := 0.65
+const CHAIN_ON_HIT := 0.85
+const CHAIN_ON_GUARD := 0.7
 const CHAIN_TIRED := 0.7
 ## At most this many blows added to the first.
 const CHAIN_MOST := 2
 ## Further off than this, centre to centre, it does not go on: it goes after them.
 const CHAIN_REACH := 2.6
 ## Blown after a chain: this much longer until the next blow, for each one it added.
-const CHAIN_REST := 0.7
+const CHAIN_REST := 0.3
 ## Under this share of their health it has them, and presses: more blows, less rest.
 const LOW_HEALTH := 0.35
 ## How long after their swing ends they are open to a blow.
@@ -179,10 +181,11 @@ const FLANK_TIME := 1.6
 const RING_CLOSE := 1.7
 const RING_WAIT := 2.7
 const RING_SLACK := 1.6
-## After an exchange it circles this share of the time, for this long.
-const CIRCLE_SHARE := 0.65
-const CIRCLE_LEAST := 0.7
-const CIRCLE_MOST := 2.2
+## After an exchange it circles this share of the time, for this long (note 148: was 0.65
+## of the time for 0.7-2.2 s; at the short swordsman's pace it goes back in sooner).
+const CIRCLE_SHARE := 0.35
+const CIRCLE_LEAST := 0.35
+const CIRCLE_MOST := 1.1
 ## How long it goes one way round, and how often it stops a moment instead.
 const WAY_LEAST := 0.9
 const WAY_MOST := 2.2

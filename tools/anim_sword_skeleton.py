@@ -73,7 +73,7 @@ TAU = math.tau
 # and BLOW_TEMPO with TEMPO. `reel` and the gaits are not blows and do not take it.
 LIGHT = (0.9, 0.24, 1.3)
 HEAVY = (1.25, 0.3, 1.85)
-TEMPO = 1.15
+TEMPO = 1.725  # 1.15 (note 142) x 1.5 (note 148)
 # How much of each recovery is keyed; the last of those keys is stretched to fill it,
 # running down to a stand (`Blow.clock`, note 138).
 LIGHT_KEYED, LIGHT_SETTLE = 1.0, 0.7
@@ -2225,12 +2225,20 @@ def reach_report(name, elbows, tips, rootz, A, B):
     low, high = V(0, -STANDOFF, TARGET_LOW), V(0, -STANDOFF, TARGET_HIGH)
     first, best = None, (9.0, 0)
     for i in range(int(A * FPS), int(B * FPS) + 1):
-        off = V(0, -rootz[i] + end, 0)
-        gap = seg_gap(elbows[i] + off, tips[i] + off, low, high)
-        if gap < best[0]:
-            best = (gap, i)
-        if gap < TARGET_R and first is None:
-            first = i
+        # Swept from the frame before, in four steps, as the game does
+        # (skeleton_sword.gd `strike`): at note 148's tempo the point moves over a
+        # metre a frame, and frame by frame alone would step past them.
+        for k in range(1 if i > 0 else 4, 5):
+            t = k / 4.0
+            j = max(i - 1, 0)
+            off = V(0, -(rootz[j] + (rootz[i] - rootz[j]) * t) + end, 0)
+            el = elbows[j] + (elbows[i] - elbows[j]) * t
+            tp = tips[j] + (tips[i] - tips[j]) * t
+            gap = seg_gap(el + off, tp + off, low, high)
+            if gap < best[0]:
+                best = (gap, i)
+            if gap < TARGET_R and first is None:
+                first = i
     print("[reach] %-12s %s, window A+0 .. A%+.2f, nearest in it %.2f m at A%+.2f" % (name, "lands at A%+.2f" % (first / FPS - A) if first is not None else "MISSES", B - A, best[0], best[1] / FPS - A), flush=True)
 
 
