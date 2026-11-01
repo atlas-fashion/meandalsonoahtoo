@@ -460,9 +460,9 @@ func _stats_for(id: StringName) -> Array:
 				"Attack", [
 					["Level", str(player.weapon_level(&"spear"))],
 					["Stab", str(roundi(s.STAB_DAMAGE * k))],
-					["Stab rate", "%.2f s" % s.STAB_EVERY],
+					["Stab rate", "%.2f s" % (s.STAB_EVERY * s.time_scale())],
 					["Dash", str(roundi(s.DASH_DAMAGE * k))],
-					["Dash cooldown", "%.1f s" % s.DASH_COOLDOWN],
+					["Dash cooldown", "%.1f s" % (s.DASH_COOLDOWN * s.time_scale())],
 					["Throw blast", str(roundi(s.BLAST_DAMAGE * k))],
 					["Blast reach", "%.1f m" % s.BLAST_RADIUS],
 					["Throw cooldown", "%d s" % roundi(s.THROW_COOLDOWN)],
@@ -483,7 +483,7 @@ func _stats_for(id: StringName) -> Array:
 				"Attack", [
 					["Level", str(player.weapon_level(&"axe"))],
 					["Slash", str(roundi(a.SLASH_DAMAGE * k))],
-					["Slash rate", "%.2f s" % a.SLASH_EVERY],
+					["Slash rate", "%.2f s" % (a.SLASH_EVERY * a.time_scale())],
 					["Throw", str(roundi(a.THROW_DAMAGE * k))],
 					["Stays in its mark", "%d s" % roundi(a.STICK_TIME)],
 					["Berserk", "%d s" % roundi(a.BERSERK_TIME)],

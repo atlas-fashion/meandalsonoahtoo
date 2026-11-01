@@ -19,6 +19,9 @@ extends Node3D
 ##   to the hand along a glowing tether, butt first. Nothing else can be done
 ##   with the spear until it is caught.
 ##
+## The stab's, dash's and wind-up's times here are all before `time_scale()`, the
+## player's `attack_time_scale` (note 144).
+##
 ## The model is built from primitives (an ash shaft, a leaf blade, an iron socket
 ## and butt spike, leather bindings) along -Z, tip forward. In the hand it is
 ## drawn pulled toward the camera like the sword (`use_z_clip_scale`); the
@@ -145,8 +148,13 @@ func busy() -> bool:
 	return is_away() or _pose in [Pose.STAB, Pose.DASH, Pose.WINDUP]
 
 
+## What every spear attack's time is multiplied by.
+func time_scale() -> float:
+	return player.attack_time_scale
+
+
 func dash_charge() -> float:
-	return clampf(1.0 - (_dash_ready_at - _now()) / DASH_COOLDOWN, 0.0, 1.0)
+	return clampf(1.0 - (_dash_ready_at - _now()) / (DASH_COOLDOWN * time_scale()), 0.0, 1.0)
 
 
 ## For the HUD's attack icons (`player.attack_cooldowns`): throw, dash, stab as
@@ -161,8 +169,8 @@ func attack_cooldowns() -> Array:
 		stab = maxf(stab, _dash_until - now)
 	return [
 		[&"throw", maxf(_throw_ready_at - now, 0.0), THROW_COOLDOWN, "F"],
-		[&"dash", -1.0 if away else maxf(_dash_ready_at - now, 0.0), DASH_COOLDOWN, "Q"],
-		[&"stab", -1.0 if away else stab, STAB_EVERY, "LMB"],
+		[&"dash", -1.0 if away else maxf(_dash_ready_at - now, 0.0), DASH_COOLDOWN * time_scale(), "Q"],
+		[&"stab", -1.0 if away else stab, STAB_EVERY * time_scale(), "LMB"],
 	]
 
 
@@ -204,7 +212,7 @@ func _fire_stab() -> void:
 	# From the step it fires on. A held click fires on the very step it falls
 	# due, so held clicks come exactly STAB_EVERY apart -- and nothing, early
 	# or late, ever comes sooner than that.
-	_next_stab = _stab_clock + STAB_EVERY
+	_next_stab = _stab_clock + STAB_EVERY * time_scale()
 	_begin(Pose.STAB)
 	_stab_hit = false
 	stab_side = -stab_side
@@ -224,11 +232,13 @@ func dash() -> void:
 	forward.y = 0.0
 	if forward.length_squared() < 0.0001:
 		return
-	_dash_ready_at = now + DASH_COOLDOWN
-	_dash_until = now + DASH_TIME
+	# Slower, not shorter: the same ground covered in a longer charge.
+	var time := DASH_TIME * time_scale()
+	_dash_ready_at = now + DASH_COOLDOWN * time_scale()
+	_dash_until = now + time
 	_dash_hit.clear()
 	_begin(Pose.DASH)
-	player.begin_spear_dash(forward.normalized() * DASH_SPEED, DASH_TIME)
+	player.begin_spear_dash(forward.normalized() * DASH_SPEED / time_scale(), time)
 
 
 func throw() -> void:
@@ -265,7 +275,7 @@ func _process(delta: float) -> void:
 	# The MODEL is hidden, not this node: the tether is a child, and a hidden
 	# parent hides a top_level child too.
 	_model.visible = _raise > 0.01 and _pose != Pose.AWAY
-	_pose_t += delta
+	_pose_t += delta / time_scale()
 	var pose: Transform3D = scene if scene != null else _pose_transform()
 	# The guard (`player._start_block`), eased by the player's own level.
 	var g: float = player.guard_amount()

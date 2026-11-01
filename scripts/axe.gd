@@ -31,6 +31,9 @@ extends Node3D
 ##   burns on the floor round the feet, and the edges of the view glow red
 ##   (hud.gd `_update_berserk_glow`). `BERSERK_COOLDOWN` after it wears off.
 ##
+## The chop's and the throw's times here are all before `time_scale()`, which
+## carries the player's `attack_time_scale` (note 144).
+##
 ## The model is built from primitives along +Y (the haft, hand at the origin)
 ## with the bearded head at the top, its edge toward -Z. In the hand it is drawn
 ## pulled toward the camera like the sword (`use_z_clip_scale`).
@@ -230,9 +233,10 @@ func berserk_amount() -> float:
 	return clampf((_berserk_until - now) / 0.5, 0.0, 1.0)
 
 
-## What every axe attack's time is multiplied by: half while berserk.
+## What every axe attack's time is multiplied by: the player's
+## `attack_time_scale`, halved while berserk.
 func time_scale() -> float:
-	return BERSERK_ATTACK_SCALE if is_berserk() else 1.0
+	return player.attack_time_scale * (BERSERK_ATTACK_SCALE if is_berserk() else 1.0)
 
 
 ## For the HUD's attack icons (`player.attack_cooldowns`): berserk, throw, slash

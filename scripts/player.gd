@@ -21,6 +21,14 @@ extends CharacterBody3D
 ## up even though each individual cut lands for less.
 @export var attack_damage := 20.0
 
+## How long every weapon's attacks take, as a multiple of the timelines written
+## in this file, spear.gd and axe.gd (note 144): 1.25 is 25% longer, so 20%
+## slower. The one number to turn. Swings, wind-ups, the beat between blows, the
+## dash (its speed falls to match, the same ground covered), the slam's dive and
+## its getting up all follow it; the long recharges (spear throw, slam, berserk)
+## and things in flight do not.
+@export var attack_time_scale := 1.25
+
 ## A shove on every sword hit, so a connecting swing visibly moves what it hits.
 @export var attack_push := 5.5
 @export var attack_stun := 0.15
@@ -1276,7 +1284,7 @@ func _update_dash_view(delta: float) -> void:
 	if _dash_view > 0.0 and not _ghosting:
 		_dash_view = maxf(_dash_view - delta / maxf(dash_effect_time, 0.001), 0.0)
 	if _swing_kick > 0.0:
-		_swing_kick = maxf(_swing_kick - delta / maxf(attack_kick_time, 0.001), 0.0)
+		_swing_kick = maxf(_swing_kick - delta / maxf(attack_kick_time * attack_time_scale, 0.001), 0.0)
 	# Squared, so both punch at the start and ease out rather than sliding
 	# back linearly.
 	var dash := _dash_view * _dash_view
@@ -1301,7 +1309,7 @@ func _update_head(delta: float) -> void:
 	if _land_kick > 0.0:
 		_land_kick = maxf(_land_kick - delta / maxf(landing_kick_time, 0.001), 0.0)
 	if _slam_crouch > 0.0:
-		_slam_crouch = maxf(_slam_crouch - delta / maxf(slam_recover_time, 0.001), 0.0)
+		_slam_crouch = maxf(_slam_crouch - delta / maxf(slam_recover_time * attack_time_scale, 0.001), 0.0)
 	if _shake > 0.0:
 		_shake = maxf(_shake - delta / maxf(slam_shake_time, 0.001), 0.0)
 	if _jump_kick > 0.0:
@@ -1402,7 +1410,7 @@ func _update_head(delta: float) -> void:
 	# `_update_dash_view`).
 	var effort := _spin_effort()
 	if _stab_strain > 0.0:
-		_stab_strain = maxf(_stab_strain - delta * 1.1, 0.0)
+		_stab_strain = maxf(_stab_strain - delta * 1.1 / attack_time_scale, 0.0)
 	var stab := _stab_effort()
 	_stab_fov = stab.w
 	effort += stab
@@ -1432,7 +1440,7 @@ func _update_head(delta: float) -> void:
 		+ deg_to_rad(haft_roll) * _cine_roll * _cine_z + deg_to_rad(_scene_roll) + deg_to_rad(effort.x)
 	# The haft strike's turn onto its target. Only ever here, on the head: the
 	# body's yaw is the player's aim and is never touched.
-	head.rotation.y = _cine_aim.x * _cine_a + _spin_view_yaw(delta)
+	head.rotation.y = _cine_aim.x * _cine_a + _spin_view_yaw(delta / attack_time_scale)
 
 
 ## Puts the sword away when something else is in hand (or the hands are busy,
@@ -1915,7 +1923,7 @@ func _physics_process(delta: float) -> void:
 		if _slam_grounded:
 			velocity.y = 0.0 if is_on_floor() else velocity.y + get_gravity().y * delta
 		else:
-			velocity.y = -slam_descent_speed
+			velocity.y = -slam_descent_speed / attack_time_scale
 		move_and_slide()
 		_place_slam_marker()
 		if _slam_grounded:
@@ -2666,7 +2674,9 @@ func _warm_guard_flash() -> void:
 const REST_POS := Vector3(0.34, -0.85, -0.35)
 const REST_ROT := Vector3(-1.113895, 0.0, -0.244346)
 ## A stroke's timeline, seconds: into the wind-up, the cut, the follow-through
-## held, and back to rest. The blade bites from SWING_WIND to SWING_HOLD.
+## held, and back to rest. The blade bites from SWING_WIND to SWING_HOLD. These
+## and the spin's and slam's below run on `_pose_time`, which `attack_time_scale`
+## stretches (`ATTACK_POSES`), so in real seconds each is that much longer.
 const SWING_WIND := 0.07
 const SWING_CUT := 0.21
 const SWING_HOLD := 0.27
@@ -2704,6 +2714,9 @@ const GUARD_DIR := Vector3(-0.8, 0.5, -0.33)
 const GUARD_EDGE := Vector3(0.52, 0.85, 0.0)
 const GUARD_UP := 0.1
 const GUARD_DOWN := 0.16
+## The poses that are attacks, on `attack_time_scale`. The guard and the scripted
+## poses (a haft strike, the cage stab) keep their own time.
+const ATTACK_POSES: Array[StringName] = [&"slash", &"chop", &"spin", &"raise", &"slam"]
 
 func _begin_pose(kind: StringName) -> void:
 	if _stab_depth and kind != &"stab":
@@ -2735,7 +2748,8 @@ func _end_pose() -> void:
 func _update_pose(delta: float) -> void:
 	if _pose_time < 0.0:
 		return
-	_pose_time += delta
+	var step := delta / attack_time_scale if _pose_kind in ATTACK_POSES else delta
+	_pose_time += step
 	var length := SWING_END
 	if _pose_kind == &"slam":
 		length = slam_recover_time + SLAM_STRIKE
@@ -2779,7 +2793,7 @@ func _update_pose(delta: float) -> void:
 		_hit_window_open = _pose_time >= SPIN_WIND and _pose_time <= SPIN_TURN and not is_flinching()
 		# The cut's white trail, all the way round (`_update_sweep_trail`).
 		_trail_on = _pose_time >= SPIN_WIND * 0.6 and _pose_time <= SPIN_TURN + 0.03 and not is_flinching()
-		if _pose_time >= SPIN_TURN and _pose_time - delta < SPIN_TURN:
+		if _pose_time >= SPIN_TURN and _pose_time - step < SPIN_TURN:
 			# The release: a punch of the view and a shake as it comes round.
 			_swing_kick = maxf(_swing_kick, 0.9)
 			_shake = maxf(_shake, 0.2)
@@ -3506,14 +3520,14 @@ func attack_cooldowns() -> Array:
 		# until its turn is done); a spin waits only for a spin still turning.
 		var cut := 0.0
 		if _attacking and _pose_time >= 0.0:
-			cut = maxf(_bite_end() - _pose_time, 0.0)
+			cut = maxf(_bite_end() - _pose_time, 0.0) * attack_time_scale
 		var spin := 0.0
 		if _pose_kind == &"spin" and _pose_time >= 0.0 and not _spin_released():
-			spin = SPIN_TURN - _pose_time
+			spin = (SPIN_TURN - _pose_time) * attack_time_scale
 		return [
 			[&"slam", maxf(_slam_ready_at - now, recover), slam_cooldown, "F"],
-			[&"spin", maxf(spin, recover), SPIN_TURN, "Q"],
-			[&"slash", maxf(cut, recover), SWING_HOLD, "LMB"],
+			[&"spin", maxf(spin, recover), SPIN_TURN * attack_time_scale, "Q"],
+			[&"slash", maxf(cut, recover), SWING_HOLD * attack_time_scale, "LMB"],
 		]
 	var list: Array = []
 	if held == &"spear" and spear != null and spear.has_method("attack_cooldowns"):
@@ -3581,7 +3595,7 @@ func _land_slam() -> void:
 	_slamming = false
 	velocity = Vector3.ZERO
 	# Down on the ground for a moment, getting up: no moving, view low and rising.
-	_slam_recover_until = _now() + slam_recover_time
+	_slam_recover_until = _now() + slam_recover_time * attack_time_scale
 	_slam_crouch = 1.0
 	_flash_slam_marker()
 
