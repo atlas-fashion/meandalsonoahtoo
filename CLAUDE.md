@@ -552,6 +552,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 139 | 2026-10-31 | The sword skeletons are Proel swordsmen (name only; code ids stay, `&"blade"` is in the saves). Out of a blow in stride: 18 `out_*` clips start as the blow stands and end on the gait's first frame, no blend, from 0.32-0.52 s after the swing; 8 `pivot_*` / `gpivot_*` turns of 90 and 180 degrees on planted feet, the turn in `root` x; a lean into turns; `idle_fight` 6.6 s and alive; red eyes at half the light; chains weighed at `CHAIN_OUT` on the result, their health, armour and guard, and which blow can catch them. Walk, run, every blow and link byte-identical | [docs/notes/139-proel-swordsmen.md](docs/notes/139-proel-swordsmen.md) |
 | 140 | 2026-10-31 | Proels: a parry makes them reel 1.1 m (`reel`, `reel_from`; the old throw was 7.1 m) and stuns them 1.5 s; four guarded strafe clips; close in they circle, flank a guard and go in on an opening or at the player's back; several on one player take turns (`_take_turn`, one blow at a time) and keep apart (`_keep_clear`); every old clip byte for byte identical | [docs/notes/140-proels-reel-strafe-and-take-turns.md](docs/notes/140-proels-reel-strafe-and-take-turns.md) |
 | 141 | 2026-10-31 | Proels hunt in three gaits so a pack does not move as one: plain, `_low` (bent, blade swept back) and `_high` (upright, blade raised), each a walk, a run, four strafes and 9 `out` clips; those on one player take different ones (`_share_gaits`); walking about they all use plain walk and run. Light blows 12 -> 20, heavy 26 -> 36. Every old clip byte for byte identical | [docs/notes/141-proels-three-hunting-gaits-harder-blows.md](docs/notes/141-proels-three-hunting-gaits-harder-blows.md) |
+| 142 | 2026-10-31 | The proels' blows a little faster: one tempo, `TEMPO` / `BLOW_TEMPO` 1.15, over every blow and link and both cooldowns, keys unmoved (light 2.44 -> 2.12 s, heavy 3.40 -> 2.96 s, wind-up 0.90 -> 0.78 s); baked, since `out` clips must end at the gait's speed; 47 clips byte for byte identical, walk and run among them | [docs/notes/142-proels-blows-a-little-faster.md](docs/notes/142-proels-blows-a-little-faster.md) |
 
 ## Notes by source file
 
@@ -620,7 +621,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pause_menu.gd`: 19
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140
 - `scripts/portcullis.gd`: 6.18
-- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141
+- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79
@@ -656,7 +657,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111, 128
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
-- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141
+- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
 - `scripts/wood_door.gd`: 6.18, 79
@@ -681,7 +682,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/torch_flame.gdshader`: 6.18, 19
 - `shaders/vine_leaf.gdshader`: 6.18
 - `shaders/water_drip.gdshader`: 39, 121
-- `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141
+- `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142
 - `tools/benchmark.gd`: 6.11, 33, 112
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75

@@ -623,8 +623,10 @@ The arms are joint angles (note 136): a roll is a key, never something an IK sol
 falls into. Run `--check` after touching a blow and read the `[roll]` line.
 
 The clip names and their lengths are read by `scripts/sword_skeleton.gd`, and
-`LIGHT` / `HEAVY` must stay equal to `BLADE_*` and `HEAVY_*` in `prosthetic.gd`, or the
-ATTACK window slides off the swing. After touching a blow, read `[reach]` (it must land
+`LIGHT` / `HEAVY` must stay equal to `BLADE_*` and `HEAVY_*` in `prosthetic.gd`, and `TEMPO`
+to `BLOW_TEMPO`, or the ATTACK window slides off the swing. `TEMPO` is how much faster than the
+keys every blow and link plays, so to change their speed change that one number in both: note 142.
+After touching a blow, read `[reach]` (it must land
 inside the window) and `[pace]` as well. A blow's weight is timing, and the end of a
 swing is judged in world space: note 137. `LINK`, `LINK_OUT` and `LINK_IN` must stay equal
 to `LINK_TIME`, `CHAIN_OUT` and `CHAIN_IN` in `sword_skeleton.gd`. Read `[seam]` (a blow ends

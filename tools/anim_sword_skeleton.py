@@ -30,7 +30,7 @@ stay exactly where they are put.
 
     the BLOWS are keyed, a chain of late starts from the floor up: step, hips,
     chest, shoulder, then elbow, then wrist. One clip is the whole blow:
-    wind-up, swing and recovery, on enemy.gd's own clock (LIGHT and HEAVY), so
+    wind-up, swing and recovery, on enemy.gd's own clock (LIGHT, HEAVY, TEMPO), so
     nothing has to blend inside a blow. Their weight is timing (note 137): a long
     lift, a short swing, and a swing that does not stop where the blow ends. The
     beats are set out above `slash_1`. A LINK (note 138) takes one blow's recovery
@@ -65,11 +65,15 @@ OUT = os.path.join(ROOT, "models", "sword_skeleton.glb")
 FPS = 60
 TAU = math.tau
 
-# The light slice's and the heavy's three phases: wind-up, swing, recovery. These are
+# The light slice's and the heavy's three phases as they are keyed: wind-up, swing,
+# recovery. TEMPO is how much faster than the keys every blow and link plays (note 142),
+# so the proportions, which are the weight, cannot drift. Over TEMPO these are
 # prosthetic.gd's BLADE_* and HEAVY_* and sword_skeleton.gd plays them at 1x, so the
-# swing here is enemy.gd's ATTACK state and the blade can only hurt in it. Change both.
+# swing here is enemy.gd's ATTACK state and the blade can only hurt in it. Change both,
+# and BLOW_TEMPO with TEMPO. `reel` and the gaits are not blows and do not take it.
 LIGHT = (0.9, 0.24, 1.3)
 HEAVY = (1.25, 0.3, 1.85)
+TEMPO = 1.15
 # How much of each recovery is keyed; the last of those keys is stretched to fill it,
 # running down to a stand (`Blow.clock`, note 138).
 LIGHT_KEYED, LIGHT_SETTLE = 1.0, 0.7
@@ -736,8 +740,11 @@ class Blow:
         return (V(pos[0], pos[1] + root, z), pitch, yaw, 0.0, toe)
 
 
-def blow_clip(bl):
+def blow_clip(bl, tempo=1.0):
+    """`bl` as a clip, played `tempo` times as fast as it is keyed."""
+
     def fn(t, L):
+        t *= tempo
         # The blurs narrow with the clock, or a blow would stop short of the guard
         # by what they take off the last key.
         g = bl.pace(t)
@@ -835,7 +842,7 @@ def slash_1(k=1.0):
     # blow carried on with.
     bl.feet("r", [(A - 0.14, A + 0.11, (-0.15, -0.26 - 0.68 * k), -8.0, 0.03 + 0.045 * k)])
     bl.feet("l", [(A + 0.15, B + 0.42, (0.17, 0.22 - 0.68 * k), 22.0, 0.025 + 0.025 * k)])
-    return blow_clip(bl), bl.L
+    return blow_clip(bl, TEMPO), bl.L / TEMPO
 
 
 def slash_2(k=1.0):
@@ -870,7 +877,7 @@ def slash_2(k=1.0):
     # comes up: both done by LINK_OUT, and the foot does not skate home in the idle.
     bl.feet("l", [(A - 0.14, A + 0.11, (0.09 + 0.08 * (1.0 - k), 0.22 - 0.8 * k), 28.0, 0.03 + 0.045 * k), (B + 0.34, B + 0.5, (0.17, 0.22 - 0.6 * k), 22.0, 0.02)])
     bl.feet("r", [(B + 0.06, B + 0.36, (-0.15, -0.26 - 0.6 * k), -7.0, 0.025 + 0.025 * k)])
-    return blow_clip(bl), bl.L
+    return blow_clip(bl, TEMPO), bl.L / TEMPO
 
 
 def slash_3(k=1.0):
@@ -902,7 +909,7 @@ def slash_3(k=1.0):
     bl.key("curl", [(0.0, 0.5), (A, 0.2), (A + 0.16, 0.75), (B + 0.5, 0.62), (E, 0.5)])
     bl.feet("r", [(A - 0.14, A + 0.11, (-0.15, -0.26 - 0.54 * k), -6.0, 0.03 + 0.04 * k)])
     bl.feet("l", [(A + 0.18, B + 0.46, (0.17, 0.22 - 0.54 * k), 22.0, 0.025 + 0.025 * k)])
-    return blow_clip(bl), bl.L
+    return blow_clip(bl, TEMPO), bl.L / TEMPO
 
 
 def heavy(k=1.0):
@@ -939,7 +946,7 @@ def heavy(k=1.0):
     # round after the blade and the left has to shuffle back under it.
     bl.feet("l", [(0.3, 0.68, (0.2, 0.1), 24.0, 0.04), (A - 0.1, A + 0.14, (0.22, 0.1 - 0.46 * k), 32.0, 0.03 + 0.04 * k), (B + 0.76, B + 1.16, (0.17, 0.22 - 0.52 * k), 22.0, 0.025 + 0.025 * k)])
     bl.feet("r", [(B + 0.08, B + 0.5, (-0.15, -0.26 - 0.52 * k), -7.0, 0.03 + 0.03 * k)])
-    return blow_clip(bl), bl.L
+    return blow_clip(bl, TEMPO), bl.L / TEMPO
 
 
 # --- Chains ---------------------------------------------------------------------------
@@ -957,7 +964,7 @@ def heavy(k=1.0):
 # position and speed matching at both ends; the speed the arm carries in is kept, so it
 # swings on a little before it turns.
 
-LINK = 0.75                 # sword_skeleton.gd LINK_TIME
+LINK = 0.75                 # as keyed, like these three; sword_skeleton.gd LINK_TIME
 LINK_OUT = 0.62             # after the swing's end; ... CHAIN_OUT
 # How long before its swing each blow is joined; ... CHAIN_IN.
 LINK_IN = {"slash_1": 0.22, "slash_2": 0.22, "slash_3": 0.22, "heavy": 0.28}
@@ -1022,9 +1029,9 @@ def link_clip(a, b):
     bl.ch["root"] = track([(0.0, 0.0), (LINK, Bb.ch["root"](t1))])
     if b == "heavy":
         bl.feet("l", [(0.06, 0.44, (0.2, 0.1), 24.0, 0.04)])
-    fn = blow_clip(bl)
+    fn = blow_clip(bl, TEMPO)
     fn.out = (a, t0, b, t1)
-    return fn, LINK
+    return fn, LINK / TEMPO
 
 
 # --- Standing down, and turning on guard -------------------------------------------------
@@ -1430,7 +1437,7 @@ def pivot(sgn, deg, guard):
 
 # When a blow can break off, by its clip's clock: just past the carry, the right foot
 # down. sword_skeleton.gd OUT_AT.
-OUT_AT = dict(slash_1=LIGHT[0] + LIGHT[1] + 0.32, slash_2=LIGHT[0] + LIGHT[1] + 0.38, slash_3=LIGHT[0] + LIGHT[1] + 0.32, heavy=HEAVY[0] + HEAVY[1] + 0.52)
+OUT_AT = dict(slash_1=(LIGHT[0] + LIGHT[1] + 0.32) / TEMPO, slash_2=(LIGHT[0] + LIGHT[1] + 0.38) / TEMPO, slash_3=(LIGHT[0] + LIGHT[1] + 0.32) / TEMPO, heavy=(HEAVY[0] + HEAVY[1] + 0.52) / TEMPO)
 # The first stride, against the time it would take at the gait's own speed. A blow that
 # leaves the blade high wants longer to get it down: slash_2's comes from over its shoulder.
 OUT_STRIDE = dict(slash_1=2.1, slash_2=2.9, slash_3=2.1, heavy=2.5)
@@ -1914,6 +1921,7 @@ def bake_clip(arm, name, fn, L, loop_):
     roll_report(name, lq, L)
     if base in BLOWS:
         w, a, _r = HEAVY if base == "heavy" else LIGHT
+        w, a = w / TEMPO, a / TEMPO
         blow_report(name, tips, grips, edges, w, w + a, rootz)
         pace_report(name, tips, w, w + a)
         reach_report(name, elbows, tips, rootz, w, w + a)
@@ -1988,23 +1996,23 @@ def seam_report():
         print("[seam]  %-12s end to guard %.4f (%s), tip speed at -0.4 .. -0.05 s: %s" % (name, gap[0], gap[1], " ".join(speed)), flush=True)
     dt = 1.0 / FPS
     for a, b, name in LINKS:
-        fn = fns[name][0]
+        fn, ln = fns[name]
         w, s, _r = LIGHT
-        t0 = w + s + LINK_OUT
+        t0 = (w + s + LINK_OUT) / TEMPO
         w, _s, _r = HEAVY if b == "heavy" else LIGHT
-        t1 = w - LINK_IN[b]
+        t1 = (w - LINK_IN[b]) / TEMPO
         for tag in ("", "_s"):
             fa, la = fns[a + tag]
             fb, lb = fns[b + tag]
-            out = worst_gap(seen_at(fa, t0, la), seen_at(fn, 0.0, LINK))
-            into = worst_gap(seen_at(fn, LINK, LINK), seen_at(fb, t1, lb))
+            out = worst_gap(seen_at(fa, t0, la), seen_at(fn, 0.0, ln))
+            into = worst_gap(seen_at(fn, ln, ln), seen_at(fb, t1, lb))
 
             def speed(f, t, L):
                 p, q = seen_at(f, t - dt, L), seen_at(f, t + dt, L)
                 return {k: (q[k] - p[k]) * (0.5 / dt) for k in p}
 
-            vo = worst_gap(speed(fa, t0, la), speed(fn, 0.0, LINK))
-            vi = worst_gap(speed(fn, LINK, LINK), speed(fb, t1, lb))
+            vo = worst_gap(speed(fa, t0, la), speed(fn, 0.0, ln))
+            vi = worst_gap(speed(fn, ln, ln), speed(fb, t1, lb))
             print("[link]  %-10s %-9s out %.4f (%s) speed %.3f (%s)   in %.4f (%s) speed %.3f (%s)" % (name, a + tag + ">" + b + tag, out[0], out[1], vo[0], vo[1], into[0], into[1], vi[0], vi[1]), flush=True)
 
     def speed_of(f, t, L, e=0.5 / FPS):
@@ -2069,7 +2077,7 @@ def sheet(arm, actions, out_dir, only, count=9):
         if base in BLOWS:
             # A blow's beats, not even steps: most of its frames are the slow ones.
             w, a, r = HEAVY if base == "heavy" else LIGHT
-            at_frames = [FPS * x for x in (0.0, w * 0.2, w * 0.55, w, w + a * 0.5, w + a, w + a + 0.2, w + a + r * 0.5, w + a + r * 0.8)]
+            at_frames = [FPS * x / TEMPO for x in (0.0, w * 0.2, w * 0.55, w, w + a * 0.5, w + a, w + a + 0.2, w + a + r * 0.5, w + a + r * 0.8)]
         strip = []
         for view, loc in (("side", V(6.6, -0.5, 1.3)), ("q", V(-3.6, -5.6, 1.5))):
             row = []

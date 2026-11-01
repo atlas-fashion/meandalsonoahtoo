@@ -74,12 +74,12 @@ const TURNS: Array[StringName] = [&"turn_l", &"turn_r", &"turn_gl", &"turn_gr"]
 ## Into a turn on guard here, with both feet nearest where the stance has them.
 const TURN_FROM_GUARD := 0.26
 ## A chain. tools/anim_sword_skeleton.py `LINK`, `LINK_OUT` and `LINK_IN` are these
-## same times, baked into the clips: change both. What can follow what is by where
-## the blade ends up: slash_1 ends low on its left, where the backhand starts; the
-## backhand ends high on its right, where the others start. The heavy only ever ends one.
-const LINK_TIME := 0.75
-const CHAIN_OUT := BLADE_WINDUP + BLADE_SWING + 0.62
-const CHAIN_IN := {&"slash_1": 0.68, &"slash_2": 0.68, &"slash_3": 0.68, &"heavy": 0.97}
+## same times as they are keyed, baked into the clips: change both. What can follow what
+## is by where the blade ends up: slash_1 ends low on its left, where the backhand starts;
+## the backhand ends high on its right, where the others start. The heavy only ever ends one.
+const LINK_TIME := 0.75 / BLOW_TEMPO
+const CHAIN_OUT := BLADE_WINDUP + BLADE_SWING + 0.62 / BLOW_TEMPO
+const CHAIN_IN := {&"slash_1": 0.68 / BLOW_TEMPO, &"slash_2": 0.68 / BLOW_TEMPO, &"slash_3": 0.68 / BLOW_TEMPO, &"heavy": 0.97 / BLOW_TEMPO}
 const CHAIN_NEXT := {&"slash_1": [&"slash_2"], &"slash_2": [&"slash_1", &"slash_3", &"heavy"], &"slash_3": [&"slash_2"]}
 const LINK_TAG := {&"slash_1": "1", &"slash_2": "2", &"slash_3": "3", &"heavy": "h"}
 ## How often a light blow goes on to a second with nothing to go on, when the last one
@@ -102,7 +102,7 @@ const SWING_OPEN := 0.45
 const SIDESTEP := 1.5
 ## When a blow's clock can break off into an `out` clip: past the carry, the right foot
 ## down. tools/anim_sword_skeleton.py `OUT_AT`: change both.
-const OUT_AT := {&"slash_1": 1.46, &"slash_2": 1.52, &"slash_3": 1.46, &"heavy": 2.07}
+const OUT_AT := {&"slash_1": 1.46 / BLOW_TEMPO, &"slash_2": 1.52 / BLOW_TEMPO, &"slash_3": 1.46 / BLOW_TEMPO, &"heavy": 2.07 / BLOW_TEMPO}
 ## With the model turned further from them than this it pivots first.
 const OUT_TURN := 1.2
 ## How much of a late start the crossfade takes up.

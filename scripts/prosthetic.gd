@@ -30,14 +30,17 @@ const HANDS: Array[StringName] = [&"drill", &"blade", &"hammer", &"shield"]
 ## The sword hand's two blows, wind-up, swing and recovery. The blade is its whole
 ## arm: a long heave, a short swing that is all the ATTACK window there is, and a long
 ## time getting it back and letting it settle (notes 137, 138). tools/anim_sword_skeleton.py
-## `LIGHT` and `HEAVY` are these same numbers, baked into the clips: change both.
-const BLADE_WINDUP := 0.9
-const BLADE_SWING := 0.24
-const BLADE_RECOVER := 1.3
+## `LIGHT`, `HEAVY` and `TEMPO` are these same numbers, baked into the clips: change both.
+## BLOW_TEMPO is how much faster than they are keyed they play (note 142): one number, so
+## the wind-up, the swing and the recovery keep their proportions.
+const BLOW_TEMPO := 1.15
+const BLADE_WINDUP := 0.9 / BLOW_TEMPO
+const BLADE_SWING := 0.24 / BLOW_TEMPO
+const BLADE_RECOVER := 1.3 / BLOW_TEMPO
 const HEAVY_DAMAGE := 36.0
-const HEAVY_WINDUP := 1.25
-const HEAVY_SWING := 0.3
-const HEAVY_RECOVER := 1.85
+const HEAVY_WINDUP := 1.25 / BLOW_TEMPO
+const HEAVY_SWING := 0.3 / BLOW_TEMPO
+const HEAVY_RECOVER := 1.85 / BLOW_TEMPO
 ## Of the moments both slices are ready, how often it chooses the heavy one.
 const HEAVY_SHARE := 0.4
 ## The drill's dash hits harder than its jab.
@@ -151,7 +154,7 @@ func _apply_hand() -> void:
 			display_name = "PROEL SWORDSMAN"
 			max_health = 100.0
 			move_speed = 4.6
-			normal_cooldown = 1.6
+			normal_cooldown = 1.6 / BLOW_TEMPO
 			attack_damage = 20.0
 			windup_time = BLADE_WINDUP
 			normal_duration = BLADE_SWING
@@ -159,7 +162,7 @@ func _apply_hand() -> void:
 			# The heavy slice is SLAM: a short planted step, not a charge.
 			slam_speed = 2.5
 			slam_duration = HEAVY_SWING
-			slam_cooldown = 4.5
+			slam_cooldown = 4.5 / BLOW_TEMPO
 
 
 func _ready() -> void:
