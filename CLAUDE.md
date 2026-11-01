@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 141), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 143), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -553,6 +553,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 140 | 2026-10-31 | Proels: a parry makes them reel 1.1 m (`reel`, `reel_from`; the old throw was 7.1 m) and stuns them 1.5 s; four guarded strafe clips; close in they circle, flank a guard and go in on an opening or at the player's back; several on one player take turns (`_take_turn`, one blow at a time) and keep apart (`_keep_clear`); every old clip byte for byte identical | [docs/notes/140-proels-reel-strafe-and-take-turns.md](docs/notes/140-proels-reel-strafe-and-take-turns.md) |
 | 141 | 2026-10-31 | Proels hunt in three gaits so a pack does not move as one: plain, `_low` (bent, blade swept back) and `_high` (upright, blade raised), each a walk, a run, four strafes and 9 `out` clips; those on one player take different ones (`_share_gaits`); walking about they all use plain walk and run. Light blows 12 -> 20, heavy 26 -> 36. Every old clip byte for byte identical | [docs/notes/141-proels-three-hunting-gaits-harder-blows.md](docs/notes/141-proels-three-hunting-gaits-harder-blows.md) |
 | 142 | 2026-10-31 | The proels' blows a little faster: one tempo, `TEMPO` / `BLOW_TEMPO` 1.15, over every blow and link and both cooldowns, keys unmoved (light 2.44 -> 2.12 s, heavy 3.40 -> 2.96 s, wind-up 0.90 -> 0.78 s); baked, since `out` clips must end at the gait's speed; 47 clips byte for byte identical, walk and run among them | [docs/notes/142-proels-blows-a-little-faster.md](docs/notes/142-proels-blows-a-little-faster.md) |
+| 143 | 2026-10-31 | The flinch: a blow that hurts and leaves the player standing throws the view from the blow and knocks the weapon down, slows them to half and stops every attack for 1 s (`player.gd` `_flinch`, `is_flinching`, `flinch_view`, `weapon_dip`); the attack under way cannot bite (cuts, chops, wind-ups and dashes cut off, a spin turns on dead, a slam lands a dud); guard, ghost, drink and jump stay free | [docs/notes/143-the-flinch.md](docs/notes/143-the-flinch.md) |
 
 ## Notes by source file
 
@@ -570,7 +571,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/archer.gd`: 20, 77, 92, 93
 - `scripts/arrow.gd`: 20, 79, 93
 - `scripts/attack_icons.gd`: 24, 77, 79, 84
-- `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91
+- `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91, 143
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
@@ -579,7 +580,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79
+- `scripts/coop_avatar.gd`: 79, 143
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -619,13 +620,13 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79
-- `scripts/rat_control.gd`: 77, 78, 79
+- `scripts/rat_control.gd`: 77, 78, 79, 143
 - `scripts/rat_look.gd`: 78
 - `scripts/rat_model.gd`: 77
 - `scripts/respawn_anchor.gd`: 8b, 32, 79
@@ -646,7 +647,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_sword.gd`: 24, 93, 135
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
-- `scripts/spear.gd`: 14, 78, 79
+- `scripts/spear.gd`: 14, 78, 79, 143
 - `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120, 128
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109, 121

@@ -243,7 +243,7 @@ func throw_held() -> bool:
 ## INF: in front of the eye). False (and the rat kept) when the hands are not
 ## free.
 func throw_rat(slot: int, from := Vector3.INF) -> bool:
-	if _busy() or _clock < _next_throw or player.inventory.id_at(slot) != &"live_rat":
+	if _busy() or player.is_flinching() or _clock < _next_throw or player.inventory.id_at(slot) != &"live_rat":
 		return false
 	var cam: Camera3D = player.camera
 	var fwd := -cam.global_basis.z
@@ -268,7 +268,7 @@ func throw_rat(slot: int, from := Vector3.INF) -> bool:
 
 ## The attack key with the robot rat in hand: set it down and see through it.
 func deploy() -> bool:
-	if _busy() or not player.is_on_floor():
+	if _busy() or player.is_flinching() or not player.is_on_floor():
 		return false
 	var slot: int = player.selected_slot
 	if player.inventory.id_at(slot) != &"robot_rat":

@@ -70,7 +70,7 @@ const BUTT_REACH := 0.67
 const REST_AT := Vector3(0.27, -0.36, -0.28)
 const AIM_FAR := Vector3(0.0, -0.05, -6.0)
 
-enum Pose { REST, STAB, DASH, WINDUP, AWAY, CATCH }
+enum Pose { REST, STAB, DASH, WINDUP, AWAY, CATCH, BACK }
 
 var player: CharacterBody3D
 
@@ -238,6 +238,15 @@ func throw() -> void:
 	_begin(Pose.WINDUP)
 
 
+## A blow knocked them out of it (player.gd `_flinch`): the dash and the throw's
+## wind-up stop where they are. A stab bites as it starts, so it plays out.
+func interrupt() -> void:
+	_stab_queued = false
+	if _pose in [Pose.DASH, Pose.WINDUP]:
+		_dash_until = 0.0
+		_begin(Pose.BACK)
+
+
 # --- Per frame --------------------------------------------------------------------
 
 func _process(delta: float) -> void:
@@ -263,7 +272,8 @@ func _process(delta: float) -> void:
 	if g > 0.0 and _pose in [Pose.REST, Pose.CATCH]:
 		pose = pose.interpolate_with(_guard_pose(), g)
 	var lowered := Transform3D(pose.basis, pose.origin + Vector3(0.05, -0.7, 0.25))
-	transform = lowered.interpolate_with(pose, _raise * _raise * (3.0 - 2.0 * _raise))
+	var up: float = _raise * (1.0 - player.weapon_dip())
+	transform = lowered.interpolate_with(pose, up * up * (3.0 - 2.0 * up))
 	if _pose == Pose.WINDUP and not _released and _pose_t >= THROW_WINDUP:
 		_release()
 	_update_tether()
@@ -367,6 +377,11 @@ func _pose_transform() -> Transform3D:
 			if k >= 1.0:
 				_pose = Pose.REST
 			return arriving.interpolate_with(_rest(), 1.0 - (1.0 - k) * (1.0 - k))
+		Pose.BACK:
+			var k := minf(t / 0.18, 1.0)
+			if k >= 1.0:
+				_pose = Pose.REST
+			return _from.interpolate_with(_rest(), k * k * (3.0 - 2.0 * k))
 	return _rest()
 
 

@@ -592,7 +592,7 @@ var _spear_dash_vel := Vector3.ZERO
 ## Nothing in the way of using the spear right now.
 func _spear_free() -> bool:
 	return not _blocking and not _ghosting and not is_drinking() and not _slamming and not hands_busy \
-		and not _dead and _now() >= _slam_recover_until
+		and not _dead and _now() >= _slam_recover_until and not is_flinching()
 
 
 ## Carried forward at `vel` for `time` s, steering locked, with the lunge's
@@ -1410,7 +1410,7 @@ func _update_head(delta: float) -> void:
 	shake_offset += Vector3(tremble.x, tremble.y, 0.0)
 	shake_roll += tremble.z
 	# Getting up after a death, and a scene's crush into the floor.
-	var wake := _wake_view() + _knock_view() + restrain_view
+	var wake := _wake_view() + _knock_view() + restrain_view + flinch_view()
 	var crushed := _scene_crush * _scene_crush * (3.0 - 2.0 * _scene_crush)
 	effort.x += wake.z + 38.0 * crushed
 	effort.y += wake.y - 25.0 * crushed
@@ -1460,7 +1460,7 @@ func _update_sword(delta: float) -> void:
 	var smooth := sword_duck_smooth_up if goal > _sword_duck else sword_duck_smooth_down
 	_sword_duck = clampf(_smooth_damp(_sword_duck, goal, delta, smooth), 0.0, 1.0)
 	sword_model.visible = _sword_duck < 0.999
-	sword_model.transform = _duck_transform(_sword_duck)
+	sword_model.transform = _duck_transform(maxf(_sword_duck, weapon_dip()))
 
 
 ## Every surface of the sword gets its own copy of its material, drawn pulled
@@ -1825,7 +1825,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		# brought down where you stand; with the spear, the throw.
 		if Coop.aim_ready(self) and not _ghosting \
 				and held_item() == &"sword" and not _slamming and _now() >= _slam_recover_until \
-				and _pose_kind != &"haft" and not is_drinking():
+				and _pose_kind != &"haft" and not is_drinking() and not is_flinching():
 			_end_block()
 			_start_slam()
 		elif Coop.aim_ready(self) and held_item() == &"spear" \
@@ -1978,7 +1978,7 @@ func _physics_process(delta: float) -> void:
 		# Full steering at ghost speed, a little off the floor.
 		var ghost_input := _move_input()
 		var ghost_dir := (global_basis * Vector3(ghost_input.x, 0.0, ghost_input.y)).normalized()
-		var ghost_target := ghost_dir * move_speed * ghost_speed_scale * _beam_speed_scale()
+		var ghost_target := ghost_dir * move_speed * ghost_speed_scale * _beam_speed_scale() * _flinch_speed_scale()
 		var ghost_accel := acceleration * ghost_acceleration_scale
 		velocity.x = move_toward(velocity.x, ghost_target.x, ghost_accel * delta)
 		velocity.z = move_toward(velocity.z, ghost_target.z, ghost_accel * delta)
@@ -1987,7 +1987,7 @@ func _physics_process(delta: float) -> void:
 		# Treading water: full steering, slowly.
 		var swim_input := _move_input()
 		var swim_dir := (global_basis * Vector3(swim_input.x, 0.0, swim_input.y)).normalized()
-		var swim_target := swim_dir * move_speed * swim_speed_scale
+		var swim_target := swim_dir * move_speed * swim_speed_scale * _flinch_speed_scale()
 		velocity.x = move_toward(velocity.x, swim_target.x, acceleration * 0.6 * delta)
 		velocity.z = move_toward(velocity.z, swim_target.z, acceleration * 0.6 * delta)
 	elif is_on_floor():
@@ -2000,7 +2000,7 @@ func _physics_process(delta: float) -> void:
 			* (block_move_scale if _blocking else 1.0) \
 			* (drink_move_scale if is_drinking() else 1.0) \
 			* (wade_speed_scale if depth > 0.3 else 1.0) * carry_speed_scale * _beam_speed_scale() \
-			* (spear_stab_move_scale if _spear_stabbing() else 1.0) * _axe_speed()
+			* (spear_stab_move_scale if _spear_stabbing() else 1.0) * _axe_speed() * _flinch_speed_scale()
 		var target_velocity := direction * walk
 		# Damping is raised during a swing so the lunge surge is gone well before
 		# the stroke ends, leaving the back half of it visibly slower.
@@ -2036,7 +2036,8 @@ func _physics_process(delta: float) -> void:
 		if air_input != Vector2.ZERO:
 			var wish := (global_basis * Vector3(air_input.x, 0.0, air_input.y)).normalized()
 			var air_walk := move_speed * (attack_move_scale if _attack_slows() else 1.0) \
-				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() * _axe_speed()
+				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() * _axe_speed() \
+				* _flinch_speed_scale()
 			var target_velocity := wish * air_walk
 			var air_damp := acceleration * air_damp_scale \
 				* (attack_damp_scale if _attack_slows() else 1.0)
@@ -2221,7 +2222,7 @@ func _silence_viewmodel_shadows(from: Node) -> void:
 
 func _start_attack() -> void:
 	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
-			or _ghosting or is_drinking():
+			or _ghosting or is_drinking() or is_flinching():
 		return
 	# A new stroke may cut into the last one's recovery, so a combo flows.
 	if _attacking and _pose_time < _bite_end():
@@ -2272,7 +2273,7 @@ func _attack_slows() -> bool:
 ## of the reach is the long, committed animation (SPIN_END).
 func _start_spin() -> void:
 	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
-			or _ghosting or is_drinking():
+			or _ghosting or is_drinking() or is_flinching():
 		return
 	# Q overrides a cut in progress, as the heavy attack does: the slash or chop
 	# is dropped where it is and the spin begins (it winds up from wherever the
@@ -2774,9 +2775,10 @@ func _update_pose(delta: float) -> void:
 		sword_pivot.transform = _spin_pose(_pose_time)
 		# Bites from the moment the turn starts to the moment it ends: the
 		# blade is out the whole way round.
-		_hit_window_open = _pose_time >= SPIN_WIND and _pose_time <= SPIN_TURN
+		# (A spin that took a blow turns on with its blade dead: `_flinch`.)
+		_hit_window_open = _pose_time >= SPIN_WIND and _pose_time <= SPIN_TURN and not is_flinching()
 		# The cut's white trail, all the way round (`_update_sweep_trail`).
-		_trail_on = _pose_time >= SPIN_WIND * 0.6 and _pose_time <= SPIN_TURN + 0.03
+		_trail_on = _pose_time >= SPIN_WIND * 0.6 and _pose_time <= SPIN_TURN + 0.03 and not is_flinching()
 		if _pose_time >= SPIN_TURN and _pose_time - delta < SPIN_TURN:
 			# The release: a punch of the view and a shake as it comes round.
 			_swing_kick = maxf(_swing_kick, 0.9)
@@ -3498,7 +3500,7 @@ func _on_animation_finished(anim_name: StringName) -> void:
 func attack_cooldowns() -> Array:
 	var held := held_item()
 	var now := _now()
-	var recover := maxf(_slam_recover_until - now, 0.0)
+	var recover := maxf(maxf(_slam_recover_until, _flinch_until) - now, 0.0)
 	if held == &"sword":
 		# A cut waits for the stroke in progress to stop biting (a spin blocks it
 		# until its turn is done); a spin waits only for a spin still turning.
@@ -3509,25 +3511,21 @@ func attack_cooldowns() -> Array:
 		if _pose_kind == &"spin" and _pose_time >= 0.0 and not _spin_released():
 			spin = SPIN_TURN - _pose_time
 		return [
-			[&"slam", maxf(_slam_ready_at - now, 0.0), slam_cooldown, "F"],
+			[&"slam", maxf(_slam_ready_at - now, recover), slam_cooldown, "F"],
 			[&"spin", maxf(spin, recover), SPIN_TURN, "Q"],
 			[&"slash", maxf(cut, recover), SWING_HOLD, "LMB"],
 		]
+	var list: Array = []
 	if held == &"spear" and spear != null and spear.has_method("attack_cooldowns"):
-		var list: Array = spear.call("attack_cooldowns")
-		for entry: Array in list:
-			if float(entry[1]) >= 0.0:
-				entry[1] = maxf(float(entry[1]), recover)
-		return list
-	if held == &"axe" and axe != null:
-		var list: Array = axe.call("attack_cooldowns")
-		for entry: Array in list:
-			if float(entry[1]) >= 0.0:
-				entry[1] = maxf(float(entry[1]), recover)
-		return list
-	if held == &"robot_rat" and rats != null:
-		return rats.call("attack_cooldowns")
-	return []
+		list = spear.call("attack_cooldowns")
+	elif held == &"axe" and axe != null:
+		list = axe.call("attack_cooldowns")
+	elif held == &"robot_rat" and rats != null:
+		list = rats.call("attack_cooldowns")
+	for entry: Array in list:
+		if float(entry[1]) >= 0.0:
+			entry[1] = maxf(float(entry[1]), recover)
+	return list
 
 
 ## Drops out of the air, landing in a ring of damage. The descent is what sells
@@ -3551,9 +3549,7 @@ func _start_slam() -> void:
 	if _slam_armed:
 		_slam_ready_at = _now() + slam_cooldown
 	# Paint what the blast will catch on the floor below, for the whole dive.
-	_slam_marker_mat.set_shader_parameter("tint", slam_marker_color if _slam_armed else slam_dud_color)
-	_slam_marker_mat.set_shader_parameter("strength", 1.0 if _slam_armed else 0.5)
-	_slam_marker.scale = Vector3.ONE * (slam_radius if _slam_armed else slam_dud_radius)
+	_paint_slam_marker()
 	_place_slam_marker()
 	# A new dive must not be hidden by the last one's fade finishing.
 	if _slam_marker_tween != null and _slam_marker_tween.is_valid():
@@ -3573,6 +3569,12 @@ func _start_slam() -> void:
 	# horizontal sweep these days and reads as nothing like a dive.
 	anim.play(&"dive")
 	anim.seek(0.0, true)
+
+
+func _paint_slam_marker() -> void:
+	_slam_marker_mat.set_shader_parameter("tint", slam_marker_color if _slam_armed else slam_dud_color)
+	_slam_marker_mat.set_shader_parameter("strength", 1.0 if _slam_armed else 0.5)
+	_slam_marker.scale = Vector3.ONE * (slam_radius if _slam_armed else slam_dud_radius)
 
 
 func _land_slam() -> void:
@@ -4202,6 +4204,9 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 	_mark_damage(amount, _from_direction)
 	# A hit that hurts spills the drink.
 	_interrupt_drink()
+	# ...and staggers them, unless they met it (or it was their own rat's blast).
+	if guard == 0 and attacker != null:
+		_flinch(_from_direction)
 
 	health = maxf(health - amount, 0.0)
 	health_changed.emit(health, max_health)
@@ -4380,7 +4385,7 @@ func _finish_drink(interrupted: bool) -> void:
 ## attack goes ahead. (Left click with the potion in hand is the drink itself,
 ## not an attack.)
 func _attack_key_spills_drink() -> void:
-	if is_drinking() and Coop.aim_ready(self) \
+	if is_drinking() and Coop.aim_ready(self) and not is_flinching() \
 			and Inventory.is_weapon(held_item()) and not in_cutscene and not ui_open:
 		_interrupt_drink()
 
@@ -4645,6 +4650,8 @@ func _respawn() -> void:
 	_ghost_locked = true
 	_slam_recover_until = 0.0
 	_knock_at = -1.0
+	_flinch_at = -1.0
+	_flinch_until = 0.0
 	_slam_crouch = 0.0
 	_shake = 0.0
 	_slamming = false
@@ -4756,6 +4763,9 @@ func knock_down(dir: Vector3, push := 7.5) -> void:
 	away = away.normalized()
 	_knock_at = _now()
 	_knock_side = -1.0 if randf() < 0.5 else 1.0
+	# The floor takes the place of the flinch, whichever call came first.
+	_flinch_at = -1.0
+	_flinch_until = 0.0
 	_slamming = false
 	if _blocking:
 		_end_block()
@@ -4783,6 +4793,101 @@ func _knock_view() -> Vector3:
 		return floored * (k * k)
 	var k := smoothstep(0.0, 1.0, (t - KNOCK_FALL) / KNOCK_UP)
 	return floored * (1.0 - k)
+
+
+## --- Flinching (2026-10-31, note 143) ----------------------------------------------
+##
+## A blow that hurts and leaves them on their feet. For `flinch_time` the view is
+## thrown away from the blow and eases back (`flinch_view`), the weapon in hand
+## is knocked down (`weapon_dip`), they move at `flinch_move_scale`, and no attack
+## can start (`is_flinching`; the attack icons wait it out). The attack under way
+## stops before it can bite: a cut, an axe chop, a throw's wind-up and a spear
+## dash are cut off where they are, a spin keeps turning with its blade dead, a
+## slam lands as a dud. Guard, ghost, drink and jump stay free: the way out of
+## the next blow is still there.
+##
+## Not for a guarded blow, one taken on the floor or in a scene, a beam or a
+## drain (neither is a blow), or their own rat's blast. `knock_down` replaces it.
+@export var flinch_time := 1.0
+@export_range(0.05, 1.0) var flinch_move_scale := 0.5
+## The view at the peak of a flinch, reached in FLINCH_SNAP: drop in metres, then
+## degrees of pitch (a blow straight from the front) and of roll (one from the side).
+const FLINCH_DROP := 0.06
+const FLINCH_PITCH := 9.0
+const FLINCH_ROLL := 7.0
+const FLINCH_SNAP := 0.07
+## The least of the roll, either way: a blow straight on still tips the head.
+const FLINCH_MIN_ROLL := 0.4
+## How much of its put-away motion the weapon in hand is knocked through at the peak.
+const FLINCH_WEAPON := 0.45
+var _flinch_at := -1.0
+var _flinch_until := 0.0
+var _flinch_kick := Vector3.ZERO
+## The view as this flinch began: a second blow takes it on from there.
+var _flinch_start := Vector3.ZERO
+
+
+## `blow`: the way it travelled (attacker to player).
+func _flinch(blow: Vector3) -> void:
+	if in_cutscene or is_knocked_down():
+		return
+	var away := global_basis.inverse() * Vector3(blow.x, 0.0, blow.z)
+	away = away.normalized() if away.length_squared() > 0.0001 else Vector3.BACK
+	var roll := -away.x
+	if absf(roll) < FLINCH_MIN_ROLL:
+		roll = FLINCH_MIN_ROLL * (-1.0 if roll < 0.0 or (roll == 0.0 and randf() < 0.5) else 1.0)
+	_flinch_start = flinch_view()
+	_flinch_kick = Vector3(FLINCH_DROP, FLINCH_PITCH * away.z, FLINCH_ROLL * roll)
+	_flinch_at = _now()
+	_flinch_until = _flinch_at + flinch_time
+	_shake = maxf(_shake, 0.3)
+	# Whatever was swinging stops here.
+	_hit_window_open = false
+	if _pose_kind in [&"slash", &"chop"]:
+		_attacking = false
+		_trail_on = false
+		_begin_pose(&"unblock")
+	if _slamming:
+		_slam_armed = false
+		_paint_slam_marker()
+	if is_spear_dashing():
+		_spear_dash_until = _flinch_at
+	spear.interrupt()
+	axe.interrupt()
+
+
+func is_flinching() -> bool:
+	return _now() < _flinch_until
+
+
+## 1 at the peak of a flinch, easing to 0 as it ends.
+func flinch_amount() -> float:
+	if _flinch_at < 0.0:
+		return 0.0
+	var t := _now() - _flinch_at
+	if t >= flinch_time:
+		return 0.0
+	if t < FLINCH_SNAP:
+		return smoothstep(0.0, 1.0, t / FLINCH_SNAP)
+	var k := 1.0 - (t - FLINCH_SNAP) / (flinch_time - FLINCH_SNAP)
+	return k * k
+
+
+## The view while flinching: (drop m, pitch deg, roll deg), as `_knock_view`.
+func flinch_view() -> Vector3:
+	var k := flinch_amount()
+	if k > 0.0 and _now() - _flinch_at < FLINCH_SNAP:
+		return _flinch_start.lerp(_flinch_kick, k)
+	return _flinch_kick * k
+
+
+## How far the weapon in hand is knocked down, 0..FLINCH_WEAPON; a raised guard stays up.
+func weapon_dip() -> float:
+	return FLINCH_WEAPON * flinch_amount() * (1.0 - guard_amount())
+
+
+func _flinch_speed_scale() -> float:
+	return flinch_move_scale if is_flinching() else 1.0
 
 
 ## Shoved by something in the world. Applied straight to velocity so the hit

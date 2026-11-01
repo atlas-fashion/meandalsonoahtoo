@@ -323,6 +323,15 @@ func berserk() -> void:
 		add_child(_ground_light)
 
 
+## A blow knocked them out of it (player.gd `_flinch`): the chop and the throw's
+## wind-up stop where they are and the axe comes home. The roar is not stopped.
+func interrupt() -> void:
+	_slash_queued = false
+	if _pose in [Pose.WIND, Pose.CUT, Pose.WINDUP]:
+		_slash_hit = true
+		_begin(Pose.BACK)
+
+
 # --- Per frame --------------------------------------------------------------------
 
 func _process(delta: float) -> void:
@@ -342,7 +351,8 @@ func _process(delta: float) -> void:
 	if g > 0.0 and _pose in [Pose.REST, Pose.CATCH]:
 		pose = pose.interpolate_with(_guard_pose(), g)
 	var lowered := Transform3D(pose.basis, pose.origin + Vector3(0.05, -0.7, 0.25))
-	transform = lowered.interpolate_with(pose, _raise * _raise * (3.0 - 2.0 * _raise))
+	var up: float = _raise * (1.0 - player.weapon_dip())
+	transform = lowered.interpolate_with(pose, up * up * (3.0 - 2.0 * up))
 	if _pose == Pose.WINDUP and not _released and _pose_t >= THROW_WINDUP:
 		_release()
 	_update_ground(delta)

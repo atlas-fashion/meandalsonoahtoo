@@ -137,7 +137,10 @@ func _process(delta: float) -> void:
 	_spear.visible = held == &"spear"
 	# Lying down when dead.
 	_lie = move_toward(_lie, 1.0 if dead else 0.0, delta * 2.5)
-	_body.rotation.x = -PI * 0.5 * _lie * _lie
+	# Staggered back and aside by a blow, as their view is (player.gd `flinch_view`).
+	var flinch: Vector3 = player.call("flinch_view")
+	_body.rotation.x = -PI * 0.5 * _lie * _lie + deg_to_rad(flinch.y)
+	_body.rotation.z = deg_to_rad(flinch.z)
 	_body.position.y = 0.2 * _lie
 	_label.visible = not dead
 	# Pace: bob and swing with how fast they move.
