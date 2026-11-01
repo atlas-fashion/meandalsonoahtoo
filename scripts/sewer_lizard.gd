@@ -2,7 +2,8 @@ extends "res://scripts/enemy.gd"
 
 ## The SEWER LIZARD (2026-10-16): the sewer's common vermin -- a slimy lizard,
 ## glistening and mottled with a faint radioactive glow, that keeps its distance
-## and spits radioactive goo (goo.gd): SPIT_DAMAGE a gob, one every SPIT_EVERY.
+## and spits radioactive goo (goo.gd) in bursts: BURST gobs of SPIT_DAMAGE, BURST_GAP
+## apart, then BURST_REST before the next (note 147; it was one gob a second).
 ## A placeholder until there is a design: built from primitives here and animated
 ## in code -- the spine snaking side to side as it runs, the tail sweeping after
 ## it, the legs paddling in diagonal pairs, the head rearing back to spit.
@@ -13,14 +14,18 @@ extends "res://scripts/enemy.gd"
 ## Hunting (`_chase`): beyond KEEP_FAR, or with no line to the player, it comes
 ## on along the sewer's navmesh; inside KEEP_NEAR it scuttles back; in between it
 ## holds and sidles. Whenever it has a clear line within SPIT_RANGE it rears up
-## (SPIT_WINDUP, its throat glowing) and spits -- the gob lobbed to land where the
+## (SPIT_WINDUP, its throat glowing) and spits a burst -- each gob lobbed to land where the
 ## player will be. Small and low: look down to cut it.
 
 const GOO_SCRIPT := preload("res://scripts/goo.gd")
 const ENF := preload("res://scripts/enforcer.gd")
 const SPLIT_Y := -4.0
 const SPIT_DAMAGE := 5.0
-const SPIT_EVERY := 1.0
+## A burst: BURST gobs BURST_GAP apart, each aimed afresh, then BURST_REST (from
+## the burst's end) before it rears up for the next.
+const BURST := 4
+const BURST_GAP := 0.12
+const BURST_REST := 2.8
 const SPIT_WINDUP := 0.24
 const SPIT_RANGE := 16.0
 const SPIT_SPEED := 12.0
@@ -48,6 +53,9 @@ var _phase := 0.0
 var _rear := 0.0
 var _spit_at := 0.0
 var _windup_until := -1.0
+## Gobs left in the burst it is firing, and when the next goes.
+var _burst_left := 0
+var _gob_at := 0.0
 var _side := 1.0
 var _side_at := 0.0
 ## Spits fired (for the tests).
@@ -275,11 +283,24 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		_face(flat)
 		if now >= _windup_until:
 			_windup_until = -1.0
+			_burst_left = BURST
+			_gob_at = now
+		return true
+	if _burst_left > 0:
+		# The burst: planted, each gob aimed afresh; out of range, it stops short.
+		_hold(delta)
+		_face(flat)
+		if distance > SPIT_RANGE * 1.2:
+			_burst_left = 0
+		elif now >= _gob_at:
 			_spit(player)
+			_burst_left -= 1
+			_gob_at = now + BURST_GAP
+		if _burst_left == 0:
+			_spit_at = now + BURST_REST
 		return true
 	if clear and distance <= SPIT_RANGE and now >= _spit_at:
 		_windup_until = now + SPIT_WINDUP
-		_spit_at = now + SPIT_EVERY
 		_hold(delta)
 		_face(flat)
 		return true
