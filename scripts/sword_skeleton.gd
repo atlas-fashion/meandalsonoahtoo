@@ -20,6 +20,8 @@ extends "res://scripts/prosthetic.gd"
 ##   strafe_l/r/f/b                                moving on guard, facing them (note 140)
 ##   walk, run, strafe_*, out_*_run + _low or _high  its own gait, after someone (note 141)
 ##   reel                                          parried (`reel_from`, note 140)
+##   jump_slam, leap_run, _low, _high              the leap, from the guard or a run (note 146)
+##   thrown                                        the leap parried: over on its back
 ##   death_b/f/s                                   by where the last blow came from
 ##
 ## Every change of clip is inertialized (enforcer_react.gd `crossfade`, under
@@ -55,6 +57,14 @@ extends "res://scripts/prosthetic.gd"
 ## Its gait (note 141): going after someone a proel moves one of three ways, `_style`, and
 ## proels on the same player take different ones (`_share_gaits`). Walking about, it is
 ## plain walk and run, whatever its style.
+##
+## The leap (note 146): someone too far off to run down in a stride or two, in a straight
+## line, it leaps at (`_try_leap`, enemy.gd's LUNGE). Off a run it goes in stride, the clip
+## taking over from the gait at a left foot strike with no blend. It picks where it will
+## come down as it leaves the floor and is committed from there: nothing shoves it out of
+## the air and it does not turn. The blade is the blow, and the point going into the floor
+## shakes it for a stride round (`_leap_strike`). Either knocks them down unless the guard
+## is up. Parried, it goes over on its back and is up again quickly (`reel_from`).
 
 const MODEL := preload("res://models/sword_skeleton.glb")
 const REACT := preload("res://scripts/sword_skeleton_react.gd")
@@ -188,6 +198,47 @@ const EVADE_SPEED := 2.6
 ## parried proel is wary: it circles this long before it goes in again.
 const REEL_TIME := 1.5
 const REEL_WARY := 0.8
+## The leap. tools/anim_sword_skeleton.py `LEAP_*`, on the clips' own clock: when the feet
+## leave the floor, when they come down, when the point strikes it, and when the blade
+## is out of the floor and it can turn again. Change both.
+const LEAPS: Array[StringName] = [&"jump_slam", &"leap_run", &"leap_run_low", &"leap_run_high"]
+const LEAP_OFF := 0.62
+const LEAP_LAND := 1.42
+const LEAP_STRIKE := 1.56
+const LEAP_FREE := 2.32
+## Where it means to end up from them, centre to centre, and how far it will stretch or
+## shrink the flight to do it, and how fast that eases in.
+const LEAP_STANDOFF := 1.5
+const LEAP_MIN := 0.55
+const LEAP_MAX := 1.3
+const LEAP_EASE := 4.0
+## Seconds of their going that it aims ahead of them.
+const LEAP_LEAD := 0.35
+## The chance it takes at a left foot strike, or each LEAP_THINK seconds on guard, with
+## them in range. Under the first speed it is not running, over the second not standing.
+const LEAP_SHARE := 0.6
+const LEAP_THINK := 0.5
+const LEAP_RUNNING := 3.6
+const LEAP_STANDING := 2.0
+## The most off its heading they may be, as a cosine, and the most above or below it.
+const LEAP_AHEAD := 0.85
+const LEAP_LEVEL := 0.8
+## The heights a leap needs clear all the way, and how far the ground shakes a player.
+const LEAP_CLEAR: Array[float] = [0.5, 2.7]
+const LEAP_FELT := 12.0
+## How many places along the way it looks for a floor.
+const LEAP_FLOOR_RAYS := 5
+## The blow: how hard it throws them, how hard it shoves a guard. The point's strike
+## reaches this far from the point, on the floor only, and does this.
+const LEAP_THROW := 6.5
+const LEAP_SHOVE := 5.0
+const LEAP_SHOCK := 1.5
+const LEAP_SHOCK_DAMAGE := 14.0
+## Parried: tools/anim_sword_skeleton.py `thrown`, how long it is. It is wary for less
+## long after than a reel: it has already been down.
+const THROWN_TIME := 2.05
+const THROWN_WARY := 0.5
+const BLEND_THROWN := 0.14
 ## Turns: the gap between one proel's swing ending and the next taking its turn, how long
 ## one has to get to them, and how soon a parried one's fellows may step in.
 const TURN_GAP := 0.35
@@ -217,6 +268,8 @@ static var _roots := {}
 static var _yaws := {}
 static var _glow_hot: StandardMaterial3D
 static var _glow_out: StandardMaterial3D
+static var _dust_mesh: QuadMesh
+static var _dust_fade: Gradient
 ## Whose turn it is at each player: instance id -> {who, free_at}.
 static var _turns := {}
 
@@ -267,6 +320,17 @@ var _evade_until := 0.0
 var _evade_dir := Vector3.ZERO
 var _reeling := false
 var _reel_until := 0.0
+## The leap under way: the clip and where in it, from its first tick. `_leap_up` once it has
+## left the floor, `_leap_struck` once the point has met it, `_leap_held` while the
+## body keeps its heading, `_leap_to` where it means to come down.
+var _leaping := false
+var _leap_clip := &""
+var _leap_at := 0.0
+var _leap_up := false
+var _leap_struck := false
+var _leap_held := false
+var _leap_to := Vector3.ZERO
+var _leap_think := 0.0
 ## Its turn: when it must have got to them by, when it last had one, when it last wanted one.
 var _closing_until := 0.0
 var _last_turn := -INF
@@ -421,16 +485,24 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO) -> void
 	super(amount, _from_direction)
 
 
-## Reeling is not shoved about: the opening lasts its own length.
+## Reeling is not shoved about: the opening lasts its own length. Nor is it, in the air.
 func apply_knockback(impulse: Vector3, stun_time := 0.25) -> void:
-	if _reeling:
+	if _reeling or _in_air():
 		return
 	super(impulse, stun_time)
 
 
+## A rat does not bring it down out of the air.
+func scare(from: Vector3, time: float) -> bool:
+	if _in_air():
+		return false
+	return super(from, time)
+
+
 ## Parried (player.gd `_on_guarded`, note 140): no throw. Whatever it was doing is over,
 ## and it reels back on its own feet, as far as the clip steps (`_slide`), stunned for
-## the length of it. Its fellows may step in at once.
+## the length of it. Its fellows may step in at once. The leap parried is thrown over on
+## its back instead (note 146), for as long as that takes to get up from.
 func reel_from(away: Vector3) -> void:
 	if _dying or caged:
 		return
@@ -439,20 +511,23 @@ func reel_from(away: Vector3) -> void:
 		return
 	_knockback = Vector3.ZERO
 	_attack_connected = true
+	var over := _leaping
 	if state != State.CHASE:
 		_enter_chase()
 	var now := _now()
 	_hand_on(now + TURN_PARRIED)
 	_closing_until = 0.0
-	_stun_until = maxf(_stun_until, now + REEL_TIME)
-	_reel_until = now + REEL_TIME
+	var down := THROWN_TIME if over else REEL_TIME
+	_stun_until = maxf(_stun_until, now + down)
+	_reel_until = now + down
 	_reeling = true
 	_cooldowns[Attack.NORMAL] = maxf(_ready_at(Attack.NORMAL), _reel_until)
 	_cooldowns[Attack.SLAM] = maxf(_ready_at(Attack.SLAM), _reel_until)
-	_circle_until = _reel_until + REEL_WARY
+	_circle_until = _reel_until + (THROWN_WARY if over else REEL_WARY)
 	_face(-away)
-	_switch(&"reel", 1.0, BLEND_HIT)
-	_blow = &"reel"
+	var clip := &"thrown" if over else &"reel"
+	_switch(clip, 1.0, BLEND_THROWN if over else BLEND_HIT)
+	_blow = clip
 	_blow_t = 0.0
 	_blow_scale = 1.0
 	_carry = Vector3.ZERO
@@ -494,6 +569,8 @@ func _play_state_anim(which: StringName, _duration: float) -> void:
 			_blow = &""
 			_next = &""
 			_out = false
+			_leaping = false
+			_leap_held = false
 			_rest()
 		# The blow's clip carries on through its swing and its recovery.
 		_:
@@ -576,7 +653,8 @@ func _update_locomotion() -> void:
 static func _on_guard(clip: StringName) -> bool:
 	var name_ := String(clip)
 	return clip == &"idle_fight" or clip == &"turn_gl" or clip == &"turn_gr" or clip == &"reel" or name_.begins_with("gpivot") \
-		or name_.begins_with("slash") or name_.begins_with("heavy") or name_.begins_with("link") or name_.begins_with("strafe")
+		or name_.begins_with("slash") or name_.begins_with("heavy") or name_.begins_with("link") or name_.begins_with("strafe") \
+		or clip in LEAPS or clip == &"thrown"
 
 
 ## Puts `clip` on the rig, the old pose decaying into it. Walk and run take over
@@ -839,7 +917,11 @@ func _watch_player() -> void:
 
 func _on_blow_landed(player: Node3D, kind: int) -> void:
 	super(player, kind)
-	_result = &"blocked" if _guarded(player) else &"hit"
+	var guarded := _guarded(player)
+	_result = &"blocked" if guarded else &"hit"
+	# Parried, it is the one on the floor.
+	if kind == Attack.LUNGE and not _reeling:
+		_leap_lands_on(player, _attack_direction, guarded)
 
 
 # --- The fight ------------------------------------------------------------------------
@@ -849,10 +931,12 @@ func _on_blow_landed(player: Node3D, kind: int) -> void:
 # cover, or to where a fellow is not. Out of sight, on another level or far off, the
 # ordinary hunt (enemy.gd) brings it up.
 
-func _chase(delta: float, now: float, player: Node3D, flat: Vector3, _distance: float, gap: float) -> bool:
+func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: float, gap: float) -> bool:
 	_circling = false
 	if _out:
 		return false
+	if _try_leap(now, player, distance):
+		return true
 	var fellows := _fellows(player)
 	var ring := RING_CLOSE if fellows == 0 else RING_WAIT
 	var seen := now + sight_memory - _seen_until < 0.4
@@ -1145,10 +1229,238 @@ func _keep_clear() -> Vector3:
 	return parted * (SPACE_IN_BLOW if in_blow else 1.0)
 
 
+# --- The leap -------------------------------------------------------------------------
+
+## In the air?
+func _in_air() -> bool:
+	return _leaping and _leap_up and _blow_t < LEAP_LAND
+
+
+## While it is in the air and the blade is in the floor the body keeps its heading.
+func _face(direction: Vector3) -> void:
+	if _leap_held:
+		return
+	super(direction)
+
+
+## Close the gap in one go? From a run only at a left foot strike, where the clip takes over
+## with no blend; from a stand every so often. Only with them in the range the flight can
+## be stretched to, on its level, near where it is facing, nothing in the way, and its turn.
+func _try_leap(now: float, player: Node3D, distance: float) -> bool:
+	if anim == null or not engaged or caged or _pivot != &"" or now < _ready_at(Attack.LUNGE) or now < _next_attack_allowed:
+		return false
+	var clip := StringName(anim.assigned_animation)
+	var speed := Vector2(velocity.x, velocity.z).length()
+	var at := 0.0
+	if clip == _run_clip:
+		at = anim.current_animation_position
+		if at > get_physics_process_delta_time() * 1.2 or speed < LEAP_RUNNING:
+			return false
+		clip = StringName("leap_run" + _style)
+	else:
+		if speed > LEAP_STANDING or now < _leap_think:
+			return false
+		_leap_think = now + LEAP_THINK
+		clip = &"jump_slam"
+	if randf() >= LEAP_SHARE or not _shown_close() or absf(player.global_position.y - global_position.y) > LEAP_LEVEL:
+		return false
+	if now + sight_memory - _seen_until >= 0.4:
+		return false
+	var to := player.global_position - global_position
+	to.y = 0.0
+	var facing := -global_basis.z
+	facing.y = 0.0
+	if to.length_squared() < 0.01 or facing.normalized().dot(to.normalized()) < LEAP_AHEAD:
+		return false
+	var flight := _root_at(clip, 99.0) - _root_at(clip, LEAP_OFF)
+	var need := distance - (_root_at(clip, LEAP_OFF) - _root_at(clip, at)) - LEAP_STANDOFF
+	if need < flight * LEAP_MIN or need > flight * LEAP_MAX or not _leap_clear(player.global_position):
+		return false
+	if not _take_turn(player, now):
+		return false
+	_leap_clip = clip
+	_leap_at = at
+	_next = &""
+	_enter_windup(Attack.LUNGE)
+	return true
+
+
+func _leap_clear(to: Vector3) -> bool:
+	var space := get_world_3d().direct_space_state
+	for h in LEAP_CLEAR:
+		var up := Vector3(0.0, h, 0.0)
+		var ray := PhysicsRayQueryParameters3D.create(global_position + up, Vector3(to.x, global_position.y, to.z) + up)
+		ray.collision_mask = sight_blocking_mask
+		ray.exclude = [get_rid()]
+		if not space.intersect_ray(ray).is_empty():
+			return false
+	# The capsule keeps to the floor all the way, so there has to be one: not across the
+	# sewer's channel.
+	for i in range(1, LEAP_FLOOR_RAYS + 1):
+		if not _floor_at(global_position.lerp(to, float(i) / LEAP_FLOOR_RAYS)):
+			return false
+	return true
+
+
+func _floor_at(at: Vector3) -> bool:
+	var ray := PhysicsRayQueryParameters3D.create(Vector3(at.x, global_position.y + 1.0, at.z), Vector3(at.x, global_position.y - 1.0, at.z))
+	ray.collision_mask = collision_mask
+	ray.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+	return not hit.is_empty() and absf(float(hit["position"].y) - global_position.y) <= LEAP_LEVEL
+
+
+## From the run it swaps with no blend, the clip on the same foot as the gait. The speed the
+## clip does not already have is shed like a blow's; on guard all of it is.
+func _start_leap() -> void:
+	_chained = 0
+	_cooldowns[Attack.LUNGE] = _now() + _cooldown_of(Attack.LUNGE)
+	_leaping = true
+	_leap_up = false
+	_leap_struck = false
+	_blow_scale = 1.0
+	_carry = Vector3(velocity.x, 0.0, velocity.z)
+	if _leap_clip == &"jump_slam":
+		_switch(_leap_clip, 1.0, BLEND_BLOW)
+		_blow = _leap_clip
+		_blow_t = 0.0
+		return
+	var fwd := -global_basis.z
+	fwd.y = 0.0
+	_carry -= fwd.normalized() * RUN_SPEED
+	_pivot = &""
+	_put_on(_leap_clip, _leap_at)
+
+
+## Each tick of it: picks where it comes down as it leaves the floor, stretches the flight to
+## get there, and lets go of its heading once the blade is out of the floor.
+func _tend_leap(delta: float) -> void:
+	if not _leaping:
+		return
+	var t := anim.current_animation_position if anim.is_playing() else _blow_t
+	if not _leap_up and t >= LEAP_OFF:
+		_leave_floor()
+	if _leap_up and t < LEAP_LAND:
+		var left := _root_at(_blow, 99.0) - _root_at(_blow, t)
+		if left > 0.6:
+			var gap := Vector2(_leap_to.x - global_position.x, _leap_to.z - global_position.z).length() - LEAP_STANDOFF
+			_blow_scale = move_toward(_blow_scale, clampf(gap / left, LEAP_MIN, LEAP_MAX), delta * LEAP_EASE)
+	if not _leap_struck and t >= LEAP_STRIKE:
+		_leap_struck = true
+		_leap_strike()
+	if _leap_held and t >= LEAP_FREE:
+		_leap_held = false
+
+
+func _leave_floor() -> void:
+	_leap_up = true
+	var player := _resolve_player()
+	_leap_to = global_position - global_basis.z * _root_at(_blow, 99.0)
+	if player != null:
+		_leap_to = player.global_position
+		var going = player.get("velocity")
+		if going is Vector3 and _floor_at(_leap_to + (going as Vector3) * LEAP_LEAD):
+			_leap_to += (going as Vector3) * LEAP_LEAD
+		var to := _leap_to - global_position
+		_face(Vector3(to.x, 0.0, to.z))
+	_leap_held = true
+
+
+## The blade has hit them, or a guard. The floor is theirs unless the guard was up.
+func _leap_lands_on(player: Node3D, way: Vector3, guarded: bool) -> void:
+	if guarded:
+		if player.has_method("apply_knockback"):
+			player.call("apply_knockback", Vector3(way.x, 0.0, way.z).normalized() * LEAP_SHOVE)
+	elif player.has_method("knock_down"):
+		player.call("knock_down", way, LEAP_THROW)
+
+
+## The point goes into the floor. It shakes for a stride round, for anyone with their feet
+## on it, and they can be felt across the room.
+func _leap_strike() -> void:
+	var at: Vector3 = (_sword.call("blade") as Array)[1]
+	at.y = global_position.y
+	_leap_dust(at)
+	for node in Coop.all():
+		var p := node as Node3D
+		var way := p.global_position - at
+		way.y = 0.0
+		var off := way.length()
+		if off < LEAP_FELT:
+			p.set("_shake", maxf(float(p.get("_shake")), 0.5 * (1.0 - off / LEAP_FELT)))
+		var aired: bool = p.has_method("is_on_floor") and not p.call("is_on_floor")
+		if off > LEAP_SHOCK or aired or _reeling or (p == _player and _attack_connected):
+			continue
+		way = way / off if off > 0.01 else -global_basis.z
+		_attack_connected = true
+		p.call("take_damage", LEAP_SHOCK_DAMAGE, way, self)
+		if not _reeling:
+			_leap_lands_on(p, way, _guarded(p))
+
+
+## Dust, kicked out along the floor. One mesh and one fade for all of them.
+func _leap_dust(at: Vector3) -> void:
+	if not Graphics.effects:
+		return
+	if _dust_mesh == null:
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		m.vertex_color_use_as_albedo = true
+		m.roughness = 1.0
+		var soft := Gradient.new()
+		soft.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
+		soft.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+		var puff := GradientTexture2D.new()
+		puff.gradient = soft
+		puff.fill = GradientTexture2D.FILL_RADIAL
+		puff.fill_from = Vector2(0.5, 0.5)
+		puff.fill_to = Vector2(1.0, 0.5)
+		puff.width = 48
+		puff.height = 48
+		m.albedo_texture = puff
+		var q := QuadMesh.new()
+		q.size = Vector2(0.7, 0.7)
+		q.material = m
+		_dust_mesh = q
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(0.34, 0.31, 0.27, 0.42))
+		ramp.set_color(1, Color(0.3, 0.27, 0.24, 0.0))
+		_dust_fade = ramp
+	var p := CPUParticles3D.new()
+	p.mesh = _dust_mesh
+	p.one_shot = true
+	p.emitting = false
+	p.amount = 26
+	p.lifetime = 0.8
+	p.lifetime_randomness = 0.4
+	p.explosiveness = 1.0
+	p.local_coords = false
+	p.direction = Vector3.UP
+	p.spread = 80.0
+	p.flatness = 0.75
+	p.initial_velocity_min = 1.2
+	p.initial_velocity_max = 3.4
+	p.gravity = Vector3(0.0, 0.25, 0.0)
+	p.damping_min = 2.0
+	p.damping_max = 4.0
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.5
+	p.color_ramp = _dust_fade
+	get_parent().add_child(p)
+	p.global_position = at + Vector3(0.0, 0.08, 0.0)
+	p.finished.connect(p.queue_free)
+	p.emitting = true
+
+
 # --- Blows ----------------------------------------------------------------------------
 
 func _start_blow() -> void:
 	_closing_until = 0.0
+	if attack_kind == Attack.LUNGE:
+		_start_leap()
+		return
 	if _next != &"":
 		_start_link()
 		return
@@ -1180,7 +1492,7 @@ func _start_blow() -> void:
 ## when the swing starts, so it is measured again from where they are now.
 func _measure_step() -> void:
 	var player := _resolve_player()
-	if player == null or _blow == &"":
+	if player == null or _blow == &"" or _leaping:
 		return
 	var need := Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length() - STANDOFF
 	var left := _root_at(_blow, 99.0) - _root_at(_blow, _blow_t)
@@ -1189,6 +1501,8 @@ func _measure_step() -> void:
 
 ## The wind-up of a blow in a chain is what is left of the link and of its own.
 func _windup_for(kind: int) -> float:
+	if kind == Attack.LUNGE:
+		return LEAP_WINDUP - _leap_at
 	if _next == &"":
 		return super(kind)
 	var swing_at: float = HEAVY_WINDUP if _next == &"heavy" else BLADE_WINDUP
@@ -1348,6 +1662,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_look_for_fellows(_now())
 	_turn_model(delta)
+	_tend_leap(delta)
 	_tend_chain(delta)
 	_watch_player()
 	_tend_react()
@@ -1436,6 +1751,8 @@ func _haul_anim(delta: float) -> void:
 ## It falls the way the blow would throw it, lies there, and goes.
 func _fold_up() -> void:
 	_reeling = false
+	_leaping = false
+	_leap_held = false
 	_blow = &""
 	_next = &""
 	_model.rotation.z = 0.0

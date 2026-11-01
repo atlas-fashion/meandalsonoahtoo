@@ -1686,6 +1686,367 @@ def reel():
     return fn, bl.L
 
 
+# --- The leap -----------------------------------------------------------------------------
+#
+# A gap closer (note 146). It sinks, the blade swept down behind it; the legs throw it up and
+# forward with the arm dragging after; it hangs at the top with the blade over its head and
+# its back arched; on the way down it jackknifes, hips, chest, shoulder, then the elbow, and
+# the blade comes down with all of it behind it, the point going into the floor as the body
+# lands. Then it is folded over the arm, the clang ringing out, until it can wrench the blade
+# out and drag it home. A blow's clock, so it ends on idle_fight's first frame at no speed.
+#
+# Not on TEMPO: how long it is in the air is the jump, not the pace of its blows. The capsule
+# stays on the floor and the clip does the height, so `root` is only ever forward.
+#
+#   jump_slam                       from the guard: two feet
+#   leap_run, _low, _high           off the run, in stride: one foot (`leap_in`)
+#
+# Each of those is the jump_slam from LEAP_JOIN on, so they all land the same, and `thrown`
+# can start from it wherever they came from.
+
+# All of these are sword_skeleton.gd's own: the same names. The ATTACK window is LEAP_A to
+# LEAP_STRIKE, when the point meets the floor (`[leap]` in --check reads it); LEAP_B is the
+# arm's last key before that. `LEAP_REACH` is the root's travel in the air, which the game
+# stretches to fit.
+LEAP_OFF = 0.62
+LEAP_LAND = 1.42
+LEAP_A = 1.16
+LEAP_B = 1.5
+LEAP_STRIKE = 1.56
+LEAP_REACH = 5.4
+LEAP_V = LEAP_REACH / (LEAP_LAND - LEAP_OFF)
+# The last of the load, as the root gets up to speed; and the run after the feet come down.
+LEAP_RAMP = 0.2
+LEAP_STOP = 0.14
+LEAP_JOIN = LEAP_OFF + 0.28
+# It has the blade out of the floor by here, and can turn again.
+LEAP_FREE = LEAP_LAND + 0.9
+LEAP_KEYED, LEAP_SETTLE = LEAP_LAND + 1.3, LEAP_LAND + 0.85
+# The arm as the point meets the floor: swing, out, roll. The chest folding brings it down.
+# The body is still coming down after that, so the arm opens to keep the point where it is.
+ARM_DOWN = (98.0, 4.0, 5.0)
+ARM_STUCK = 113.0
+# Where each foot comes down, its y on the floor with the root at zero there: the landing's
+# run takes each up to the stance's own.
+LAND_R = (-0.17, STANCE["r"][1] - LEAP_V * LEAP_STOP * 0.5, -10.0)
+LAND_L = (0.2, STANCE["l"][1] - LEAP_V * LEAP_STOP * 0.5 + 0.04, 26.0)
+
+
+def leap_root(t):
+    """How far forward: up to speed in the last of the load, straight on through the air,
+    and stopped dead on the landing. The body's carry after that is the hips'."""
+    off, land, v = LEAP_OFF, LEAP_LAND, LEAP_V
+    r0 = v * LEAP_RAMP * 0.5
+    if t <= off - LEAP_RAMP:
+        return 0.0
+    if t <= off:
+        u = (t - off + LEAP_RAMP) / LEAP_RAMP
+        return v * LEAP_RAMP * (u * u * u - 0.5 * u * u * u * u)
+    if t <= land:
+        return r0 + v * (t - off)
+    u = min(1.0, (t - land) / LEAP_STOP)
+    return r0 + LEAP_REACH + v * LEAP_STOP * 0.5 * (2.0 * u - u * u)
+
+
+def herm(p0, v0, p1, v1, u, h):
+    u2, u3 = u * u, u * u * u
+    return (2 * u3 - 3 * u2 + 1) * p0 + (u3 - 2 * u2 + u) * h * v0 + (-2 * u3 + 3 * u2) * p1 + (u3 - u2) * h * v1
+
+
+def foot_of(sp, side):
+    return sp.foot_l if side == "l" else sp.foot_r
+
+
+def foot_tuple(f):
+    return (f[0].x, f[0].y, f[0].z, f[1], f[2], f[4])
+
+
+def air_foot(a, va, b, vb, u, h, tuck, trail=False):
+    """Off the floor from `a` at speed `va` to `b` at speed `vb`, tucked `tuck` up on the way."""
+    c = [herm(p, v, q, w, u, h) for p, v, q, w in zip(a, va, b, vb)]
+    # The way along the body: what it left the floor at runs off in the first of it, rather
+    # than carrying it a metre behind, and it comes through from there.
+    if trail:
+        k = 0.22 / h
+        back = a[1] + va[1] * h * k * 0.33
+        if u < k:
+            c[1] = herm(a[1], va[1], back, 0.0, u / k, h * k)
+        else:
+            c[1] = herm(back, 0.0, b[1], vb[1], (u - k) / (1.0 - k), h * (1.0 - k))
+    return (V(c[0], c[1], c[2] + tuck * math.sin(math.pi * u) ** 2), c[3], c[4], 0.0, c[5])
+
+
+def jump_slam():
+    n = _b()
+    A, B, off, land = LEAP_A, LEAP_B, LEAP_OFF, LEAP_LAND
+    E = LEAP_KEYED
+    bl = Blow(E, LEAP_SETTLE)
+    bl.ch["root"] = leap_root
+    bl.key("pelvis", [(0.0, n["p"]), (0.16, (0.012, 0.05, 1.15)), (0.36, (0.02, 0.1, 1.0)), (0.5, (0.02, 0.07, 0.97)), (off - 0.05, (0.015, 0.0, 1.17)), (off, (0.01, -0.05, 1.3)),
+                      (off + 0.16, (0.0, -0.05, 1.66)), (off + 0.3, (-0.01, -0.03, 1.8)), (off + 0.42, (-0.01, -0.02, 1.83)), (off + 0.6, (0.0, -0.01, 1.66)), (land - 0.06, (0.01, 0.0, 1.42)),
+                      (land, (0.01, 0.0, 1.21)), (land + 0.1, (0.0, -0.09, 0.98)), (land + 0.22, (0.0, -0.13, 0.86)), (land + 0.36, (0.0, -0.14, 0.83)), (land + 0.62, (0.0, -0.13, 0.85)),
+                      (land + 0.9, (0.0, -0.1, 0.92)), (land + 1.1, (0.0, -0.04, 1.08)), (E, n["p"])])
+    bl.key("pq", [(0.0, n["pq"]), (0.16, (15.0, 18.0, 1.0)), (0.42, (30.0, 22.0, 2.0)), (0.5, (31.0, 20.0, 2.0)), (off, (9.0, 6.0, 0.0)), (off + 0.2, (-8.0, -10.0, -2.0)), (off + 0.4, (-13.0, -18.0, -3.0)),
+                  (A, (-12.0, -18.0, -3.0)), (A + 0.1, (6.0, -4.0, 0.0)), (land, (22.0, 10.0, 3.0)), (land + 0.2, (31.0, 16.0, 3.0)), (land + 0.4, (32.0, 16.0, 3.0)), (land + 0.7, (31.0, 16.0, 2.0)),
+                  (land + 1.05, (18.0, 16.0, 1.0)), (E, n["pq"])])
+    bl.key("spine", [(0.0, n["spine"]), (0.16, (19.0, -8.0, 0.0)), (0.42, (31.0, -10.0, 0.0)), (0.5, (31.0, -10.0, 1.0)), (off, (-2.0, -7.0, 2.0)), (off + 0.22, (-18.0, -12.0, 4.0)), (off + 0.42, (-25.0, -15.0, 5.0)),
+                     (A + 0.02, (-23.0, -15.0, 5.0)), (A + 0.12, (6.0, -4.0, 0.0)), (A + 0.22, (24.0, 6.0, -3.0)), (land + 0.08, (31.0, 10.0, -4.0)), (land + 0.24, (36.0, 12.0, -5.0)), (land + 0.42, (37.0, 12.0, -5.0)),
+                     (land + 0.72, (35.0, 10.0, -4.0)), (land + 1.08, (20.0, 0.0, -1.0)), (E, n["spine"])])
+    bl.key("neck", [(0.0, n["neck"]), (0.42, (-6.0, 0.0, 0.0)), (off + 0.1, (-4.0, 0.0, 0.0)), (A, (10.0, 3.0, 0.0)), (land + 0.12, (-14.0, 0.0, 0.0)), (land + 0.8, (-12.0, 0.0, 0.0)), (E, n["neck"])])
+    bl.key("head", [(0.0, n["head"]), (0.42, (-30.0, 0.0, 0.0)), (off + 0.1, (-20.0, 0.0, 0.0)), (A, (-6.0, 4.0, 0.0)), (land + 0.16, (-38.0, 0.0, 0.0)), (land + 0.8, (-34.0, 0.0, 0.0)), (E, n["head"])])
+    bl.key("clav_r", [(0.0, (0.0, 0.0)), (0.42, (-5.0, -4.0)), (off + 0.2, (11.0, -3.0)), (A, (16.0, -4.0)), (A + 0.18, (2.0, 10.0)), (land + 0.2, (-8.0, 22.0)), (land + 0.8, (-6.0, 20.0)), (E, (0.0, 0.0))])
+    bl.key("clav_l", [(0.0, (0.0, 0.0)), (0.42, (-3.0, -3.0)), (off + 0.2, (7.0, 5.0)), (A, (6.0, 2.0)), (land + 0.2, (-3.0, 8.0)), (land + 0.8, (-2.0, 7.0)), (E, (0.0, 0.0))])
+    # Swing, out, roll. Down behind it for the load, then up with the legs and on overhead,
+    # dragging; it hangs there, and comes over on the way down.
+    bl.key("arm", [(0.0, n["arm"]), (0.18, (40.0, 34.0, 8.0)), (0.42, (96.0, 46.0, 2.0)), (0.5, (112.0, 42.0, 0.0)), (off, (128.0, 26.0, 0.0)), (off + 0.2, (136.0, 17.0, 0.0)),
+                   (A - 0.06, (138.0, 15.0, 0.0)), (A + 0.04, (137.0, 14.0, 1.0)), (A + 0.1, (130.0, 12.0, 1.0)), (A + 0.16, (122.0, 9.0, 2.0)), (A + 0.22, (117.0, 6.0, 3.0)), (B, ARM_DOWN),
+                   (land + 0.24, (ARM_STUCK, 3.0, 6.0)), (land + 0.72, (ARM_STUCK + 1.0, 3.0, 7.0)), (land + 1.0, (78.0, 12.0, 9.0)), (E, n["arm"])])
+    bl.key("elbow", [(0.0, n["el"]), (0.18, 78.0), (0.42, 90.0), (0.5, 96.0), (off, 100.0), (off + 0.2, 98.0), (A + 0.1, 96.0), (A + 0.16, 74.0), (A + 0.22, 42.0), (B, 14.0),
+                     (land + 0.24, 13.0), (land + 0.72, 14.0), (land + 1.0, 40.0), (E, n["el"])])
+    bl.key("wrist", [(0.0, n["wrist"]), (0.42, (-12.0, -4.0, 0.0)), (off + 0.1, (-16.0, 0.0, 0.0)), (A, (-18.0, 0.0, 0.0)), (A + 0.16, (-16.0, 0.0, 0.0)), (A + 0.24, (2.0, 0.0, 0.0)), (B, (8.0, 0.0, 0.0)), (land + 0.72, (8.0, 0.0, 0.0)), (E, n["wrist"])])
+    bl.key("arm_l", [(0.0, n["al"]), (0.42, (-16.0, 42.0, 36.0)), (off, (46.0, 30.0, 70.0)), (off + 0.2, (72.0, 26.0, 74.0)), (A, (54.0, 36.0, 70.0)), (A + 0.2, (0.0, 46.0, 40.0)), (land + 0.14, (-20.0, 52.0, 26.0)),
+                     (land + 0.72, (-16.0, 50.0, 30.0)), (E, n["al"])])
+    bl.key("curl", [(0.0, 0.5), (0.42, 0.72), (off, 0.3), (A, 0.18), (land + 0.1, 0.85), (land + 0.72, 0.7), (E, 0.5)])
+    # Down, the left planted well out and the right ahead; then each shuffled under it as it
+    # heaves the blade out.
+    d = leap_root(99.0)
+    land_r = (LAND_R[0], LAND_R[1] - leap_root(land), LAND_R[2])
+    land_l = (LAND_L[0], LAND_L[1] - leap_root(land), LAND_L[2])
+    bl.feet("r", [(off, land, (land_r[0], land_r[1]), land_r[2], 0.0), (land + 0.9, land + 1.2, (STANCE["r"][0], STANCE["r"][1] - d), STANCE["yr"], 0.03)])
+    bl.feet("l", [(off, land, (land_l[0], land_l[1]), land_l[2], 0.0), (land + 0.74, land + 1.08, (STANCE["l"][0], STANCE["l"][1] - d), STANCE["yl"], 0.04)])
+    keyed = blow_clip(bl)
+    dt = 1.0 / FPS
+
+    def toes(side, k):
+        """The load: the heels come up as the legs throw it, a foot on its ball."""
+        f = bl.foot(side, k, leap_root(k))
+        p = 44.0 * smr(k, off - 0.17, off + 0.02) if side == "l" else 36.0 * smr(k, off - 0.14, off + 0.03)
+        return (V(f[0].x, f[0].y, sole(p) if p > 0.0 else f[0].z), p, f[2], 0.0, -p * 0.8)
+
+    # The feet in the air. They go from where the load leaves them, at the speed it does,
+    # up under the body and on to the floor; the root is taken out, so they move in its frame.
+    def launch(side):
+        a = foot_tuple(toes(side, off))
+        b = foot_tuple(toes(side, off - dt))
+        return a, [(p - q) / dt for p, q in zip(a, b)]
+
+    def landing(side):
+        land_f = LAND_L if side == "l" else LAND_R
+        return (land_f[0], land_f[1], ANKLE * math.cos(rad(-14.0)) - HEEL * math.sin(rad(-14.0)), -14.0, land_f[2], 0.0), (0.0, LEAP_V, -1.4, 0.0, 0.0, 0.0)
+
+    takeoff = {s: launch(s) for s in "lr"}
+    downs = {s: landing(s) for s in "lr"}
+
+    def foot_air(side, k):
+        a, va = takeoff[side]
+        b, vb = downs[side]
+        return air_foot(a, va, b, vb, (k - off) / (land - off), land - off, 0.62 if side == "l" else 0.5, True)
+
+    def fn(t, L):
+        sp = keyed(t, L)
+        k = bl.clock(t)
+        for side in "lr":
+            if k < off:
+                f = toes(side, k)
+            elif k < land:
+                f = foot_air(side, k)
+            else:
+                f = bl.foot(side, k, leap_root(k))
+            if side == "l":
+                sp.foot_l = f
+            else:
+                sp.foot_r = f
+        sp.knee_out = 0.12 + 0.2 * smr(k, off, off + 0.3) * (1.0 - smr(k, land + 0.8, land + 1.2))
+        # The clang, ringing out through the arm and up the back.
+        hit = LEAP_STRIKE
+        ring = smr(t, hit - 0.01, hit + 0.05) * (1.0 - smr(t, hit + 0.2, hit + 0.62)) * math.sin(TAU * 11.0 * (t - hit))
+        r = sp.arm_r
+        sp.arm_r = (r[0] + 0.9 * ring, r[1], r[2] + 1.6 * ring)
+        return sp
+
+    fn.bl = bl
+    return fn, bl.L
+
+
+def leap_in(g, gfn, jump, L):
+    """Off the run, in stride: the gait's own left foot strike to the jump_slam's flight. The
+    left is the last foot it runs on and comes through as the free knee; the right goes
+    down, takes the weight and is what it leaves the floor from. Body and arms go from the
+    gait, still running, to the jump by a minimum-jerk weight, as `out_clip`'s do the other
+    way. So the game swaps the run for this with no blend, at a left strike."""
+    Tg, S, s, y0 = g["T"], g["S"], g["s"], g.get("y0", 0.0)
+    speed = s / (S * Tg)
+    off, join = LEAP_OFF, LEAP_JOIN
+    strike = 0.5 * Tg
+    # A little under the average: it sits down on the last step before it goes.
+    r_off = speed * strike + (off - strike) * (0.5 * (speed + LEAP_V) - 0.5)
+
+    def root_at(x):
+        if x <= strike:
+            return speed * x
+        if x <= off:
+            return herm(speed * strike, speed, r_off, LEAP_V, (x - strike) / (off - strike), off - strike)
+        return r_off + leap_root(x) - leap_root(off)
+
+    dt = 1.0 / FPS
+
+    def right_down(x):
+        p = (root_at(x) - root_at(strike)) / s
+        y, z, pitch, toe = stance_foot(min(p, 1.0), s, g["heel"], g["toe"], g["pf"], g["pr"])
+        return (V(-g["width"], y + y0 + max(p - 1.0, 0.0) * s, z), pitch, -9.0, 0.0, toe)
+
+    leave = S * Tg
+
+    def left_gait(x):
+        return gait_foot(g, x / Tg, "l")
+
+    # The two free stretches, each joining the jump at LEAP_JOIN at its speed.
+    land_at = {s_: foot_tuple(foot_of(jump(join, L), s_)) for s_ in "lr"}
+    land_v = {s_: [(p - q) / dt for p, q in zip(land_at[s_], foot_tuple(foot_of(jump(join - dt, L), s_)))] for s_ in "lr"}
+    l0 = foot_tuple(left_gait(leave))
+    lv = [(p - q) / dt for p, q in zip(l0, foot_tuple(left_gait(leave - dt)))]
+    r0 = foot_tuple(right_down(off))
+    rv = [(p - q) / dt for p, q in zip(r0, foot_tuple(right_down(off - dt)))]
+
+    def mix(lo, hi, x):
+        return mj((x / off - lo) / (hi - lo))
+
+    def fn(x, _L):
+        b = gfn(x % Tg, Tg)
+        j = jump(x, L)
+        if x >= join:
+            j.root = V(0, -root_at(x), 0)
+            return j
+        sp = Spec()
+        sp.root = V(0, -root_at(x), 0)
+        w = mix(0.1, 1.0, x)
+        sp.pelvis = b.pelvis.lerp(j.pelvis, w)
+        sp.pelvis_q = b.pelvis_q.slerp(j.pelvis_q, mix(0.1, 1.0, x))
+        sp.spine = lerp(b.spine, j.spine, mix(0.14, 1.0, x))
+        sp.neck = lerp(b.neck, j.neck, mix(0.0, 0.8, x))
+        sp.head = lerp(b.head, j.head, mix(0.0, 0.8, x))
+        w = mix(0.1, 1.0, x)
+        sp.clav_l = lerp(b.clav_l, j.clav_l, w)
+        sp.clav_r = lerp(b.clav_r, j.clav_r, w)
+        w = mix(0.12, 1.1, x)
+        e = mix(0.2, 1.1, x)
+        sp.arm_r = (b.arm_r[0] + (j.arm_r[0] - b.arm_r[0]) * w, b.arm_r[1] + (j.arm_r[1] - b.arm_r[1]) * w, b.arm_r[2] + (j.arm_r[2] - b.arm_r[2]) * e)
+        # Round the outside, as `out_clip` takes it, though not as far: it is going up, not by.
+        push = 0.4 * math.sin(math.pi * min(1.0, x / off)) ** 4
+        sp.arm_r = (sp.arm_r[0], sp.arm_r[1] + g.get("out_wide", 0.0) * push, sp.arm_r[2] + g.get("out_el", 0.0) * push)
+        sp.roll_r = b.roll_r + (j.roll_r - b.roll_r) * w
+        sp.hand_r = b.hand_r.slerp(j.hand_r, e)
+        w = mix(0.0, 0.9, x)
+        sp.arm_l = lerp(b.arm_l, j.arm_l, w)
+        sp.roll_l = b.roll_l + (j.roll_l - b.roll_l) * w
+        sp.hand_l = b.hand_l.slerp(j.hand_l, w)
+        w = mix(0.1, 0.9, x)
+        sp.curl = b.curl + (j.curl - b.curl) * w
+        sp.spread = b.spread + (j.spread - b.spread) * w
+        sp.knee_out = 0.12 + (j.knee_out - 0.12) * smr(x, off, join)
+        # The left.
+        if x < leave:
+            sp.foot_l = left_gait(x)
+        else:
+            sp.foot_l = air_foot(l0, lv, land_at["l"], land_v["l"], (x - leave) / (join - leave), join - leave, 0.3)
+        # The right: the gait's, down, and away.
+        if x < strike:
+            sp.foot_r = gait_foot(g, x / Tg, "r")
+        elif x < off:
+            sp.foot_r = right_down(x)
+        else:
+            sp.foot_r = air_foot(r0, rv, land_at["r"], land_v["r"], (x - off) / (join - off), join - off, 0.12)
+        return sp
+
+    fn.leap = (gfn, Tg, jump)
+    return fn, L
+
+
+def thrown(jump):
+    """The leap parried (note 146): the blade is turned back on it in the air, and it goes
+    over on its back. The arm is flung behind it and its legs come up; it hits the floor
+    and skids; it does not lie there. The knees come in, the blade is planted out to
+    its side and it hauls itself up over it, already looking at them, and comes up into
+    the guard. A blow's clock, so it ends on idle_fight's first frame at no speed."""
+    j = jump.bl
+    n = _b()
+    A = LEAP_A + 0.14
+    down, up, E = 0.5, 0.92, THROWN_KEYED
+
+    def at(name):
+        return j.ch[name](A)
+
+    bl = Blow(E, THROWN_SETTLE)
+    bl.key("root", [(0.0, 0.0), (0.1, -0.34), (0.3, -1.02), (down, -1.52), (down + 0.22, -1.78), (down + 0.4, -1.84), (E, -1.84)])
+    # Flat on its back is hips on the floor, tipped back 84 degrees: as `death_back` has it.
+    p0 = at("pelvis")
+    bl.key("pelvis", [(0.0, p0), (0.14, (0.01, 0.1, p0[2] + 0.02)), (0.32, (0.01, 0.34, 0.78)), (down - 0.02, (0.01, 0.4, 0.27)), (down + 0.05, (0.01, 0.4, 0.19)), (down + 0.11, (0.01, 0.4, 0.235)), (down + 0.2, (0.01, 0.38, 0.19)),
+                      (up, (0.02, 0.34, 0.2)), (up + 0.16, (0.03, 0.25, 0.32)), (up + 0.3, (0.03, 0.12, 0.6)), (up + 0.46, (0.02, 0.0, 0.9)), (up + 0.66, (0.012, -0.02, 1.13)), (E, n["p"])])
+    q0 = at("pq")
+    bl.key("pq", [(0.0, q0), (0.14, (-30.0, -8.0, 0.0)), (0.32, (-66.0, 4.0, 2.0)), (down - 0.02, (-84.0, 8.0, 3.0)), (down + 0.08, (-80.0, 8.0, 3.0)), (down + 0.2, (-84.0, 8.0, 3.0)), (up, (-82.0, 6.0, 2.0)),
+                  (up + 0.16, (-58.0, 8.0, 0.0)), (up + 0.3, (-14.0, 12.0, 0.0)), (up + 0.46, (22.0, 16.0, 0.0)), (up + 0.66, (18.0, 16.0, 0.0)), (E, n["pq"])])
+    s0 = at("spine")
+    bl.key("spine", [(0.0, s0), (0.14, (-30.0, -8.0, 4.0)), (0.32, (-14.0, -4.0, 2.0)), (down - 0.02, (10.0, -4.0, 2.0)), (down + 0.1, (-6.0, -6.0, 3.0)), (down + 0.22, (4.0, -6.0, 3.0)), (up, (10.0, -8.0, 3.0)),
+                     (up + 0.16, (40.0, -10.0, 1.0)), (up + 0.3, (56.0, -12.0, 0.0)), (up + 0.46, (40.0, -12.0, 0.0)), (up + 0.66, (20.0, -10.0, 0.0)), (E, n["spine"])])
+    bl.key("neck", [(0.0, at("neck")), (0.16, (-14.0, 0.0, 0.0)), (down - 0.04, (14.0, 0.0, 0.0)), (down + 0.12, (-4.0, 4.0, 0.0)), (up, (16.0, 4.0, 0.0)), (up + 0.4, (-12.0, 0.0, 0.0)), (E, n["neck"])])
+    bl.key("head", [(0.0, at("head")), (0.16, (-30.0, 0.0, 0.0)), (down - 0.04, (10.0, 0.0, 0.0)), (down + 0.12, (-16.0, 6.0, 0.0)), (up, (14.0, 4.0, 0.0)), (up + 0.4, (-30.0, 0.0, 0.0)), (E, n["head"])])
+    # Swing, out, roll: flung back past its head, out flat on the floor, then planted to prop it up.
+    bl.key("arm", [(0.0, at("arm")), (0.14, (150.0, 40.0, 0.0)), (0.32, (120.0, 66.0, 2.0)), (down, (60.0, 84.0, 6.0)), (down + 0.2, (44.0, 86.0, 6.0)), (up, (32.0, 78.0, 8.0)), (up + 0.16, (40.0, 68.0, 8.0)),
+                   (up + 0.3, (40.0, 54.0, 10.0)), (up + 0.5, (36.0, 40.0, 12.0)), (E, n["arm"])])
+    bl.key("elbow", [(0.0, j.ch["elbow"](A)), (0.14, 36.0), (0.32, 20.0), (down, 16.0), (up, 18.0), (up + 0.2, 14.0), (up + 0.42, 34.0), (E, n["el"])])
+    bl.key("wrist", [(0.0, at("wrist")), (0.14, (-22.0, -6.0, 0.0)), (down, (-8.0, -6.0, 0.0)), (up, (-6.0, -6.0, 0.0)), (E, n["wrist"])])
+    bl.key("arm_l", [(0.0, at("arm_l")), (0.16, (60.0, 56.0, 40.0)), (0.34, (30.0, 70.0, 30.0)), (down, (0.0, 62.0, 20.0)), (up, (-10.0, 48.0, 24.0)), (up + 0.2, (-20.0, 38.0, 16.0)), (up + 0.42, (6.0, 30.0, 40.0)), (E, n["al"])])
+    bl.key("curl", [(0.0, 0.3), (0.14, 0.12), (down, 0.9), (up, 0.8), (E, 0.5)])
+    bl.key("clav_r", [(0.0, at("clav_r")), (0.16, (6.0, -8.0)), (down, (0.0, 0.0)), (up + 0.2, (12.0, 4.0)), (E, (0.0, 0.0))])
+    bl.key("clav_l", [(0.0, at("clav_l")), (0.16, (6.0, -6.0)), (down, (0.0, 0.0)), (up + 0.2, (8.0, 2.0)), (E, (0.0, 0.0))])
+    keyed = blow_clip(bl)
+    d = -1.84
+    # The two feet: up off the floor with the fall, down flat with the knees up as it skids,
+    # then planted, in order, where it will stand, as the stance has them at the clip's end.
+    stand_r = (STANCE["r"][0], STANCE["r"][1] - d, 0.0)
+    stand_l = (STANCE["l"][0], STANCE["l"][1] - d, 0.0)
+
+    def feet(side, k, root):
+        far = 1.0 if side == "l" else 0.82
+        sx = 0.28 if side == "l" else -0.32
+        st = stand_l if side == "l" else stand_r
+        yw = STANCE["yl"] if side == "l" else STANCE["yr"]
+        fall = smr(k, 0.0, 0.4)
+        lie = smr(k, down, up)
+        tuck = smr(k, up - 0.06, up + 0.14 if side == "r" else up + 0.26)
+        y = -0.52 * far * (1.0 - tuck) + 0.04 * lie
+        z = ANKLE + (0.5 * far * math.sin(math.pi * min(1.0, k / (down + 0.12))) ** 2) * (1.0 - tuck)
+        x = sx + (st[0] - sx) * tuck
+        y = y * (1.0 - tuck) + (st[1] + root) * tuck
+        pitch = -44.0 * fall * (1.0 - tuck)
+        yaw = (yw + (20.0 if side == "l" else -24.0) * (1.0 - tuck))
+        return (V(x, y, z), pitch, yaw, 0.0, 0.0)
+
+    start = {s_: foot_tuple(foot_of(jump(A, 3.0), s_)) for s_ in "lr"}
+
+    def fn(t, L):
+        sp = keyed(t, L)
+        k = bl.clock(t)
+        root = -sp.root.y
+        for side in "lr":
+            f = feet(side, k, root)
+            w = mj(k / 0.22)
+            a = start[side]
+            f = (V(a[0] + (f[0].x - a[0]) * w, a[1] + (f[0].y - a[1]) * w, a[2] + (f[0].z - a[2]) * w), a[3] + (f[1] - a[3]) * w, a[4] + (f[2] - a[4]) * w, 0.0, 0.0)
+            if side == "l":
+                sp.foot_l = f
+            else:
+                sp.foot_r = f
+        sp.knee_out = 0.12 + 0.9 * smr(k, 0.1, down) * (1.0 - smr(k, up + 0.1, up + 0.5))
+        return sp
+
+    return fn, bl.L
+
+
+# sword_skeleton.gd THROWN_TIME is this clip's length: 2.05 s.
+THROWN_KEYED, THROWN_SETTLE = 1.85, 1.65
+
+
 # --- Bake -----------------------------------------------------------------------------
 
 CLIPS = []
@@ -1740,6 +2101,11 @@ def make_clips():
         loop("strafe_" + tag, fn_len[0], fn_len[1])
     once("reel", reel())
     once("death_b", death_back())
+    leap = jump_slam()
+    once("jump_slam", leap)
+    once("thrown", thrown(leap[0]))
+    for tag, rg in (("", RUN_G), ("_low", RUN_LOW), ("_high", RUN_HIGH)):
+        once("leap_run" + tag, leap_in(rg, gait_fn(rg), leap[0], leap[1]))
     once("death_f", death_fwd())
     once("death_s", death_side())
     # The hunting gaits (note 141). Only a proel after someone uses them, and an `out` clip
@@ -1900,7 +2266,7 @@ def bake_clip(arm, name, fn, L, loop_):
         rootz.append(-sp.root.y)
         # A leg stretched past its reach leaves its planted foot behind.
         stretch = max(stretch, (s.P["foot.L"] - sp.foot_l[0]).length, (s.P["foot.R"] - sp.foot_r[0]).length)
-        if base in BLOWS or name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel", "walk_", "run_")):
+        if base in BLOWS or name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel", "walk_", "run_", "leap_", "jump_", "thrown")):
             edge_at = s.P["blade"] + (tip - s.P["blade"]) * 0.2
             for b0, b1, thick in CLEAR:
                 gap = seg_gap(edge_at, tip, s.P[b0], s.P[b1]) - thick
@@ -1926,7 +2292,7 @@ def bake_clip(arm, name, fn, L, loop_):
         pace_report(name, tips, w, w + a)
         reach_report(name, elbows, tips, rootz, w, w + a)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
-    if name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel", "walk_", "run_")):
+    if name.startswith(("link_", "out_", "gpivot_", "pivot_", "strafe_", "reel", "walk_", "run_", "leap_", "jump_", "thrown")):
         v = [(tips[i + 1] - tips[i]).length * FPS for i in range(len(tips) - 1)]
         print("[pace]  %-12s tip mean %.1f peak %.1f m/s @ %.2f" % (name, sum(v) / len(v), max(v), v.index(max(v)) / FPS), flush=True)
         print("[clear] %-12s blade to body %.3f (%s) @ %d" % (name, near[0], near[1], near[2]), flush=True)
@@ -2037,6 +2403,18 @@ def seam_report():
             b = seen_at(lambda _t, _L: base(), 0.0, 1.0)
             print("[pivot] %-12s %.2f s   starts %.4f, ends %.4f off the stance, turned %.1f degrees" % (name, L, worst_gap(seen_at(fn, 0.0, L), b)[0], worst_gap(seen_at(fn, L, L), b)[0], math.degrees(fn(L, L).root.x)), flush=True)
     for name, (fn, L) in fns.items():
+        if name == "jump_slam" or name == "thrown":
+            sp_end = worst_gap(seen_at(fn, L, L), guard)
+            print("[leap]  %-12s %.2f s   ends %.4f (%s) off the guard, root %.2f m, tip speed at -0.3 .. -0.05 s: %s" % (name, L, sp_end[0], sp_end[1], -fn(L, L).root.y, " ".join("%.1f" % ((seen_at(fn, L - a + 1.0 / FPS, L)["tip"] - seen_at(fn, L - a, L)["tip"]).length * FPS) for a in (0.3, 0.2, 0.1, 0.05))), flush=True)
+        if name == "jump_slam":
+            print("[leap]  tip z through the window: %s" % " ".join("%.2f" % seen_at(fn, LEAP_A + i * 0.04, L)["tip"].z for i in range(12)), flush=True)
+            print("[leap]  highest tip %.2f head %.2f  feet at apex %.2f  pelvis at apex %.2f" % (max(seen_at(fn, i / 30.0, L)["tip"].z for i in range(100)), max(seen_at(fn, i / 30.0, L)["head"].z for i in range(100)), min(seen_at(fn, 1.02, L)["foot.L"].z, seen_at(fn, 1.02, L)["foot.R"].z), seen_at(fn, 1.02, L)["pelvis"].z), flush=True)
+        if name.startswith("leap_run"):
+            gfn, Tg, jump = fn.leap
+            ljoin = worst_gap(seen_at(fn, LEAP_JOIN, L), seen_at(jump, LEAP_JOIN, L))
+            print("[leap]  %-12s %.2f s   from the gait %.4f (%s) speed %.3f (%s)   into the jump %.4f (%s) speed %.3f (%s)" % (name, L, worst_gap(seen_at(fn, 0.0, L), seen_at(gfn, 0.0, Tg))[0], worst_gap(seen_at(fn, 0.0, L), seen_at(gfn, 0.0, Tg))[1],
+                  worst_gap(speed_of(fn, 1.0 / FPS, L), speed_of(gfn, 1.0 / FPS, Tg))[0], worst_gap(speed_of(fn, 1.0 / FPS, L), speed_of(gfn, 1.0 / FPS, Tg))[1], ljoin[0], ljoin[1],
+                  worst_gap(speed_of(fn, LEAP_JOIN - 1.0 / FPS, L), speed_of(jump, LEAP_JOIN - 1.0 / FPS, L))[0], worst_gap(speed_of(fn, LEAP_JOIN - 1.0 / FPS, L), speed_of(jump, LEAP_JOIN - 1.0 / FPS, L))[1]), flush=True)
         if name.startswith("strafe_"):
             print("[strafe] %-11s loop %.4f (%s), feet at the stance's distance from %.3f, ankle low %.3f" % (name, worst_gap(seen_at(fn, 0.0, L), seen_at(fn, L - 1e-6, L))[0], worst_gap(seen_at(fn, 0.0, L), seen_at(fn, L - 1e-6, L))[1], min((solve(fn(i * L / 60.0, L)).P["foot.L"] - solve(fn(i * L / 60.0, L)).P["foot.R"]).length for i in range(60)), min(fn(i * L / 60.0, L).foot_l[0].z for i in range(60))), flush=True)
         if name == "reel":

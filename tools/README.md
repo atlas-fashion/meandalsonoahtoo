@@ -638,6 +638,10 @@ in radians. `[strafe]` reads a strafe's loop and `[reel]` the reel against the g
 `REEL` and `STRAFE_V` must stay equal to `REEL_TIME` and `STRAFE_SPEED` in `sword_skeleton.gd`.
 The hunting gaits are `WALK_LOW`, `RUN_LOW`, `WALK_HIGH`, `RUN_HIGH`, `STRAFE_LOW` and `STRAFE_HIGH`: a new one
 needs its clip names in `CYCLES`, `STRAFES` and `STYLES` in `sword_skeleton.gd`. Note 141.
+`LEAP_OFF`, `LEAP_LAND`, `LEAP_STRIKE` and `LEAP_FREE` must stay equal to the same names in
+`sword_skeleton.gd`, `LEAP_A` to `LEAP_WINDUP` in `prosthetic.gd`, what is left of the clip after `LEAP_STRIKE` to
+`LEAP_RECOVER`, and `thrown`'s length to `THROWN_TIME`. `[leap]` reads where the tip is through the swing, and the
+run-in clips against the gait and the jump. A new hunting gait needs a `leap_run` of its own. Note 146.
 The eyes' colour is `light_eyes`, which the anim script sets too.
 `models/sword_skeleton.glb.import` must keep `animation/fps=60`, and the three maps
 `compress/mode=2`, as the scout's. After replacing a map, delete

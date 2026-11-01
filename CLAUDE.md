@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 144), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 146), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -334,7 +334,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
   hands; `skeleton_shield.gd`; note 93), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
-  notes 135-138; its combos are baked links, note 138; circling, turns and the parry reel, note 140), `enemy.gd` (skeleton; base class; also the boss via
+  notes 135-138; its combos are baked links, note 138; circling, turns and the parry reel, note 140; the leap, a jump slam, note 146), `enemy.gd` (skeleton; base class; also the boss via
   `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` (the crossbow hand) + `arrow.gd`, `crier.gd`
   (flying heads, once "bombers"), `enforcer.gd` + `enforcer_react.gd` (once
   "warden bots"), `decrepit.gd` + `decrepit_react.gd` (moves: notes 59, 61, 65-71), `sewer_lizard.gd` +
@@ -555,6 +555,8 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 142 | 2026-10-31 | The proels' blows a little faster: one tempo, `TEMPO` / `BLOW_TEMPO` 1.15, over every blow and link and both cooldowns, keys unmoved (light 2.44 -> 2.12 s, heavy 3.40 -> 2.96 s, wind-up 0.90 -> 0.78 s); baked, since `out` clips must end at the gait's speed; 47 clips byte for byte identical, walk and run among them | [docs/notes/142-proels-blows-a-little-faster.md](docs/notes/142-proels-blows-a-little-faster.md) |
 | 143 | 2026-10-31 | The flinch: a blow that hurts and leaves the player standing throws the view from the blow and knocks the weapon down, slows them to half and stops every attack for 1 s (`player.gd` `_flinch`, `is_flinching`, `flinch_view`, `weapon_dip`); the attack under way cannot bite (cuts, chops, wind-ups and dashes cut off, a spin turns on dead, a slam lands a dud); guard, ghost, drink and jump stay free | [docs/notes/143-the-flinch.md](docs/notes/143-the-flinch.md) |
 | 144 | 2026-10-31 | Every weapon's attacks 25% longer (20% slower), one number: `player.gd` `attack_time_scale` 1.25. Sword poses, slam getting up and dive, spear stab, dash (same distance, lower speed) and throw wind-up, the axe through its `time_scale()`; long recharges, flight speeds, guard and scripted poses left alone | [docs/notes/144-attacks-slower.md](docs/notes/144-attacks-slower.md) |
+| 145 | 2026-10-31 | The flinch planted: 0.5 s at a tenth of walking pace and stopped hard (`flinch_time`, `flinch_move_scale`, `FLINCH_PLANT`), on one clock with the attacks, so the moment they can move they can swing. Supersedes note 143's second at half speed | [docs/notes/145-flinch-planted.md](docs/notes/145-flinch-planted.md) |
+| 146 | 2026-10-31 | The proels' leap, a jump slam to close the gap: `jump_slam` from a stand, `leap_run`, `_low`, `_high` off the run in stride with no blend (the capsule stays on the floor, the clip does the height, the flight stretched to fit); 30 and a knockdown, the point's strike a shock on the floor; committed in the air; parried it goes over on its back (`thrown`) and is up in 2.05 s; rays and a floor check on the way; every old clip byte for byte identical | [docs/notes/146-the-proels-leap.md](docs/notes/146-the-proels-leap.md) |
 
 ## Notes by source file
 
@@ -621,9 +623,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145
 - `scripts/portcullis.gd`: 6.18
-- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142
+- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79
@@ -659,7 +661,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111, 128
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
-- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142
+- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
 - `scripts/wood_door.gd`: 6.18, 79
@@ -684,7 +686,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/torch_flame.gdshader`: 6.18, 19
 - `shaders/vine_leaf.gdshader`: 6.18
 - `shaders/water_drip.gdshader`: 39, 121
-- `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142
+- `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146
 - `tools/benchmark.gd`: 6.11, 33, 112
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75

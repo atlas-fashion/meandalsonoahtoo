@@ -41,6 +41,13 @@ const HEAVY_DAMAGE := 36.0
 const HEAVY_WINDUP := 1.25 / BLOW_TEMPO
 const HEAVY_SWING := 0.3 / BLOW_TEMPO
 const HEAVY_RECOVER := 1.85 / BLOW_TEMPO
+## The leap (sword_skeleton.gd, note 146): its clip's wind-up, up to the swing, its swing and
+## what is left of the clip. tools/anim_sword_skeleton.py `LEAP_A`, `LEAP_STRIKE`: change both. How
+## long it is in the air is the jump, not the pace of its blows, so BLOW_TEMPO has no say.
+const LEAP_WINDUP := 1.16
+const LEAP_SWING := 0.4
+const LEAP_RECOVER := 1.61
+const LEAP_DAMAGE := 30.0
 ## Of the moments both slices are ready, how often it chooses the heavy one.
 const HEAVY_SHARE := 0.4
 ## The drill's dash hits harder than its jab.
@@ -163,6 +170,10 @@ func _apply_hand() -> void:
 			slam_speed = 2.5
 			slam_duration = HEAVY_SWING
 			slam_cooldown = 4.5 / BLOW_TEMPO
+			# The leap is LUNGE. Not in `can_lunge`: it is not rolled for, it asks for
+			# itself (sword_skeleton.gd `_try_leap`).
+			lunge_duration = LEAP_SWING
+			lunge_cooldown = 9.0
 
 
 func _ready() -> void:
@@ -191,6 +202,8 @@ func _windup_for(kind: int) -> float:
 		return HAMMER_WINDUP
 	if hand == &"blade" and kind == Attack.SLAM:
 		return HEAVY_WINDUP
+	if hand == &"blade" and kind == Attack.LUNGE:
+		return LEAP_WINDUP
 	return windup_time
 
 
@@ -199,6 +212,8 @@ func _recover_for(kind: int) -> float:
 		return HAMMER_RECOVER
 	if hand == &"blade" and kind == Attack.SLAM:
 		return HEAVY_RECOVER
+	if hand == &"blade" and kind == Attack.LUNGE:
+		return LEAP_RECOVER
 	return recover_time
 
 
@@ -208,6 +223,8 @@ func _damage_for(kind: int) -> float:
 			return HEAVY_DAMAGE
 		if hand == &"drill":
 			return DRILL_DASH_DAMAGE
+	if kind == Attack.LUNGE and hand == &"blade":
+		return LEAP_DAMAGE
 	return attack_damage
 
 
