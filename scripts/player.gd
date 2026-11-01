@@ -2016,6 +2016,8 @@ func _physics_process(delta: float) -> void:
 		# Berserk picks up speed as ghost mode does, not at walking's rate.
 		if axe != null:
 			damp *= lerpf(1.0, ghost_acceleration_scale, axe.berserk_amount())
+		if is_flinching():
+			damp *= FLINCH_PLANT
 		velocity.x = move_toward(velocity.x, target_velocity.x, damp * delta)
 		velocity.z = move_toward(velocity.z, target_velocity.z, damp * delta)
 	else:
@@ -4809,12 +4811,14 @@ func _knock_view() -> Vector3:
 	return floored * (1.0 - k)
 
 
-## --- Flinching (2026-10-31, note 143) ----------------------------------------------
+## --- Flinching (2026-10-31, notes 143, 145) ----------------------------------------
 ##
 ## A blow that hurts and leaves them on their feet. For `flinch_time` the view is
 ## thrown away from the blow and eases back (`flinch_view`), the weapon in hand
-## is knocked down (`weapon_dip`), they move at `flinch_move_scale`, and no attack
-## can start (`is_flinching`; the attack icons wait it out). The attack under way
+## is knocked down (`weapon_dip`), they are all but planted (`flinch_move_scale`,
+## their way stopped at `FLINCH_PLANT` times the usual rate), and no attack can
+## start (`is_flinching`; the attack icons wait it out). One clock: the moment
+## they can move they can swing. The attack under way
 ## stops before it can bite: a cut, an axe chop, a throw's wind-up and a spear
 ## dash are cut off where they are, a spin keeps turning with its blade dead, a
 ## slam lands as a dud. Guard, ghost, drink and jump stay free: the way out of
@@ -4822,8 +4826,10 @@ func _knock_view() -> Vector3:
 ##
 ## Not for a guarded blow, one taken on the floor or in a scene, a beam or a
 ## drain (neither is a blow), or their own rat's blast. `knock_down` replaces it.
-@export var flinch_time := 1.0
-@export_range(0.05, 1.0) var flinch_move_scale := 0.5
+@export var flinch_time := 0.5
+@export_range(0.0, 1.0) var flinch_move_scale := 0.1
+## How much harder the floor stops them while flinching.
+const FLINCH_PLANT := 4.0
 ## The view at the peak of a flinch, reached in FLINCH_SNAP: drop in metres, then
 ## degrees of pitch (a blow straight from the front) and of roll (one from the side).
 const FLINCH_DROP := 0.06

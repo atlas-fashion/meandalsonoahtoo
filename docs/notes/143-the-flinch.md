@@ -1,5 +1,7 @@
 ## 143. The flinch (2026-10-31)
 
+The times and the slow here are superseded by note 145: half a second, all but planted.
+
 The user: "If the player gets hit and is not knocked down, he should react, slow
 down and not be able to attack for 1 second."
 
