@@ -24,7 +24,7 @@ what `--check` and `--sheet` read are clip time, over `TEMPO`. In the game `BLAD
 
 Baked, not played at 1.15. An `out` clip ends at the gait's own speed, so it must stay at 1x, and a
 blow played faster would meet it at the wrong speed. `out_clip` reads the blow's clip function, so
-the blow runs on faster inside it and the clip still ends in stride. 18 + 18 `out_*` clips changed
+the blow runs on faster inside it and the clip still ends in stride. 32 `out_*` clips changed
 for that, the same lengths as before. `out_g_*` did not.
 
 The cooldowns are over `BLOW_TEMPO` too, or the time saved would only go to standing in guard.
@@ -43,8 +43,8 @@ heavy      24.6 -> 28.6   14.8 -> 17.1  A+0.18 -> 0.16  0.111 -> 0.146   4.1/f -
 
 The jolts went up by 1.32, which is 1.15 squared: the same path in less time. Every blow still lands
 inside its window, `[seam]` reads 0.0000 m with the tip stopped, and `[link]` 0.0000 m in and out at
-speed gaps of 0.03 m/s or less. `[out]` reads 0.0000 m at both ends; its worst speed gap, `out_2_run_high`
-out of the blow, 1.03 -> 1.22 m/s. Blade to body at the closest went from 0.041 to 0.054 m. Foot off its
+speed gaps of 0.03 m/s or less. `[out]` reads 0.0000 m at both ends; the speed gap out of the blow rose most on
+`out_2_run_high`, 1.03 -> 1.22 m/s, under the 1.33 of `out_3_run_low`, which did not move. Blade to body at the closest went from 0.041 to 0.054 m. Foot off its
 mark and wrist turn did not change: the poses are the same.
 
 **The export**: 92 clips in, 92 out. Compared accessor by accessor against the last build, 47 are byte
