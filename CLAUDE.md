@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 149), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 150), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -566,6 +566,8 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 149 | 2026-11-01 | The hammer skeletons are Proel builders: the user's rusted metal golem (`tools/build_proel_builder.py`, `tools/anim_proel_builder.py`, 42k triangles, 23 bones, 16 clips), a slow walk at the player with a hammer down on the floor each stride (`slam_walk`, `slam_stand`: 30 and a knockdown, 12 from the floor within 1.7 m, parried it reels) and a very heavy spin (`spin`, 6.8 s, two turns read by the hips and arms, 40 and a throw); only a shove of 8.5 stops it | [docs/notes/149-proel-builders.md](docs/notes/149-proel-builders.md) |
 | 148 | 2026-10-31 | The proels strike half again as fast (`BLOW_TEMPO` / `TEMPO` 1.15 -> 1.725, re-baked) and run one blow into the next: chain far more often, rest less, circle less between exchanges; `[reach]` sweeps between frames | [docs/notes/148-proels-strike-half-again-as-fast.md](docs/notes/148-proels-strike-half-again-as-fast.md) |
 
+| 150 | 2026-11-01 | The Proel builders' blows have weight, same clocks: a 1.6 s hoist and a hang, a 0.3 s drive at 30 m/s, the body going on down past a hammer held on the floor (`pin`), a shudder; the spin a 1.9 s coil, then three turns at 2 a second, the chest and hammers worked out on springs behind the hips (`Trail`), riding a tilted circle, the left foot pivoting, the right stamping (`Foot`), carried past the end and back; every other clip byte for byte identical | [docs/notes/150-proel-builders-weight.md](docs/notes/150-proel-builders-weight.md) |
+
 ## Notes by source file
 
 Which notes name each file (section numbers; `8b` = the second section 8).
@@ -633,8 +635,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pause_menu.gd`: 19
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145
 - `scripts/portcullis.gd`: 6.18
-- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149
-- `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149
+- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150
+- `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79
@@ -695,7 +697,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/torch_flame.gdshader`: 6.18, 19
 - `shaders/vine_leaf.gdshader`: 6.18
 - `shaders/water_drip.gdshader`: 39, 121
-- `tools/anim_proel_builder.py`, `tools/build_proel_builder.py`: 149
+- `tools/anim_proel_builder.py`, `tools/build_proel_builder.py`: 149, 150
 - `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146
 - `tools/benchmark.gd`: 6.11, 33, 112
 - `tools/build_brick_kit.py`: 27, 28

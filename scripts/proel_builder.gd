@@ -10,8 +10,9 @@ extends "res://scripts/prosthetic.gd"
 ##               (`slam_walk`). With nowhere left to go it stands and does the same
 ##               (`slam_stand`). A hammer that catches them on the way down knocks them
 ##               flat; the floor where it lands shakes for SHOCK_RADIUS round it.
-##   the spin    close in, when it can: it coils, and comes round twice with both
-##               hammers flying (`spin`), walking itself at them as it goes.
+##   the spin    close in, when it can: it coils for a long moment, then comes round three
+##               times, fast, the hammers dragging it (`spin`, note 150), walking itself at
+##               them as it goes.
 ##
 ## models/proel_builder.glb carries every clip, baked by tools/anim_proel_builder.py,
 ## and plays them at 1x on their own clocks, so the feet and the hammers keep to the floor:
