@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 151), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 152), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -568,6 +568,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 
 | 151 | 2026-11-01 | The Proel builders: 1.15 m a step; the spin starts on the frame a left hammer lands and ends inside `slam_in`, no blend (`spin_w`, `spin_s`); a 1.15 s coil, shaking, never held; `[still]` in `--check`; five parry reactions (`reel_wl/wr/sl/sr`, `reel_o`) from the pose the guard met, 2.2 s, the hammer thrown over the shoulder, dragging the body back, falling, and it goes down after it. Player: a sword stroke clicked too soon held to when the blade stops biting (`_attack_queued`), a jump pressed in the air held for the landing (`_jump_queued`) | [docs/notes/151-builder-transitions-parry-input-queues.md](docs/notes/151-builder-transitions-parry-input-queues.md) |
 | 150 | 2026-11-01 | The Proel builders' blows have weight, same clocks: a 1.6 s hoist and a hang, a 0.3 s drive at 30 m/s, the body going on down past a hammer held on the floor (`pin`), a shudder; the spin a 1.9 s coil, then three turns at 2 a second, the chest and hammers worked out on springs behind the hips (`Trail`), riding a tilted circle, the left foot pivoting, the right stamping (`Foot`), carried past the end and back; every other clip byte for byte identical | [docs/notes/150-proel-builders-weight.md](docs/notes/150-proel-builders-weight.md) |
+| 152 | 2026-11-01 | Sandbox: a noclip switch (`Sandbox.noclip`; player.gd `_update_noclip`, `_fly`: flight the way the view points, Space / Ctrl, Shift x3; solid for scenes and death; switched off in the rock it goes to the nearest floor, `land_from_noclip`); the menu's columns scroll inside a panel kept on screen (the UI is 720 high at any resolution) | [docs/notes/152-sandbox-noclip-and-a-menu-that-fits.md](docs/notes/152-sandbox-noclip-and-a-menu-that-fits.md) |
 
 ## Notes by source file
 
@@ -634,7 +635,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
@@ -647,9 +648,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/respawn_anchor.gd`: 8b, 32, 79
 - `scripts/robot_rat.gd`: 77
 - `scripts/save_system.gd`: 19, 60, 79, 131
-- `scripts/sandbox.gd`: 60, 68
-- `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130
-- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149
+- `scripts/sandbox.gd`: 60, 68, 152
+- `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130, 152
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
 - `scripts/settings_panel.gd`: 19, 46, 80, 112

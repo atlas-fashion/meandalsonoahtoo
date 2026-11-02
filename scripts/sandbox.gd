@@ -15,6 +15,8 @@ extends Node
 ##   * `player_god` -- player.gd takes no damage from any source (blows, drains,
 ##     beams, the morgue's scripted death); guards and parries still register,
 ##     so enemies react to them as usual.
+##   * `noclip` -- player.gd flies the way the view points, through everything
+##     (`_update_noclip`, `_fly`; note 152).
 
 ## In a sandbox session.
 var active := false
@@ -22,6 +24,8 @@ var active := false
 var enemies_passive := false
 ## The player takes no damage.
 var player_god := false
+## The player flies free, through walls and floors.
+var noclip := false
 ## Attack hitboxes (shield_hitbox.gd) are drawn while their hit window is open
 ## -- in the sandbox only (2026-10-18, the user); on by default there, the
 ## sandbox menu switches it.
@@ -45,3 +49,4 @@ func reset() -> void:
 	active = false
 	enemies_passive = false
 	player_god = false
+	noclip = false

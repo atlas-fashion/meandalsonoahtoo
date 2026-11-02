@@ -1037,6 +1037,13 @@ var _ghost_locked := true
 ## gap in that (`_physics_process`): a key held across the gap needs a fresh press.
 var _ghost_frame := -10
 var _ghost_resumed := false
+## Noclip (the sandbox menu's switch, note 152): flying, and the collision mask
+## that comes back when they stop.
+const NOCLIP_SPEED := 14.0
+const NOCLIP_BOOST := 3.0
+const NOCLIP_ACCEL := 90.0
+var _flying := false
+var _solid_mask := 0
 ## Pad device ids `_pad_held` asks (Godot's joypad slots).
 const PAD_SLOTS := 16
 ## 1.0 while a ghost is on, decaying to 0 after. One clock drives the field of
@@ -1836,7 +1843,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_attack_key_spills_drink()
 		# F: the heavy attack. With the sword, a dive in the air or the blade
 		# brought down where you stand; with the spear, the throw.
-		if Coop.aim_ready(self) and not _ghosting \
+		if Coop.aim_ready(self) and not _ghosting and not _flying \
 				and held_item() == &"sword" and not _slamming and _now() >= _slam_recover_until \
 				and _pose_kind != &"haft" and not is_drinking() and not is_flinching():
 			_end_block()
@@ -1869,6 +1876,7 @@ func _physics_process(delta: float) -> void:
 	# Out of play -- held, hidden, on a ladder or a vat, in a scene, or the game
 	# paused (no call at all) -- leaves a gap in `_ghost_frame`, and a ghost key
 	# still down across it has to be let go before it starts one (note 113).
+	_update_noclip()
 	var frame := Engine.get_physics_frames()
 	if not (is_hidden() or climbing or restrained_by != null or latched_to != null or in_cutscene):
 		_ghost_resumed = frame - _ghost_frame > 1
@@ -1896,6 +1904,9 @@ func _physics_process(delta: float) -> void:
 		if not is_on_floor():
 			velocity += get_gravity() * delta
 		move_and_slide()
+		return
+	if _flying:
+		_fly(delta)
 		return
 	# Jump pressed with nothing to jump off: held for the landing (note 151). Read
 	# here so a press in the air during a dash or a dive counts as one.
@@ -2087,6 +2098,45 @@ func _physics_process(delta: float) -> void:
 		_on_landed(pre_move_fall_speed)
 	_was_grounded = is_on_floor()
 
+	if _hit_window_open:
+		_resolve_hits()
+
+
+## Noclip on or off (note 152). Solid again for any scene and for a death: those
+## drop the body under gravity, and with no mask it would fall through the floor.
+func _update_noclip() -> void:
+	var want := Sandbox.noclip and not in_cutscene and not _dead
+	if want == _flying:
+		return
+	_flying = want
+	if want:
+		_solid_mask = collision_mask
+		collision_mask = 0
+		_ghosting = false
+		_swimming = false
+	else:
+		collision_mask = _solid_mask
+		velocity = Vector3.ZERO
+		# Shift was the boost, not a ghost: it waits for a fresh press (note 113).
+		_ghost_locked = true
+
+
+## Noclip's flight: full steering the way the view points, Space / A straight up,
+## Ctrl / B straight down, Shift / the ghost button faster. Nothing is in the
+## mask, so nothing stops it; weapons still swing.
+func _fly(delta: float) -> void:
+	var move := _move_input()
+	var wish := global_basis * Basis(Vector3.RIGHT, _look_pitch) * Vector3(move.x, 0.0, move.y)
+	if not ui_open and not remote_view:
+		if _action_held(&"jump"):
+			wish += Vector3.UP
+		if Input.is_physical_key_pressed(KEY_CTRL) or Input.is_action_pressed(&"ui_cancel"):
+			wish += Vector3.DOWN
+	var speed := NOCLIP_SPEED * (NOCLIP_BOOST if _dodge_held() else 1.0)
+	velocity = velocity.move_toward(wish.limit_length() * speed, NOCLIP_ACCEL * delta)
+	move_and_slide()
+	_update_locomotion()
+	_was_grounded = is_on_floor()
 	if _hit_window_open:
 		_resolve_hits()
 

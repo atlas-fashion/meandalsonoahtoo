@@ -8,6 +8,7 @@ extends CanvasLayer
 ##              spawning that many in a row in front of the player; Clear
 ##   SWITCHES   enemies take an interest (aggro) / the player takes damage /
 ##              the level's own enemies (its normal population, maze `_populate`)
+##              / hitboxes / noclip (player.gd `_fly`, note 152)
 ##   WEAPONS    sword, spear, axe and armor level, 1..UPGRADE_MAX (player.gd)
 ##   TELEPORT   every place the level built (sandbox_world.gd `destinations`)
 ##
@@ -15,10 +16,19 @@ extends CanvasLayer
 ## behind it -- the player's `ui_open` holds their input and the mouse is freed;
 ## a pause, a cutscene or death closes it. Above the inventory (46), below the
 ## pause menu (50).
+##
+## The UI is 720 high however big the screen (project.godot: canvas_items over
+## 1280 x 720, so 1720 x 720 at 3440 x 1440) and the columns are taller, so each
+## scrolls on its own inside a panel kept on screen (`_fit`, note 152).
 
 const SP := preload("res://scripts/settings_panel.gd")
 const SW := preload("res://scripts/sandbox_world.gd")
 const PLAYER := preload("res://scripts/player.gd")
+## What the panel takes round its columns: borders, margins, title, hint line and
+## a gap to the screen's edge.
+const PANEL_CHROME := 140.0
+## The tallest the columns need; on a tall window the panel stops there.
+const COLUMNS_MAX := 780.0
 
 var world: Node3D
 var maze: Node3D
@@ -30,8 +40,10 @@ var _aggro: CheckButton
 var _damage: CheckButton
 var _population: CheckButton
 var _hitboxes: CheckButton
+var _noclip: CheckButton
 var _levels := {}
 var _teleports: VBoxContainer
+var _scrolls: Array[ScrollContainer] = []
 var _first: Control
 var _open := false
 
@@ -103,6 +115,7 @@ func _refresh() -> void:
 	_damage.set_pressed_no_signal(not Sandbox.player_god)
 	_population.set_pressed_no_signal(bool(maze.get("sandbox_population")))
 	_hitboxes.set_pressed_no_signal(Sandbox.show_hitboxes)
+	_noclip.set_pressed_no_signal(Sandbox.noclip)
 	for id in _levels:
 		var spin: SpinBox = _levels[id]
 		var v: int = int(_player.get("armor_level")) if id == &"armor" else int(_player.call("weapon_level", id))
@@ -130,9 +143,30 @@ func _build() -> void:
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 26)
 	outer.add_child(cols)
-	cols.add_child(_build_spawn())
-	cols.add_child(_build_switches())
-	cols.add_child(_build_teleport())
+	cols.add_child(_scrolled(_build_spawn()))
+	cols.add_child(_scrolled(_build_switches()))
+	cols.add_child(_scrolled(_build_teleport()))
+	get_viewport().size_changed.connect(_fit)
+	_fit()
+
+
+## A column in its own scroll. `follow_focus` brings what a pad lands on into view.
+func _scrolled(col: Control) -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(col)
+	_scrolls.append(scroll)
+	return scroll
+
+
+## Sizes the columns to the screen, as it is now.
+func _fit() -> void:
+	var room := minf(get_viewport().get_visible_rect().size.y - PANEL_CHROME, COLUMNS_MAX)
+	for scroll in _scrolls:
+		scroll.custom_minimum_size.y = room
 
 
 func _column(title: String) -> VBoxContainer:
@@ -183,6 +217,9 @@ func _build_switches() -> Control:
 	col.add_child(_population)
 	_hitboxes = _switch("Show hitboxes", func(on: bool) -> void: Sandbox.show_hitboxes = on)
 	col.add_child(_hitboxes)
+	_noclip = _switch("Noclip (fly through walls)", _set_noclip)
+	col.add_child(_noclip)
+	col.add_child(SP.dim_label("Fly where you look: WASD, Space up, Ctrl down,\nShift faster (pad: A up, B down, ghost button)"))
 	col.add_child(SP.spacer(10))
 	col.add_child(SP.section_label("WEAPON LEVELS"))
 	for entry in [[&"sword", "Sword"], [&"spear", "Spear"], [&"axe", "Axe"], [&"armor", "Armor"]]:
@@ -230,6 +267,12 @@ func _switch(text: String, on_toggle: Callable) -> CheckButton:
 	return c
 
 
+func _set_noclip(on: bool) -> void:
+	Sandbox.noclip = on
+	if not on and _player != null and is_instance_valid(_player):
+		world.call("land_from_noclip", _player)
+
+
 func _set_level(id: StringName, level: int) -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
@@ -245,14 +288,10 @@ func _set_level(id: StringName, level: int) -> void:
 func _build_teleport() -> Control:
 	var col := _column("TELEPORT")
 	col.add_child(SP.dim_label("Or anywhere: on the map (M), T / Y\nteleports to the cursor or the pin under it"))
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(330, 430)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	col.add_child(scroll)
 	_teleports = VBoxContainer.new()
 	_teleports.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_teleports.add_theme_constant_override("separation", 4)
-	scroll.add_child(_teleports)
+	col.add_child(_teleports)
 	return col
 
 

@@ -373,6 +373,23 @@ const MAP_RAY_UP := 1.6
 const MAP_RAY_DOWN := 6.0
 ## How far the navmesh may move a map spot sideways.
 const MAP_NAV_REACH := 4.0
+## Noclip switched off (note 152) further than this sideways from the navmesh has
+## no floor under it.
+const NOCLIP_OPEN := 1.2
+
+
+## Noclip has just gone off. In the open the body drops where it is; left in the
+## rock or under a floor it would fall for ever, so it goes to the nearest floor.
+## The test is sight of that floor: its navmesh rides half a metre above the stone,
+## so no height compared with it says which side of a floor the body is on.
+func land_from_noclip(player: CharacterBody3D) -> void:
+	var at := player.global_position
+	var nav := NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, at)
+	var q := PhysicsRayQueryParameters3D.create(nav, at, int(player.get("_solid_mask")))
+	q.exclude = [player.get_rid()]
+	var shut := not get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+	if shut or Vector2(nav.x - at.x, nav.z - at.z).length() > NOCLIP_OPEN:
+		teleport(nav, player.rotation.y)
 
 
 ## Puts the player at `at` facing `yaw`, out of anything that holds them.
