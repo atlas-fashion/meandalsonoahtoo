@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 148), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 149), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -262,6 +262,11 @@ and rig the user's Tripo golem (`models/source/sword_skeleton/`) and animate it 
 Blender. Rebuild, never hand-edit; always run the second after the first. See note
 136 and `tools/README.md`.
 
+`models/proel_builder.glb` (the Proel builder) is a build artifact from
+`tools/build_proel_builder.py` then `tools/anim_proel_builder.py`, out of the user's
+Tripo golem (`models/source/proel_builder/`). Rebuild, never hand-edit; always run the
+second after the first. See note 149 and `tools/README.md`.
+
 `models/kit/module_*.glb` are build artifacts from `tools/build_modules.py`,
 cut from the raw `models/kit/mod_*.glb` Tripo returned. Never hand-edit them;
 rebuild and re-run `tools/verify_modules.py`.
@@ -332,7 +337,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `hand_torch.gd`, `held_potion.gd`,
   `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt).
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
-  hands; `skeleton_shield.gd`; note 93), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
+  hands; `skeleton_shield.gd`; note 93), `proel_builder.gd` (the hammer hand, the Proel builder, note 149: the user's rusted golem with two hammers, baked clips, `proel_builder_hammers.gd`; a slow walk pounding the floor, a very heavy spin), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
   notes 135-138; its combos are baked links, note 138; circling, turns and the parry reel, note 140; the leap, a jump slam, note 146), `enemy.gd` (skeleton; base class; also the boss via
   `scenes/boss.tscn` + `weak_point.gd`), `archer.gd` (the crossbow hand) + `arrow.gd`, `crier.gd`
@@ -558,6 +563,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 145 | 2026-10-31 | The flinch planted: 0.5 s at a tenth of walking pace and stopped hard (`flinch_time`, `flinch_move_scale`, `FLINCH_PLANT`), on one clock with the attacks, so the moment they can move they can swing. Supersedes note 143's second at half speed | [docs/notes/145-flinch-planted.md](docs/notes/145-flinch-planted.md) |
 | 146 | 2026-10-31 | The proels' leap, a jump slam to close the gap: `jump_slam` from a stand, `leap_run`, `_low`, `_high` off the run in stride with no blend (the capsule stays on the floor, the clip does the height, the flight stretched to fit); 30 and a knockdown, the point's strike a shock on the floor; committed in the air; parried it goes over on its back (`thrown`) and is up in 2.05 s; rays and a floor check on the way; every old clip byte for byte identical | [docs/notes/146-the-proels-leap.md](docs/notes/146-the-proels-leap.md) |
 | 147 | 2026-10-31 | The sewer lizards spit in bursts: one rear-up, 4 gobs 0.12 s apart, then 2.8 s of rest (`BURST`, `BURST_GAP`, `BURST_REST`; was one gob a second) | [docs/notes/147-sewer-lizards-spit-in-bursts.md](docs/notes/147-sewer-lizards-spit-in-bursts.md) |
+| 149 | 2026-11-01 | The hammer skeletons are Proel builders: the user's rusted metal golem (`tools/build_proel_builder.py`, `tools/anim_proel_builder.py`, 42k triangles, 23 bones, 16 clips), a slow walk at the player with a hammer down on the floor each stride (`slam_walk`, `slam_stand`: 30 and a knockdown, 12 from the floor within 1.7 m, parried it reels) and a very heavy spin (`spin`, 6.8 s, two turns read by the hips and arms, 40 and a throw); only a shove of 8.5 stops it | [docs/notes/149-proel-builders.md](docs/notes/149-proel-builders.md) |
 | 148 | 2026-10-31 | The proels strike half again as fast (`BLOW_TEMPO` / `TEMPO` 1.15 -> 1.725, re-baked) and run one blow into the next: chain far more often, rest less, circle less between exchanges; `[reach]` sweeps between frames | [docs/notes/148-proels-strike-half-again-as-fast.md](docs/notes/148-proels-strike-half-again-as-fast.md) |
 
 ## Notes by source file
@@ -593,7 +599,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
-- `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120, 122, 126, 139
+- `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120, 122, 126, 139, 149
 - `scripts/enemy.gd`: 6.19, 8, 11, 20, 22, 23, 24, 25, 48, 52, 56, 60, 77, 79, 92, 93, 120, 131, 135
 - `scripts/enemy_health_bar.gd`: 6.19
 - `scripts/enforcer.gd`: 48, 51, 53, 59, 64, 68, 72, 73, 74, 75, 92, 115, 116
@@ -627,7 +633,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pause_menu.gd`: 19
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145
 - `scripts/portcullis.gd`: 6.18
-- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148
+- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149
+- `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79
@@ -639,7 +646,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/save_system.gd`: 19, 60, 79, 131
 - `scripts/sandbox.gd`: 60, 68
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130
-- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
 - `scripts/settings_panel.gd`: 19, 46, 80, 112
@@ -663,7 +670,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111, 128
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79
-- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146
+- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 149
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
 - `scripts/wood_door.gd`: 6.18, 79
@@ -688,6 +695,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/torch_flame.gdshader`: 6.18, 19
 - `shaders/vine_leaf.gdshader`: 6.18
 - `shaders/water_drip.gdshader`: 39, 121
+- `tools/anim_proel_builder.py`, `tools/build_proel_builder.py`: 149
 - `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146
 - `tools/benchmark.gd`: 6.11, 33, 112
 - `tools/build_brick_kit.py`: 27, 28

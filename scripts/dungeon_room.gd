@@ -77,7 +77,7 @@ const PRISONER_SCALE := 0.94
 ## through them into the dark, and the type is loose in the maze
 ## (maze.gd `release_hand`). Empty for the plain prison.
 var hand: StringName = &""
-const HAND_NAMES := {&"blade": "PROEL SWORDSMEN", &"hammer": "HAMMER HANDS", &"shield": "SHIELD HANDS",
+const HAND_NAMES := {&"blade": "PROEL SWORDSMEN", &"hammer": "PROEL BUILDERS", &"shield": "SHIELD HANDS",
 	&"crossbow": "CROSSBOW HANDS", &"drill": "DRILL HANDS"}
 const BACK_DOOR_W := 1.2
 const BACK_DOOR_H := 2.3

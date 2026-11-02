@@ -31,6 +31,8 @@ const LOOK_EASE := 3.5
 
 var look_target = null
 var look_strength := 1.0
+## Where the skull looks as modelled, for a body other than this one's.
+var rest_face := HEAD_REST_FACE
 ## Whose clips these are, to read where the new clip's bones have just been.
 var player: AnimationPlayer = null
 ## Animation -> {bone id: [rotation track, position track]}.
@@ -60,7 +62,7 @@ func _find_bones(sk: Skeleton3D) -> void:
 	var k := sk.get_bone_global_rest(_ids[&"shin.L"]).origin
 	var f := sk.get_bone_global_rest(_ids[&"foot.L"]).origin
 	_leg = h.distance_to(k) + k.distance_to(f)
-	_head_face = sk.get_bone_global_rest(_ids[&"head"]).basis.inverse() * HEAD_REST_FACE.normalized()
+	_head_face = sk.get_bone_global_rest(_ids[&"head"]).basis.inverse() * rest_face.normalized()
 
 
 func _track_of(a: Animation, bone_id: int) -> Array:

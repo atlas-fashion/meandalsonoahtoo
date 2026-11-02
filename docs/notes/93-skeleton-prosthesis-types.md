@@ -1,5 +1,7 @@
 ## 93. Skeleton types: a prosthesis for a hand (2026-10-20)
 
+**Note 149 replaced the hammer hand: it is the Proel builder now, with its own body and moves.**
+
 The user: "Separate skeletons into different types ... different prostheses on
 their hands that do different things": a DRILL hand (dashes like the old
 skeleton, found in the mining room), a SWORD hand (no dash; a light and a heavy

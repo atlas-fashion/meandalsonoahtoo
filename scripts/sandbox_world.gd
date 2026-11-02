@@ -39,7 +39,7 @@ const RAT_SCRIPT := preload("res://scripts/rat.gd")
 const KINDS := [
 	[&"skeleton_blade", "Proel swordsman"],
 	[&"skeleton_drill", "Drill skeleton"],
-	[&"skeleton_hammer", "Hammer skeleton"],
+	[&"skeleton_hammer", "Proel builder"],
 	[&"skeleton_shield", "Shield skeleton"],
 	[&"archer", "Crossbow skeleton"],
 	[&"enforcer", "Enforcer"],

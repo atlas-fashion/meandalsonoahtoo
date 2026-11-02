@@ -649,3 +649,29 @@ The eyes' colour is `light_eyes`, which the anim script sets too.
 
 Blender's frame in the script is X its left, -Y its front, Z up: the old rig's axes
 once exported.
+
+---
+
+# The Proel builder (2026-11-01, Blender, note 149)
+
+```
+blender -b --factory-startup -P tools/build_proel_builder.py                          # model, bake
+blender -b --factory-startup -P tools/build_proel_builder.py -- --no-bake             # keep the normal map
+blender -b models/source/proel_builder/proel_builder.blend -P tools/anim_proel_builder.py   # clips, export
+blender -b models/source/proel_builder/proel_builder.blend -P tools/anim_proel_builder.py -- --check
+blender -b models/source/proel_builder/proel_builder.blend -P tools/anim_proel_builder.py -- --sheet <dir> [clip,clip]
+godot --headless --import --path .
+```
+
+The same steps as the swordsman's, in files of its own. `build_proel_builder.py` reads
+`models/source/proel_builder/rusted metal golem 3d model.glb` (keep it under `models/source/`: 2
+million triangles) and writes the .blend and its maps. It leaves the .blend without clips, so run
+`anim_proel_builder.py` after it, always. `--check` prints each clip's worst jolt, how low and high
+the hammers go, `[slam]` (where each one lands, how low its lowest point is, how fast it comes in)
+and `[spin]`. `--sheet` renders strips of poses, textured, with the spin's turn on the object.
+
+`SLAM_T`, `HIT_L`, `HIT_R`, `IN_PHASE`, `SLAM_V`, `WALK_V` and `REEL` must stay equal to `SLAM_CYCLE`,
+`SLAM_AT`, `SLAM_FROM_IN`, `SLAM_SPEED`, `WALK_SPEED` and `REEL_TIME` in `scripts/proel_builder.gd`
+(the first ones scaled by `SLAM_T`), and `SPIN_LIVE` to `SPIN_WINDUP` and `SPIN_SWING` in `prosthetic.gd`,
+what is left of the clip to `SPIN_RECOVER`. `root` x in `spin` is the turn, in radians.
+`models/proel_builder.glb.import` must keep `animation/fps=60`, and the three maps `compress/mode=2`.

@@ -9,9 +9,10 @@ extends "res://scripts/enemy.gd"
 ##   &"blade"   the SWORD hand: cannot dash. A light slice (the old cut, quick,
 ##              often) and a heavy slice -- a long wind-up, then a flat sweep
 ##              across the whole front for nearly twice the damage.
-##   &"hammer"  the HAMMER hand: slow on its feet, a long wind-up, an overhead
-##              smash for 30 that knocks the player off their feet unless the
-##              guard is up. Hard to shove.
+##   &"hammer"  the Proel builder (proel_builder.gd, note 149): two hammers for hands.
+##              A slow walk at the player pounding the floor, a hammer to a stride,
+##              30 and off their feet unless the guard is up; and a very heavy spin.
+##              Hard to stop.
 ##   &"shield"  a tower SHIELD on BOTH arms: guards its fellows. It picks one
 ##              (a crossbowman first) and stands braced between it and the
 ##              player; a blow at that fellow through the shield is taken by
@@ -52,9 +53,13 @@ const LEAP_DAMAGE := 30.0
 const HEAVY_SHARE := 0.4
 ## The drill's dash hits harder than its jab.
 const DRILL_DASH_DAMAGE := 18.0
-## The hammer.
-const HAMMER_WINDUP := 0.95
-const HAMMER_RECOVER := 1.2
+## The Proel builder's spin, on its clip's clock: until the hammers are moving, while they
+## are flying, and what is left of the clip. tools/anim_proel_builder.py `SPIN_LIVE`:
+## change both.
+const SPIN_WINDUP := 1.85
+const SPIN_SWING := 2.65
+const SPIN_RECOVER := 2.3
+## How hard a hammer throws them.
 const HAMMER_KNOCKDOWN := 6.5
 ## The shield's bash shoves the player this hard (half through a guard).
 const BASH_SHOVE := 8.0
@@ -94,9 +99,15 @@ static func make(scene: PackedScene, which: StringName) -> CharacterBody3D:
 	return e
 
 
-## The sword hand has a body of its own (sword_skeleton.gd, note 135).
+## The sword and hammer hands have bodies of their own (sword_skeleton.gd, note 135;
+## proel_builder.gd, note 149).
 static func script_for(which: StringName) -> Script:
-	return load("res://scripts/sword_skeleton.gd" if which == &"blade" else "res://scripts/prosthetic.gd")
+	match which:
+		&"blade":
+			return load("res://scripts/sword_skeleton.gd")
+		&"hammer":
+			return load("res://scripts/proel_builder.gd")
+	return load("res://scripts/prosthetic.gd")
 
 
 func _init() -> void:
@@ -139,15 +150,15 @@ func _apply_hand() -> void:
 			normal_cooldown = 2.4
 			attack_damage = 14.0
 		&"hammer":
-			display_name = "HAMMER SKELETON"
+			display_name = "PROEL BUILDER"
 			max_health = 140.0
-			move_speed = 3.4
+			move_speed = 0.9
 			acceleration = 14.0
-			normal_range = 1.6
-			normal_duration = 0.5
-			normal_cooldown = 2.4
 			attack_damage = 30.0
 			knockback_resistance = 0.45
+			# The spin. Not in `can_spin`: it asks for itself (proel_builder.gd `_land`).
+			spin_duration = SPIN_SWING
+			spin_cooldown = 9.0
 		&"shield":
 			display_name = "SHIELD SKELETON"
 			max_health = 120.0
@@ -190,16 +201,12 @@ func _sword_move(kind: int) -> int:
 	match hand:
 		&"drill":
 			return 2
-		&"hammer":
-			return 1
 		&"blade":
 			return 4 if kind == Attack.SLAM else 0
 	return super(kind)
 
 
 func _windup_for(kind: int) -> float:
-	if hand == &"hammer":
-		return HAMMER_WINDUP
 	if hand == &"blade" and kind == Attack.SLAM:
 		return HEAVY_WINDUP
 	if hand == &"blade" and kind == Attack.LUNGE:
@@ -208,8 +215,6 @@ func _windup_for(kind: int) -> float:
 
 
 func _recover_for(kind: int) -> float:
-	if hand == &"hammer":
-		return HAMMER_RECOVER
 	if hand == &"blade" and kind == Attack.SLAM:
 		return HEAVY_RECOVER
 	if hand == &"blade" and kind == Attack.LUNGE:
@@ -244,14 +249,9 @@ func _pick_attack(gap: float, now: float) -> int:
 
 func _on_blow_landed(player: Node3D, _kind: int) -> void:
 	var guarding: bool = player.get("_blocking") == true
-	match hand:
-		&"hammer":
-			if not guarding and player.has_method("knock_down"):
-				player.call("knock_down", _attack_direction, HAMMER_KNOCKDOWN)
-		&"shield":
-			if player.has_method("apply_knockback"):
-				var push := Vector3(_attack_direction.x, 0.0, _attack_direction.z).normalized() * BASH_SHOVE
-				player.call("apply_knockback", push * (0.5 if guarding else 1.0))
+	if hand == &"shield" and player.has_method("apply_knockback"):
+		var push := Vector3(_attack_direction.x, 0.0, _attack_direction.z).normalized() * BASH_SHOVE
+		player.call("apply_knockback", push * (0.5 if guarding else 1.0))
 
 
 # --- The shield ---------------------------------------------------------------------
