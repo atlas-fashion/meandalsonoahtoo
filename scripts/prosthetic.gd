@@ -56,7 +56,7 @@ const DRILL_DASH_DAMAGE := 18.0
 ## The Proel builder's spin, on its clip's clock: until the hammers are moving, while they
 ## are flying, and what is left of the clip. tools/anim_proel_builder.py `SPIN_LIVE`:
 ## change both.
-const SPIN_WINDUP := 2.2
+const SPIN_WINDUP := 1.45
 const SPIN_SWING := 2.15
 const SPIN_RECOVER := 2.45
 ## How hard a hammer throws them.
@@ -152,7 +152,7 @@ func _apply_hand() -> void:
 		&"hammer":
 			display_name = "PROEL BUILDER"
 			max_health = 140.0
-			move_speed = 0.9
+			move_speed = 1.15
 			acceleration = 14.0
 			attack_damage = 30.0
 			knockback_resistance = 0.45

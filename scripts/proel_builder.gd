@@ -10,8 +10,9 @@ extends "res://scripts/prosthetic.gd"
 ##               (`slam_walk`). With nowhere left to go it stands and does the same
 ##               (`slam_stand`). A hammer that catches them on the way down knocks them
 ##               flat; the floor where it lands shakes for SHOCK_RADIUS round it.
-##   the spin    close in, when it can: it coils for a long moment, then comes round three
-##               times, fast, the hammers dragging it (`spin`, note 150), walking itself at
+##   the spin    close in, off a left hammer landing: it twists away over the hammer and
+##               hauls it into a coil, shaking under the load, then comes round three times,
+##               fast, the hammers dragging it (`spin_*`, notes 150, 151), walking itself at
 ##               them as it goes.
 ##
 ## models/proel_builder.glb carries every clip, baked by tools/anim_proel_builder.py,
@@ -20,16 +21,18 @@ extends "res://scripts/prosthetic.gd"
 ##   idle, walk, turn_l, turn_r       walking about (`_update_locomotion`)
 ##   slam_in                          from a stand into the pound
 ##   slam_walk, slam_stand            the pound: same clock, same arms
-##   spin                             one clip: wind-up, swing, recovery
-##   reel                             parried (`reel_from`)
+##   spin_w, spin_s                   one clip each: wind-up, swing, recovery. They start on
+##                                    the frame of a left hammer landing in slam_walk or
+##                                    slam_stand and end inside slam_in, so no blend either way
+##   reel_wl/wr/sl/sr, reel_o         parried (`reel_from`): by which hammer, in stride or
+##                                    standing, or in the spin; ending inside slam_in too
 ##   stagger_b/f/l/r                  thrown by a shove hard enough (`apply_knockback`)
 ##   death_b/f/s                      by where the last blow came from
 ##
-## Every change of clip is inertialized (sword_skeleton_react.gd), but for the end of
-## `slam_in`, which ends on the pound's own frame. `root` is lifted out of the clips
-## once: its y walks the body through a spin or a reel (`_slide`), its x is the spin's
-## turn, which the model takes (`_turn_model`), so anything breaking the spin off leaves it
-## facing wherever it had got to.
+## Every change of clip is inertialized (sword_skeleton_react.gd), but for those. `root` is
+## lifted out of the clips once: its y walks the body through a spin or a reel (`_slide`),
+## its x is the turn of a spin or of `reel_o`, which the model takes (`_turn_model`), so
+## anything breaking the spin off leaves it facing wherever it had got to.
 ##
 ## It turns no faster than TURN_MOST (`_face`), so getting behind it works, for a moment.
 ## Ordinary blows land without breaking its stride (`apply_knockback`); a shove of
@@ -42,9 +45,11 @@ const EYES := preload("res://scripts/skeleton_eyes.gd")
 
 ## What the clips are authored for (tools/anim_proel_builder.py WALK_V, SLAM_V).
 const WALK_SPEED := 1.1
-const SLAM_SPEED := 0.9
+const SLAM_SPEED := 1.15
 const TURN_RATE := 1.22
 const POUNDS: Array[StringName] = [&"slam_walk", &"slam_stand"]
+const SPINS: Array[StringName] = [&"spin_w", &"spin_s"]
+const REELS: Array[StringName] = [&"reel_wl", &"reel_wr", &"reel_sl", &"reel_sr", &"reel_o"]
 ## The pound's clock: tools/anim_proel_builder.py SLAM_T, HIT_L and HIT_R x SLAM_T, and
 ## IN_PHASE x SLAM_T. When each hammer lands, left then right, and where `slam_in` ends.
 const SLAM_CYCLE := 2.0
@@ -63,9 +68,11 @@ const SHOCK_FELT := 14.0
 const SHOCK_SHAKE := 0.26
 ## A blow that lands through a guard shoves them this hard.
 const GUARD_SHOVE := 5.0
-## The spin: `spin` turns this far all told. In reach by this gap it goes into it, this
-## often, as a hammer lands: then its arms are down and it is already bowed. How hard it
-## hits, how far it throws them, and how far it means to walk to get at them.
+## The spin. In reach by this gap it goes into it, this often, as the LEFT hammer lands: its
+## clip starts on that frame. How hard it hits, how far it throws them, how far it means to
+## walk to get at them, and how far the rest of a stride carries it into the coil (SLAM_V x
+## SPIN_CARRY x 0.5), until SPIN_COILED. SPIN_JOIN and REEL_JOIN: how far into `slam_in` the
+## end of each clip is (tools/anim_proel_builder.py, which has all of these).
 const SPIN_FROM := 2.6
 const SPIN_SHARE := 0.75
 const SPIN_DAMAGE := 40.0
@@ -73,8 +80,18 @@ const SPIN_THROW := 10.0
 const SPIN_TRAVEL := 1.5
 const SPIN_TRAVEL_MOST := 1.2
 const SPIN_STANDOFF := 0.9
-## Parried: tools/anim_proel_builder.py REEL.
-const REEL_TIME := 1.7
+const SPIN_CARRIED := 0.29
+const SPIN_COILED := 1.15
+const SPIN_JOIN := 0.9
+const REEL_JOIN := 0.7
+## Parried: tools/anim_proel_builder.py REEL; the moment its hammer comes back down onto the
+## floor, as `reel`'s `hit_arm` has it; how fast the spin turns flat out (`[spin] top speed`).
+const REEL_TIME := 2.2
+const REEL_THUD := 1.02
+const SPIN_TOP_RATE := 10.66
+## The stamp the coil ends on, and how hard the two are felt.
+const COIL_PLANT := 0.92
+const THUD_SHAKE := 0.14
 ## The most it turns, rad/s, and how stiff the model's heading is on the body's.
 const TURN_MOST := 1.3
 const TURN_SPRING := 12.0
@@ -107,16 +124,16 @@ const HEAD_REST_FACE := Vector3(0.0, -0.5, 0.85)
 const BLEND_MOVE := 0.4
 const BLEND_POUND := 0.35
 const BLEND_IN := 0.3
-const BLEND_SPIN := 0.4
 const BLEND_HIT := 0.26
+const BLEND_PARRY := 0.12
 const BLEND_DEATH := 0.3
 ## Lying dead this long, then it goes.
 const LIE_DEAD := 6.0
 
 ## Clip name -> forward distance by 1/60 s: the root tracks, lifted out once.
 static var _roots := {}
-## The spin's turn, radians to its left by 1/60 s.
-static var _spin_yaw := PackedFloat32Array()
+## Clip name -> its turn, radians to its left by 1/60 s, for those that turn.
+static var _yaws := {}
 static var _glow_hot: StandardMaterial3D
 static var _glow_out: StandardMaterial3D
 static var _dust_mesh: QuadMesh
@@ -140,10 +157,14 @@ var _advancing := true
 ## The pound's clock last tick; < 0 when it was not pounding.
 var _beat_t := -1.0
 var _spinning := false
+## The clip whose turn the model is taking, from this heading, this much of it.
+var _yaw_clip := &""
 var _spin_from := 0.0
+var _yaw_scale := 1.0
 var _held := false
 var _reeling := false
-var _reel_until := 0.0
+## The moment in a spin or a reel still to be felt on the floor; < 0 when there is none.
+var _thud_at := -1.0
 ## Other builders near it, untyped: one may be freed before the next look.
 var _pack: Array = []
 var _next_pack := 0.0
@@ -252,8 +273,8 @@ func _lift_roots() -> void:
 				a.remove_track(i)
 				break
 		_roots[StringName(clip_name)] = curve
-		if clip_name == "spin":
-			_spin_yaw = yaw
+		if clip_name.begins_with("spin_") or clip_name == "reel_o":
+			_yaws[StringName(clip_name)] = yaw
 
 
 static func _make_glows(base: StandardMaterial3D) -> void:
@@ -296,8 +317,9 @@ func apply_knockback(impulse: Vector3, stun_time := 0.25) -> void:
 	super(impulse, maxf(stun_time, STAGGER_TIME))
 
 
-## Parried (player.gd `_on_guarded`): the hammer comes back up off the guard and takes the
-## whole body back with it, in the clip, whatever it was doing, stunned for the length of it.
+## Parried (player.gd `_on_guarded`): the hammer stops dead on the guard and is thrown back
+## up, and takes the whole body back with it, in the clip from the pose it was in, stunned
+## for the length of it. In the spin the body goes on round on what it had.
 func reel_from(away: Vector3) -> void:
 	if _dying or caged:
 		return
@@ -305,19 +327,45 @@ func reel_from(away: Vector3) -> void:
 		super.apply_knockback(away * 3.0, REEL_TIME)
 		return
 	_attack_connected = true
+	var clip := _reel_clip()
+	var spun := 0.0
+	if _spinning and _yaw_clip != &"":
+		var yaw: PackedFloat32Array = _yaws[_yaw_clip]
+		var t := anim.current_animation_position
+		spun = (_on_curve(yaw, t + 0.05) - _on_curve(yaw, t - 0.05)) / 0.1
 	if state != State.CHASE:
 		_enter_chase()
 	_end_spin()
 	_beat_t = -1.0
 	var now := _now()
-	_stun_until = maxf(_stun_until, now + REEL_TIME)
-	_reel_until = now + REEL_TIME
+	# Over when its clip is (`_end_reel`): the parry's hit-stop slows one clock and not the other.
+	_stun_until = maxf(_stun_until, now + REEL_TIME + 1.0)
 	_reeling = true
-	_cooldowns[Attack.SPIN] = maxf(_ready_at(Attack.SPIN), _reel_until + _cooldown_of(Attack.SPIN) * 0.5)
-	_switch(&"reel", 1.0, BLEND_HIT)
-	_blow = &"reel"
+	_cooldowns[Attack.SPIN] = maxf(_ready_at(Attack.SPIN), now + REEL_TIME + _cooldown_of(Attack.SPIN) * 0.5)
+	if _react != null:
+		# The spin's arms can be anywhere in their round; the pound's are where the clip starts.
+		_react.call("crossfade", BLEND_HIT if clip == &"reel_o" else BLEND_PARRY)
+		_react.call("stop_dead")
+	_put_on(clip, 0.0)
+	_blow = clip
 	_blow_t = 0.0
 	_blow_scale = 1.0
+	_thud_at = REEL_THUD
+	if clip == &"reel_o":
+		_yaw_clip = clip
+		_spin_from = _shown_yaw
+		_yaw_scale = clampf(spun / SPIN_TOP_RATE, 0.0, 1.0)
+
+
+## Which reel: by the hammer that met the guard, in stride or standing, or the spin's.
+func _reel_clip() -> StringName:
+	var live: int = HAMMERS.NONE if _sword == null else int(_sword.get("live"))
+	if _spinning or live == HAMMERS.BOTH:
+		return &"reel_o"
+	if live == HAMMERS.NONE:
+		live = randi() % 2
+	var walking := StringName(anim.assigned_animation) == &"slam_walk"
+	return StringName("reel_%s%s" % ["w" if walking else "s", "l" if live == 0 else "r"])
 
 
 ## Thrown by a blow: a stumble the way it was thrown.
@@ -441,9 +489,15 @@ func _tend_pound_clip() -> void:
 	if clip == &"slam_in":
 		# A tick short of the end: a clip that has stopped has no position.
 		if not anim.is_playing() or anim.current_animation_position + get_physics_process_delta_time() * 1.5 >= anim.current_animation_length:
+			# It ends on slam_stand's frame: the legs blend into a stride, the arms are the same.
+			if _advancing and _react != null:
+				_react.call("crossfade", BLEND_POUND)
 			_put_on(&"slam_walk" if _advancing else &"slam_stand", SLAM_FROM_IN)
 			# The hammer it hoisted is already nearly at the top: its cue is still to come.
 			_beat_t = SLAM_FROM_IN - 0.05
+		return
+	# Nearly out of a spin or a reel, whatever the state's clock says: `_run_on` has it.
+	if (clip in SPINS or clip in REELS) and anim.is_playing() and anim.current_animation_position > anim.current_animation_length - 0.3:
 		return
 	if clip not in POUNDS:
 		_switch(&"slam_in", 1.0, BLEND_IN)
@@ -479,6 +533,32 @@ func _chase(delta: float, now: float, _player_node: Node3D, flat: Vector3, _dist
 	velocity.z = move_toward(velocity.z, want.z, acceleration * delta)
 	_slide()
 	return true
+
+
+## The end of a spin or a reel is the middle of slam_in: straight on the tick it ends, with
+## no blend, whatever state the clock says it is still in (a spin starts a tick or two into
+## its clip, and a clip that has stopped would stand still). Only going after someone.
+func _run_on(delta: float) -> void:
+	if anim == null or not engaged or not anim.is_playing():
+		return
+	var clip := StringName(anim.assigned_animation)
+	if clip not in SPINS and clip not in REELS:
+		return
+	var left := anim.current_animation_length - anim.current_animation_position
+	if left <= delta * 1.5:
+		_put_on(&"slam_in", (SPIN_JOIN if clip in SPINS else REEL_JOIN) - left)
+		_blow = &""
+
+
+## The reel's clip is over, however it ended.
+func _end_reel() -> void:
+	_reeling = false
+	_blow = &""
+	_stun_until = minf(_stun_until, _now())
+	if _yaw_clip != &"":
+		_yaw_clip = &""
+		rotation.y = _shown_yaw
+		_yaw_v = 0.0
 
 
 ## Each tick of the pound: its beats, read off the clip as it passes them.
@@ -538,7 +618,7 @@ func _bring_down(side: int) -> void:
 
 
 ## A hammer on the floor. It is not a blow from anyone: the floor, through the guard as any
-## blow is, and no parry. Then, with the arms down, it may go into the spin.
+## blow is, and no parry. Then, if it was the left, it may go into the spin.
 func _land(side: int) -> void:
 	_sword.set("live", HAMMERS.NONE)
 	_apply_state_color(_base_color, base_glow)
@@ -559,7 +639,7 @@ func _land(side: int) -> void:
 			continue
 		p.call("take_damage", SHOCK_DAMAGE, way / off if off > 0.01 else -global_basis.z, null)
 	var player := _resolve_player()
-	if player != null and _wants_spin(player):
+	if side == 0 and player != null and _wants_spin(player):
 		_enter_windup(Attack.SPIN)
 
 
@@ -568,6 +648,17 @@ func _wants_spin(player: Node3D) -> bool:
 	var gap := _flat_gap(global_position, player.global_position) - _body_radius - maxf(_target_radius, 0.0)
 	return seen and _now() >= _ready_at(Attack.SPIN) and gap <= SPIN_FROM and randf() < SPIN_SHARE \
 		and absf(player.global_position.y - global_position.y) <= max_height_difference
+
+
+## Something heavy felt through the floor, short of hurting anyone.
+func _thud(at: Vector3) -> void:
+	at.y = global_position.y
+	_dust(at)
+	for node in Coop.all():
+		var p := node as Node3D
+		var off := p.global_position.distance_to(at)
+		if off < SHOCK_FELT:
+			p.set("_shake", maxf(float(p.get("_shake")), THUD_SHAKE * (1.0 - off / SHOCK_FELT)))
 
 
 ## Dust, kicked out along the floor. One mesh and one fade for all of them.
@@ -632,28 +723,35 @@ func _dust(at: Vector3) -> void:
 # --- The spin -------------------------------------------------------------------------
 
 ## The body takes its line at them now and keeps it; the model's heading is the clip's
-## from here, from wherever it stood.
+## from here, from wherever it stood. The clip starts on the frame of the hammer that has
+## just landed, so it goes straight on from where the pound is.
 func _start_spin() -> void:
 	var player := _resolve_player()
+	var walking := StringName(anim.assigned_animation) == &"slam_walk"
+	var since := fposmod(anim.current_animation_position - SLAM_AT[0], SLAM_CYCLE)
+	var clip := &"spin_w" if walking else &"spin_s"
 	# A hammer that met nobody left its cue open, and the spin has none.
 	for node in Coop.all():
 		if node.has_method("_take_parry_cue"):
 			node.call("_take_parry_cue", self)
 	_spin_from = _shown_yaw
+	_yaw_clip = clip
+	_yaw_scale = 1.0
 	_spinning = true
 	_beat_t = -1.0
+	_thud_at = COIL_PLANT
 	var need := SPIN_TRAVEL
 	if player != null:
 		var to := player.global_position - global_position
 		to.y = 0.0
 		if to.length_squared() > 0.01:
 			rotation.y = atan2(-to.x, -to.z)
-		need = to.length() - SPIN_STANDOFF
+		need = to.length() - SPIN_STANDOFF - (SPIN_CARRIED if walking else 0.0)
 	_held = true
 	_blow_scale = clampf(need / SPIN_TRAVEL, 0.0, SPIN_TRAVEL_MOST)
-	_switch(&"spin", 1.0, BLEND_SPIN)
-	_blow = &"spin"
-	_blow_t = 0.0
+	_put_on(clip, since)
+	_blow = clip
+	_blow_t = since
 
 
 ## However it ended, the body takes the heading the model has got to.
@@ -661,9 +759,13 @@ func _end_spin() -> void:
 	if not _spinning:
 		return
 	_spinning = false
+	_yaw_clip = &""
 	_held = false
 	_blow = &""
 	rotation.y = _shown_yaw
+	# At once: a parry comes after this tick's `_turn_model`.
+	if _model != null:
+		_model.rotation.y = PI
 	_yaw_v = 0.0
 	if _sword != null:
 		_sword.set("live", HAMMERS.NONE)
@@ -702,7 +804,8 @@ func _slide() -> void:
 	if _blow != &"" and anim != null:
 		var dt := get_physics_process_delta_time()
 		var t := anim.current_animation_position if anim.is_playing() else _blow_t
-		var step := (_root_at(_blow, t) - _root_at(_blow, _blow_t)) * _blow_scale
+		# The rest of a stride is not the walk at them: it goes as far as it goes.
+		var step := (_root_at(_blow, t) - _root_at(_blow, _blow_t)) * (_blow_scale if t > SPIN_COILED else 1.0)
 		_blow_t = t
 		var fwd := -global_basis.z
 		fwd.y = 0.0
@@ -740,9 +843,9 @@ func _keep_clear() -> Vector3:
 
 
 func _physics_process(delta: float) -> void:
-	if _reeling and _now() >= _reel_until:
-		_reeling = false
-		_blow = &""
+	_run_on(delta)
+	if _reeling and (anim == null or not anim.is_playing() or StringName(anim.assigned_animation) not in REELS):
+		_end_reel()
 	super(delta)
 	if _dying:
 		_advance_anim(delta)
@@ -752,14 +855,28 @@ func _physics_process(delta: float) -> void:
 	_turn_model(delta)
 	_tend_pound()
 	_tend_react()
+	_tend_thud()
 
 
-## The model's heading chases the body's on a spring; in the spin it is the clip's, and
-## stays where the clip left it until the state is over.
+## The coil's last stamp, or the parried hammer back on the floor.
+func _tend_thud() -> void:
+	if _thud_at < 0.0 or anim == null or _sword == null:
+		return
+	var clip := StringName(anim.assigned_animation)
+	if clip not in SPINS and clip not in REELS:
+		_thud_at = -1.0
+	elif anim.is_playing() and anim.current_animation_position >= _thud_at:
+		_thud_at = -1.0
+		_thud(_sword.call("head", 0))
+
+
+## The model's heading chases the body's on a spring; in the spin or `reel_o` it is the
+## clip's, and stays where the clip left it until that is over.
 func _turn_model(delta: float) -> void:
-	if _spinning:
-		if anim.is_playing() and StringName(anim.assigned_animation) == &"spin":
-			_shown_yaw = wrapf(_spin_from + _on_curve(_spin_yaw, anim.current_animation_position), -PI, PI)
+	if _yaw_clip != &"":
+		if anim.is_playing() and StringName(anim.assigned_animation) == _yaw_clip:
+			var turned := _on_curve(_yaws[_yaw_clip], anim.current_animation_position) * _yaw_scale
+			_shown_yaw = wrapf(_spin_from + turned, -PI, PI)
 	else:
 		var off := wrapf(rotation.y - _shown_yaw, -PI, PI)
 		_yaw_v += (TURN_SPRING * TURN_SPRING * off - 2.0 * TURN_SPRING * _yaw_v) * delta
@@ -768,7 +885,8 @@ func _turn_model(delta: float) -> void:
 
 
 ## Near the player the layer stays on, so every switch knows how the rig was moving, and
-## the head follows them. In the spin the hammers have the whole of it.
+## the head follows them, right to the top of the coil. In the spin the hammers have the
+## whole of it.
 func _tend_react() -> void:
 	if _react == null:
 		return
@@ -778,7 +896,7 @@ func _tend_react() -> void:
 	if near:
 		_react.active = true
 		var want = null
-		if engaged and not is_stunned() and not _spinning:
+		if engaged and not is_stunned() and (not _spinning or state == State.WINDUP):
 			want = player.global_position + Vector3(0.0, 1.5, 0.0)
 		_react.set("look_target", want)
 		_react.set("look_strength", 0.7)
@@ -792,6 +910,8 @@ func _tend_react() -> void:
 func _fold_up() -> void:
 	_reeling = false
 	_end_spin()
+	_yaw_clip = &""
+	_thud_at = -1.0
 	_blow = &""
 	var clip := &"death_s"
 	var b := Vector3(_last_blow.x, 0.0, _last_blow.z)

@@ -474,6 +474,13 @@ func crossfade(time: float) -> void:
 	active = true
 
 
+## After `crossfade`, before the next frame: the switch is a blow that stopped the rig
+## dead (a parried hammer, note 151), so the offset carries none of the speed it had.
+func stop_dead() -> void:
+	_from_prev_rot = _from_rot.duplicate()
+	_from_prev_pos = _from_pos.duplicate()
+
+
 ## The pose shown last frame, bone by bone (local rotation / position); empty
 ## if the layer has not run lately. For pose matching (decrepit.gd).
 func shown_rotation(bone: int) -> Variant:

@@ -24,14 +24,20 @@ Its two moves:
                   right. Both clips have the same arms and the same clock, so one takes
                   over from the other mid-stride.
 
-    the SPIN      `spin`: one clip, wind-up, swing, recovery. `root` x is the turn, in
-                  radians, as for the swordsman's pivots: the game lifts that track out
+    the SPIN      `spin_w`, `spin_s`: one clip each, wind-up, swing, recovery, starting on
+                  the frame a left hammer lands in `slam_walk` or `slam_stand` and ending
+                  inside `slam_in`, so neither end needs a blend (note 151). `root` x is the
+                  turn, in radians, as for the swordsman's pivots: the game lifts that track out
                   and turns the model by it, so a blow that breaks it off leaves it
                   facing wherever it had got to. Its weight is in `Trail`: the hips'
                   turn is laid out by `Turn` and the chest and hammers are worked out
                   from it as weights on springs, so they are left behind by the first
                   shove, take the body round after that, and carry on when it stops.
                   The left foot pivots under it, the right stamps once a turn (`Foot`).
+
+    the REEL      `reel_wl`, `reel_wr`, `reel_sl`, `reel_sr`, `reel_o`: parried, by which hammer
+                  and in stride or standing, or in the spin (`reel_body`). Each starts from
+                  the pose the guard met and ends inside `slam_in`.
 
 `root` y is the root motion: the game moves the body by it (proel_builder.gd).
 
@@ -56,7 +62,7 @@ TAU = math.tau
 
 # The speeds the clips are authored for (proel_builder.gd WALK_SPEED, SLAM_SPEED).
 WALK_V = 1.1
-SLAM_V = 0.9
+SLAM_V = 1.15
 TURN_RATE = math.radians(70.0)
 # One stride of each foot, so two hammers: proel_builder.gd SLAM_CYCLE.
 SLAM_T = 2.0
@@ -70,7 +76,14 @@ IN_PHASE = 0.32
 # SPIN_RECOVER, whose wind-up runs until the hammers are moving and whose swing ends as
 # they sag. SPIN_A is the coil; then SPIN_UP to get going, SPIN_CRUISE flat out, and
 # SPIN_DOWN running out of turn; SPIN_REST getting up.
-SPIN_A = 1.9
+SPIN_A = 1.15
+# The spin starts on the pound's own frame, a left hammer landing, in stride or standing
+# (`spin`): the pound lets go over SPIN_IN, and what is left of the stride over SPIN_CARRY.
+SPIN_IN = 0.75
+SPIN_CARRY = 0.5
+# Its last seconds are the first of `slam_in`, and the game goes on from there
+# (proel_builder.gd SPIN_JOIN).
+SPIN_JOIN = 0.9
 SPIN_UP = 0.5
 SPIN_CRUISE = 1.3
 SPIN_DOWN = 1.1
@@ -89,9 +102,12 @@ SPIN_BACK = 0.1
 SPIN_STAMP = 215.0
 # How far it walks itself round in that, forward.
 SPIN_TRAVEL = 1.5
-# Parried (proel_builder.gd REEL_TIME), and how far back that takes it.
-REEL = 1.7
-REEL_BACK = 0.75
+# Parried (proel_builder.gd REEL_TIME), how far back that takes it, and how long before a
+# hammer lands a blow on the guard usually comes. Its end is `slam_in` too (REEL_JOIN).
+REEL = 2.2
+REEL_BACK = 1.0
+REEL_EARLY = 0.07
+REEL_JOIN = 0.7
 
 HEEL = 0.10         # the heel behind the ankle
 BALL = 0.20         # the ball ahead of it
@@ -490,24 +506,44 @@ def walk(t, L):
 # --- Standing -------------------------------------------------------------------------
 
 def idle(t, L):
-    """Standing as it was made: feet wide, stooped, the hammers hanging from its arms."""
+    """Standing as it was made: feet wide, stooped, the hammers hanging from its arms. It
+    never quite stands still: the weight goes from foot to foot and the hammers go on
+    swinging a little from their arms."""
     sp = Spec()
     br = harm(t, L, (2, 1.0, 0.0), (5, 0.18, 0.2))
     sw = harm(t, L, (1, 1.0, 0.1), (3, 0.3, 0.45))
-    sp.pelvis = V(0.012 * sw, 0.0, 1.165 - 0.005 * br)
-    sp.pelvis_q = rz(rad(1.2 * sw)) @ rx(rad(3.0)) @ ry(rad(-0.8 * sw))
-    sp.spine = (6.0 + 1.2 * br, -1.0 * sw, 0.8 * sw)
-    sp.neck = (0.5 * br, 3.0 * harm(t, L, (1, 1.0, 0.55)), 0.0)
-    sp.head = (-4.0 + 1.0 * harm(t, L, (3, 1.0, 0.1)), 6.0 * harm(t, L, (1, 1.0, 0.6), (2, 0.35, 0.9)), 1.2 * harm(t, L, (1, 1.0, 0.0)))
-    sp.clav_l = (-3.0 + 1.5 * br, 0.0)
-    sp.clav_r = (-3.0 + 1.5 * br, 0.0)
-    sp.arm_l = (6.0 + 1.2 * sw, 20.0 + 0.6 * br, 10.0 + 1.5 * harm(t, L, (2, 1.0, 0.7)))
-    sp.arm_r = (6.0 - 1.2 * sw, 20.0 + 0.6 * br, 10.0 + 1.5 * harm(t, L, (2, 1.0, 0.1)))
-    sp.ham_l = 2.0 * harm(t, L, (2, 1.0, 0.8))
-    sp.ham_r = 2.0 * harm(t, L, (2, 1.0, 0.3))
+    sp.pelvis = V(0.04 * sw, 0.0, 1.165 - 0.012 * br)
+    sp.pelvis_q = rz(rad(3.0 * sw)) @ rx(rad(3.0)) @ ry(rad(-2.0 * sw))
+    sp.spine = (6.0 + 2.6 * br, -3.0 * sw, 2.0 * sw)
+    sp.neck = (1.0 * br, 5.0 * harm(t, L, (1, 1.0, 0.55)), 0.0)
+    sp.head = (-4.0 + 2.0 * harm(t, L, (3, 1.0, 0.1)), 12.0 * harm(t, L, (1, 1.0, 0.6), (2, 0.35, 0.9)), 2.0 * harm(t, L, (1, 1.0, 0.0)))
+    sp.clav_l = (-3.0 + 3.0 * br, 0.0)
+    sp.clav_r = (-3.0 + 3.0 * br, 0.0)
+    sp.arm_l = (6.0 + 4.0 * sw, 20.0 + 1.5 * br, 10.0 + 3.0 * harm(t, L, (2, 1.0, 0.7)))
+    sp.arm_r = (6.0 - 4.0 * sw, 20.0 + 1.5 * br, 10.0 + 3.0 * harm(t, L, (2, 1.0, 0.1)))
+    sp.ham_l = 5.0 * harm(t, L, (2, 1.0, 0.8), (3, 0.4, 0.1))
+    sp.ham_r = 5.0 * harm(t, L, (2, 1.0, 0.3), (3, 0.4, 0.6))
     sp.foot_l = (V(0.33, 0.0, ANKLE), 0.0, 18.0, 0.0, 0.0)
     sp.foot_r = (V(-0.33, 0.02, ANKLE), 0.0, -18.0, 0.0, 0.0)
     return sp
+
+
+def foot_mix(a, b, w):
+    return (a[0].lerp(b[0], w), a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w, a[3] + (b[3] - a[3]) * w, a[4] + (b[4] - a[4]) * w)
+
+
+def mix(sp, o, w, feet=False):
+    """`sp`, `w` of the way to `o`, joint by joint; its root stays its own."""
+    sp.pelvis = sp.pelvis.lerp(o.pelvis, w)
+    sp.pelvis_q = sp.pelvis_q.slerp(o.pelvis_q, w)
+    for k in ("spine", "neck", "head", "clav_l", "clav_r", "arm_l", "arm_r"):
+        setattr(sp, k, lerp(getattr(sp, k), getattr(o, k), w))
+    for k in ("roll_l", "roll_r", "yaw_l", "yaw_r", "ham_l", "ham_r", "knee_out"):
+        x = getattr(sp, k)
+        setattr(sp, k, x + (getattr(o, k) - x) * w)
+    if feet:
+        sp.foot_l = foot_mix(sp.foot_l, o.foot_l, w)
+        sp.foot_r = foot_mix(sp.foot_r, o.foot_r, w)
 
 
 # --- The pound ------------------------------------------------------------------------
@@ -685,7 +721,7 @@ def bow_shoulder(a):
     return lerp((16.0, -8.0), (-12.0, 16.0), ((a - ARM_DRIVE_AT) / (1.0 - ARM_DRIVE_AT)) ** 1.5)
 
 
-SLAM_S = 0.6
+SLAM_S = 0.56
 SLAM_G = dict(T=SLAM_T, S=SLAM_S, s=SLAM_V * SLAM_T * SLAM_S, heel=14.0, toe=22.0, pf=0.1, pr=0.6, lift=0.11, width=0.25, fyaw=13.0, z=1.135, bob=0.0, sway=0.0, pyaw=0.0,
               proll=0.0, plean=0.0, cyaw=0.0, lean=0.0, neck=0.0, headp=0.0, aswing=0.0, a0=0.0, aout=0.0, ael=0.0)
 
@@ -758,7 +794,7 @@ class Turn:
         self.dt = (SPIN_UP + SPIN_CRUISE + SPIN_DOWN) / self.n
         whole = rad(SPIN_TURN - SPIN_COIL)
         self.top = whole / (0.6 * SPIN_UP + SPIN_CRUISE + 0.36 * SPIN_DOWN)
-        self.coil = track([(0.0, 0.0), (0.4, 0.08), (1.25, 0.84), (1.6, 0.985), (SPIN_A, 1.0)])
+        self.coil = track([(0.0, 0.0), (0.12, 0.05), (0.72, 0.84), (0.98, 0.965), (SPIN_A, 1.0)])
         for _ in range(8):
             self.lay_out()
             self.top *= whole / self.table[-1]
@@ -870,15 +906,22 @@ class Trail:
         return self.c[i] + (self.c[i + 1] - self.c[i]) * u, self.h[i] + (self.h[i + 1] - self.h[i]) * u
 
 
-def walked(t):
-    """How far forward it has got at clip time `t`."""
-    return SPIN_TRAVEL * mj((t - SPIN_A) / (SPIN_UP + SPIN_CRUISE + SPIN_DOWN * 0.7))
+def eased_off(t, v, over):
+    """How far something moving at `v` goes in `t` while being stopped over `over` s."""
+    u = min(t / over, 1.0)
+    return v * over * (u - u ** 3 + 0.5 * u ** 4)
 
 
-def on_floor(spot, t, t_walk=None):
+def walked(t, v=0.0):
+    """How far forward it has got at clip time `t`: the rest of a stride at `v`, then
+    the spin's own walk."""
+    return eased_off(t, v, SPIN_CARRY) + SPIN_TRAVEL * mj((t - SPIN_A) / (SPIN_UP + SPIN_CRUISE + SPIN_DOWN * 0.7))
+
+
+def on_floor(spot, t, t_walk=None, v=0.0):
     """A point `spot` in the body's frame at `t`, on the floor as it was before it moved."""
     p = rz(rad(spin_clock().at(t))) @ V(spot[0], spot[1], 0.0)
-    return p.x, p.y - walked(t if t_walk is None else t_walk)
+    return p.x, p.y - walked(t if t_walk is None else t_walk, v)
 
 
 class Foot:
@@ -887,16 +930,17 @@ class Foot:
     with `yaw` the foot's turn from the body's at `yaw_at`. A foot `swivel` 1 spins on the
     ball with the body; 0 stays as it was put down."""
 
-    def __init__(self, stances, lift, push):
+    def __init__(self, stances, lift, push, v=0.0):
         self.stances = stances
         self.lift = lift
         self.push = push
+        self.v = v
 
     def stand(self, st, t):
         tn = spin_clock()
         turned = tn.at(t)
         q = rz(rad(-turned))
-        at = q @ V(st[2][0], st[2][1] + walked(t), 0.0)
+        at = q @ V(st[2][0], st[2][1] + walked(t, self.v), 0.0)
         return at, st[3] - (1.0 - st[5]) * (turned - tn.at(st[4]))
 
     def at(self, t):
@@ -926,25 +970,30 @@ class Foot:
         return a, ANKLE, yaw, 0.0, 0.0
 
 
-def spin_feet(home_l, home_r):
-    """The left is the pivot, as for someone throwing the hammer. It steps in under the
-    body as the turn starts and spins on its ball, hopping forward each time the right
-    is down. The right pushes off and is carried round, stamping once a turn, and goes on
+def spin_feet(home_l, home_r, start_l, start_r, v):
+    """The left is the pivot, as for someone throwing the hammer. Out of the pound the right
+    goes first, it is on its toes already, then the left, to stand wide for the coil. It steps
+    in under the body as the turn starts and spins on its ball, hopping forward each time the
+    right is down. The right pushes off and is carried round, stamping once a turn, and goes on
     the floor for good as the hips stop. Both end where idle stands, at the turn's end."""
     tn = spin_clock()
     end = SPIN_A + SPIN_UP + SPIN_CRUISE + SPIN_DOWN
     when = tn.when
     pivot = (0.05, -0.02)
     out = (-0.4, -0.42)
-    home = lambda f: on_floor((f[0].x, f[0].y), end)
+    home = lambda f: on_floor((f[0].x, f[0].y), end, None, v)
 
     def stance(down, up, spot, yaw, swivel, t_walk=None):
-        return (down, up, on_floor(spot, down, t_walk), yaw, down, swivel)
+        return (down, up, on_floor(spot, down, t_walk, v), yaw, down, swivel)
 
-    l, r = [(-1.0, 0.6, (home_l[0].x, home_l[0].y), home_l[2], 0.0, 0.0)], [(-1.0, 1.15, (home_r[0].x, home_r[0].y), home_r[2], 0.0, 0.0)]
+    def coiled(down, up, spot, yaw, swivel):
+        """Where `spot` will be under the body at the top of the coil."""
+        return (down, up, on_floor(spot, SPIN_A, None, v), yaw, SPIN_A, swivel)
+
+    l, r = [(-1.0, 0.5, (start_l[0].x, start_l[0].y), start_l[2], 0.0, 0.0)], [(-1.0, 0.04, (start_r[0].x, start_r[0].y), start_r[2], 0.0, 0.0)]
     # The coil: one heavy step each, wide, to wind up on.
-    l.append(stance(1.1, when(-96.0), (0.46, -0.3), 18.0, 0.4, None))
-    r.append(stance(1.62, when(-30.0), (-0.42, 0.14), -18.0, 0.6, None))
+    r.append(coiled(0.46, when(-30.0), (-0.42, 0.14), -18.0, 0.6))
+    l.append(coiled(0.92, when(-96.0), (0.46, -0.3), 18.0, 0.4))
     # The turns.
     for a in (SPIN_STAMP, SPIN_STAMP + 360.0):
         t0, t1 = when(a), when(a + 104.0)
@@ -957,24 +1006,30 @@ def spin_feet(home_l, home_r):
     l.append(stance(when(950.0), when(1010.0), (0.3, -0.15), 14.0, 0.5))
     r.append((when(1040.0), end + 9.0, home(home_r), home_r[2], end, 0.0))
     l.append((when(1065.0), end + 9.0, home(home_l), home_l[2], end, 0.0))
-    return Foot(l, 0.05, 0.3), Foot(r, 0.15, 0.3)
+    return Foot(l, 0.05, 0.3, v), Foot(r, 0.15, 0.3, v)
 
 
-def spin():
-    """Coiled round to its right and low, the hammers drawn back and across, for so long
-    that it looks stuck. Then the hips go, the chest after them, and the hammers last of
-    all, dragged; by the end of the first turn they have caught it up and it is the hammers
-    that are turning the body, leaning out against them, the left foot spinning under it
-    and the right snatched round, stamping once a turn to stay up. They ride a tilted
-    circle, high behind it and low in front. It stops its feet, the hammers go on and
-    drag it round past where it meant to stop, then they drop, and take it down with them."""
+def spin(walking):
+    """From a left hammer on the floor, in stride or standing, with no blend: the body twists
+    away over it and hauls it across the front, the right one still going up and drawn back,
+    down into a coil round to its right, low. It does not wait there: it goes on tightening,
+    shaking under the load, the hammers still swinging into it. Then the hips go, the chest
+    after them, and the hammers last of all, dragged; by the end of the first turn they have
+    caught it up and it is the hammers that are turning the body, leaning out against them,
+    the left foot spinning under it and the right snatched round, stamping once a turn to
+    stay up. They ride a tilted circle, high behind it and low in front. It stops its feet,
+    the hammers go on and drag it round past where it meant to stop, then they drop, and take
+    it down with them, and it heaves itself up straight into the next hoist (`slam_in`)."""
     tn = spin_clock()
+    v = SLAM_V if walking else 0.0
+    pound_at = slam_walk if walking else slam_stand
     end = SPIN_A + SPIN_UP + SPIN_CRUISE + SPIN_DOWN
     L = end + SPIN_REST
     trail = Trail(L)
     i0 = idle(0.0, 6.0)
-    fl, fr = spin_feet(i0.foot_l, i0.foot_r)
-    coil = track([(0.0, 0.0), (0.45, 0.1), (1.3, 0.84), (1.65, 0.985), (SPIN_A, 1.0), (SPIN_A + 0.12, 0.8), (SPIN_A + 0.38, 0.0)])
+    start = pound_at(HIT_L * SLAM_T, SLAM_T)
+    fl, fr = spin_feet(i0.foot_l, i0.foot_r, start.foot_l, start.foot_r, v)
+    coil = track([(0.0, 0.0), (0.14, 0.06), (0.76, 0.84), (1.0, 0.965), (SPIN_A, 1.0), (SPIN_A + 0.12, 0.8), (SPIN_A + 0.38, 0.0)])
     idl = idle(0.0, 6.0)
 
     def fn(t, _L):
@@ -989,15 +1044,18 @@ def spin():
         rest = smr(t, end + 0.35, L - 0.1)
         down = smr(t, end - 0.62, end - 0.08) * (1.0 - smr(t, end + 0.75, L - 0.15))
         heave = math.sin(TAU * (t - end) / 0.95) * smr(t, end, end + 0.3) * (1.0 - smr(t, L - 0.8, L - 0.2))
+        # Held at the top of the coil only by what is pulling against it.
+        strain = smr(t, 0.55, 0.95) * (1.0 - smr(t, SPIN_A - 0.02, SPIN_A + 0.1))
+        quake, quake_late = strain * math.sin(TAU * t / 0.11), strain * math.sin(TAU * (t - 0.03) / 0.11)
         # The tilted circle, fixed on the floor: read off in the body's frame.
         ang = rad(turned - SPIN_TILT_AT)
         tilt_p, tilt_r = SPIN_TILT * fly * math.cos(ang), -SPIN_TILT * fly * math.sin(ang)
-        z = 1.165 - 0.11 * sm(t / SPIN_A) * (1.0 - fly) - 0.13 * fly - 0.16 * down * (1.0 - fly) + 0.012 * heave + 0.11 * smr(t, end + 0.75, L - 0.1)
+        z = 1.165 - 0.11 * sm(t / SPIN_A) * (1.0 - fly) - 0.13 * fly - 0.16 * down * (1.0 - fly) + 0.012 * heave + 0.11 * smr(t, end + 0.75, L - 0.1) - 0.05 * strain
         # Leaning out against the hammers, away from the left one, which rides further out.
         sp.pelvis = V(-0.13 * fly, 0.0, z)
         sp.pelvis_q = rz(rad(-24.0 * ch)) @ rx(rad(3.0 - 7.0 * fly + 18.0 * down + 7.0 * ch + tilt_p * 0.5)) @ ry(rad(tilt_r * 0.5 - 4.0 * fly))
         twist = 1.1 * chest + 15.0 * fly - 34.0 * cc
-        sp.spine = (6.0 - 5.0 * fly + 34.0 * down + 3.0 * heave + 8.0 * cc + tilt_p * 0.8, twist, tilt_r * 0.8 - 6.0 * fly)
+        sp.spine = (6.0 - 5.0 * fly + 34.0 * down + 3.0 * heave + 8.0 * cc + tilt_p * 0.8 + 0.9 * quake, twist, tilt_r * 0.8 - 6.0 * fly)
         # The head comes last of all.
         sp.neck = (-3.0 * fly - 10.0 * down, 16.0 * cc - 0.4 * twist - 8.0 * fly, 0.0)
         sp.head = (-6.0 * fly - 14.0 * down - 3.0 * heave - 4.0, 22.0 * cc - 0.3 * twist - 8.0 * fly, 0.0)
@@ -1009,15 +1067,15 @@ def spin():
         # Then they are let fall.
         sag = 12.0 * (1.0 - fly) * (1.0 - ca)
         la, ra = (la[0], la[1] - sag, la[2]), (ra[0], ra[1] - sag, ra[2])
-        sp.arm_l = lerp(lerp(la, (64.0, 4.0, 34.0), ca), idl.arm_l, rest)
-        sp.arm_r = lerp(lerp(ra, (-34.0, 46.0, 14.0), ca), idl.arm_r, rest)
+        sp.arm_l = lerp(lerp(la, (64.0 + 1.5 * quake, 4.0, 34.0 + 1.5 * quake_late), ca), idl.arm_l, rest)
+        sp.arm_r = lerp(lerp(ra, (-34.0 - 1.5 * quake_late, 46.0, 14.0), ca), idl.arm_r, rest)
         round_arm = 42.0 * math.tanh((ham + 10.0 * fly) / 42.0) * (1.0 - ca) * (1.0 - rest)
         sp.yaw_l, sp.yaw_r = round_arm, round_arm
-        sp.ham_l = 16.0 * ca + 10.0 * down * (1.0 - rest) - 0.6 * ham * (1.0 - rest)
-        sp.ham_r = -14.0 * ca + 10.0 * down * (1.0 - rest) + 0.6 * ham * (1.0 - rest)
+        sp.ham_l = 16.0 * ca + 10.0 * down * (1.0 - rest) - 0.6 * ham * (1.0 - rest) + 4.0 * quake_late
+        sp.ham_r = -14.0 * ca + 10.0 * down * (1.0 - rest) + 0.6 * ham * (1.0 - rest) - 4.0 * quake_late
         sp.clav_l = (6.0 * cc + 7.0 * fly - 8.0 * down - 2.0, 10.0 * cc)
         sp.clav_r = (6.0 * cc + 5.0 * fly - 8.0 * down - 2.0, -8.0 * cc)
-        sp.root = V(rad(turned), -walked(t), 0.0)
+        sp.root = V(rad(turned), -walked(t, v), 0.0)
         for f, side in ((fl, "l"), (fr, "r")):
             a, zf, yaw, pitch, toe = f.at(t)
             ft = (V(a.x, a.y, zf), pitch, yaw, 0.0, toe)
@@ -1026,6 +1084,17 @@ def spin():
             else:
                 sp.foot_r = ft
         sp.knee_out = 0.2 + 0.25 * fly
+        # The pound, going on as it was and let go of; the feet have to catch it up
+        # (the right is on its toes as it starts).
+        if t < SPIN_IN:
+            was = pound_at(HIT_L * SLAM_T + t, SLAM_T)
+            mix(sp, was, 1.0 - mj(t / SPIN_IN))
+            if t < 0.2:
+                sp.foot_r = foot_mix(was.foot_r, sp.foot_r, smr(t, 0.0, 0.2))
+        # And into the next hoist.
+        if t > L - SPIN_JOIN:
+            u = t - (L - SPIN_JOIN)
+            mix(sp, slam_in(u, SLAM_IN), mj(u / SPIN_JOIN), True)
         return sp
 
     return fn, L
@@ -1033,44 +1102,156 @@ def spin():
 
 # --- Hit and fall ---------------------------------------------------------------------
 
-def reel():
-    """Parried: the hammer comes back up off the guard and takes the arm and the whole
-    body back with it, two heavy steps, and it stands stunned, getting its weight back."""
+def reel_body(s0, sgn, v, turn):
+    """What a parry does, from the pose it met the guard in. `sgn` +1 the left hammer was
+    stopped, -1 the right; `v` how fast it was walking; `turn` degrees it has come round by a
+    time. Nothing here is keyed from a stand: the arm is knocked back up the way it came and
+    folds, the hammer going on over the shoulder, and that drags the chest round and back and
+    the whole body after it. It starts going backward late, as something this heavy does, and
+    the feet only come when they have to: the rear one, the front one a long stumbling step,
+    the toes up as the weight goes off them, and two more to get under it. Then the hammer
+    comes back down behind that with all its weight and the body goes down after it, bowed,
+    sagging on its knees, both hammers hanging, shoulders heaving, until it gets itself up."""
     L = REEL
+    # Which is which: the arm that was stopped, and the other.
+    hit_arm = track([(0.0, (118.0, 30.0, 82.0, 16.0)), (0.14, (146.0, 40.0, 112.0, 34.0)), (0.4, (170.0, 42.0, 126.0, 48.0)), (0.6, (154.0, 40.0, 112.0, 34.0)), (0.82, (92.0, 36.0, 62.0, -2.0)),
+                     (1.0, (30.0, 32.0, 24.0, -16.0)), (1.14, (24.0, 28.0, 14.0, 6.0)), (1.4, (52.0, 24.0, 12.0, 2.0)), (1.8, (34.0, 21.0, 12.0, 0.0)), (L, (8.0, 20.0, 10.0, 0.0))])
+    off_arm = track([(0.0, (96.0, 26.0, 70.0, 22.0)), (0.24, (84.0, 32.0, 64.0, 20.0)), (0.5, (52.0, 38.0, 42.0, 6.0)), (0.76, (30.0, 40.0, 26.0, -8.0)), (1.02, (34.0, 34.0, 16.0, -10.0)),
+                     (1.3, (56.0, 26.0, 12.0, 0.0)), (1.8, (34.0, 21.0, 12.0, 0.0)), (L, (8.0, 20.0, 10.0, 0.0))])
+    torso = track([(0.0, (12.0, 12.0, -3.0)), (0.16, (-18.0, 26.0, -7.0)), (0.4, (-30.0, 32.0, -8.0)), (0.62, (-14.0, 24.0, -2.0)), (0.86, (18.0, 2.0, 10.0)), (1.1, (42.0, -10.0, 15.0)),
+                   (1.42, (48.0, -4.0, 8.0)), (1.76, (30.0, 0.0, 2.0)), (L, (6.0, 0.0, 0.0))])
+    hips = track([(0.0, (1.09, 0.0, 6.0, 0.0, 0.0)), (0.2, (1.12, -10.0, 10.0, -0.05, 0.1)), (0.44, (1.07, -14.0, 12.0, -0.05, 0.12)), (0.7, (1.02, -2.0, 4.0, 0.0, 0.06)),
+                  (0.92, (0.99, 6.0, -3.0, 0.05, 0.0)), (1.16, (0.93, 15.0, -6.0, 0.08, -0.04)), (1.45, (0.95, 16.0, -2.0, 0.04, -0.04)), (1.8, (1.06, 8.0, 0.0, 0.0, -0.02)), (L, (1.165, 3.0, 0.0, 0.0, 0.0))])
+    shoulder_hit = track([(0.0, (-4.0, 8.0)), (0.2, (14.0, -14.0)), (0.5, (16.0, -12.0)), (0.9, (-8.0, 4.0)), (1.2, (-12.0, 10.0)), (L, (-2.0, 0.0))])
+    shoulder_off = track([(0.0, (6.0, 0.0)), (0.4, (-4.0, 6.0)), (1.0, (-8.0, 8.0)), (L, (-2.0, 0.0))])
+    neck = track([(0.0, 0.0), (0.1, 0.0), (0.24, 14.0), (0.44, 10.0), (0.7, -8.0), (1.1, 10.0), (1.5, 8.0), (L, 0.0)])
+    head = track([(0.0, -4.0), (0.12, -4.0), (0.26, 20.0), (0.46, 8.0), (0.72, -14.0), (1.15, 22.0), (1.55, 14.0), (L, -4.0)])
+    going = track([(0.0, 0.0), (0.12, 0.03), (0.44, 0.35), (0.92, 0.8), (1.3, 0.96), (1.72, 1.0)])
+
+    def back(t):
+        return REEL_BACK * going(t) - eased_off(t, v, 0.2)
+
+    def spot(t, x, y):
+        """A point (x, y) in the body's frame at `t`, on the floor."""
+        p = rz(rad(turn(t))) @ V(x, y, 0.0)
+        return V(p.x, p.y + back(t), 0.0)
+
+    fa, fb = (s0.foot_l, s0.foot_r) if sgn > 0.0 else (s0.foot_r, s0.foot_l)
+    idl = idle(0.0, 6.0)
+    ha, hb = (idl.foot_l, idl.foot_r) if sgn > 0.0 else (idl.foot_r, idl.foot_l)
+    a0, b0 = V(fa[0].x, fa[0].y, 0.0), V(fb[0].x, fb[0].y, 0.0)
+    # The rear foot first, back and wide; the front one the long way past it; the rear
+    # again; and the last of it to stand as the idle does. (Down, up, where, yaw.)
+    b1 = spot(0.42, fb[0].x * 1.1, 0.3)
+    b1.y = max(b1.y, b0.y + 0.16)
+    a_up = 0.3 if v > 0.0 else 0.46
+    steps_a = [(a_up, 0.92, spot(0.92, ha[0].x, -0.02), ha[2]), (1.44, 1.74, spot(1.74, ha[0].x, ha[0].y), ha[2])]
+    steps_b = [(0.14, 0.42, b1, hb[2]), (1.02, 1.38, spot(1.38, hb[0].x, hb[0].y), hb[2])]
+    lands = [0.42, 0.92, 1.38, 1.74]
+
+    def foot(t, start, yaw0, steps, lift, rock):
+        """In the body's frame: the ankle, pitch, yaw, toe bend."""
+        at, yaw = start, yaw0
+        pitch, z = 0.0, ANKLE
+        for t0, t1, to, y1 in steps:
+            if t <= t0:
+                break
+            if t >= t1:
+                at, yaw = to, y1
+                continue
+            u = (t - t0) / (t1 - t0)
+            # Picked up late and put down hard, flat.
+            e = sm(u ** 1.25)
+            at = at.lerp(to, e)
+            yaw = yaw + (y1 - yaw) * e
+            z = ANKLE + lift * math.sin(math.pi * u ** 0.8)
+            pitch = -14.0 * math.sin(math.pi * u) * (1.0 - u)
+            break
+        p = rz(rad(-turn(t))) @ V(at.x, at.y - back(t), 0.0)
+        if rock != 0.0 and pitch == 0.0 and z == ANKLE:
+            # On its heel, the toes up, as the weight goes back off it.
+            a = rad(rock)
+            p = p + V(0.0, HEEL * (1.0 - math.cos(a)) - ANKLE * math.sin(a), 0.0)
+            z = -HEEL * math.sin(a) + ANKLE * math.cos(a)
+            pitch = rock
+        return V(p.x, p.y, z), pitch, yaw - turn(t), 0.0, 0.0
 
     def fn(t, _L):
         sp = idle(0.0, 6.0)
-        hit = blur(track([(0.0, 0.0), (0.08, 0.6), (0.2, 1.0), (0.5, 0.84), (1.0, 0.36), (L, 0.0)]), t, 0.04)
-        late = blur(track([(0.0, 0.0), (0.12, 0.3), (0.26, 1.0), (0.6, 0.8), (1.1, 0.3), (L, 0.0)]), t, 0.05)
-        back = REEL_BACK * mj(t / 1.1)
-        sp.root = V(0, back, 0)
-        p0 = sp.pelvis
-        sp.pelvis = V(p0.x, p0.y + 0.08 * hit, p0.z - 0.09 * track([(0.0, 0.0), (0.3, 1.0), (0.9, 0.7), (L, 0.0)])(t))
-        sp.pelvis_q = sp.pelvis_q @ rot(-12.0 * hit, 0.0, 0.0)
-        s0 = sp.spine
-        sp.spine = (s0[0] - 22.0 * hit, s0[1], s0[2])
-        sp.neck = (sp.neck[0] + 14.0 * late, sp.neck[1], 0.0)
-        sp.head = (sp.head[0] + 12.0 * late, sp.head[1], 0.0)
-        l0, r0 = sp.arm_l, sp.arm_r
-        sp.arm_l = (l0[0] + 70.0 * late, l0[1] + 16.0 * late, l0[2] + 42.0 * late)
-        sp.arm_r = (r0[0] + 46.0 * late, r0[1] + 22.0 * late, r0[2] + 30.0 * late)
-        sp.ham_l = 30.0 * late
-        sp.ham_r = 24.0 * late
-        for side, t0, t1 in (("r", 0.1, 0.5), ("l", 0.46, 0.94)):
-            ft = sp.foot_l if side == "l" else sp.foot_r
-            u = max(0.0, min(1.0, (t - t0) / (t1 - t0)))
-            ank = ft[0].copy()
-            # On the floor: each foot goes the whole way back in one step.
-            ank.y += REEL_BACK * sm(u) - back
-            ank.z = ANKLE + 0.08 * math.sin(math.pi * u)
-            nf = (ank, -10.0 * math.sin(math.pi * u), ft[2], 0.0, 0.0)
-            if side == "l":
-                sp.foot_l = nf
-            else:
-                sp.foot_r = nf
+        # An arm stopped dead is thrown back at once; the rest of it takes a moment to know.
+        kick = 1.0 - (1.0 - min(t / 0.09, 1.0)) ** 3
+        heel = 1.0 - (1.0 - min(t / 0.22, 1.0)) ** 2
+        ta, tb = hit_arm(t), off_arm(t)
+        s_a, h_a = (s0.arm_l, s0.ham_l) if sgn > 0.0 else (s0.arm_r, s0.ham_r)
+        s_b, h_b = (s0.arm_r, s0.ham_r) if sgn > 0.0 else (s0.arm_l, s0.ham_l)
+        aa = lerp(s_a + (h_a,), ta, kick)
+        ab = lerp(s_b + (h_b,), tb, heel)
+        q = max(0.0, shudder(t - 1.02))
+        for land in lands:
+            q += 0.6 * shudder(t - land)
+        br = math.sin(TAU * (t - 1.2) / 0.8) * smr(t, 1.2, 1.45) * (1.0 - smr(t, L - 0.6, L))
+        tz, tp, ty, tx, tb_y = hips(t)
+        if sgn > 0.0:
+            sp.arm_l, sp.ham_l, sp.arm_r, sp.ham_r = aa[:3], aa[3] + 3.0 * q, ab[:3], ab[3]
+            sp.clav_l, sp.clav_r = shoulder_hit(t), shoulder_off(t)
+        else:
+            sp.arm_r, sp.ham_r, sp.arm_l, sp.ham_l = aa[:3], aa[3] + 3.0 * q, ab[:3], ab[3]
+            sp.clav_r, sp.clav_l = shoulder_hit(t), shoulder_off(t)
+        sp.clav_l = (sp.clav_l[0] + 3.0 * br, sp.clav_l[1])
+        sp.clav_r = (sp.clav_r[0] + 3.0 * br, sp.clav_r[1])
+        sp.pelvis = V(sgn * tx, tb_y * (0.4 if v > 0.0 else 1.0), tz + 0.012 * br - 0.018 * q)
+        sp.pelvis_q = rz(rad(sgn * ty)) @ rx(rad(tp)) @ ry(rad(-sgn * 3.0 * math.sin(math.pi * min(t / 1.4, 1.0))))
+        sa = torso(t)
+        sp.spine = (sa[0] + 3.0 * br + 3.0 * q, sgn * sa[1], sgn * sa[2])
+        sp.neck = (neck(t), -sgn * 5.0 * smr(t, 0.1, 0.4), 0.0)
+        sp.head = (head(t) + 2.0 * br, -sgn * 7.0 * smr(t, 0.1, 0.4), 0.0)
+        # The trunk has not heard yet.
+        w = 1.0 - heel
+        if w > 0.0:
+            keep_a, keep_b, keep_h = sp.arm_l, sp.arm_r, (sp.ham_l, sp.ham_r)
+            mix(sp, s0, w)
+            sp.arm_l, sp.arm_r = keep_a, keep_b
+            sp.ham_l, sp.ham_r = keep_h
+        rock = -16.0 * smr(t, 0.1, a_up) if t < a_up else 0.0
+        fta = foot(t, a0, fa[2], steps_a, 0.1, rock)
+        ftb = foot(t, b0, fb[2], steps_b, 0.09, 0.0)
+        # They start as the pose they met the guard in, a heel or a toe off the floor.
+        e = smr(t, 0.0, 0.12)
+        fta = foot_mix(fa, fta, e)
+        ftb = foot_mix(fb, ftb, e)
+        sp.foot_l, sp.foot_r = (fta, ftb) if sgn > 0.0 else (ftb, fta)
+        sp.root = V(rad(turn(t)), back(t), 0.0)
+        # And up into the next hoist.
+        if t > L - REEL_JOIN:
+            u = t - (L - REEL_JOIN)
+            mix(sp, slam_in(u, SLAM_IN), mj(u / REEL_JOIN), True)
         return sp
 
     return fn, L
+
+
+def reel(side, walking):
+    """Parried in the pound: `reel_wl`, `reel_wr` in stride, `reel_sl`, `reel_sr` standing,
+    each from the pose its hammer meets a guard in."""
+    pound_at = slam_walk if walking else slam_stand
+    hit = (HIT_L if side == "L" else HIT_R) - REEL_EARLY / SLAM_T
+    return reel_body(pound_at(hit % 1.0 * SLAM_T, SLAM_T), 1.0 if side == "L" else -1.0, SLAM_V if walking else 0.0, lambda t: 0.0)
+
+
+def reel_spinning():
+    """Parried in the spin: flat out, the left hammer stopped. The rest of it does not stop
+    at once: the body goes on round on what it had, its speed gone in 0.4 s, and comes back a
+    little. `root` x is that turn, as in the spin, and the game scales it by how fast the
+    spin was going."""
+    tn = spin_clock()
+    fn, L = spin(False)
+    s0 = fn(SPIN_A + SPIN_UP + 0.6, L)
+    top = tn.top
+
+    def turn(t):
+        return math.degrees(eased_off(t, top, 0.4)) - 18.0 * smr(t, 0.4, 1.1)
+
+    return reel_body(s0, 1.0, 0.0, turn)
 
 
 def stagger(dirn):
@@ -1254,6 +1435,8 @@ def turn(sgn):
 # --- Baking ---------------------------------------------------------------------------
 
 CLIPS = []
+# Under this the fastest joint is not moving to the eye, m/s.
+STILL = 0.2
 CHECK = ("head", "chest", "forearm.L", "forearm.R", "hammer.L", "hammer.R", "foot.L", "foot.R", "shin.L", "shin.R")
 
 
@@ -1272,8 +1455,13 @@ def make_clips():
     loop("slam_walk", slam_walk, SLAM_T)
     loop("slam_stand", slam_stand, SLAM_T)
     once("slam_in", (slam_in, SLAM_IN))
-    once("spin", spin())
-    once("reel", reel())
+    once("spin_w", spin(True))
+    once("spin_s", spin(False))
+    once("reel_wl", reel("L", True))
+    once("reel_wr", reel("R", True))
+    once("reel_sl", reel("L", False))
+    once("reel_sr", reel("R", False))
+    once("reel_o", reel_spinning())
     for d in "bflr":
         once("stagger_" + d, stagger(d))
     once("death_b", death_back())
@@ -1305,7 +1493,7 @@ def bake_clip(arm, name, fn, L, loop_):
     data = {}
     for pb in arm.pose.bones:
         data[pb.name] = []
-    roots, pelvs = [], []
+    roots, pelvs, rootm = [], [], []
     tracks = {}
     stretch = 0.0
     low = {"L": [], "R": []}
@@ -1315,6 +1503,7 @@ def bake_clip(arm, name, fn, L, loop_):
         ph = (f % n) / FPS if loop_ else t
         sp = fn(ph, L)
         s = solve(sp)
+        rootm.append(sp.root.copy())
         for b, q in s.q.items():
             data[b].append(q)
         for b in CHECK:
@@ -1327,6 +1516,18 @@ def bake_clip(arm, name, fn, L, loop_):
         stretch = max(stretch, (s.P["foot.L"] - sp.foot_l[0]).length, (s.P["foot.R"] - sp.foot_r[0]).length)
         roots.append(s.root_loc)
         pelvs.append(s.pelvis_loc)
+    # The longest it goes with nothing moving: the fastest joint, with root motion and
+    # the turn at a metre's reach counted in.
+    quick = []
+    for i in range(1, frames):
+        fast = max((pts[i] - pts[i - 1]).length for pts in tracks.values())
+        quick.append((fast + (rootm[i] - rootm[i - 1]).length) * FPS)
+    run = best = last = 0
+    for i, q in enumerate(quick):
+        run = run + 1 if q < STILL else 0
+        if run > best:
+            best, last = run, i
+    print("[still] %-12s slowest %.2f m/s; longest under %.2f m/s: %.2f s, to %.2f s" % (name, min(quick), STILL, best / FPS, last / FPS), flush=True)
     # The worst jolt in the clip: change of a joint's velocity in one frame.
     worst = (0.0, "", 0)
     for b, pts in tracks.items():
@@ -1380,16 +1581,17 @@ def bake_clip(arm, name, fn, L, loop_):
 
 def spin_report():
     tn = spin_clock()
-    fn, L = next((c[1], c[2]) for c in CLIPS if c[0] == "spin")
+    fn, L = next((c[1], c[2]) for c in CLIPS if c[0] == "spin_w")
     s = [("%.1f" % (i * 0.5), "%.0f" % tn.at(i * 0.5), "%.1f" % tn.speed(i * 0.5)) for i in range(int(L * 2) + 1)]
     print("[spin]  top speed %.2f rad/s; live %.2f .. %.2f s of %.2f; t, degrees, rad/s: %s" % (tn.top, SPIN_LIVE[0], SPIN_LIVE[1], L, " ".join("/".join(x) for x in s)), flush=True)
     a = [solve(fn(SPIN_LIVE[0] + i * 0.15, L)) for i in range(int((SPIN_LIVE[1] - SPIN_LIVE[0]) / 0.15))]
     r = [V(hammer_mid(x, "L").x, hammer_mid(x, "L").y, 0.0).length for x in a]
     z = [hammer_mid(x, "L").z for x in a]
     print("[spin]  left head out %.2f .. %.2f m, up %.2f .. %.2f m in the live window" % (min(r), max(r), min(z), max(z)), flush=True)
-    print("[spin]  ends %.3f m off the idle" % max((solve(fn(L, L)).P[b] - solve(idle(0.0, 6.0)).P[b]).length for b in CHECK), flush=True)
+    print("[spin]  ends %.3f m off slam_in at %.2f s" % (max((solve(fn(L, L)).P[b] - solve(slam_in(SPIN_JOIN, SLAM_IN)).P[b]).length for b in CHECK), SPIN_JOIN), flush=True)
     i0 = idle(0.0, 6.0)
-    fl, fr = spin_feet(i0.foot_l, i0.foot_r)
+    st = slam_walk(HIT_L * SLAM_T, SLAM_T)
+    fl, fr = spin_feet(i0.foot_l, i0.foot_r, st.foot_l, st.foot_r, SLAM_V)
     for side, f in (("left", fl), ("right", fr)):
         print("[spin]  %s foot down, up: %s" % (side, " ".join("%.2f-%.2f" % (x[0], min(x[1], L)) for x in f.stances)), flush=True)
     far, near, quick = 0.0, 9.0, 0.0

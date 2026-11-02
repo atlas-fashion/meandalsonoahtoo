@@ -997,6 +997,9 @@ const LOCOMOTION: Array[StringName] = [&"idle", &"run", &"jump"]
 
 var _attacking := false
 var _next_attack := 0
+## A cut clicked for while the last still bites: held, as the axe's and the spear's
+## are, and begun the moment the blade stops biting (`_take_queued_attack`, note 151).
+var _attack_queued := false
 ## True only during the active frames of a swing.
 var _hit_window_open := false
 ## Bodies already hit by the current swing, so one swing deals damage once.
@@ -1021,6 +1024,8 @@ var _held_potion: Node3D
 
 ## Latest moment a jump will still be honoured after leaving the ground.
 var _coyote_until := 0.0
+## A jump pressed in the air, spent on the first tick there is a floor (note 151).
+var _jump_queued := false
 ## Ghost mode: whether it is on, the bar (1 full, 0 empty), and whether the
 ## key has to be let go before it can start again (after running the bar dry,
 ## or after it was held through a menu, a scene, a death or a lost focus --
@@ -1868,6 +1873,8 @@ func _physics_process(delta: float) -> void:
 	if not (is_hidden() or climbing or restrained_by != null or latched_to != null or in_cutscene):
 		_ghost_resumed = frame - _ghost_frame > 1
 		_ghost_frame = frame
+	else:
+		_jump_queued = false
 	if is_hidden() or climbing or restrained_by != null:
 		# Held: the holder places them every frame (note 96).
 		velocity = Vector3.ZERO
@@ -1890,6 +1897,11 @@ func _physics_process(delta: float) -> void:
 			velocity += get_gravity() * delta
 		move_and_slide()
 		return
+	# Jump pressed with nothing to jump off: held for the landing (note 151). Read
+	# here so a press in the air during a dash or a dive counts as one.
+	var jump_pressed := Coop.just_pressed(self, &"jump") and not ui_open and not remote_view
+	if jump_pressed and not is_on_floor() and _now() >= _coyote_until and not _swimming and not _ghosting:
+		_jump_queued = true
 	# The berserk roar and the throw's wind-up: stopped dead (axe.gd).
 	if _axe_planted():
 		velocity.x = 0.0
@@ -1965,8 +1977,13 @@ func _physics_process(delta: float) -> void:
 	# hand out a second jump in mid-air.
 	if is_on_floor():
 		_coyote_until = _now() + coyote_time
-	if not ui_open and not down and not _ghosting and not remote_view \
-			and Coop.just_pressed(self, &"jump") and (_now() < _coyote_until or _swimming):
+	var can_jump := not ui_open and not down and not _ghosting and not remote_view
+	# Nothing to spend it on any more (a dive's landing, a blow, ghost mode, a menu):
+	# forgotten, as the spear's held click is.
+	if not can_jump:
+		_jump_queued = false
+	if can_jump and (jump_pressed or _jump_queued) and (_now() < _coyote_until or _swimming):
+		_jump_queued = false
 		velocity.y = jump_velocity
 		_coyote_until = 0.0
 		_jump_kick = 1.0
@@ -2234,9 +2251,13 @@ func _start_attack() -> void:
 	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
 			or _ghosting or is_drinking() or is_flinching():
 		return
-	# A new stroke may cut into the last one's recovery, so a combo flows.
+	# A new stroke may cut into the last one's recovery, so a combo flows. Clicked
+	# for sooner than that it is not dropped but held, and begun the moment it may
+	# (`_take_queued_attack`, note 151).
 	if _attacking and _pose_time < _bite_end():
+		_attack_queued = true
 		return
+	_attack_queued = false
 	_attacking = true
 	_stroke_damage = attack_damage * weapon_damage_scale(&"sword")
 	_hit_this_swing.clear()
@@ -2257,6 +2278,18 @@ func _start_attack() -> void:
 		facing = facing.normalized()
 		velocity.x += facing.x * attack_lunge
 		velocity.z += facing.z * attack_lunge
+
+
+## The held click, begun the tick the stroke stops biting -- if the sword is
+## still in hand and free, and they have not gone for the guard; otherwise
+## forgotten. Clicks held like this come exactly a stroke apart, as the axe's and
+## the spear's do. Whatever ended the stroke early forgets it too.
+func _take_queued_attack() -> void:
+	if not _attacking or held_item() != &"sword" or not _spear_free() or in_cutscene or ui_open \
+			or remote_view or wheel_open or _action_held(&"block"):
+		_attack_queued = false
+	elif _pose_time >= _bite_end():
+		_start_attack()
 
 
 ## When the stroke in progress stops biting -- the earliest a new one may begin.
@@ -2290,6 +2323,7 @@ func _start_spin() -> void:
 	# blade is). Only a spin still turning refuses another.
 	if _pose_kind == &"spin" and not _spin_released():
 		return
+	_attack_queued = false
 	_attacking = true
 	_stroke_damage = attack_damage * weapon_damage_scale(&"sword")
 	_trail_on = false
@@ -2752,6 +2786,8 @@ func _update_pose(delta: float) -> void:
 		return
 	var step := delta / attack_time_scale if _pose_kind in ATTACK_POSES else delta
 	_pose_time += step
+	if _attack_queued:
+		_take_queued_attack()
 	var length := SWING_END
 	if _pose_kind == &"slam":
 		length = slam_recover_time + SLAM_STRIKE
