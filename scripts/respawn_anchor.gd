@@ -1,15 +1,18 @@
 extends Node3D
 
-## A respawn anchor: a rune-cut obelisk with a crystal turning over it, set in
-## a dead end. Aim at it and press E ("interact") to attune it; the player then
-## rises here when they die, until another anchor is attuned. Only one is ever
-## active -- `maze.gd` keeps track (`_on_anchor_attuned`) and switches the old
-## one off. Any anchor can be attuned again at any time, the active one
-## included: every attuning saves the map as it is now (what a death keeps),
-## and the player always rises at the one attuned last (2026-10-11).
+## A respawn beacon (once "anchor"): a rune-cut obelisk with a crystal turning
+## over it, at the back of a holding cell (holding_cell.gd, note 154). It starts
+## RED. Aim at it and HOLD E ("interact") for `CLAIM_TIME` to turn it gold;
+## letting go, looking or walking away, or taking any damage meanwhile stops it
+## and the hold starts again from nothing. Once gold it stays gold, and the
+## player rises here when they die, until another beacon is claimed or chosen.
+## Only one is ever active -- `maze.gd` keeps track (`_on_anchor_attuned`) and
+## dims the old one. A gold beacon is chosen again with a plain press of E, the
+## active one included: every choosing saves the map as it is now (what a death
+## keeps), and the player always rises at the one chosen last (2026-10-11).
 ##
-## Asleep it glows faintly cold; attuned the crystal and runes blaze teal and it
-## gives off light (one light, on the active anchor only).
+## Red it glows dull ember; gold it glows warm, and the active one blazes gold
+## and gives off light (one light, on the active beacon, or the one being held).
 ##
 ## Local +Z points out of the dead end, towards the corridor: the way the player
 ## faces when they rise here (`spawn_point`, `spawn_yaw`).
@@ -17,17 +20,25 @@ extends Node3D
 signal attuned(anchor: Node3D)
 
 const REACH := 2.4
-const TEAL := Color(0.4, 0.9, 1.0)
-const ASLEEP := Color(0.35, 0.5, 0.6)
+const RED := Color(1.0, 0.16, 0.08)
+const GOLD := Color(1.0, 0.72, 0.22)
+## How long E is held to turn it gold.
+const CLAIM_TIME := 3.0
 ## Where the player rises: this far out in front of it.
 const RISE_AHEAD := 1.6
 const CRYSTAL_HEIGHT := 3.05
 
 var active := false
+## Gold: claimed, so the player can rise here.
+var claimed := false
 
 var _prompt: Interact.Prompt
 var _player: Node3D
 var _near := false
+## The hold under way: who is holding, how long so far, their health as it began.
+var _holder: Node3D
+var _hold := 0.0
+var _holder_health := 0.0
 var _crystal: MeshInstance3D
 var _crystal_mat: StandardMaterial3D
 var _rune_mat: StandardMaterial3D
@@ -38,7 +49,7 @@ var _clock := 0.0
 func _ready() -> void:
 	_clock = randf() * 10.0
 	_build()
-	_prompt = Interact.prompt("E   Attune", Vector3(0.0, 1.6, 0.6))
+	_prompt = Interact.prompt("Hold E   Claim the beacon", Vector3(0.0, 1.6, 0.6))
 	add_child(_prompt)
 	_apply_look()
 
@@ -58,10 +69,19 @@ func set_active(on: bool) -> void:
 	_apply_look()
 
 
+## Gold or red, as a save has it.
+func set_claimed(on: bool) -> void:
+	claimed = on
+	_cancel_hold()
+	_apply_look()
+
+
 func _process(delta: float) -> void:
 	_clock += delta
+	# How far a hold has got, 0 to 1: the crystal turns from red to gold with it.
+	var k := _hold / CLAIM_TIME
 	if _crystal != null:
-		_crystal.rotation.y = _clock * (1.6 if active else 0.4)
+		_crystal.rotation.y = _clock * (1.6 if active else 0.4 + 3.0 * k)
 		_crystal.position.y = CRYSTAL_HEIGHT + sin(_clock * 1.7) * (0.08 if active else 0.03)
 	if active and _crystal_mat != null:
 		_crystal_mat.emission_energy_multiplier = 4.0 + sin(_clock * 3.0) * 0.8
@@ -70,11 +90,26 @@ func _process(delta: float) -> void:
 	# Co-op: whoever is nearest, or in a scene with it (coop.gd `user_for`).
 	_player = Coop.user_for(self, _player)
 	if _player == null:
+		_cancel_hold()
 		return
 	var to := _player.global_position - global_position
 	_near = Vector2(to.x, to.z).length() <= REACH and absf(to.y) < 2.0 \
-		and Interact.looked_at(self, 3.4, 0.1, [], _player)
-	_prompt.text = "E   Save progress" if active else "E   Attune"
+		and Interact.looked_at(self, 3.4, 0.1, [], _player) \
+		and not _player.get("in_cutscene") and _player.get("_dead") != true
+	if _holder != null:
+		if _holder != _player or not _near or not is_instance_valid(_holder) \
+				or not Coop.held(_holder, &"interact"):
+			_cancel_hold()
+		else:
+			_hold += delta
+			_show_hold()
+			if _hold >= CLAIM_TIME:
+				_claim()
+	if claimed:
+		_prompt.text = "E   Save progress" if active else "E   Rise here"
+	else:
+		_prompt.text = "Hold E   Claim the beacon"
+	_prompt.progress = _hold / CLAIM_TIME if _holder != null else -1.0
 	_prompt.visible = _near
 	_prompt.player = _player
 
@@ -85,25 +120,85 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _player == null or _player.get("in_cutscene") or _player.get("_dead"):
 		return
 	get_viewport().set_input_as_handled()
+	if not claimed:
+		_start_hold(_player)
+		return
 	_near = false
 	_prompt.visible = false
 	attuned.emit(self)
 	# A burst of its light, from the crystal.
 	if _player.has_method("_guard_flash"):
-		_player._guard_flash(_crystal.global_position, TEAL, true)
+		_player._guard_flash(_crystal.global_position, GOLD, true)
 	# No announcement (2026-10-15, at the user's request): the burst of light
 	# and the anchor waking are the only sign.
+
+
+func _start_hold(by: Node3D) -> void:
+	_cancel_hold()
+	_holder = by
+	_hold = 0.0
+	if by.has_signal("health_changed"):
+		by.connect("health_changed", _on_holder_health)
+	_holder_health = float(by.get("health"))
+
+
+## Any damage stops the hold, and it starts again from nothing.
+func _on_holder_health(current: float, _maximum: float) -> void:
+	if current < _holder_health - 0.001:
+		_cancel_hold()
+		return
+	_holder_health = current
+
+
+func _cancel_hold() -> void:
+	if _holder != null and is_instance_valid(_holder) \
+			and _holder.is_connected("health_changed", _on_holder_health):
+		_holder.disconnect("health_changed", _on_holder_health)
+	var was := _holder != null
+	_holder = null
+	_hold = 0.0
+	if _prompt != null:
+		_prompt.progress = -1.0
+	if was:
+		_apply_look()
+
+
+func _claim() -> void:
+	var by := _holder
+	_cancel_hold()
+	claimed = true
+	_near = false
+	_prompt.visible = false
+	attuned.emit(self)
+	if by != null and by.has_method("_guard_flash"):
+		by._guard_flash(_crystal.global_position, GOLD, true)
+
+
+## Red running into gold as the hold goes on, its light coming up.
+func _show_hold() -> void:
+	var k := clampf(_hold / CLAIM_TIME, 0.0, 1.0)
+	var colour := RED.lerp(GOLD, k)
+	_crystal_mat.albedo_color = colour.darkened(0.4)
+	_crystal_mat.emission = colour
+	_crystal_mat.emission_energy_multiplier = lerpf(0.9, 4.0, k)
+	_rune_mat.emission = colour
+	_rune_mat.emission_energy_multiplier = lerpf(0.5, 2.5, k)
+	_light.visible = true
+	_light.light_color = colour
+	_light.light_energy = 3.0 * k
 
 
 func _apply_look() -> void:
 	if _crystal_mat == null:
 		return
-	var colour := TEAL if active else ASLEEP
+	var colour := GOLD if claimed else RED
 	_crystal_mat.albedo_color = colour.darkened(0.4)
 	_crystal_mat.emission = colour
-	_crystal_mat.emission_energy_multiplier = 4.0 if active else 0.5
+	_crystal_mat.emission_energy_multiplier = 4.0 if active else (1.4 if claimed else 0.9)
 	_rune_mat.emission = colour
-	_rune_mat.emission_energy_multiplier = 2.5 if active else 0.25
+	_rune_mat.emission_energy_multiplier = 2.5 if active else (0.8 if claimed else 0.5)
+	_light.light_color = GOLD
+	_light.light_energy = 3.0
 	_light.visible = active
 
 
@@ -175,7 +270,7 @@ func _build() -> void:
 	_crystal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	_light = OmniLight3D.new()
-	_light.light_color = TEAL
+	_light.light_color = GOLD
 	_light.light_energy = 3.0
 	_light.omni_range = 7.0
 	_light.shadow_enabled = false

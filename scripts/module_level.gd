@@ -1413,7 +1413,10 @@ static func place_doors(parent: Node3D, out: Built) -> Node3D:
 	if not out.spawn_door.is_empty():
 		var spawn_cell: Vector2i = out.spawn_door["cell"]
 		var spawn_step: Vector2i = ModuleMaze.DIRS[int(out.spawn_door["side"])]
-		wanted.append([out.cells[spawn_cell], spawn_step])
+		# The brick kit shuts the spawn with a holding cell's gate instead (note
+		# 154, maze.gd `_place_holding_cells`).
+		if not brick:
+			wanted.append([out.cells[spawn_cell], spawn_step])
 		seen[_door_edge(spawn_cell, spawn_step)] = true
 	for key in out.cells:
 		var cell: ModuleMaze.Cell = out.cells[key]

@@ -877,8 +877,11 @@ func _build_module_level() -> void:
 	# Doors first: every door is flanked by a pair of torches, which
 	# place_torches hangs from the list place_doors leaves in _module_level.
 	var doors: Node3D = builder.place_doors(holder, _module_level)
-	# The dead end the player wakes in is a jail cell, its door the one above.
-	load("res://scripts/jail_cell.gd").build(holder, _module_level, module_torch_energy)
+	# The dead end the player wakes in is a jail cell, its door the one above. On
+	# the brick kit it is a holding cell with a gate instead (note 154), built
+	# with the others in `_place_holding_cells`.
+	if not load("res://scripts/module_level.gd").brick:
+		load("res://scripts/jail_cell.gd").build(holder, _module_level, module_torch_energy)
 	var torches: Node3D = builder.place_torches(holder, _module_level,
 		module_torch_density * detail, module_torch_energy)
 	var windows: Node3D = builder.place_windows(
@@ -1279,7 +1282,7 @@ func _indices(nodes: Array[Node], test: Callable) -> Array[int]:
 
 
 func save_state() -> Dictionary:
-	var data := {"version": 1, "seed": _active_seed, "boss_defeated": boss_defeated,
+	var data := {"version": 2, "seed": _active_seed, "boss_defeated": boss_defeated,
 		"taken_to_boss": taken_to_boss, "zone": zone, "zone_name": zone_name(), "zones_cleared": zones_cleared.duplicate()}
 	var player := get_tree().get_first_node_in_group("player")
 	if player != null and player.has_method("save_state"):
@@ -1290,6 +1293,17 @@ func save_state() -> Dictionary:
 		data["player2"] = second.call("save_state")
 		data["coop"] = true
 	data["anchor"] = _anchors.find(active_anchor()) if active_anchor() != null else -1
+	# Note 154: the beacons claimed (gold) and the holding cells opened, by index.
+	var claimed: Array[int] = []
+	for i in _anchors.size():
+		if is_instance_valid(_anchors[i]) and _anchors[i].get("claimed") == true:
+			claimed.append(i)
+	data["beacons"] = claimed
+	var opened: Array[int] = []
+	for i in _holding_cells.size():
+		if is_instance_valid(_holding_cells[i]) and _holding_cells[i].get("is_open") == true:
+			opened.append(i)
+	data["cells_open"] = opened
 	var map = _explore_map_node()
 	if map != null:
 		data["map"] = map.snapshot()
@@ -1339,9 +1353,11 @@ func restore_world(data: Dictionary) -> void:
 			released_hands.append(StringName(h))
 	zones_cleared.assign(data.get("zones_cleared", []))
 	var doors := _nodes_with("res://scripts/wood_door.gd")
+	# Before version 2 the spawn's wooden door was door 0 (note 154: a gate now).
+	var shift := 1 if int(data.get("version", 1)) < 2 and load("res://scripts/module_level.gd").brick else 0
 	for i in data.get("doors", []):
-		if int(i) < doors.size():
-			doors[int(i)].call("restore_opened")
+		if int(i) - shift >= 0 and int(i) - shift < doors.size():
+			doors[int(i) - shift].call("restore_opened")
 	var cages := _nodes_with("res://scripts/bone_cage.gd")
 	for i in data.get("cages", []):
 		if int(i) < cages.size():
@@ -1355,7 +1371,17 @@ func restore_world(data: Dictionary) -> void:
 			_manholes[int(i)].call("set_open_now")
 	if _surgery != null and data.has("surgery"):
 		_surgery.call("restore_state", data["surgery"])
-	var a := int(data.get("anchor", -1))
+	# Note 154: cells opened stand open and empty (before `_populate` stocks them),
+	# and the beacons claimed are gold. A save from before has neither, and its
+	# anchor numbers name other places: the player starts from the start.
+	var beacons_saved := data.has("beacons")
+	for i in data.get("cells_open", []):
+		if int(i) < _holding_cells.size():
+			_holding_cells[int(i)].call("swing_open", true)
+	for i in data.get("beacons", []):
+		if int(i) < _anchors.size():
+			_anchors[int(i)].call("set_claimed", true)
+	var a := int(data.get("anchor", -1)) if beacons_saved or not load("res://scripts/module_level.gd").brick else -1
 	if a >= 0 and a < _anchors.size():
 		for other in _anchors:
 			other.set_active(false)
@@ -1446,6 +1472,9 @@ func _place_anchors(holder: Node3D) -> void:
 	_anchors.clear()
 	_active_anchor = null
 	if anchor_count <= 0 or _module_level == null:
+		return
+	# The brick kit's beacons stand in the holding cells (note 154).
+	if load("res://scripts/module_level.gd").brick and holding_cell_count > 0:
 		return
 	var spots := _plain_dead_ends()
 	if spots.is_empty():
@@ -1566,65 +1595,128 @@ func _plain_dead_ends() -> Array[Dictionary]:
 	return spots
 
 
-## --- Holding cells (note 153) --------------------------------------------------------
+## --- Holding cells (notes 153, 154) --------------------------------------------------
 ##
 ## The user: "Make random jail cells in the maze that contain 2 or 3 random proels
-## of different types." Up to `holding_cell_count` dead ends, picked at random and
-## at least `holding_cell_gap` apart, are shut with the prison's gate
-## (holding_cell.gd). Each draws 2 or 3 different types from CONTAINED, so every
-## skeleton type counts as a proel and a new type added there turns up in the
-## cells with no other change. The prisoners stay caged until every type in their
-## cell is out of containment, then the gate opens and they are loose subjects.
+## of different types." Then (note 154): "Make many more cells, but make more of
+## them in strategic places along the route through the maze. the player should be
+## able to open said cells at any time. the respawn beacons should be inside the
+## cells with the proels." Up to `holding_cell_count` dead ends are shut with the
+## prison's gate (holding_cell.gd), each with a red beacon at the back
+## (respawn_anchor.gd) and 2 or 3 different types from CONTAINED in front of it, so
+## every skeleton type counts as a proel and a new type added there turns up in the
+## cells with no other change. E opens a gate at any time; the prisoners come out
+## as loose subjects. The starting cell is one too, empty but for its beacon.
+##
+## Where: first the dead ends nearest the user's five beacon marks on the fixed
+## seed (`anchor_marks`, where the anchors stood), then those on or just off the
+## main route (`_main_route`) at `holding_cell_route_gap`, then the rest of the
+## maze at `holding_cell_gap`.
 
-@export var holding_cell_count := 10
+@export var holding_cell_count := 24
 @export var holding_cell_gap := 30.0
+## Along the main route a cell may stand this near the next.
+@export var holding_cell_route_gap := 16.0
+## A dead end at most this many cells' walk from the main route counts as on it.
+@export var holding_cell_route_reach := 6
 const HOLDING_CELL := preload("res://scripts/holding_cell.gd")
 var _holding_cells: Array[Node3D] = []
+## The player's starting cell, also in `_holding_cells` (its first).
+var _start_cell: Node3D
 
 
 func _place_holding_cells(holder: Node3D, detail: float) -> void:
 	_holding_cells.clear()
+	_start_cell = null
 	if holding_cell_count <= 0 or not load("res://scripts/module_level.gd").brick:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _active_seed ^ 0x6a61696c
 	var passage: Dictionary = _module_level.get_meta("exit_passage", {})
 	var cells_script = load("res://scripts/module_level.gd").ModuleMaze
-	var anchored := {}
-	for a in _anchors:
-		anchored[world_to_tile((a as Node3D).global_position)] = true
+	var parent := Node3D.new()
+	parent.name = "HoldingCells"
+	holder.add_child(parent)
+	# The starting cell first: nobody in it but its beacon. Its tiles stay open
+	# (the start's reachability and spawn distances are measured from them).
+	if not _module_level.spawn_door.is_empty():
+		var step: Vector2i = load("res://scripts/module_level.gd").ModuleMaze.DIRS[int(_module_level.spawn_door["side"])]
+		_start_cell = HOLDING_CELL.place(parent, _module_level, _module_level.spawn_door["cell"],
+			Vector3(float(step.x), 0.0, float(step.y)), [] as Array[StringName], self, module_torch_energy, true)
+		_holding_cells.append(_start_cell)
+		_add_beacon(_start_cell)
 	var spots: Array[Dictionary] = []
 	for s in _plain_dead_ends():
 		var out: Vector3 = s["out"]
 		var ahead = _module_level.cells.get(Vector2i(s["cell"]) + Vector2i(roundi(out.x), roundi(out.z)))
 		if ahead == null or ahead.room >= 0 or ahead.court or passage.has(s["cell"]):
 			continue
-		# It hangs its own torch by the gate; a wall torch would crowd that.
+		# A wall torch stands on a pilaster in the middle of a wall. On the back wall
+		# it would be in the beacon's plinth; on a side wall the prisoner on that
+		# side stands clear of it and the cell's own torch goes on the other wall.
+		var pilaster := 0
 		if _module_level.torch_cells.has(s["cell"]):
-			continue
-		# An anchor stands 1.1 m back from the middle: a tile or so off it.
-		var back := world_to_tile(_module_level.to_world(s["cell"]) - out * 1.1)
-		if anchored.has(back):
-			continue
+			var step: Vector2i = cells_script.DIRS[int(_module_level.torch_cells[s["cell"]])]
+			var wall := Vector3(float(step.x), 0.0, float(step.y))
+			if wall.dot(out) < -0.5:
+				continue
+			pilaster = 1 if wall.dot(Vector3.UP.cross(out)) > 0.0 else -1
+		s["pilaster"] = pilaster
 		spots.append(s)
 	for i in range(spots.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
 		var tmp: Dictionary = spots[i]
 		spots[i] = spots[j]
 		spots[j] = tmp
-	var parent := Node3D.new()
-	parent.name = "HoldingCells"
-	holder.add_child(parent)
+	var off_route := _route_distance(_main_route())
+	var near_route := spots.filter(func(s: Dictionary) -> bool:
+		return int(off_route.get(s["cell"], 999)) <= holding_cell_route_reach)
+	# Nearest the route first; the shuffle above breaks ties.
+	for i in near_route.size():
+		near_route[i]["order"] = int(off_route.get(near_route[i]["cell"], 999)) * 1000 + i
+	near_route.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["order"]) < int(b["order"]))
+	var chosen: Array[Dictionary] = []
 	var taken: Array[Vector3] = [_module_level.spawn]
-	for s in spots:
-		if _holding_cells.size() >= holding_cell_count:
-			break
+	var marked := 0
+	# Where the user put the beacons on the fixed seed: the free dead end nearest each.
+	if _active_seed == ANCHOR_MARKS_SEED:
+		for mark in anchor_marks:
+			var best: Dictionary = {}
+			var best_d := INF
+			for s in spots:
+				if chosen.has(s):
+					continue
+				var at: Vector3 = _module_level.to_world(s["cell"])
+				var d := Vector2(at.x - mark.x, at.z - mark.y).length()
+				if d < best_d:
+					best_d = d
+					best = s
+			if not best.is_empty():
+				chosen.append(best)
+				taken.append(_module_level.to_world(best["cell"]))
+				marked += 1
+	var on_route := 0
+	for round_i in 2:
+		var pass_spots: Array = near_route if round_i == 0 else spots
+		var gap := holding_cell_route_gap if round_i == 0 else holding_cell_gap
+		for s: Dictionary in pass_spots:
+			if chosen.size() >= holding_cell_count:
+				break
+			if chosen.has(s):
+				continue
+			var at: Vector3 = _module_level.to_world(s["cell"])
+			if taken.any(func(p: Vector3) -> bool: return Vector2(at.x - p.x, at.z - p.z).length() < gap):
+				continue
+			taken.append(at)
+			chosen.append(s)
+			if round_i == 0:
+				on_route += 1
+	for s in chosen:
 		var at: Vector3 = _module_level.to_world(s["cell"])
-		if taken.any(func(p: Vector3) -> bool: return Vector2(at.x - p.x, at.z - p.z).length() < holding_cell_gap):
-			continue
-		taken.append(at)
-		_holding_cells.append(HOLDING_CELL.place(parent, _module_level, s["cell"], s["out"],
-			_cell_roster(rng), self, module_torch_energy if rng.randf() < detail else 0.0))
+		var c: Node3D = HOLDING_CELL.place(parent, _module_level, s["cell"], s["out"],
+			_cell_roster(rng), self, module_torch_energy if rng.randf() < detail else 0.0, false, int(s["pilaster"]))
+		_holding_cells.append(c)
+		_add_beacon(c)
 		# Nothing spawns, wanders or patrols behind the bars.
 		var mid := world_to_tile(at)
 		for dz in range(-2, 3):
@@ -1632,7 +1724,81 @@ func _place_holding_cells(holder: Node3D, detail: float) -> void:
 				var t := mid + Vector2i(dx, dz)
 				if t.x >= 0 and t.y >= 0 and t.x < tiles and t.y < tiles:
 					grid[t.y][t.x] = WALL
-	print("[cells] %d holding cells, of %d free dead ends" % [_holding_cells.size(), spots.size()])
+	print("[cells] %d holding cells and the start (%d at the beacon marks, %d more on the route), of %d free dead ends, %d of them by the route"
+		% [chosen.size(), marked, on_route, spots.size(), near_route.size()])
+
+
+## A beacon at the back of `cell`, red until claimed.
+func _add_beacon(cell: Node3D) -> void:
+	var anchor := Node3D.new()
+	anchor.set_script(load("res://scripts/respawn_anchor.gd"))
+	anchor.name = "Anchor%d" % _anchors.size()
+	cell.add_child(anchor)
+	# The cell's +Z is its way out, as the beacon's.
+	anchor.position = Vector3(0.0, 0.0, -HOLDING_CELL.BEACON_BACK)
+	anchor.connect(&"attuned", _on_anchor_attuned)
+	cell.set("beacon", anchor)
+	_anchors.append(anchor)
+
+
+## The main route through the maze: every corridor cell on the shortest walk from
+## the start to each room (the containment blocks, the surgery, the morgue, the
+## chest rooms) and to the boss. A set of cells.
+func _main_route() -> Dictionary:
+	var cells_script = load("res://scripts/module_level.gd").ModuleMaze
+	if _module_level.spawn_door.is_empty():
+		return {}
+	var start: Vector2i = _module_level.spawn_door["cell"]
+	var came := {start: start}
+	var queue: Array[Vector2i] = [start]
+	var head := 0
+	while head < queue.size():
+		var at: Vector2i = queue[head]
+		head += 1
+		var here = _module_level.cells[at]
+		for side: int in cells_script.ORDER:
+			if not (here.open & side):
+				continue
+			var to: Vector2i = at + cells_script.DIRS[side]
+			if not _module_level.cells.has(to) or came.has(to):
+				continue
+			came[to] = at
+			queue.append(to)
+	var route := {}
+	for room in _module_level.rooms:
+		var at: Vector2i = room["centre"]
+		if not came.has(at):
+			continue
+		while at != start:
+			if _module_level.cells[at].room < 0:
+				route[at] = true
+			at = came[at]
+	route[start] = true
+	return route
+
+
+## Cells' walk to the nearest cell of `route`, for every cell reached.
+func _route_distance(route: Dictionary) -> Dictionary:
+	var cells_script = load("res://scripts/module_level.gd").ModuleMaze
+	var dist := {}
+	var queue: Array[Vector2i] = []
+	for key: Vector2i in route:
+		dist[key] = 0
+		queue.append(key)
+	var head := 0
+	while head < queue.size():
+		var at: Vector2i = queue[head]
+		head += 1
+		var here = _module_level.cells[at]
+		for side: int in cells_script.ORDER:
+			if not (here.open & side):
+				continue
+			var to: Vector2i = at + cells_script.DIRS[side]
+			if not _module_level.cells.has(to) or dist.has(to):
+				continue
+			dist[to] = int(dist[at]) + 1
+			queue.append(to)
+	return dist
 
 
 ## Two or three different types, from every type there is.
@@ -1647,13 +1813,6 @@ func _cell_roster(rng: RandomNumberGenerator) -> Array[StringName]:
 func _stock_holding_cells() -> void:
 	for c in _holding_cells:
 		c.call("stock")
-
-
-## A type was let out: any cell now holding only released types opens.
-func _open_holding_cells() -> void:
-	for c in _holding_cells:
-		if c.call("all_let_out"):
-			c.call("swing_open")
 
 
 ## --- The Remnant and its hiding places (2026-10-08) --------------------------------
@@ -5559,7 +5718,6 @@ func release_hand(hand: StringName, count: int) -> void:
 	_spawn_loose(hand, loose_per_type)
 	_spawn_collectors()
 	update_surgery_bolts()
-	_open_holding_cells()
 
 
 ## A prisoner come out of its cell's back exit into the maze (note 122): a

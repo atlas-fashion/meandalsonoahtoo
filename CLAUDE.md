@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 153), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 154), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -312,7 +312,7 @@ and scouts (a lone scout is `scout_share` of the encounters, note 127).
   swaps back to the old Tripo tunnel modules for A/B.
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
-  (`zone_gate.gd`), anchors (`respawn_anchor.gd`), holding cells (`holding_cell.gd`, jail cells in dead ends with 2 or 3 caged proels of different types, note 153), hiding spots
+  (`zone_gate.gd`), respawn beacons (`respawn_anchor.gd`, inside the holding cells on the brick kit, note 154), holding cells (`holding_cell.gd`, jail cells in dead ends with 2 or 3 caged proels of different types and a beacon, opened with E, the starting cell one too; notes 153, 154), hiding spots
   (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd` + `surgeon_boss.gd`, notes 94-105; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
@@ -570,6 +570,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 150 | 2026-11-01 | The Proel builders' blows have weight, same clocks: a 1.6 s hoist and a hang, a 0.3 s drive at 30 m/s, the body going on down past a hammer held on the floor (`pin`), a shudder; the spin a 1.9 s coil, then three turns at 2 a second, the chest and hammers worked out on springs behind the hips (`Trail`), riding a tilted circle, the left foot pivoting, the right stamping (`Foot`), carried past the end and back; every other clip byte for byte identical | [docs/notes/150-proel-builders-weight.md](docs/notes/150-proel-builders-weight.md) |
 | 152 | 2026-11-01 | Sandbox: a noclip switch (`Sandbox.noclip`; player.gd `_update_noclip`, `_fly`: flight the way the view points, Space / Ctrl, Shift x3; solid for scenes and death; switched off in the rock it goes to the nearest floor, `land_from_noclip`); the menu's columns scroll inside a panel kept on screen (the UI is 720 high at any resolution) | [docs/notes/152-sandbox-noclip-and-a-menu-that-fits.md](docs/notes/152-sandbox-noclip-and-a-menu-that-fits.md) |
 | 153 | 2026-11-02 | Holding cells: 10 dead ends shut with the prison's gate (`holding_cell.gd`, maze.gd `_place_holding_cells`), each holding 2 or 3 different types from all of `CONTAINED`, `caged` as in a block; a cell opens once every type in it is out of containment and its prisoners go loose; nothing saved, open follows from `released_hands`; the layout unchanged; 74.1 -> 72.9 fps | [docs/notes/153-holding-cells.md](docs/notes/153-holding-cells.md) |
+| 154 | 2026-11-03 | Holding cells: 24 plus the start (was 10), at the old beacon marks and along the main route (`_main_route`), side-wall-torch dead ends allowed; E opens a gate at any time (no containment rule); a red beacon in every cell, held E 3 s turns it gold, any damage resets it, a gold ring round the crosshair; the starting cell is one (no proels, its bed moved aside); opened cells and gold beacons saved (version 2) | [docs/notes/154-holding-cells-with-beacons.md](docs/notes/154-holding-cells-with-beacons.md) |
 
 ## Notes by source file
 
@@ -616,21 +617,21 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hand_torch.gd`: 24, 29
 - `scripts/held_potion.gd`: 6.19, 130
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
-- `scripts/holding_cell.gd`: 153
-- `scripts/hud.gd`: 6.19, 24, 79, 84
-- `scripts/interact.gd`: 6.18, 79
+- `scripts/holding_cell.gd`: 153, 154
+- `scripts/hud.gd`: 6.19, 24, 79, 84, 154
+- `scripts/interact.gd`: 6.18, 79, 154
 - `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133
 - `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111, 130
 - `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130, 144
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
 - `scripts/item_icon.gd`: 6.19, 77, 84, 111, 130
 - `scripts/item_slot.gd`: 6.19, 30
-- `scripts/jail_cell.gd`: 12, 153
+- `scripts/jail_cell.gd`: 12, 153, 154
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
@@ -647,12 +648,12 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/rat_control.gd`: 77, 78, 79, 143
 - `scripts/rat_look.gd`: 78
 - `scripts/rat_model.gd`: 77
-- `scripts/respawn_anchor.gd`: 8b, 32, 79
+- `scripts/respawn_anchor.gd`: 8b, 32, 79, 154
 - `scripts/robot_rat.gd`: 77
 - `scripts/save_system.gd`: 19, 60, 79, 131
 - `scripts/sandbox.gd`: 60, 68, 152
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130, 152
-- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152
+- `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
 - `scripts/settings_panel.gd`: 19, 46, 80, 112

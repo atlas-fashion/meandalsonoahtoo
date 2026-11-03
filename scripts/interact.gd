@@ -16,6 +16,9 @@ class Prompt extends Node3D:
 	var text := ""
 	## Co-op: the player it is up for (their HUD shows it); null = whoever.
 	var player: Node = null
+	## A hold under way (a beacon's claiming, note 154), 0 to 1: the HUD rings
+	## the crosshair with it. Below 0, none.
+	var progress := -1.0
 
 	func _ready() -> void:
 		add_to_group(GROUP)

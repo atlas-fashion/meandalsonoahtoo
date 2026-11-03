@@ -348,7 +348,7 @@ func destinations() -> Array:
 	for i in anchors.size():
 		var a = anchors[i]
 		if is_instance_valid(a) and a.has_method("spawn_point"):
-			out.append(["Anchor %d" % (i + 1), a.spawn_point(), float(a.spawn_yaw())])
+			out.append(["Beacon %d" % (i + 1), a.spawn_point(), float(a.spawn_yaw())])
 	return out
 
 

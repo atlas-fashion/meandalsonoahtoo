@@ -36,24 +36,17 @@ const STRAW_BLADES := 260
 const BED_LENGTH := 1.8
 
 var _wall_items: Array[Node3D] = []
+## A beacon stands at the back (holding_cell.gd's starting cell, note 154): the
+## bed goes along the left wall and the shackles either side of the obelisk.
+var beacon_at_back := false
 
 
 ## Builds the cell in `built`'s spawn dead end. Null when the spawn is not in one.
+## (The tunnel modules only: on the brick kit the starting cell is a holding cell.)
 static func build(parent: Node3D, built, torch_energy := 1.3) -> Node3D:
 	if built.spawn_door.is_empty():
 		return null
-	# The brick kit's dead end (brick_level.gd): walls 1.9 m out, its corner
-	# pillars filling 1.55 to 2.45 m on both axes.
-	if load("res://scripts/module_level.gd").brick:
-		FACE = 1.9
-		ALCOVE = 1.5
-		PIER_END = -1.55
-		TALLY_AT = Vector3(1.9, 1.25, -0.95)
-	else:
-		FACE = 2.79
-		ALCOVE = 1.8
-		PIER_END = -1.2
-		TALLY_AT = Vector3(1.8, 1.25, -2.05)
+	fit_kit()
 	var cell: Vector2i = built.spawn_door["cell"]
 	var step: Vector2i = load("res://scripts/module_maze.gd").DIRS[int(built.spawn_door["side"])]
 	var out := Vector3(float(step.x), 0.0, float(step.y))
@@ -73,6 +66,22 @@ static func build(parent: Node3D, built, torch_energy := 1.3) -> Node3D:
 	level._hang_torch(jail, load(level.TORCH_SCENE), Vector3(-FACE, built.height * level.TORCH_HEIGHT, 0.5),
 		Vector3.LEFT, torch_energy * 0.6, level.TORCH_RANGE)
 	return jail
+
+
+## The dead end's measurements for the kit in use.
+static func fit_kit() -> void:
+	# The brick kit's dead end (brick_level.gd): walls 1.9 m out, its corner
+	# pillars filling 1.55 to 2.45 m on both axes.
+	if load("res://scripts/module_level.gd").brick:
+		FACE = 1.9
+		ALCOVE = 1.5
+		PIER_END = -1.55
+		TALLY_AT = Vector3(1.9, 1.25, -0.95)
+	else:
+		FACE = 2.79
+		ALCOVE = 1.8
+		PIER_END = -1.2
+		TALLY_AT = Vector3(1.8, 1.25, -2.05)
 
 
 func _ready() -> void:
@@ -147,8 +156,8 @@ func _dress() -> void:
 	var scratch := _mat(Color(0.3, 0.28, 0.26), 1.0)
 	_bed(wood, straw, cloth)
 	_strewn_straw(straw, rng)
-	_shackles(Vector3(0.62, 0.0, -FACE), iron, false)
-	_shackles(Vector3(1.3, 0.0, -FACE), iron, true)
+	_shackles(Vector3(-1.1 if beacon_at_back else 0.62, 0.0, -FACE), iron, false)
+	_shackles(Vector3(1.1 if beacon_at_back else 1.3, 0.0, -FACE), iron, true)
 	_remains(bone, rng)
 	_bucket(wood, iron)
 	# Scratches float over the brick kit's deep mortar joints; only on smooth stone.
@@ -156,18 +165,20 @@ func _dress() -> void:
 		_tally(scratch)
 
 
-## A low plank bed across the back wall of the alcove, its head against the
-## left pier, a lumpy straw mattress, and a blanket half off it. Kept 0.15-0.2 m
-## off the stone, which stands up to ~10 cm proud of its measured face.
+## A low plank bed across the back wall of the alcove (along the left wall when
+## a beacon has the back), its head against the left pier, a lumpy straw
+## mattress, and a blanket half off it. Kept 0.15-0.2 m off the stone, which
+## stands up to ~10 cm proud of its measured face.
 func _bed(wood: Material, straw: Material, cloth: Material) -> void:
 	var half := BED_LENGTH * 0.5
-	var x := -ALCOVE + 0.15 + half
-	var z := -FACE + 0.2 + 0.45
+	var x := -FACE + 0.2 + 0.45 if beacon_at_back else -ALCOVE + 0.15 + half
+	var z := 0.35 if beacon_at_back else -FACE + 0.2 + 0.45
 	var bed := Node3D.new()
 	bed.name = "Bed"
 	bed.position = Vector3(x, 0.0, z)
-	# Its length (local Z) along the wall.
-	bed.rotation.y = PI * 0.5
+	# Its length (local Z) along the side wall, or the back one; local -X, where
+	# the blanket slides, towards the room either way.
+	bed.rotation.y = PI if beacon_at_back else PI * 0.5
 	add_child(bed)
 	for lx: float in [-0.36, 0.36]:
 		for lz: float in [-(half - 0.08), half - 0.08]:
@@ -192,7 +203,10 @@ func _bed(wood: Material, straw: Material, cloth: Material) -> void:
 	# The blanket, rucked and sliding off toward the room (local -X is the room).
 	_mesh(_box(Vector3(0.95, 0.03, 1.0)), cloth, Vector3(-0.12, 0.6, 0.2), Vector3(0.0, -0.18, 0.32), bed)
 	_mesh(_box(Vector3(0.06, 0.4, 0.85)), cloth, Vector3(-0.56, 0.38, 0.26), Vector3(0.0, -0.18, -0.08), bed)
-	_solid(Vector3(BED_LENGTH + 0.05, 0.62, 0.9), Vector3(x, 0.31, z))
+	var footprint := Vector3(BED_LENGTH + 0.05, 0.62, 0.9)
+	if beacon_at_back:
+		footprint = Vector3(0.9, 0.62, BED_LENGTH + 0.05)
+	_solid(footprint, Vector3(x, 0.31, z))
 
 
 ## Straw everywhere: thin blades, thickest round the bed and in the back corner.

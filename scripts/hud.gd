@@ -123,6 +123,8 @@ var _drink_box: VBoxContainer
 var _drink_bar: ProgressBar
 ## 0 = plain crosshair, 1 = interact cursor; eased between.
 var _interact_k := 0.0
+## A hold under way on the prompt in focus (Interact.Prompt `progress`), or -1.
+var _interact_hold := -1.0
 ## CO-OP (coop.gd): whose HUD this is -- 0 player 1, 1 player 2. HUD2 is in
 ## scenes/main.tscn always and takes itself away outside co-op; in co-op
 ## split_screen.gd moves each HUD into its player's half.
@@ -767,6 +769,10 @@ func _process(delta: float) -> void:
 func _update_interact_mark(delta: float) -> void:
 	var focus := Interact.focus(get_tree(), _player)
 	var want := 1.0 if focus != null and not _player.in_cutscene and not _player.ui_open else 0.0
+	var hold := focus.progress if want > 0.0 else -1.0
+	if hold != _interact_hold:
+		_interact_hold = hold
+		_interact_mark.queue_redraw()
 	if want == _interact_k:
 		return
 	_interact_k = move_toward(_interact_k, want, delta / maxf(interact_morph_time, 0.001))
@@ -777,6 +783,10 @@ func _update_interact_mark(delta: float) -> void:
 ## from a little further out as they fade up.
 func _draw_interact_mark() -> void:
 	_interact_mark.draw_arc(Vector2.ZERO, crosshair_radius, 0.0, TAU, 40, crosshair_color, 1.5, true)
+	# A hold (a beacon's claiming): a gold arc filling clockwise from the top.
+	if _interact_hold > 0.0:
+		_interact_mark.draw_arc(Vector2.ZERO, crosshair_radius + 9.0, -PI * 0.5,
+			-PI * 0.5 + TAU * minf(_interact_hold, 1.0), 48, Color(1.0, 0.75, 0.3, 0.95), 2.5, true)
 	var k := _interact_k
 	if k <= 0.0:
 		return
