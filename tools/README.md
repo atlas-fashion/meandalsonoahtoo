@@ -679,3 +679,20 @@ what is left of the clip to `SPIN_RECOVER`. Also `SPIN_A`, `SPIN_JOIN`, `REEL_JO
 `SPIN_TOP_RATE`. `SLAM_V` is `move_speed` in `prosthetic.gd` too. `root` x in `spin_*` and `reel_o`
 is the turn, in radians.
 `models/proel_builder.glb.import` must keep `animation/fps=60`, and the three maps `compress/mode=2`.
+
+# The player's knight (2026-11-03, Higgsfield / Meshy, note 155)
+
+```
+blender -b --factory-startup -P tools/build_player_knight.py
+```
+
+`models/source/knight/knight_meshy.glb`: Meshy multi-image to 3D (run through
+Higgsfield's Supercomputer) from the user's front and back views
+(`knight_front.png`, `knight_back.png`), textured and auto-rigged: 31k
+triangles, 1.70 m, T-pose, 24 bones (Hips, Spine02, Spine01, Spine, neck, Head,
+Left/Right Shoulder, Arm, ForeArm, Hand, UpLeg, Leg, Foot, ToeBase), facing glTF
++Z. The script drops Meshy's stray icosphere and its one-frame `clip0`, cuts an
+emission map out of the albedo where it is hot (the molten cracks), sets metallic
+0.55 / roughness 0.62, and writes `models/player_knight.glb`. Nothing is baked:
+`scripts/coop_avatar.gd` poses every bone from the player each frame, so any
+humanoid with those bone names drops in.

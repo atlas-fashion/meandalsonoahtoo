@@ -46,6 +46,8 @@ const SPEC := [
 		"hint": "Death bursts and flourishes."},
 	{"key": "damp", "label": "Damp floors and drips", "type": "check",
 		"hint": "Wet patches on the floor that catch the torchlight, and water dripping from the vault."},
+	{"key": "body_shadow", "label": "Your shadow", "type": "check",
+		"hint": "Your knight casts a shadow by the torches and the moon. One body in each nearby shadow."},
 	{"key": "texture_detail", "label": "Texture detail", "type": "option",
 		"choices": [["Untextured", 0], ["No triplanar", 1], ["Full", 2]],
 		"hint": "Triplanar mapping samples each texture three times per pixel."},

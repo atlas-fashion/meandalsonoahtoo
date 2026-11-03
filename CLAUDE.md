@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 154), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 155), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -267,6 +267,11 @@ Blender. Rebuild, never hand-edit; always run the second after the first. See no
 Tripo golem (`models/source/proel_builder/`). Rebuild, never hand-edit; always run the
 second after the first. See note 149 and `tools/README.md`.
 
+`models/player_knight.glb` (the player's body) is a build artifact from
+`tools/build_player_knight.py`, out of the user's Higgsfield / Meshy knight
+(`models/source/knight/`). Rebuild, never hand-edit; the bones are posed in code
+(`scripts/coop_avatar.gd`), so keep Meshy's bone names. See note 155.
+
 `models/kit/module_*.glb` are build artifacts from `tools/build_modules.py`,
 cut from the raw `models/kit/mod_*.glb` Tripo returned. Never hand-edit them;
 rebuild and re-run `tools/verify_modules.py`.
@@ -335,7 +340,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   its mark, berserk; note 84), `player.gd` (movement, sword, block/parry `_start_block`
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `hand_torch.gd`, `held_potion.gd`,
-  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt).
+  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the molten rust knight: alone only its shadow, in co-op what the other player sees; note 155).
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
   hands; `skeleton_shield.gd`; note 93), `proel_builder.gd` (the hammer hand, the Proel builder, note 149: the user's rusted golem with two hammers, baked clips, `proel_builder_hammers.gd`; a slow walk pounding the floor, a very heavy spin), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
@@ -571,6 +576,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 152 | 2026-11-01 | Sandbox: a noclip switch (`Sandbox.noclip`; player.gd `_update_noclip`, `_fly`: flight the way the view points, Space / Ctrl, Shift x3; solid for scenes and death; switched off in the rock it goes to the nearest floor, `land_from_noclip`); the menu's columns scroll inside a panel kept on screen (the UI is 720 high at any resolution) | [docs/notes/152-sandbox-noclip-and-a-menu-that-fits.md](docs/notes/152-sandbox-noclip-and-a-menu-that-fits.md) |
 | 153 | 2026-11-02 | Holding cells: 10 dead ends shut with the prison's gate (`holding_cell.gd`, maze.gd `_place_holding_cells`), each holding 2 or 3 different types from all of `CONTAINED`, `caged` as in a block; a cell opens once every type in it is out of containment and its prisoners go loose; nothing saved, open follows from `released_hands`; the layout unchanged; 74.1 -> 72.9 fps | [docs/notes/153-holding-cells.md](docs/notes/153-holding-cells.md) |
 | 154 | 2026-11-03 | Holding cells: 24 plus the start (was 10), at the old beacon marks and along the main route (`_main_route`), side-wall-torch dead ends allowed; E opens a gate at any time (no containment rule); a red beacon in every cell, held E 3 s turns it gold, any damage resets it, a gold ring round the crosshair; the starting cell is one (no proels, its bed moved aside); opened cells and gold beacons saved (version 2) | [docs/notes/154-holding-cells-with-beacons.md](docs/notes/154-holding-cells-with-beacons.md) |
+| 155 | 2026-11-03 | The player is the molten rust knight: generated on Higgsfield (Meshy multi-image, rigged; through the Supercomputer agent), glowing cracks cut from the albedo (`tools/build_player_knight.py`); alone it only casts your shadow, in co-op it is the body the other player sees (`coop_avatar.gd`), every bone posed from the player; `Graphics.body_shadow`; 71.1 -> 70.6 fps | [docs/notes/155-the-player-knight.md](docs/notes/155-the-player-knight.md) |
 
 ## Notes by source file
 
@@ -597,7 +603,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143
+- `scripts/coop_avatar.gd`: 79, 143, 155
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -613,7 +619,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82, 117
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
-- `scripts/graphics_settings.gd`: 79, 80, 112, 121
+- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155
 - `scripts/hand_torch.gd`: 24, 29
 - `scripts/held_potion.gd`: 6.19, 130
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
@@ -638,7 +644,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
@@ -656,7 +662,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
-- `scripts/settings_panel.gd`: 19, 46, 80, 112
+- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92, 130, 131, 147
@@ -704,13 +710,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39, 121
 - `tools/anim_proel_builder.py`, `tools/build_proel_builder.py`: 149, 150, 151
 - `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146
-- `tools/benchmark.gd`: 6.11, 33, 112
+- `tools/benchmark.gd`: 6.11, 33, 112, 155
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66
 - `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18
+- `tools/build_player_knight.py`: 155
 - `tools/build_potion.py`: 6.19
 - `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18
@@ -722,7 +729,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_wood_texture.py`: 6.19
 - `tools/grade_texture.py`: 6.05
 - `tools/preview_module_level.gd`: 6.11, 6.14
-- `tools/tripo.ps1`: 7
+- `tools/tripo.ps1`: 7, 155
 - `tools/tripo_image.ps1`: 41, 45, 47
 - `tools/tripo_texture.ps1`: 40, 41
 - `tools/verify_collision.py`: 6.06

@@ -430,7 +430,8 @@ var rats: Node3D
 ## scenes/main.tscn always and takes itself away outside co-op.
 @export var player_index := 0
 var _discarded := false
-## This player as the other one sees them (coop_avatar.gd), co-op only.
+## This player's knight body (coop_avatar.gd): their shadow alone, what the
+## other one sees in co-op.
 var _avatar: Node3D
 ## The visual layer this player's first-person pieces are drawn on, co-op only.
 var _viewmodel_layer := 0
@@ -473,11 +474,20 @@ func set_view_layers(viewmodel: int, avatar: int) -> void:
 	_viewmodel_layer = viewmodel
 	_sweep_view_layers()
 	if _avatar == null:
-		_avatar = Node3D.new()
-		_avatar.set_script(load("res://scripts/coop_avatar.gd"))
-		# Built, layers and all, before it is in the scene (see above).
-		_avatar.call("setup", self, avatar)
-		add_child(_avatar)
+		_make_body(avatar, true)
+	else:
+		# The lone player's shadow-only knight becomes the one the other half sees.
+		_avatar.call("set_mode", avatar, true)
+
+
+## The knight body (coop_avatar.gd, note 155): alone it only casts the player's
+## shadow; in co-op it is what the other player sees.
+func _make_body(layer: int, coop: bool) -> void:
+	_avatar = Node3D.new()
+	_avatar.set_script(load("res://scripts/coop_avatar.gd"))
+	# Built, layers and all, before it is in the scene (see above).
+	_avatar.call("setup", self, layer, coop)
+	add_child(_avatar)
 
 
 ## Everything drawn under the head -- sword, spear, potion, the torch in the
@@ -1211,6 +1221,9 @@ func _ready() -> void:
 	torch_hand.set_script(load("res://scripts/hand_torch.gd"))
 	camera.add_child(torch_hand)
 	torch_hand.call("setup", self)
+	# The knight's shadow (coop_avatar.gd); co-op turns it into the visible body.
+	if _avatar == null:
+		_make_body(load("res://scripts/coop_avatar.gd").SOLO_LAYER, false)
 
 
 	var slam_shape := SphereShape3D.new()

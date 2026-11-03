@@ -408,6 +408,9 @@ func _screenshots() -> void:
 		var out := -tn.global_basis.z
 		where["torch"] = _floor_under(tn.global_position + out * 1.8)
 		torch_yaw = atan2(out.x, out.z)
+		# The torch at the back, looking down at the floor in front: the
+		# player's own shadow (the knight, note 155).
+		where["shadow"] = _floor_under(tn.global_position + out * 1.0)
 	for name in where:
 		_player.global_position = where[name]
 		for turn in 2:
@@ -425,10 +428,15 @@ func _screenshots() -> void:
 			if name == "torch":
 				# Straight at it, then a glance down the corridor it lights.
 				_player.rotation.y = torch_yaw + float(turn) * 1.1
+			if name == "shadow":
+				# Back to it, then half turned.
+				_player.rotation.y = torch_yaw + PI + float(turn) * 0.7
 			if "_look_pitch" in _player:
 				var pitch := 0.75 if name == "sky" else 0.0
 				if name == "torch":
 					pitch = 0.28 if turn == 0 else 0.0
+				if name == "shadow":
+					pitch = -0.7
 				if name == "skylight":
 					# Up into it, then down at the pool of red it throws.
 					pitch = 0.9 if turn == 0 else -0.45

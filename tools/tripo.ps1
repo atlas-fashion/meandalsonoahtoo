@@ -33,6 +33,9 @@ param(
     [ValidateSet("text", "image")][string]$Mode,
     [string]$Prompt,
     [string]$Image,
+    # A rear view of the same subject: with -Mode image the task becomes
+    # multiview_to_model (front + back), which keeps the back from being guessed.
+    [string]$BackImage,
     # Resume polling an existing task instead of submitting a new one.
     [string]$TaskId,
     [Parameter(Mandatory = $true)][string]$Out,
@@ -151,6 +154,19 @@ if ($TaskId) {
             face_limit    = $FaceLimit
             texture       = (-not $NoTexture)
             pbr           = (-not $NoPbr -and -not $NoTexture)
+        }
+        if ($BackImage) {
+            if (-not (Test-Path $BackImage)) { throw "image not found: $BackImage" }
+            Write-Host "uploading $BackImage ..."
+            $backToken = Send-Image $BackImage
+            $backExt = ([IO.Path]::GetExtension($BackImage)).TrimStart(".").ToLower()
+            if ($backExt -eq "jpeg") { $backExt = "jpg" }
+            # Views in the order front, left, back, right; a missing one is {}.
+            $body.Remove("file")
+            $body.type = "multiview_to_model"
+            $body.files = @(
+                @{ type = $ext; file_token = $token }, @{},
+                @{ type = $backExt; file_token = $backToken }, @{})
         }
     }
     if ($TextureQuality) { $body.texture_quality = $TextureQuality }
