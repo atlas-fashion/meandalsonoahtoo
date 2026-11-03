@@ -432,15 +432,15 @@ func _swing(a: float) -> Transform3D:
 	return _held(SWING_PIVOT + radial * SWING_HAND, radial, tangent)
 
 
-## The guard: the haft level across the face, the head off to the left.
+## The player's script, for its `GUARD_DRAW`.
+const PLAYER := preload("res://scripts/player.gd")
+
+
+## The guard is the knight's left arm (first_person_arms.gd, note 157): the axe
+## is only drawn back out of its way.
 func _guard_pose() -> Transform3D:
-	var pose := _held(Vector3(0.28, -0.24, -0.5), Vector3(-1.0, 0.15, -0.1), Vector3(0.0, 1.0, -0.3))
-	var kick: float = player.get("_guard_kick")
-	if kick > 0.0:
-		var k := kick * kick
-		pose = Transform3D(Basis(Vector3.RIGHT, 0.15 * k) * pose.basis,
-			pose.origin + Vector3(0.0, 0.05, -0.16) * k)
-	return pose
+	var rest := _rest()
+	return Transform3D(rest.basis, rest.origin + PLAYER.GUARD_DRAW)
 
 
 func _pose_transform() -> Transform3D:

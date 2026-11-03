@@ -332,27 +332,15 @@ static func _facing(dir: Vector3) -> Basis:
 	return Basis.looking_at(dir, up)
 
 
-## The guard: the spear brought up level across the body, the middle of the
-## haft -- where the crystal and the shield will sit -- square in front of the
-## face, the blade off to the left. A blow taken knocks it forward and up
-## (`player._guard_kick`), as it does the sword. PLACEHOLDER until the haft's
-## shield and its animation exist.
-const GUARD_CENTRE := Vector3(0.0, -0.2, -0.62)
-const GUARD_ALONG := Vector3(-1.0, 0.22, -0.12)
-## The middle of the haft, measured along the model from the hand.
-const HAFT_MIDDLE := 0.66
+## The player's script, for its `GUARD_DRAW`.
+const PLAYER := preload("res://scripts/player.gd")
 
 
+## The guard is the knight's left arm (first_person_arms.gd, note 157): the spear
+## is only drawn back out of its way, still pointing ahead.
 func _guard_pose() -> Transform3D:
-	var dir := GUARD_ALONG.normalized()
-	var hand := GUARD_CENTRE - dir * HAFT_MIDDLE
-	var pose := _aimed(hand, hand + dir * 6.0, PI * 0.5)
-	var kick: float = player.get("_guard_kick")
-	if kick > 0.0:
-		var k := kick * kick
-		pose = Transform3D(Basis(Vector3.RIGHT, 0.15 * k) * pose.basis,
-			pose.origin + Vector3(0.0, 0.05, -0.16) * k)
-	return pose
+	var rest := _rest()
+	return Transform3D(rest.basis, rest.origin + PLAYER.GUARD_DRAW)
 
 
 func _rest() -> Transform3D:

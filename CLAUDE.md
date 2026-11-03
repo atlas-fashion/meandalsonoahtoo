@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 156), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 157), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -344,8 +344,8 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 - Player & combat: `axe.gd` (the third weapon: slash, a throw that stays in
   its mark, berserk; note 84), `player.gd` (movement, sword, block/parry `_start_block`
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
-  `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `hand_torch.gd`, `held_potion.gd`,
-  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the molten rust knight: alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its right arm in your own view, the fist solved onto what is held; note 156).
+  `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `held_potion.gd`,
+  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the molten rust knight: alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its arms in your own view: the right fist solved onto what is held, note 156; the left arm the guard, block and parry on springs, note 157 -- there is no hand torch).
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
   hands; `skeleton_shield.gd`; note 93), `proel_builder.gd` (the hammer hand, the Proel builder, note 149: the user's rusted golem with two hammers, baked clips, `proel_builder_hammers.gd`; a slow walk pounding the floor, a very heavy spin), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
@@ -583,6 +583,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 154 | 2026-11-03 | Holding cells: 24 plus the start (was 10), at the old beacon marks and along the main route (`_main_route`), side-wall-torch dead ends allowed; E opens a gate at any time (no containment rule); a red beacon in every cell, held E 3 s turns it gold, any damage resets it, a gold ring round the crosshair; the starting cell is one (no proels, its bed moved aside); opened cells and gold beacons saved (version 2) | [docs/notes/154-holding-cells-with-beacons.md](docs/notes/154-holding-cells-with-beacons.md) |
 | 155 | 2026-11-03 | The player is the molten rust knight: generated on Higgsfield (Meshy multi-image, rigged; through the Supercomputer agent), glowing cracks cut from the albedo (`tools/build_player_knight.py`); alone it only casts your shadow, in co-op it is the body the other player sees (`coop_avatar.gd`), every bone posed from the player; `Graphics.body_shadow`; 71.1 -> 70.6 fps | [docs/notes/155-the-player-knight.md](docs/notes/155-the-player-knight.md) |
 | 156 | 2026-11-03 | The knight's arms in first person: an arms-only cut of the knight with fists (`tools/build_player_knight_arms.py`), solved every frame onto the sword, spear, axe, flask and a held rat by two-bone IK (`first_person_arms.gd`), drawn at what it holds' scale, in front of walls; no left arm (the torch's handle is under the view); 71.1 -> 70.4 fps, GPU the same | [docs/notes/156-the-knights-arms-in-first-person.md](docs/notes/156-the-knights-arms-in-first-person.md) |
+| 157 | 2026-11-03 | No torch; the left arm blocks and parries: the hand torch deleted (and the co-op body's); the guard is the knight's left forearm across the view, on springs (elbow leads, overshoot, breath, look lag), a blocked blow a recoil into the face and a shudder, a parry an upright beat out to the left; the weapon only drawn back (`GUARD_DRAW`); 70.2 fps, as before | [docs/notes/157-left-arm-block-and-parry.md](docs/notes/157-left-arm-block-and-parry.md) |
 
 ## Notes by source file
 
@@ -600,7 +601,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/archer.gd`: 20, 77, 92, 93
 - `scripts/arrow.gd`: 20, 79, 93
 - `scripts/attack_icons.gd`: 24, 77, 79, 84
-- `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91, 143, 144
+- `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91, 143, 144, 157
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
@@ -609,8 +610,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155, 156
-- `scripts/first_person_arms.gd`: 156
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157
+- `scripts/first_person_arms.gd`: 156, 157
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -627,7 +628,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
 - `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155
-- `scripts/hand_torch.gd`: 24, 29
+- `scripts/hand_torch.gd`: 24, 29 (deleted in 157)
 - `scripts/held_potion.gd`: 6.19, 130
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/holding_cell.gd`: 153, 154
@@ -651,7 +652,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
@@ -679,7 +680,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_sword.gd`: 24, 93, 135
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
-- `scripts/spear.gd`: 14, 78, 79, 143, 144
+- `scripts/spear.gd`: 14, 78, 79, 143, 144, 157
 - `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120, 128
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109, 121

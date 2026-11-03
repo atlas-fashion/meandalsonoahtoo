@@ -2,21 +2,21 @@ extends Node3D
 
 ## The player's body: the molten rust knight (note 155; models/player_knight.glb,
 ## built by tools/build_player_knight.py from the user's Higgsfield / Meshy
-## knight). The game is first person -- you are a camera, a sword and a torch --
-## so the body is seen two ways:
+## knight). The game is first person -- you see its arms (first_person_arms.gd)
+## -- so the body is seen two ways:
 ##
 ## - ALONE: shadows only. The knight casts the player's shadow for the moon and
 ##   the wall torches, and is never drawn, so it can never clip the camera.
 ##   `Graphics.body_shadow` off takes it away altogether.
 ## - CO-OP (note 79): it is how the OTHER player sees you, drawn only by the
 ##   other half's camera (its own layer, split_screen.gd AVATAR), with what is
-##   in hand -- the sword, the spear -- a lit torch in the other, and a name
-##   over the head. It casts a shadow while `body_shadow` is on.
+##   in hand -- the sword, the spear -- the left arm raised to guard (note 157),
+##   and a name over the head. It casts a shadow while `body_shadow` is on.
 ##
 ## A child of the player, so it already turns with their yaw. Every bone is posed
 ## here from the player each frame, nothing baked: the legs stride with their
 ## pace, the arms swing, the head follows where they look, the sword arm winds
-## up and cuts with their strokes and comes across to guard, the whole knight
+## up and cuts with their strokes, the left forearm comes up to guard, the whole knight
 ## lies down when they die and is gone while they hide.
 ##
 ## Posing: a target is a DIRECTION for a limb segment in the knight's own space
@@ -48,7 +48,6 @@ var _meshes: Array[GeometryInstance3D] = []
 var _props: Node3D
 var _sword: Node3D
 var _spear: Node3D
-var _torch: Node3D
 var _label: Label3D
 var _phase := 0.0
 var _lie := 0.0
@@ -160,7 +159,6 @@ func _process(delta: float) -> void:
 	# Dropped as they go down.
 	_sword.visible = held == &"sword" and _lie < 0.3
 	_spear.visible = held == &"spear" and _lie < 0.3
-	_torch.visible = _lie < 0.3
 	_label.visible = _coop and not dead
 
 	# Pace: stride, bob and swing with how fast they move on the ground.
@@ -189,13 +187,18 @@ func _process(delta: float) -> void:
 		_goal_dir(key + "thigh", Vector3(x, -cos(a), sin(a)), k)
 		_goal_dir(key + "shin", Vector3(x * 0.5, -cos(a - knee), sin(a - knee)), k)
 
-	# The left arm holds the torch out, swinging a little against the stride.
-	var lb := 0.18 - 0.35 * s * sw
-	_goal_dir("lupper", Vector3(0.22, -cos(lb), sin(lb)), k)
-	_goal_dir("lfore", Vector3(0.12, -0.3, 0.95), k)
+	# The left arm swings against the stride; on guard it is the shield (note
+	# 157): elbow out and forward, the forearm across the front of the face.
+	var lb := 0.12 - 0.35 * s * sw
+	if player.get("_blocking") == true:
+		_goal_dir("lupper", Vector3(0.55, -0.35, 0.75), 1.0 - exp(-30.0 * delta))
+		_goal_dir("lfore", Vector3(-0.85, 0.35, 0.4), 1.0 - exp(-30.0 * delta))
+	else:
+		_goal_dir("lupper", Vector3(0.18, -cos(lb), sin(lb)), k)
+		_goal_dir("lfore", Vector3(0.08, -0.75, 0.65), k)
 
 	# The sword arm: forward with the blade out; cutting through a stroke;
-	# across the body on guard; the spear held level.
+	# drawn back on guard (the left arm blocks); the spear held level.
 	var rb := 0.12 + 0.35 * s * sw
 	var upper := Vector3(-0.2, -cos(rb), sin(rb))
 	var fore := Vector3(-0.08, -0.55, 0.85)
@@ -203,8 +206,8 @@ func _process(delta: float) -> void:
 	var t: float = player.get("_pose_time")
 	var ka := k
 	if player.get("_blocking") == true:
-		upper = Vector3(-0.15, -0.35, 0.9)
-		fore = Vector3(0.75, 0.35, 0.55)
+		upper = Vector3(-0.25, -0.9, 0.2)
+		fore = Vector3(-0.05, -0.2, 0.95)
 	elif kind in [&"slash", &"chop", &"spin", &"slam", &"raise", &"stab", &"haft"] and t >= 0.0:
 		var c := clampf(t / 0.35, 0.0, 1.0)
 		upper = Vector3(-0.35, 0.85, 0.3).lerp(Vector3(0.25, -0.55, 0.8), c)
@@ -286,18 +289,15 @@ func _arc(from: Vector3, to: Vector3) -> Quaternion:
 
 # --- What is in hand ----------------------------------------------------------------
 
-## The sword, spear and torch, placed each frame at the hands in the direction
+## The sword and spear, placed each frame at the hands in the direction
 ## of the forearms (props are children of the knight's root: knight space).
 func _place_props() -> void:
 	var to_k := _rel_transform(_skel, _knight)
 	var hand_r := to_k * _skel.get_bone_global_pose(_b["RightHand"]).origin
-	var hand_l := to_k * _skel.get_bone_global_pose(_b["LeftHand"]).origin
 	var fore_r: Vector3 = _goal["rfore"]
-	var fore_l: Vector3 = _goal["lfore"]
 	var grip := hand_r + fore_r * 0.07
 	_sword.transform = Transform3D(_along(fore_r + Vector3(0.0, 0.65, 0.6)), grip)
 	_spear.transform = Transform3D(_along(fore_r), grip)
-	_torch.transform = Transform3D(_along(fore_l * 0.35 + Vector3.UP), hand_l + fore_l * 0.06)
 
 
 ## A basis whose +Y runs along `dir`.
@@ -310,11 +310,6 @@ func _along(dir: Vector3) -> Basis:
 func _build_props(i: int) -> void:
 	var steel := _mat(Color(0.7, 0.72, 0.76), 0.35, 0.8)
 	var wood := _mat(Color(0.35, 0.24, 0.14), 0.9)
-	var flame := StandardMaterial3D.new()
-	flame.albedo_color = Color(1.0, 0.6, 0.2)
-	flame.emission_enabled = true
-	flame.emission = Color(1.0, 0.5, 0.15)
-	flame.emission_energy_multiplier = 3.0
 	_props = Node3D.new()
 	_props.name = "InHand"
 	_knight.add_child(_props)
@@ -335,15 +330,6 @@ func _build_props(i: int) -> void:
 	head.bottom_radius = 0.045 * u
 	head.height = 0.22 * u
 	_part(_spear, head, Vector3(0.0, 1.3 * u, 0.0), steel)
-	# The torch, alight.
-	_torch = Node3D.new()
-	_props.add_child(_torch)
-	_part(_torch, _cyl(0.025 * u, 0.02 * u, 0.4 * u), Vector3(0.0, 0.12 * u, 0.0), wood)
-	var fire := SphereMesh.new()
-	fire.radius = 0.05 * u
-	fire.height = 0.14 * u
-	_part(_torch, fire, Vector3(0.0, 0.37 * u, 0.0), flame).cast_shadow = \
-		GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_label = Label3D.new()
 	_label.text = NAMES[i]
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED

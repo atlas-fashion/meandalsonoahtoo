@@ -1216,12 +1216,8 @@ func _ready() -> void:
 	head.add_child(rats)
 	rats.setup(self)
 	get_tree().create_timer(0.4).timeout.connect(_warm_guard_flash)
-	# A torch in the left hand, down in the corner of the view (hand_torch.gd).
-	var torch_hand := Node3D.new()
-	torch_hand.set_script(load("res://scripts/hand_torch.gd"))
-	camera.add_child(torch_hand)
-	torch_hand.call("setup", self)
-	# The knight's own arms holding all of it (first_person_arms.gd, note 156).
+	# The knight's own arms: the right holding what is in hand, the left
+	# blocking and parrying (first_person_arms.gd, notes 156, 157). No torch.
 	var arms := Node3D.new()
 	arms.set_script(load("res://scripts/first_person_arms.gd"))
 	arms.call("setup", self)
@@ -2404,7 +2400,9 @@ func _start_spin() -> void:
 
 ## --- Block and parry -----------------------------------------------------------
 ##
-## Right click ("block") held raises the sword across the body (`_guard_pose`). A blow
+## Right click ("block") held raises the knight's LEFT forearm across the front
+## (first_person_arms.gd, note 157), the weapon drawn back in the right hand
+## (`_guard_pose`). A blow
 ## from the front while it is up is BLOCKED, or PARRIED if the block went up
 ## within `parry_window` of the blow landing -- see `_guard`, called from
 ## `take_damage`. Pressed during an attack (a cut, a thrust, a slam or a
@@ -2490,15 +2488,11 @@ func _check_block() -> void:
 		_end_block()
 
 
-## The sword across the body, flat to the front; a guarded blow knocks it a
-## little forward and up (`_guard_kick`).
+## The guard is the left arm's (note 157): the sword is only drawn back and
+## down out of its way, point still up, ready to answer.
 func _guard_pose() -> Transform3D:
-	var pose := _blade_pose(GUARD_HAND, GUARD_DIR, GUARD_EDGE)
-	if _guard_kick > 0.0:
-		var k := _guard_kick * _guard_kick
-		pose = Transform3D(Basis(Vector3.RIGHT, 0.18 * k) * pose.basis,
-			pose.origin + Vector3(0.0, 0.06, -0.22) * k)
-	return pose
+	var rest := _rest_pose()
+	return Transform3D(Basis(Vector3.RIGHT, 0.12) * rest.basis, rest.origin + GUARD_DRAW)
 
 
 ## 0 the blow lands in full, 1 blocked, 2 parried. Only blows from the front
@@ -2811,11 +2805,9 @@ const SPIN_END := 1.0
 ## the turn on the left.
 const SPIN_COIL := 0.3
 const SPIN_LEAD := -0.45
-## The guard: hand forward of the chest, blade rising across the view to the
-## upper left with its flat to the front, and how long it takes to go up and down.
-const GUARD_HAND := Vector3(0.36, -0.4, -0.7)
-const GUARD_DIR := Vector3(-0.8, 0.5, -0.33)
-const GUARD_EDGE := Vector3(0.52, 0.85, 0.0)
+## The guard: the weapon drawn back this far (head space) while the left arm
+## blocks (note 157), and how long the guard takes to go up and down.
+const GUARD_DRAW := Vector3(0.1, -0.11, 0.12)
 const GUARD_UP := 0.1
 const GUARD_DOWN := 0.16
 ## The poses that are attacks, on `attack_time_scale`. The guard and the scripted
