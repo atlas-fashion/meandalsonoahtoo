@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bu500wwv4gsd"
-path="res://.godot/imported/player_knight_Image_0.jpg-bccfe44632a1b1593bbff2f9f03ad4f8.ctex"
+path.s3tc="res://.godot/imported/player_knight_Image_0.jpg-bccfe44632a1b1593bbff2f9f03ad4f8.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "19b2b2297f2f5dfc03cdea0a66c52dd6"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/player_knight_Image_0.jpg"
-dest_files=["res://.godot/imported/player_knight_Image_0.jpg-bccfe44632a1b1593bbff2f9f03ad4f8.ctex"]
+dest_files=["res://.godot/imported/player_knight_Image_0.jpg-bccfe44632a1b1593bbff2f9f03ad4f8.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
