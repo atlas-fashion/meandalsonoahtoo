@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 155), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 156), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -272,6 +272,11 @@ second after the first. See note 149 and `tools/README.md`.
 (`models/source/knight/`). Rebuild, never hand-edit; the bones are posed in code
 (`scripts/coop_avatar.gd`), so keep Meshy's bone names. See note 155.
 
+`models/player_knight_arms.glb` (the first-person arms) is a build artifact from
+`tools/build_player_knight_arms.py`, which reads `models/player_knight.glb`: run it
+after `build_player_knight.py`. Rebuild, never hand-edit; its printed grip point is
+`first_person_arms.gd` `GRIP`. See note 156.
+
 `models/kit/module_*.glb` are build artifacts from `tools/build_modules.py`,
 cut from the raw `models/kit/mod_*.glb` Tripo returned. Never hand-edit them;
 rebuild and re-run `tools/verify_modules.py`.
@@ -340,7 +345,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   its mark, berserk; note 84), `player.gd` (movement, sword, block/parry `_start_block`
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `hand_torch.gd`, `held_potion.gd`,
-  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the molten rust knight: alone only its shadow, in co-op what the other player sees; note 155).
+  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the molten rust knight: alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its right arm in your own view, the fist solved onto what is held; note 156).
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
   hands; `skeleton_shield.gd`; note 93), `proel_builder.gd` (the hammer hand, the Proel builder, note 149: the user's rusted golem with two hammers, baked clips, `proel_builder_hammers.gd`; a slow walk pounding the floor, a very heavy spin), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
@@ -577,6 +582,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 153 | 2026-11-02 | Holding cells: 10 dead ends shut with the prison's gate (`holding_cell.gd`, maze.gd `_place_holding_cells`), each holding 2 or 3 different types from all of `CONTAINED`, `caged` as in a block; a cell opens once every type in it is out of containment and its prisoners go loose; nothing saved, open follows from `released_hands`; the layout unchanged; 74.1 -> 72.9 fps | [docs/notes/153-holding-cells.md](docs/notes/153-holding-cells.md) |
 | 154 | 2026-11-03 | Holding cells: 24 plus the start (was 10), at the old beacon marks and along the main route (`_main_route`), side-wall-torch dead ends allowed; E opens a gate at any time (no containment rule); a red beacon in every cell, held E 3 s turns it gold, any damage resets it, a gold ring round the crosshair; the starting cell is one (no proels, its bed moved aside); opened cells and gold beacons saved (version 2) | [docs/notes/154-holding-cells-with-beacons.md](docs/notes/154-holding-cells-with-beacons.md) |
 | 155 | 2026-11-03 | The player is the molten rust knight: generated on Higgsfield (Meshy multi-image, rigged; through the Supercomputer agent), glowing cracks cut from the albedo (`tools/build_player_knight.py`); alone it only casts your shadow, in co-op it is the body the other player sees (`coop_avatar.gd`), every bone posed from the player; `Graphics.body_shadow`; 71.1 -> 70.6 fps | [docs/notes/155-the-player-knight.md](docs/notes/155-the-player-knight.md) |
+| 156 | 2026-11-03 | The knight's arms in first person: an arms-only cut of the knight with fists (`tools/build_player_knight_arms.py`), solved every frame onto the sword, spear, axe, flask and a held rat by two-bone IK (`first_person_arms.gd`), drawn at what it holds' scale, in front of walls; no left arm (the torch's handle is under the view); 71.1 -> 70.4 fps, GPU the same | [docs/notes/156-the-knights-arms-in-first-person.md](docs/notes/156-the-knights-arms-in-first-person.md) |
 
 ## Notes by source file
 
@@ -603,7 +609,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156
+- `scripts/first_person_arms.gd`: 156
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -644,7 +651,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
@@ -717,7 +724,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18
-- `tools/build_player_knight.py`: 155
+- `tools/build_player_knight.py`: 155, 156
+- `tools/build_player_knight_arms.py`: 156
 - `tools/build_potion.py`: 6.19
 - `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18

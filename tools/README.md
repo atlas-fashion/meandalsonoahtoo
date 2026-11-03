@@ -696,3 +696,18 @@ emission map out of the albedo where it is hot (the molten cracks), sets metalli
 0.55 / roughness 0.62, and writes `models/player_knight.glb`. Nothing is baked:
 `scripts/coop_avatar.gd` poses every bone from the player each frame, so any
 humanoid with those bone names drops in.
+
+## The knight's first-person arms (2026-11-03, note 156)
+
+```
+blender -b --factory-startup -P tools/build_player_knight_arms.py
+```
+
+Run after `build_player_knight.py`: it reads `models/player_knight.glb`. Keeps
+every vertex whose strongest bone is an Arm, ForeArm or Hand (8.3k triangles;
+the pauldrons ride the Shoulder bones and are cut), bends the fingers into fists
+round the knuckle line (`KNUCKLE`, `CURL_R`; the rig has no finger bones), and
+writes `models/player_knight_arms.glb` with the whole skeleton and NO materials:
+`scripts/first_person_arms.gd` dresses it in the body's own material. It prints
+each fist's grip point; `first_person_arms.gd` `GRIP` holds it, so change both
+together. `-- --preview <dir>` renders the fists instead of writing the file.

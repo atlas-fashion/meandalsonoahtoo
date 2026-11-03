@@ -1221,6 +1221,11 @@ func _ready() -> void:
 	torch_hand.set_script(load("res://scripts/hand_torch.gd"))
 	camera.add_child(torch_hand)
 	torch_hand.call("setup", self)
+	# The knight's own arms holding all of it (first_person_arms.gd, note 156).
+	var arms := Node3D.new()
+	arms.set_script(load("res://scripts/first_person_arms.gd"))
+	arms.call("setup", self)
+	head.add_child(arms)
 	# The knight's shadow (coop_avatar.gd); co-op turns it into the visible body.
 	if _avatar == null:
 		_make_body(load("res://scripts/coop_avatar.gd").SOLO_LAYER, false)

@@ -237,7 +237,10 @@ func _goal_dir(key: String, dir: Vector3, k: float) -> void:
 	if not _goal.has(key):
 		_goal[key] = d
 	else:
-		_goal[key] = (_goal[key] as Vector3).slerp(d, k).normalized()
+		# lerp, not slerp: slerp between two nearly equal unit vectors raised
+		# "The axis must be normalized" every frame.
+		var v := (_goal[key] as Vector3).lerp(d, k)
+		_goal[key] = v.normalized() if v.length_squared() > 1e-8 else d
 
 
 ## Turns the bone so its segment points along `dir` (knight space), given its
