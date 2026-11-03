@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 152), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 153), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -297,7 +297,7 @@ save's) -> level builder -> `_build_gates`, `_place_player`,
 `_connect_player`, `_attach_explore_map` -> navmesh bake ->
 `Graphics.apply_all` -> `_seal_cells`, `restore_world(save)`, `_populate()`,
 `restore_player(save)` -> `is_built = true`, emits **`level_built`**.
-`_populate()` spawns: boss, jail-cell stock, enemies, convoys, stalker,
+`_populate()` spawns: boss, jail-cell stock, holding cells' prisoners (note 153), enemies, convoys, stalker,
 decrepits, sewer lizards, rats (own `_rat_rng`), chests. Corridor skeletons only of the
 types let out of containment (`released_hands`, note 120): at the start, only criers
 and scouts (a lone scout is `scout_share` of the encounters, note 127).
@@ -312,7 +312,7 @@ and scouts (a lone scout is `scout_share` of the encounters, note 127).
   swaps back to the old Tripo tunnel modules for A/B.
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
-  (`zone_gate.gd`), anchors (`respawn_anchor.gd`), hiding spots
+  (`zone_gate.gd`), anchors (`respawn_anchor.gd`), holding cells (`holding_cell.gd`, jail cells in dead ends with 2 or 3 caged proels of different types, note 153), hiding spots
   (`hiding_spot.gd`), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd` + `surgeon_boss.gd`, notes 94-105; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
@@ -569,6 +569,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 151 | 2026-11-01 | The Proel builders: 1.15 m a step; the spin starts on the frame a left hammer lands and ends inside `slam_in`, no blend (`spin_w`, `spin_s`); a 1.15 s coil, shaking, never held; `[still]` in `--check`; five parry reactions (`reel_wl/wr/sl/sr`, `reel_o`) from the pose the guard met, 2.2 s, the hammer thrown over the shoulder, dragging the body back, falling, and it goes down after it. Player: a sword stroke clicked too soon held to when the blade stops biting (`_attack_queued`), a jump pressed in the air held for the landing (`_jump_queued`) | [docs/notes/151-builder-transitions-parry-input-queues.md](docs/notes/151-builder-transitions-parry-input-queues.md) |
 | 150 | 2026-11-01 | The Proel builders' blows have weight, same clocks: a 1.6 s hoist and a hang, a 0.3 s drive at 30 m/s, the body going on down past a hammer held on the floor (`pin`), a shudder; the spin a 1.9 s coil, then three turns at 2 a second, the chest and hammers worked out on springs behind the hips (`Trail`), riding a tilted circle, the left foot pivoting, the right stamping (`Foot`), carried past the end and back; every other clip byte for byte identical | [docs/notes/150-proel-builders-weight.md](docs/notes/150-proel-builders-weight.md) |
 | 152 | 2026-11-01 | Sandbox: a noclip switch (`Sandbox.noclip`; player.gd `_update_noclip`, `_fly`: flight the way the view points, Space / Ctrl, Shift x3; solid for scenes and death; switched off in the rock it goes to the nearest floor, `land_from_noclip`); the menu's columns scroll inside a panel kept on screen (the UI is 720 high at any resolution) | [docs/notes/152-sandbox-noclip-and-a-menu-that-fits.md](docs/notes/152-sandbox-noclip-and-a-menu-that-fits.md) |
+| 153 | 2026-11-02 | Holding cells: 10 dead ends shut with the prison's gate (`holding_cell.gd`, maze.gd `_place_holding_cells`), each holding 2 or 3 different types from all of `CONTAINED`, `caged` as in a block; a cell opens once every type in it is out of containment and its prisoners go loose; nothing saved, open follows from `released_hands`; the layout unchanged; 74.1 -> 72.9 fps | [docs/notes/153-holding-cells.md](docs/notes/153-holding-cells.md) |
 
 ## Notes by source file
 
@@ -615,6 +616,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hand_torch.gd`: 24, 29
 - `scripts/held_potion.gd`: 6.19, 130
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
+- `scripts/holding_cell.gd`: 153
 - `scripts/hud.gd`: 6.19, 24, 79, 84
 - `scripts/interact.gd`: 6.18, 79
 - `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133
@@ -623,9 +625,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
 - `scripts/item_icon.gd`: 6.19, 77, 84, 111, 130
 - `scripts/item_slot.gd`: 6.19, 30
-- `scripts/jail_cell.gd`: 12
+- `scripts/jail_cell.gd`: 12, 153
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122

@@ -902,6 +902,7 @@ func _build_module_level() -> void:
 	_close_boss_block_grid()
 	_build_zone_gates()
 	_place_anchors(holder)
+	_place_holding_cells(holder, detail)
 	_place_hiding_spots(holder)
 	_place_clutter(holder)
 	_place_damp(holder)
@@ -1446,33 +1447,7 @@ func _place_anchors(holder: Node3D) -> void:
 	_active_anchor = null
 	if anchor_count <= 0 or _module_level == null:
 		return
-	var depth: Dictionary = _module_level.get_meta("spawn_depth", {})
-	var door_cells := {}
-	for door in _module_level.doors:
-		door_cells[door["cell"]] = true
-		door_cells[door["other"]] = true
-	var spawn_cell: Vector2i = _module_level.spawn_door.get("cell", Vector2i(-999, -999))
-	# Every dead end that is a plain alcove off a corridor.
-	# Neither script has a class_name; this file loads them where it needs them.
-	var level_script = load("res://scripts/module_level.gd")
-	var cells_script = level_script.ModuleMaze
-	var spots: Array[Dictionary] = []
-	for key: Vector2i in depth:
-		var cell = _module_level.cells[key]
-		if cell.kind != "dead" or cell.room >= 0 or cell.court or key == spawn_cell \
-				or door_cells.has(key):
-			continue
-		if level_script.under_boss_hall(_module_level, _module_level.to_world(key)):
-			continue
-		var exit_side := -1
-		for side: int in cells_script.ORDER:
-			if cell.open & side:
-				exit_side = side if exit_side < 0 else -2
-		if exit_side < 0:
-			continue
-		var step: Vector2i = cells_script.DIRS[exit_side]
-		spots.append({"cell": key, "out": Vector3(float(step.x), 0.0, float(step.y)),
-			"depth": int(depth[key])})
+	var spots := _plain_dead_ends()
 	if spots.is_empty():
 		print("[anchors] no dead ends to put an anchor in")
 		return
@@ -1558,6 +1533,127 @@ func _build_anchors(holder: Node3D, chosen: Array[Dictionary], nearest: Dictiona
 					grid[t.y][t.x] = WALL
 	print("[anchors] %d respawn anchors, nearest the boss at walking depth %d"
 		% [_anchors.size(), int(nearest["depth"])])
+
+
+## Every dead end that is a plain alcove off a corridor: {cell, out, depth}.
+func _plain_dead_ends() -> Array[Dictionary]:
+	var depth: Dictionary = _module_level.get_meta("spawn_depth", {})
+	var door_cells := {}
+	for door in _module_level.doors:
+		door_cells[door["cell"]] = true
+		door_cells[door["other"]] = true
+	var spawn_cell: Vector2i = _module_level.spawn_door.get("cell", Vector2i(-999, -999))
+	# Neither script has a class_name; this file loads them where it needs them.
+	var level_script = load("res://scripts/module_level.gd")
+	var cells_script = level_script.ModuleMaze
+	var spots: Array[Dictionary] = []
+	for key: Vector2i in depth:
+		var cell = _module_level.cells[key]
+		if cell.kind != "dead" or cell.room >= 0 or cell.court or key == spawn_cell \
+				or door_cells.has(key):
+			continue
+		if level_script.under_boss_hall(_module_level, _module_level.to_world(key)):
+			continue
+		var exit_side := -1
+		for side: int in cells_script.ORDER:
+			if cell.open & side:
+				exit_side = side if exit_side < 0 else -2
+		if exit_side < 0:
+			continue
+		var step: Vector2i = cells_script.DIRS[exit_side]
+		spots.append({"cell": key, "out": Vector3(float(step.x), 0.0, float(step.y)),
+			"depth": int(depth[key])})
+	return spots
+
+
+## --- Holding cells (note 153) --------------------------------------------------------
+##
+## The user: "Make random jail cells in the maze that contain 2 or 3 random proels
+## of different types." Up to `holding_cell_count` dead ends, picked at random and
+## at least `holding_cell_gap` apart, are shut with the prison's gate
+## (holding_cell.gd). Each draws 2 or 3 different types from CONTAINED, so every
+## skeleton type counts as a proel and a new type added there turns up in the
+## cells with no other change. The prisoners stay caged until every type in their
+## cell is out of containment, then the gate opens and they are loose subjects.
+
+@export var holding_cell_count := 10
+@export var holding_cell_gap := 30.0
+const HOLDING_CELL := preload("res://scripts/holding_cell.gd")
+var _holding_cells: Array[Node3D] = []
+
+
+func _place_holding_cells(holder: Node3D, detail: float) -> void:
+	_holding_cells.clear()
+	if holding_cell_count <= 0 or not load("res://scripts/module_level.gd").brick:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _active_seed ^ 0x6a61696c
+	var passage: Dictionary = _module_level.get_meta("exit_passage", {})
+	var cells_script = load("res://scripts/module_level.gd").ModuleMaze
+	var anchored := {}
+	for a in _anchors:
+		anchored[world_to_tile((a as Node3D).global_position)] = true
+	var spots: Array[Dictionary] = []
+	for s in _plain_dead_ends():
+		var out: Vector3 = s["out"]
+		var ahead = _module_level.cells.get(Vector2i(s["cell"]) + Vector2i(roundi(out.x), roundi(out.z)))
+		if ahead == null or ahead.room >= 0 or ahead.court or passage.has(s["cell"]):
+			continue
+		# It hangs its own torch by the gate; a wall torch would crowd that.
+		if _module_level.torch_cells.has(s["cell"]):
+			continue
+		# An anchor stands 1.1 m back from the middle: a tile or so off it.
+		var back := world_to_tile(_module_level.to_world(s["cell"]) - out * 1.1)
+		if anchored.has(back):
+			continue
+		spots.append(s)
+	for i in range(spots.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp: Dictionary = spots[i]
+		spots[i] = spots[j]
+		spots[j] = tmp
+	var parent := Node3D.new()
+	parent.name = "HoldingCells"
+	holder.add_child(parent)
+	var taken: Array[Vector3] = [_module_level.spawn]
+	for s in spots:
+		if _holding_cells.size() >= holding_cell_count:
+			break
+		var at: Vector3 = _module_level.to_world(s["cell"])
+		if taken.any(func(p: Vector3) -> bool: return Vector2(at.x - p.x, at.z - p.z).length() < holding_cell_gap):
+			continue
+		taken.append(at)
+		_holding_cells.append(HOLDING_CELL.place(parent, _module_level, s["cell"], s["out"],
+			_cell_roster(rng), self, module_torch_energy if rng.randf() < detail else 0.0))
+		# Nothing spawns, wanders or patrols behind the bars.
+		var mid := world_to_tile(at)
+		for dz in range(-2, 3):
+			for dx in range(-2, 3):
+				var t := mid + Vector2i(dx, dz)
+				if t.x >= 0 and t.y >= 0 and t.x < tiles and t.y < tiles:
+					grid[t.y][t.x] = WALL
+	print("[cells] %d holding cells, of %d free dead ends" % [_holding_cells.size(), spots.size()])
+
+
+## Two or three different types, from every type there is.
+func _cell_roster(rng: RandomNumberGenerator) -> Array[StringName]:
+	var pool := CONTAINED.duplicate()
+	var out: Array[StringName] = []
+	for n in mini(rng.randi_range(2, 3), pool.size()):
+		out.append(pool.pop_at(rng.randi_range(0, pool.size() - 1)))
+	return out
+
+
+func _stock_holding_cells() -> void:
+	for c in _holding_cells:
+		c.call("stock")
+
+
+## A type was let out: any cell now holding only released types opens.
+func _open_holding_cells() -> void:
+	for c in _holding_cells:
+		if c.call("all_let_out"):
+			c.call("swing_open")
 
 
 ## --- The Remnant and its hiding places (2026-10-08) --------------------------------
@@ -1719,6 +1815,8 @@ func _place_clutter(holder: Node3D) -> void:
 			roundi((p.z - _module_level.origin.z) / _module_level.cell_size))] = true
 	for key in _module_level.manholes:
 		blocked[key] = true
+	for c in _holding_cells:
+		blocked[c.get("cell")] = true
 	var solid: Array = level_script.BrickLevel.place_clutter(holder, _module_level, blocked, module_view_range)
 	for s in solid:
 		var at: Vector3 = s["at"]
@@ -4021,6 +4119,8 @@ func _seal_cells() -> void:
 	for door in cell_doors:
 		if is_instance_valid(door) and door.has_method("make_solid"):
 			door.make_solid()
+	for c in _holding_cells:
+		c.call("arm")
 
 
 ## Throws open the next batch of cells and turns loose whatever is inside.
@@ -4410,6 +4510,7 @@ func _populate() -> void:
 	_scout_rng.seed = hash(_active_seed + 6151)
 	_spawn_boss()
 	_stock_jail_cells()
+	_stock_holding_cells()
 	_spawn_enemies()
 	# The types already let out of containment roam loose too, and the collector
 	# goes after them (note 120).
@@ -5458,6 +5559,7 @@ func release_hand(hand: StringName, count: int) -> void:
 	_spawn_loose(hand, loose_per_type)
 	_spawn_collectors()
 	update_surgery_bolts()
+	_open_holding_cells()
 
 
 ## A prisoner come out of its cell's back exit into the maze (note 122): a
