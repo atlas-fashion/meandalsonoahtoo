@@ -6,14 +6,15 @@ extends CharacterBody3D
 
 ## Walking pace, m/s. Was 5.0; brought down 15% on request (2026-10-01); 4.25 ->
 ## 3.3 when Shift became a sprint at the old 4.25 (note 161); 3.3 -> 2.5 so the
-## sprint is 70% faster, plainly felt (note 162). Everything that moves the body
+## sprint is 70% faster, plainly felt (note 162); both +0.75 (walk 3.25, sprint
+## 5.0), the 1.75 m/s gap kept (note 165). Everything that moves the body
 ## at "walking pace" reads `_pace()`, the two blended.
-@export var move_speed := 2.5
+@export var move_speed := 3.25
 ## A scripted scene walk (`scene_walk_to`) keeps the pace its scenes were timed at.
 const SCENE_WALK_SPEED := 3.3
 ## Sprinting pace (Shift held, or the pad's stick pushed all the way), m/s: the
-## old walk (note 161).
-@export var sprint_speed := 4.25
+## old walk (note 161), +0.75 with the walk (note 165).
+@export var sprint_speed := 5.0
 ## How long the pace takes to ease between walking and sprinting (a critically
 ## damped spring on `_sprint_k`, so it has no corner at either end).
 @export var sprint_blend_time := 0.3

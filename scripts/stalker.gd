@@ -428,8 +428,9 @@ func _pick_wander() -> void:
 
 
 func _hunt_speed(player: Node3D) -> float:
-	# Against the sprint (the old walk, note 161), so its pace is what it was.
-	var pace: float = player.get("sprint_speed") if player.get("sprint_speed") != null else 4.25
+	# Against the sprint (note 161), so it always outruns a sprint by the same
+	# ratio and the dash is the way out; it rose with the sprint in note 165.
+	var pace: float = player.get("sprint_speed") if player.get("sprint_speed") != null else 5.0
 	return pace * hunt_speed_ratio
 
 
