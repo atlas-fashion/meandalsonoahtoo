@@ -1623,7 +1623,11 @@ func _measure_sword() -> void:
 		return
 	var mi := found[0] as MeshInstance3D
 	var to_model := sword_model.global_transform.affine_inverse() * mi.global_transform
-	var verts: PackedVector3Array = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	# Every surface: the user's sword (note 163) is a blade and a hilt, each with
+	# its own material, and the guard and pommel are on the hilt's.
+	var verts := PackedVector3Array()
+	for s in mi.mesh.get_surface_count():
+		verts.append_array(mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX])
 	var tip := verts[0]
 	var left := verts[0]
 	var right := verts[0]

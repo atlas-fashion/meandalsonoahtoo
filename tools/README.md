@@ -112,10 +112,29 @@ ships. A handful of 2K assets will cost more than the whole rest of the level.
 
 ---
 
-# Player sword
+# Player sword and spear
 
-**In use: `models/player_sword_meshy.glb`** (2026-09-30), the Meshy model the
-user supplied, fitted to the pivot by `build_meshy_sword.py`:
+**In use since 2026-11-04: `models/sword.glb` and `models/spear.glb`**, the
+user's own Blender files (`models/source/weapons/sword.blend`, `spear.blend`),
+fitted by `build_weapons.py` (note 163):
+
+```
+blender -b --factory-startup -P tools/build_weapons.py -- sword models/sword.glb
+blender -b --factory-startup -P tools/build_weapons.py -- spear models/spear.glb
+godot --headless --import --path .
+```
+
+The sword goes on the axes below (pommel 0, tip 2.65 on +Y); the spear on
+`spear.gd`'s (along -Z, hand at 0, butt +0.67, point -2.07). The script prints
+the sword's guard height: `coop_avatar.gd` `SWORD_GUARD` must equal it. It
+renames the Tripo materials (`SpearSocket`, `SpearBlade` are lit when thrown)
+and stops if one is missing, so a re-made .blend needs its names in
+`SWORD_MATS` / `SPEAR_MATS`.
+
+To go back to the Meshy sword, point `3_sword` in `scenes/player.tscn` at
+`player_sword_meshy.glb`. Before 2026-11-04 it was **in use**
+(2026-09-30), the Meshy model the user supplied, fitted to the pivot by
+`build_meshy_sword.py`:
 
 ```
 blender -b --factory-startup -P tools/build_meshy_sword.py -- models/player_sword_meshy.glb

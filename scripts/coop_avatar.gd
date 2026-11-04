@@ -27,6 +27,13 @@ extends Node3D
 ## bone's local pose, so the rig's own bone axes never matter.
 
 const KNIGHT := preload("res://models/player_knight.glb")
+## What it holds: the user's sword and spear (tools/build_weapons.py, note 163).
+const SWORD := preload("res://models/sword.glb")
+const SPEAR := preload("res://models/spear.glb")
+## The sword's guard up its model, as tools/build_weapons.py prints it.
+const SWORD_GUARD := 0.713
+const SWORD_LENGTH := 1.0
+const SPEAR_LENGTH := 2.2
 const CLOTH := [Color(0.42, 0.12, 0.08), Color(0.13, 0.22, 0.38)]
 const NAMES := ["PLAYER 1", "PLAYER 2"]
 ## The knight is 1.70 m to the top of the helmet (the armor built to it); at 1.05 its visor sits
@@ -308,28 +315,30 @@ func _along(dir: Vector3) -> Basis:
 
 
 func _build_props(i: int) -> void:
-	var steel := _mat(Color(0.7, 0.72, 0.76), 0.35, 0.8)
-	var wood := _mat(Color(0.35, 0.24, 0.14), 0.9)
 	_props = Node3D.new()
 	_props.name = "InHand"
 	_knight.add_child(_props)
 	# Props live in knight space, which is scaled: sizes are in metres / SCALE.
 	var u := 1.0 / SCALE
-	# The sword along +Y from the grip: grip, guard, blade.
+	# The user's sword and spear (note 163), the same models as in first person,
+	# shrunk to the body. Each prop's +Y runs from the grip along the weapon.
+	# The sword model: pommel 0, guard SWORD_GUARD, tip 2.65 on +Y; a metre long
+	# here, held where the first-person fist holds it (0.42 from guard to pommel).
 	_sword = Node3D.new()
 	_props.add_child(_sword)
-	_part(_sword, _cyl(0.018 * u, 0.018 * u, 0.14 * u), Vector3(0.0, 0.0, 0.0), wood)
-	_part(_sword, _box(Vector3(0.2, 0.03, 0.04) * u), Vector3(0.0, 0.08 * u, 0.0), wood)
-	_part(_sword, _box(Vector3(0.05, 0.85, 0.012) * u), Vector3(0.0, 0.52 * u, 0.0), steel)
-	# The spear along +Y, the head forward.
+	var sword := SWORD.instantiate() as Node3D
+	var ss := SWORD_LENGTH / 2.65 * u
+	sword.scale = Vector3.ONE * ss
+	sword.position = Vector3(0.0, -SWORD_GUARD * 0.58 * ss, 0.0)
+	_sword.add_child(sword)
+	# The spear model runs along -Z, the hand at its origin, 2.74 long; here
+	# turned onto +Y and 2.2 m long.
 	_spear = Node3D.new()
 	_props.add_child(_spear)
-	_part(_spear, _cyl(0.018 * u, 0.018 * u, 2.0 * u), Vector3(0.0, 0.2 * u, 0.0), wood)
-	var head := CylinderMesh.new()
-	head.top_radius = 0.0
-	head.bottom_radius = 0.045 * u
-	head.height = 0.22 * u
-	_part(_spear, head, Vector3(0.0, 1.3 * u, 0.0), steel)
+	var spear := SPEAR.instantiate() as Node3D
+	var sp := SPEAR_LENGTH / 2.74 * u
+	spear.transform = Transform3D(Basis(Vector3.RIGHT, PI * 0.5).scaled(Vector3.ONE * sp), Vector3.ZERO)
+	_spear.add_child(spear)
 	_label = Label3D.new()
 	_label.text = NAMES[i]
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -340,38 +349,3 @@ func _build_props(i: int) -> void:
 	_label.outline_size = 6
 	_label.position = Vector3(0.0, 2.05, 0.0)
 	add_child(_label)
-
-
-# --- Pieces -------------------------------------------------------------------------
-
-func _mat(c: Color, rough: float, metal := 0.0) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = c
-	m.roughness = rough
-	m.metallic = metal
-	return m
-
-
-func _cyl(top: float, bottom: float, h: float) -> CylinderMesh:
-	var c := CylinderMesh.new()
-	c.top_radius = top
-	c.bottom_radius = bottom
-	c.height = h
-	c.radial_segments = 12
-	c.rings = 1
-	return c
-
-
-func _box(size: Vector3) -> BoxMesh:
-	var b := BoxMesh.new()
-	b.size = size
-	return b
-
-
-func _part(parent: Node3D, mesh: Mesh, at: Vector3, mat: Material) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = mat
-	mi.position = at
-	parent.add_child(mi)
-	return mi

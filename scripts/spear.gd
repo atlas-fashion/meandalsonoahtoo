@@ -63,8 +63,8 @@ const STAB_STAGGER := 0.1
 const DASH_STAGGER := 1.0
 const BLAST_STAGGER := 1.0
 
-## From the hand to the point of the blade (socket at 1.55, blade 0.52), and to
-## the end of the butt spike: what a scene (`player.stab_at`, the haft strike)
+## From the hand to the point of the blade, and to the end of the butt: the
+## model is fitted to these (tools/build_weapons.py, note 163); what a scene (`player.stab_at`, the haft strike)
 ## measures the spear by.
 const TIP_REACH := 2.07
 const BUTT_REACH := 0.67
@@ -730,110 +730,51 @@ static func _mat(key: StringName) -> StandardMaterial3D:
 					m.albedo_color = Color(1.0, 0.7, 0.35, 0.7)
 				&"tether":
 					m.albedo_color = Color(1.0, 0.62, 0.25, 0.85)
-		&"wood":
-			m.albedo_texture = load("res://textures/wood_door_albedo.png")
-			m.albedo_color = Color(1.0, 0.86, 0.66)
-			m.roughness = 0.8
-			m.uv1_triplanar = true
-			m.uv1_scale = Vector3(3.0, 3.0, 3.0)
-		&"iron":
-			# Bright and only half metal: fully metallic, with nothing in these
-			# halls to reflect, it rendered black.
-			m.albedo_color = Color(0.78, 0.79, 0.82)
-			m.metallic = 0.4
-			m.roughness = 0.32
-		&"iron_hot":
-			m.albedo_color = Color(0.5, 0.4, 0.34)
-			m.roughness = 0.4
-			m.emission_enabled = true
-			m.emission = Color(1.0, 0.5, 0.16)
-			m.emission_energy_multiplier = 2.2
-		&"leather":
-			m.albedo_color = Color(0.2, 0.12, 0.07)
-			m.roughness = 0.9
 	_mats[key] = m
 	return m
 
 
-## The spear along -Z, tip forward: the hand holds it at the origin, 0.55 m up
-## the shaft from the butt. `in_hand` gives every surface the viewmodel's
-## pulled-forward depth, as the sword has.
+## The user's spear (note 163), fitted by tools/build_weapons.py: along -Z, tip
+## forward, the hand at the origin, the butt's end at +BUTT_REACH and the point
+## at -TIP_REACH.
+const MODEL := preload("res://models/spear.glb")
+
+## Thrown, the head (socket and blade) glows like the tether, so it can be
+## followed out and back: its materials, lit, made once.
+static var _hot := {}
+
+
+static func _hot_mat(source: BaseMaterial3D) -> BaseMaterial3D:
+	if not _hot.has(source):
+		var m := source.duplicate() as BaseMaterial3D
+		m.emission_enabled = true
+		m.emission = Color(1.0, 0.5, 0.16)
+		m.emission_energy_multiplier = 2.2
+		_hot[source] = m
+	return _hot[source]
+
+
+## `in_hand` gives every surface the viewmodel's pulled-forward depth, as the
+## sword has; out of the hand it is the thrown spear, its head alight.
 func _build_model(in_hand: bool) -> Node3D:
-	var root := Node3D.new()
+	var root := MODEL.instantiate() as Node3D
 	root.name = "SpearModel"
-	var parts: Array = []
-	var shaft := CylinderMesh.new()
-	shaft.top_radius = 0.019
-	shaft.bottom_radius = 0.022
-	shaft.height = 2.0
-	shaft.radial_segments = 8
-	parts.append([shaft, &"wood", Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0.0, 0.0, -0.45))])
-	var socket := CylinderMesh.new()
-	socket.top_radius = 0.016
-	socket.bottom_radius = 0.026
-	socket.height = 0.14
-	socket.radial_segments = 8
-	parts.append([socket, &"iron", Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0.0, 0.0, -1.49))])
-	var butt := CylinderMesh.new()
-	butt.top_radius = 0.024
-	butt.bottom_radius = 0.004
-	butt.height = 0.12
-	butt.radial_segments = 8
-	parts.append([butt, &"iron", Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0.0, 0.0, 0.61))])
-	for z: float in [-1.36, -1.32, -0.05, 0.05]:
-		var band := TorusMesh.new()
-		band.inner_radius = 0.02
-		band.outer_radius = 0.028
-		band.rings = 10
-		band.ring_segments = 5
-		parts.append([band, &"leather", Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, 0.0, z))])
-	# Thrown, the head glows like the tether, so it can be followed out and back.
-	parts.append([_blade_mesh(), &"iron" if in_hand else &"iron_hot", Transform3D(Basis(), Vector3(0.0, 0.0, -1.55))])
-	for part in parts:
-		var mi := MeshInstance3D.new()
-		mi.mesh = part[0]
-		var mat: StandardMaterial3D = _mat(part[1])
-		if in_hand:
-			mat = mat.duplicate() as StandardMaterial3D
-			mat.use_z_clip_scale = true
-			mat.z_clip_scale = float(player.get("sword_draw_depth")) if player != null else 0.12
-		mi.material_override = mat
-		mi.transform = part[2]
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(mi)
+		for i in mi.mesh.get_surface_count():
+			var source := mi.mesh.surface_get_material(i) as BaseMaterial3D
+			if source == null:
+				continue
+			var mat := source
+			if in_hand:
+				mat = source.duplicate() as BaseMaterial3D
+				mat.use_z_clip_scale = true
+				mat.z_clip_scale = float(player.get("sword_draw_depth")) if player != null else 0.12
+			elif source.resource_name in ["SpearSocket", "SpearBlade"]:
+				mat = _hot_mat(source)
+			mi.set_surface_override_material(i, mat)
 	return root
-
-
-## A leaf-shaped blade with a raised midrib: diamond cross-sections lofted from
-## the socket to the point, along -Z.
-static func _blade_mesh() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var length := 0.52
-	var stations := 9
-	var rings: Array = []
-	for i in stations:
-		var t := float(i) / float(stations - 1)
-		# Swells to its widest a third of the way up, then draws to a point.
-		var w := 0.024 + 0.07 * sin(PI * clampf(t / 0.9, 0.0, 1.0) * 0.85) * (1.0 - t * 0.45)
-		if i == stations - 1:
-			w = 0.0
-		var th := maxf(w * 0.22, 0.003) if i < stations - 1 else 0.0
-		var z := -t * length
-		rings.append([Vector3(-w, 0.0, z), Vector3(0.0, th, z), Vector3(w, 0.0, z), Vector3(0.0, -th, z)])
-	for i in stations - 1:
-		var a: Array = rings[i]
-		var b: Array = rings[i + 1]
-		for k in 4:
-			var k2 := (k + 1) % 4
-			st.add_vertex(a[k])
-			st.add_vertex(b[k])
-			st.add_vertex(b[k2])
-			st.add_vertex(a[k])
-			st.add_vertex(b[k2])
-			st.add_vertex(a[k2])
-	st.generate_normals()
-	return st.commit()
 
 
 func _head() -> Node3D:
@@ -846,9 +787,11 @@ func set_depth(scale: float) -> void:
 	if _model == null:
 		return
 	for node in _model.find_children("*", "MeshInstance3D", true, false):
-		var mat := (node as MeshInstance3D).material_override as BaseMaterial3D
-		if mat != null and mat.use_z_clip_scale:
-			mat.z_clip_scale = scale
+		var mi := node as MeshInstance3D
+		for i in mi.get_surface_override_material_count():
+			var mat := mi.get_surface_override_material(i) as BaseMaterial3D
+			if mat != null and mat.use_z_clip_scale:
+				mat.z_clip_scale = scale
 
 
 func _now() -> float:

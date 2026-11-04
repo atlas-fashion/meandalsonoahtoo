@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 162), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 163), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -243,10 +243,12 @@ whole arc.
 `tools/build_skeleton.py`. Never hand-edit it. See `tools/README.md` for the
 rebuild command, the axis conventions and the traps.
 
-`models/player_sword_meshy.glb` (the sword in use) is a build artifact from
-`tools/build_meshy_sword.py`, fitted from the Meshy sources in
-`models/source/meshy_sword/` (a `.gdignore` folder). Rebuild, never hand-edit;
-see `tools/README.md`.
+`models/sword.glb` and `models/spear.glb` (the sword and spear in use, first
+person, thrown and on the co-op body) are build artifacts from
+`tools/build_weapons.py`, fitted from the user's own Blender files in
+`models/source/weapons/`. Rebuild, never hand-edit; see note 163 and
+`tools/README.md`. The Meshy sword (`models/player_sword_meshy.glb`,
+`tools/build_meshy_sword.py`) is kept as a fallback.
 
 `models/kit/gate_door.glb` (the corridor doors) is a build artifact from
 `tools/build_gate_door.py`, cut out of `module_gate.glb`. Rebuild, never
@@ -590,6 +592,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 160 | 2026-11-03 | The sword's Q is a heavy slash, not the spin: a 1 s wind-up at 0.15 walking pace (blade raised, gold building on it), a cut from high right to low left, and a slow gold crescent wave (`sword_wave.gd`, 7 m/s, 30 m, 3 m wide) that passes through enemies for 80 each and stops at stone; a blow in the wind-up cuts it off; light and sparks only with effects; +0.02 ms | [docs/notes/160-heavy-gold-slash.md](docs/notes/160-heavy-gold-slash.md) |
 | 161 | 2026-11-04 | Ghost mode replaced by a dash (Left Ctrl / L3: 34 m/s on the very next tick, eased out over 0.24 s, straight back from a stand; 14 invulnerable frames, 14/60 s of game time, in which blows, knockdowns, shoves and beams are not taken; the next only after 0.65 s, a press 0.12 s early held); Shift a sprint at the old 4.25, the walk 3.3, on a damped spring between; berserk and the Remnant keep their speeds | [docs/notes/161-dash-sprint-slower-walk.md](docs/notes/161-dash-sprint-slower-walk.md) |
 | 162 | 2026-11-04 | The gold wave slash moved to the sword's F, the ult: 130 damage, once every `slam_cooldown` 20 s on the slam's clock (`_start_wave`, pose `&"wave"`); the slam kept whole but unbound (`sword_slam`); Q a delayed heavy swipe (`_start_heavy`, pose `&"heavy"`: cocked back and held, the cut lands 0.68 s after Q for 45 with a lurch, committed, a blow in the wind-up cuts it off); the walk 3.3 -> 2.5, sprint still 4.25 | [docs/notes/162-wave-on-f-heavy-swipe-slower-walk.md](docs/notes/162-wave-on-f-heavy-swipe-slower-walk.md) |
+| 163 | 2026-11-04 | The user's own sword and spear (his Blender files, `models/source/weapons/`) fitted by `tools/build_weapons.py` to the old conventions (sword pommel 0 / tip 2.65 on +Y; spear on -Z, hand at 0, butt +0.67, point -2.07): first person, thrown (the head lit) and on the co-op body; `_measure_sword` reads every surface | [docs/notes/163-the-users-sword-and-spear.md](docs/notes/163-the-users-sword-and-spear.md) |
 
 ## Notes by source file
 
@@ -616,8 +619,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162
-- `scripts/first_person_arms.gd`: 156, 157, 158, 159
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163
+- `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -658,7 +661,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
@@ -686,7 +689,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_sword.gd`: 24, 93, 135
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
-- `scripts/spear.gd`: 14, 78, 79, 143, 144, 157
+- `scripts/spear.gd`: 14, 78, 79, 143, 144, 157, 163
 - `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120, 128
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109, 121
@@ -743,6 +746,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_surgery_kit.py`: 95, 96, 98, 99, 100, 102
 - `tools/build_surgeon.py`: 99
 - `tools/build_vines.py`: 6.18
+- `tools/build_weapons.py`, `scenes/player.tscn`: 163
 - `tools/build_wood_texture.py`: 6.19
 - `tools/grade_texture.py`: 6.05
 - `tools/preview_module_level.gd`: 6.11, 6.14
