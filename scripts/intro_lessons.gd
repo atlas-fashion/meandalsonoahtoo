@@ -29,8 +29,8 @@ var LESSONS: Array[Dictionary] = [
 	{"id": &"pack", "title": "Check your pack", "kb": "[k]TAB[/k] opens your inventory. Close it again.", "pad": "[k]Y[/k] opens your inventory. Close it again."},
 	{"id": &"map", "title": "Look at your map", "kb": "[k]M[/k] opens your map. It fills in as you explore. Close it again.", "pad": "[k]SELECT[/k] opens your map. It fills in as you explore. Close it again."},
 	{"id": &"cut", "title": "Strike a training post  ·  3 times", "kb": "[k]LEFT CLICK[/k] swings your sword.", "pad": "[k]RB[/k] swings your sword."},
-	{"id": &"heavy", "title": "Heavy slash", "kb": "[k]Q[/k]: a long wind-up, then a cut that sends a gold wave down the hall.", "pad": "[k]RT[/k]: a long wind-up, then a cut that sends a gold wave down the hall."},
-	{"id": &"slam", "title": "Slam", "kb": "[k]F[/k] brings the blade down hard. In the air, it dives.", "pad": "[k]LT[/k] brings the blade down hard. In the air, it dives."},
+	{"id": &"heavy", "title": "Heavy swipe", "kb": "[k]Q[/k]: the blade drawn back a moment, then one wide, heavy cut.", "pad": "[k]RT[/k]: the blade drawn back a moment, then one wide, heavy cut."},
+	{"id": &"wave", "title": "Wave slash", "kb": "[k]F[/k]: a long wind-up, then a cut that sends a gold wave down the hall. Once every 20 seconds.", "pad": "[k]LT[/k]: a long wind-up, then a cut that sends a gold wave down the hall. Once every 20 seconds."},
 	{"id": &"to_spear", "title": "Take up the spear", "kb": "Hold [k]C[/k], point at the spear, let go.", "pad": "Hold [k]R3[/k], point at the spear with the stick, let go."},
 	{"id": &"stab", "title": "Stab a post  ·  3 times", "kb": "[k]LEFT CLICK[/k] stabs.", "pad": "[k]RB[/k] stabs."},
 	{"id": &"dash", "title": "Spear dash", "kb": "[k]Q[/k] charges forward with the spear braced.", "pad": "[k]RT[/k] charges forward with the spear braced."},
@@ -209,6 +209,10 @@ func _fresh_track(p: Node) -> Dictionary:
 
 func _setup(id: StringName) -> void:
 	match id:
+		&"wave":
+			# Not left waiting on a wave thrown before the lesson (its 20 s clock).
+			for p in _per:
+				p.set("_slam_ready_at", 0.0)
 		&"fell":
 			if sentinel != null:
 				sentinel.set("mortal", true)
@@ -285,8 +289,8 @@ func _done_now(p: Node, t: Dictionary, _delta: float) -> bool:
 			return _hits_since(t, &"sword") >= 3
 		&"heavy":
 			return p.get("_pose_kind") == &"heavy"
-		&"slam":
-			return p.get("_slamming") == true or p.get("_pose_kind") == &"slam"
+		&"wave":
+			return p.get("_pose_kind") == &"wave"
 		&"to_spear":
 			return p.call("held_item") == &"spear"
 		&"stab":

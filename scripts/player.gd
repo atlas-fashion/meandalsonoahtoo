@@ -5,9 +5,12 @@ extends CharacterBody3D
 ## left click swings the sword, Escape releases the mouse.
 
 ## Walking pace, m/s. Was 5.0; brought down 15% on request (2026-10-01); 4.25 ->
-## 3.3 when Shift became a sprint at the old 4.25 (note 161). Everything that
-## moves the body at "walking pace" reads `_pace()`, the two blended.
-@export var move_speed := 3.3
+## 3.3 when Shift became a sprint at the old 4.25 (note 161); 3.3 -> 2.5 so the
+## sprint is 70% faster, plainly felt (note 162). Everything that moves the body
+## at "walking pace" reads `_pace()`, the two blended.
+@export var move_speed := 2.5
+## A scripted scene walk (`scene_walk_to`) keeps the pace its scenes were timed at.
+const SCENE_WALK_SPEED := 3.3
 ## Sprinting pace (Shift held, or the pad's stick pushed all the way), m/s: the
 ## old walk (note 161).
 @export var sprint_speed := 4.25
@@ -259,13 +262,16 @@ extends CharacterBody3D
 @export var damage_mark_spread_max := 96.0
 
 @export_group("Jump slam")
-## The heavy attack, Shift + right click. In mid-air it drives you straight down
-## and the landing detonates in a ring around you; on the ground there is no
+## Off the sword since note 162 (its F is the wave slash), kept whole for another
+## weapon: true puts it back on the sword's F. In mid-air it drives you straight
+## down and the landing detonates in a ring around you; on the ground there is no
 ## jump -- the sword is raised overhead and brought down where you stand, with
 ## the same blast.
+@export var sword_slam := false
 @export var slam_damage := 150.0
-## Gates the blast only. The dive to the ground is always available, so the slam
-## doubles as a way to get down fast.
+## Gates the slam's blast (the dive to the ground is always available, so the
+## slam doubles as a way to get down fast) -- and the wave slash, which keeps
+## this cooldown and its clock, `_slam_ready_at` (note 162).
 @export var slam_cooldown := 20.0
 @export var slam_radius := 4.5
 ## Colour and size of the slam's ring when the blast actually lands...
@@ -332,25 +338,40 @@ extends CharacterBody3D
 @export var parry_color := Color(0.66, 0.28, 1.0)
 @export var block_spark_color := Color(1.0, 0.82, 0.55)
 
-@export_group("Heavy slash")
-## Q with the sword (note 160; it was the spin): a long wind-up with the blade
-## hauled up over the right shoulder, the player all but planted
-## (`heavy_move_scale` of walking pace), then one heavy diagonal cut that throws
-## a slow gold wave straight ahead (sword_wave.gd). The WAVE does the damage --
-## `heavy_damage` to everything it passes through, once each -- not the blade.
-@export var heavy_damage := 80.0
-@export_range(0.0, 1.0) var heavy_move_scale := 0.15
+@export_group("Wave slash")
+## F with the sword, the ult (note 162; note 160 had it on Q at 80): a long
+## wind-up with the blade hauled up over the right shoulder, the player all but
+## planted (`wave_move_scale` of walking pace), then one heavy diagonal cut that
+## throws a slow gold wave straight ahead (sword_wave.gd). The WAVE does the
+## damage -- `wave_damage` to everything it passes through, once each -- not the
+## blade. Once every `slam_cooldown` (the slam's 20 s, which it replaced on F):
+## pressed before then, nothing.
+@export var wave_damage := 130.0
+
+@export_group("Heavy swipe")
+## Q with the sword (note 162): the blade cocked back over the right shoulder and
+## held -- a plain delay, the player slowed to `heavy_move_scale` -- then one
+## wide, flat cut right to left through the crosshair that bites for
+## `heavy_damage`, with a lurch into it and a harder shove and stun than a cut.
+## A blow taken in the wind-up cuts it off.
+@export var heavy_damage := 45.0
+@export_range(0.0, 1.0) var heavy_move_scale := 0.35
+@export var heavy_push := 9.0
+@export var heavy_stun := 0.45
+@export_range(0.0, 1.0) var heavy_stagger_chance := 1.0
+@export var heavy_lunge := 5.5
+@export_range(0.0, 1.0) var wave_move_scale := 0.15
 ## The wave: metres a second, how far it goes, and its shove and stun.
 @export var wave_speed := 7.0
 @export var wave_reach := 30.0
 @export var wave_push := 9.0
 @export var wave_stun := 0.5
-## The camera's effort through it (`_heavy_effort`): the lean back into the
+## The camera's effort through it (`_wave_effort`): the lean back into the
 ## wind-up and over into the cut (degrees), the crouch (metres) and the field of
 ## view drawn in through the wind-up (degrees).
-@export var heavy_effort_roll := 7.0
-@export var heavy_effort_drop := 0.08
-@export var heavy_effort_fov := 5.0
+@export var wave_effort_roll := 7.0
+@export var wave_effort_drop := 0.08
+@export var wave_effort_fov := 5.0
 
 @export_group("Lunge look")
 ## The lunge's look (the spear's dash): white speed lines rushing outward (the
@@ -746,7 +767,7 @@ func _stab_effort() -> Vector4:
 ## start its attack over (enemy.gd `_staggered`). A blow that does not stagger
 ## still hurts but neither moves nor interrupts it.
 ##
-## Sword: cut `slash_stagger_chance`, the heavy slash's wave and slam always.
+## Sword: cut `slash_stagger_chance`, the wave slash's wave and slam always.
 ## Spear (spear.gd): stab 10%, dash and the thrown spear's blast always.
 @export_range(0.0, 1.0) var slash_stagger_chance := 0.4
 @export_range(0.0, 1.0) var wave_stagger_chance := 1.0
@@ -995,7 +1016,8 @@ func _scene_walk(delta: float) -> void:
 		return
 	var dir := to / dist
 	# Easing into the last half metre, so it does not stop dead.
-	var speed := move_speed * clampf(dist * 2.5, 0.35, 1.0)
+	# At the walk scenes were timed against (3.3), not `move_speed` (note 162).
+	var speed := SCENE_WALK_SPEED * clampf(dist * 2.5, 0.35, 1.0)
 	velocity.x = move_toward(velocity.x, dir.x * speed, acceleration * delta)
 	velocity.z = move_toward(velocity.z, dir.z * speed, acceleration * delta)
 	# Facing the way they go -- unless the scene is holding the view on something,
@@ -1187,7 +1209,7 @@ var _slam_started_at := 0.0
 ## This slam began on the ground: no dive, the sword is raised and brought down.
 var _slam_grounded := false
 var _slam_ready_at := 0.0
-## Damage the stroke in progress deals (a cut's; the heavy slash's wave carries its own).
+## Damage the stroke in progress deals (a cut's; the wave slash's wave carries its own).
 var _stroke_damage := 0.0
 ## Guarding: whether the block is up, when it went up (wall clock, for the
 ## parry window), and the decaying 0..1 shove a guarded blow gives the sword.
@@ -1342,7 +1364,7 @@ func _update_dash_view(delta: float) -> void:
 	# The base is the player's Field of view setting.
 	_base_fov = Graphics.field_of_view
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
-			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"heavy" \
+			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind not in [&"wave", &"heavy"] \
 			and _remnant_hunt <= 0.0 and _stab_fov == 0.0 and _sprint_k <= 0.0005:
 		if camera.fov != _base_fov:
 			camera.fov = _base_fov
@@ -1360,10 +1382,10 @@ func _update_dash_view(delta: float) -> void:
 	# both instead of whichever ran last.
 	camera.fov = _base_fov + dash_fov_kick * dash - attack_fov_kick * swing \
 		+ jump_fov_kick * sin(PI * (1.0 - _jump_kick)) - haft_zoom * _cine_z - _scene_zoom \
-		+ lunge_fov_kick * lunge_intensity() + _heavy_effort().w + _remnant_fov() + _stab_fov \
+		+ lunge_fov_kick * lunge_intensity() + _wave_effort().w + _remnant_fov() + _stab_fov \
 		+ sprint_fov_kick * _sprint_k
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
-			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"heavy" \
+			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind not in [&"wave", &"heavy"] \
 			and _remnant_hunt <= 0.0 and _stab_fov == 0.0 and _sprint_k <= 0.0005:
 		# Land exactly back on the authored value rather than near it.
 		camera.fov = _base_fov
@@ -1473,9 +1495,9 @@ func _update_head(delta: float) -> void:
 		shake_offset = Vector3(_bob_noise.get_noise_2d(t, 11.0), _bob_noise.get_noise_2d(t, 37.0), 0.0) * 0.09 * quake
 		shake_pitch = _bob_noise.get_noise_2d(t, 73.0) * deg_to_rad(5.0) * quake
 		shake_roll = _bob_noise.get_noise_2d(t, 91.0) * deg_to_rad(7.0) * quake
-	# The heavy slash's effort: a lean, a nod and a crouch (its FOV is in
+	# The wave slash's effort: a lean, a nod and a crouch (its FOV is in
 	# `_update_dash_view`).
-	var effort := _heavy_effort()
+	var effort := _wave_effort()
 	if _stab_strain > 0.0:
 		_stab_strain = maxf(_stab_strain - delta * 1.1 / attack_time_scale, 0.0)
 	var stab := _stab_effort()
@@ -1775,7 +1797,7 @@ func _look_scale() -> float:
 ## push turns fast. Every rule mouse look obeys holds here too: nothing in a
 ## menu, a scene or while a wheel is open (`wheel_open`, set by radial_menu.gd,
 ## which reads the stick itself then); clamped to the gap in a hiding place;
-## (the heavy slash leaves the look free).
+## (the wave slash leaves the look free).
 
 @export var pad_look_speed := 3.4
 ## Pitch is a little slower than yaw at the same tilt.
@@ -1837,7 +1859,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if wheel_open:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		# (The heavy slash leaves the look free: the wave goes where they aim.)
+		# (The wave slash leaves the look free: the wave goes where they aim.)
 		# Yaw turns the whole body so movement follows the view; pitch stays on
 		# the head alone, otherwise looking up would tilt the capsule.
 		# Holding a vat (note 111: "The player shouldnt be able to turn when
@@ -1885,7 +1907,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 	elif event.is_action_pressed("thrust"):
 		_attack_key_spills_drink()
-		# Q: the heavy slash with the sword; the dash with the spear; the axe thrown.
+		# Q: the heavy swipe with the sword; the dash with the spear; the axe thrown.
 		if Coop.aim_ready(self) and held_item() == &"sword" \
 				and not _dashing:
 			_start_heavy()
@@ -1897,10 +1919,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			axe.throw()
 	elif event.is_action_pressed("slam"):
 		_attack_key_spills_drink()
-		# F: the heavy attack. With the sword, a dive in the air or the blade
-		# brought down where you stand; with the spear, the throw.
-		if Coop.aim_ready(self) and not _dashing and not _flying \
-				and held_item() == &"sword" and not _slamming and _now() >= _slam_recover_until \
+		# F: the ult. With the sword, the wave slash (note 162); with the spear,
+		# the throw; with the axe, berserk. The slam (`_start_slam`, a dive in the
+		# air or the blade brought down where you stand) is kept, unbound, for
+		# another weapon: `sword_slam` puts it back on the sword's F.
+		if Coop.aim_ready(self) and held_item() == &"sword" and not sword_slam \
+				and not _dashing:
+			_start_wave()
+		elif Coop.aim_ready(self) and not _dashing and not _flying \
+				and held_item() == &"sword" and sword_slam and not _slamming and _now() >= _slam_recover_until \
 				and _pose_kind != &"haft" and not is_drinking() and not is_flinching():
 			_end_block()
 			_start_slam()
@@ -2235,15 +2262,18 @@ func _update_sweep_trail(delta: float) -> void:
 		# kick and lunge carried the camera on after the blade had passed, so the
 		# streak sat well above the crosshair, stepped at every frame's join.
 		var point := _sword_rest * _trail_point()
-		if _pose_kind == &"slash" or _pose_kind == &"chop" or _pose_kind == &"heavy":
+		if _pose_kind in [&"slash", &"chop", &"wave", &"heavy"]:
 			var from_t := _trail_pose_t if _trail_pose_t >= 0.0 and _trail_pose_t < _pose_time else _pose_time
 			var steps := maxi(1, ceili((_pose_time - from_t) / TRAIL_STEP))
 			for k in range(1, steps + 1):
 				var f := float(k) / float(steps)
 				var at := lerpf(from_t, _pose_time, f)
-				if _pose_kind == &"heavy":
-					# The heavy slash's streak is gold and wide (a third element, true).
-					_tip_trail.push_front([_heavy_pose(at) * point, lerpf(before, now, f), true])
+				if _pose_kind == &"wave":
+					# The wave slash's streak is gold and wide (a third element, true).
+					_tip_trail.push_front([_wave_pose(at) * point, lerpf(before, now, f), true])
+				elif _pose_kind == &"heavy":
+					# The heavy swipe's is white and wider (a third element, false).
+					_tip_trail.push_front([_heavy_pose(at) * point, lerpf(before, now, f), false])
 				else:
 					var pose := _swing_pose(at, _pose_kind == &"chop")
 					_tip_trail.push_front([pose * point, lerpf(before, now, f)])
@@ -2277,12 +2307,13 @@ func _update_sweep_trail(delta: float) -> void:
 		# Thin at the tip's newest point, thinning and fading to nothing behind.
 		var f0 := 1.0 - clampf((now - float(_tip_trail[i][1])) / sweep_trail_life, 0.0, 1.0)
 		var f1 := 1.0 - clampf((now - float(_tip_trail[i + 1][1])) / sweep_trail_life, 0.0, 1.0)
-		# The heavy slash's samples (a third element): gold, three times as wide.
-		var gold := s0.size() > 2
-		var wide := HEAVY_TRAIL_WIDTH if gold else 1.0
+		# The wave slash's samples (a third element, true): gold, three times as
+		# wide; the heavy swipe's (false): white, HEAVY_TRAIL_WIDTH as wide.
+		var gold := s0.size() > 2 and bool(s0[2])
+		var wide := WAVE_TRAIL_WIDTH if gold else (HEAVY_TRAIL_WIDTH if s0.size() > 2 else 1.0)
 		var w0 := side * sweep_trail_width * wide * f0
 		var w1 := side * sweep_trail_width * wide * f1
-		var tint := HEAVY_TRAIL_COLOR if gold else Color(1.0, 1.0, 1.0)
+		var tint := WAVE_TRAIL_COLOR if gold else Color(1.0, 1.0, 1.0)
 		var c0 := Color(tint, f0 * sweep_trail_alpha)
 		var c1 := Color(tint, f1 * sweep_trail_alpha)
 		verts.append_array([[p0 - w0, c0], [p0 + w0, c0], [p1 + w1, c1], [p0 - w0, c0], [p1 + w1, c1], [p1 - w1, c1]])
@@ -2395,46 +2426,90 @@ func _take_queued_attack() -> void:
 
 
 ## When the stroke in progress stops biting -- the earliest a new one may begin.
-## The heavy slash is committed until its cut has followed through
-## (HEAVY_HOLD); its recovery can be cut into.
+## The wave slash and the heavy swipe are committed until their cut has followed
+## through (WAVE_HOLD, HEAVY_HOLD); their recovery can be cut into.
 func _bite_end() -> float:
-	return HEAVY_HOLD if _pose_kind == &"heavy" else SWING_HOLD
+	if _pose_kind == &"wave":
+		return WAVE_HOLD
+	if _pose_kind == &"heavy":
+		return HEAVY_HOLD
+	return SWING_HOLD
 
 
-## The heavy slash has followed through: from here the player has full control
-## again -- walk, attack, block -- while the blade comes home.
-func _heavy_released() -> bool:
-	return _pose_kind == &"heavy" and _pose_time >= HEAVY_HOLD
+## A committed stroke (the wave slash or the heavy swipe) is under way and has not
+## yet followed through: no dash, no guard, no other stroke but the wave over a
+## heavy swipe's wind-up. After it the player has full control again -- walk,
+## attack, block -- while the blade comes home.
+func _committed() -> bool:
+	return _pose_kind in [&"wave", &"heavy"] and _pose_time >= 0.0 and _pose_time < _bite_end()
 
 
-## An attack is slowing the player down (a cut; the heavy slash until it has
-## followed through).
+## An attack is slowing the player down (a cut; the wave slash and the heavy
+## swipe until they have followed through).
 func _attack_slows() -> bool:
-	return _attacking and not _heavy_released()
+	return _attacking and (_pose_kind not in [&"wave", &"heavy"] or _committed())
 
 
 ## Walking pace through an attack: a cut's `attack_move_scale`, all but planted
-## (`heavy_move_scale`) from the heavy slash's wind-up to its follow-through.
+## (`wave_move_scale`) from the wave slash's wind-up to its follow-through,
+## `heavy_move_scale` through the heavy swipe's.
 func _attack_move_scale() -> float:
 	if not _attack_slows():
 		return 1.0
-	return heavy_move_scale if _pose_kind == &"heavy" else attack_move_scale
+	if _pose_kind == &"wave":
+		return wave_move_scale
+	if _pose_kind == &"heavy":
+		return heavy_move_scale
+	return attack_move_scale
 
 
-## Q ("thrust" action) with the sword (note 160): the heavy slash. HEAVY_WIND of
-## wind-up nearly planted, the blade hauled up over the right shoulder and the
-## gold building on it (`_blade_glow`), then one heavy cut from high right to
-## low left that throws the wave (`_fire_wave`, at HEAVY_FIRE). Committed until
-## it has followed through (HEAVY_HOLD); a blow taken before the wave is out
-## cuts it off (`_flinch`).
+## Q ("thrust" action) with the sword (note 162): the heavy swipe. The blade is
+## cocked back over the right shoulder by HEAVY_RAISE and held there, creeping
+## back, to HEAVY_WIND -- the delay -- then cut flat from right to left through
+## the crosshair, biting from HEAVY_BITE to HEAVY_HOLD for `heavy_damage`, with a
+## lurch into it as the cut starts (`_heavy_lunged`). Committed until it has
+## followed through; a blow taken in the wind-up cuts it off (`_flinch`).
 func _start_heavy() -> void:
 	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
 			or _dashing or is_drinking() or is_flinching():
 		return
-	# Q overrides a cut in progress, as the heavy attack does: the slash or chop
-	# is dropped where it is and the wind-up begins from wherever the blade is.
-	# Only a heavy slash not yet followed through refuses another.
-	if _pose_kind == &"heavy" and not _heavy_released():
+	# Over a cut in progress, as the wave does; not over a committed stroke.
+	if _committed():
+		return
+	_attack_queued = false
+	_attacking = true
+	_stroke_damage = heavy_damage * weapon_damage_scale(&"sword")
+	_trail_on = false
+	_hit_window_open = false
+	_hit_this_swing.clear()
+	_blade_prev.clear()
+	_heavy_lunged = false
+	_begin_pose(&"heavy")
+	_swing_roll = 1.0
+
+
+## Set once the heavy swipe's cut has thrown the player into it.
+var _heavy_lunged := false
+
+
+## F ("slam" action) with the sword, the ult (note 162; on Q in note 160): the
+## wave slash. WAVE_WIND of wind-up nearly planted, the blade hauled up over the
+## right shoulder and the gold building on it (`_blade_glow`), then one heavy cut
+## from high right to low left that throws the wave (`_fire_wave`, at
+## WAVE_FIRE). Once every `slam_cooldown`, on the slam's clock (`_slam_ready_at`,
+## taken when the wave is thrown, so one cut off before then costs nothing).
+## Committed until it has followed through (WAVE_HOLD); a blow taken before the
+## wave is out cuts it off (`_flinch`).
+func _start_wave() -> void:
+	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
+			or _dashing or is_drinking() or is_flinching():
+		return
+	if _now() < _slam_ready_at:
+		return
+	# F overrides a cut or a heavy swipe's wind-up in progress: dropped where it
+	# is, the wind-up begins from wherever the blade is. Only a wave slash not yet
+	# followed through refuses another.
+	if _pose_kind == &"wave" and _committed():
 		return
 	_attack_queued = false
 	_attacking = true
@@ -2444,7 +2519,7 @@ func _start_heavy() -> void:
 	_hit_this_swing.clear()
 	_blade_prev.clear()
 	_wave_fired = false
-	_begin_pose(&"heavy")
+	_begin_pose(&"wave")
 	# The cut runs from high right to low left: the view rolls with it.
 	_swing_roll = 1.0
 
@@ -2457,6 +2532,7 @@ var _wave_fired := false
 ## player faces, tilted to the cut's diagonal (sword_wave.gd).
 func _fire_wave() -> void:
 	_wave_fired = true
+	_slam_ready_at = _now() + slam_cooldown
 	var ahead := -camera.global_basis.z
 	ahead.y = 0.0
 	if ahead.length_squared() < 1e-4:
@@ -2470,7 +2546,7 @@ func _fire_wave() -> void:
 	if not wall.is_empty():
 		from = (wall["position"] as Vector3) - ahead * 0.3
 	var wave := SwordWave.launch(get_parent(), self, from, ahead, WAVE_TILT)
-	wave.set("damage", heavy_damage * weapon_damage_scale(&"sword"))
+	wave.set("damage", wave_damage * weapon_damage_scale(&"sword"))
 	wave.set("speed", wave_speed)
 	wave.set("reach", wave_reach)
 	wave.set("push", wave_push)
@@ -2480,8 +2556,8 @@ func _fire_wave() -> void:
 	_swing_kick = maxf(_swing_kick, 1.4)
 	_shake = maxf(_shake, 0.28)
 	# A lurch into the cut (the wind-up gave none).
-	velocity.x += ahead.x * HEAVY_LURCH
-	velocity.z += ahead.z * HEAVY_LURCH
+	velocity.x += ahead.x * WAVE_LURCH
+	velocity.z += ahead.z * WAVE_LURCH
 
 
 ## --- Block and parry -----------------------------------------------------------
@@ -2502,8 +2578,9 @@ func _start_block() -> void:
 		return
 	if _slamming or _now() < _slam_recover_until or _pose_kind in [&"haft", &"stab", &"raise", &"slam"]:
 		return
-	# Waits out a cut; the heavy slash only until it has followed through.
-	if (_attacking or _pose_kind in [&"slash", &"chop", &"heavy"]) and not _heavy_released():
+	# Waits out a cut; the wave slash only until it has followed through.
+	if _committed() or _pose_kind in [&"slash", &"chop"] \
+			or (_attacking and _pose_kind not in [&"wave", &"heavy"]):
 		return
 	# The spear's own attacks wait the same way, and a thrown spear takes its
 	# haft -- and the shield in it -- with it until it is caught.
@@ -2859,7 +2936,7 @@ const REST_POS := Vector3(0.34, -0.85, -0.35)
 const REST_ROT := Vector3(-1.113895, 0.0, -0.244346)
 ## A stroke's timeline, seconds: into the wind-up, the cut, the follow-through
 ## held, and back to rest. The blade bites from SWING_WIND to SWING_HOLD. These
-## and the heavy slash's and slam's below run on `_pose_time`, which `attack_time_scale`
+## and the wave slash's and slam's below run on `_pose_time`, which `attack_time_scale`
 ## stretches (`ATTACK_POSES`), so in real seconds each is that much longer.
 const SWING_WIND := 0.07
 const SWING_CUT := 0.21
@@ -2876,34 +2953,34 @@ const SWING_CROSS := 2.0
 const SWING_TILT := 0.42
 ## How far above the floor the struck tip rests.
 const SLAM_TIP_LIFT := 0.03
-## The heavy slash's timeline (note 160), pose seconds (x `attack_time_scale` in
-## real ones): the blade hauled up over the right shoulder by HEAVY_RAISE and
-## held there straining, the gold building on it, to HEAVY_WIND; the cut from
-## high right to low left to HEAVY_CUT, the wave thrown at HEAVY_FIRE as the
-## blade crosses the middle; held to HEAVY_HOLD, when the player has their legs
-## back; home by HEAVY_END. A cut is done by 0.42.
-const HEAVY_RAISE := 0.32
-const HEAVY_WIND := 0.82
-const HEAVY_CUT := 0.95
-const HEAVY_FIRE := 0.885
-const HEAVY_HOLD := 1.02
-const HEAVY_END := 1.36
+## The wave slash's timeline (note 160), pose seconds (x `attack_time_scale` in
+## real ones): the blade hauled up over the right shoulder by WAVE_RAISE and
+## held there straining, the gold building on it, to WAVE_WIND; the cut from
+## high right to low left to WAVE_CUT, the wave thrown at WAVE_FIRE as the
+## blade crosses the middle; held to WAVE_HOLD, when the player has their legs
+## back; home by WAVE_END. A cut is done by 0.42.
+const WAVE_RAISE := 0.32
+const WAVE_WIND := 0.82
+const WAVE_CUT := 0.95
+const WAVE_FIRE := 0.885
+const WAVE_HOLD := 1.02
+const WAVE_END := 1.36
 ## Where the blade is wound to and cut to: yaw from straight ahead (+ right) and
 ## pitch; and how far the hand is lifted and drawn back at the top (head space).
-const HEAVY_FROM_YAW := 0.75
-const HEAVY_FROM_PITCH := 0.9
-const HEAVY_TO_YAW := -1.75
-const HEAVY_TO_PITCH := -0.7
-const HEAVY_LIFT := Vector3(0.02, 0.28, 0.0)
+const WAVE_FROM_YAW := 0.75
+const WAVE_FROM_PITCH := 0.9
+const WAVE_TO_YAW := -1.75
+const WAVE_TO_PITCH := -0.7
+const WAVE_LIFT := Vector3(0.02, 0.28, 0.0)
 ## The streak off the cut: gold, and this many times a cut's width.
-const HEAVY_TRAIL_COLOR := Color(1.0, 0.74, 0.28)
-const HEAVY_TRAIL_WIDTH := 3.0
+const WAVE_TRAIL_COLOR := Color(1.0, 0.74, 0.28)
+const WAVE_TRAIL_WIDTH := 3.0
 ## The wave leaves this high off the floor, this far ahead, tilted this far
 ## (radians round its way, the cut's diagonal); the cut lurches them this much.
 const WAVE_HEIGHT := 1.05
 const WAVE_AHEAD := 0.8
 const WAVE_TILT := -0.45
-const HEAVY_LURCH := 2.2
+const WAVE_LURCH := 2.2
 const SwordWave := preload("res://scripts/sword_wave.gd")
 ## The guard: the weapon drawn back this far (head space) while the left arm
 ## blocks (note 157), and how long the guard takes to go up and down.
@@ -2912,7 +2989,26 @@ const GUARD_UP := 0.1
 const GUARD_DOWN := 0.16
 ## The poses that are attacks, on `attack_time_scale`. The guard and the scripted
 ## poses (a haft strike, the cage stab) keep their own time.
-const ATTACK_POSES: Array[StringName] = [&"slash", &"chop", &"heavy", &"raise", &"slam"]
+const ATTACK_POSES: Array[StringName] = [&"slash", &"chop", &"wave", &"heavy", &"raise", &"slam"]
+## The heavy swipe's timeline (note 162), pose seconds (x `attack_time_scale` in
+## real ones: the cut lands ~0.6 s after Q, a plain cut's in ~0.1): the blade
+## cocked back over the right shoulder by HEAVY_RAISE, held there creeping back
+## to HEAVY_WIND; the cut round to low on the left by HEAVY_CUT, biting from
+## HEAVY_BITE (the blade already moving) to HEAVY_HOLD; home by HEAVY_END.
+const HEAVY_RAISE := 0.16
+const HEAVY_WIND := 0.47
+const HEAVY_BITE := 0.475
+const HEAVY_CUT := 0.6
+const HEAVY_HOLD := 0.68
+const HEAVY_END := 0.95
+## Cocked back to: yaw (+ right) and pitch of the blade, the hand lifted and
+## drawn back (head space). The cut ends wider than a plain one.
+const HEAVY_FROM_YAW := 1.05
+const HEAVY_FROM_PITCH := 0.32
+const HEAVY_LIFT := Vector3(0.06, 0.13, 0.08)
+const HEAVY_TO_YAW := -1.95
+## Its streak: a cut's, this many times as wide.
+const HEAVY_TRAIL_WIDTH := 1.8
 
 func _begin_pose(kind: StringName) -> void:
 	if _stab_depth and kind != &"stab":
@@ -2953,6 +3049,8 @@ func _update_pose(delta: float) -> void:
 		length = slam_recover_time + SLAM_STRIKE
 	elif _pose_kind == &"haft":
 		length = HAFT_END
+	elif _pose_kind == &"wave":
+		length = WAVE_END
 	elif _pose_kind == &"heavy":
 		length = HEAVY_END
 	elif _pose_kind == &"block":
@@ -2983,14 +3081,21 @@ func _update_pose(delta: float) -> void:
 		if not _haft_landed and _pose_time >= HAFT_HIT:
 			_land_haft()
 		return
-	if _pose_kind == &"heavy":
-		sword_pivot.transform = _heavy_pose(_pose_time)
+	if _pose_kind == &"wave":
+		sword_pivot.transform = _wave_pose(_pose_time)
 		# The blade never bites: the wave it throws is the damage.
 		_hit_window_open = false
 		# The gold streak through the cut (`_update_sweep_trail`).
-		_trail_on = _pose_time >= HEAVY_WIND - 0.02 and _pose_time <= HEAVY_HOLD
-		if not _wave_fired and _pose_time >= HEAVY_FIRE and not _dead:
+		_trail_on = _pose_time >= WAVE_WIND - 0.02 and _pose_time <= WAVE_HOLD
+		if not _wave_fired and _pose_time >= WAVE_FIRE and not _dead:
 			_fire_wave()
+		return
+	if _pose_kind == &"heavy":
+		sword_pivot.transform = _heavy_pose(_pose_time)
+		_hit_window_open = _pose_time >= HEAVY_BITE and _pose_time <= HEAVY_HOLD
+		_trail_on = _pose_time >= HEAVY_WIND and _pose_time <= HEAVY_HOLD + 0.03
+		if not _heavy_lunged and _pose_time >= HEAVY_WIND and not _dead:
+			_heavy_lunge()
 		return
 	if _pose_kind == &"block":
 		var k := clampf(_pose_time / GUARD_UP, 0.0, 1.0)
@@ -3040,73 +3145,144 @@ func _update_lunge(delta: float) -> void:
 		_lunge_age = -1.0
 
 
-## The blade on the heavy slash's arc at `yaw` / `pitch`, the hand lifted and
-## drawn back by `lift` (0..1) of HEAVY_LIFT, travelling left.
-func _heavy_arc(yaw: float, pitch: float, lift: float) -> Transform3D:
+## The blade on the wave slash's arc at `yaw` / `pitch`, the hand lifted and
+## drawn back by `lift` (0..1) of WAVE_LIFT, travelling left.
+func _wave_arc(yaw: float, pitch: float, lift: float) -> Transform3D:
 	var pose := _arc_pose(yaw, pitch, true)
-	pose.origin += HEAVY_LIFT * lift
+	pose.origin += WAVE_LIFT * lift
 	return pose
 
 
-## The heavy slash in head space: hauled up from wherever the blade is to high
-## over the right shoulder (HEAVY_RAISE), held there straining -- a slow creep
-## further back and a tremble that builds -- to HEAVY_WIND; then cut round the
-## arc to low on the left (fast in the middle, HEAVY_CUT), held, and brought
+## The wave slash in head space: hauled up from wherever the blade is to high
+## over the right shoulder (WAVE_RAISE), held there straining -- a slow creep
+## further back and a tremble that builds -- to WAVE_WIND; then cut round the
+## arc to low on the left (fast in the middle, WAVE_CUT), held, and brought
 ## home like a cut's recovery.
-func _heavy_pose(t: float) -> Transform3D:
-	if t < HEAVY_RAISE:
-		var k := t / HEAVY_RAISE
+func _wave_pose(t: float) -> Transform3D:
+	if t < WAVE_RAISE:
+		var k := t / WAVE_RAISE
 		k = 1.0 - (1.0 - k) * (1.0 - k)
 		var aim := _aim_of(_pose_from)
-		return _blend(_pose_from, _heavy_arc(lerpf(aim.x, HEAVY_FROM_YAW, k),
-			lerpf(aim.y, HEAVY_FROM_PITCH, k), k), k)
-	if t < HEAVY_WIND:
-		var s := (t - HEAVY_RAISE) / (HEAVY_WIND - HEAVY_RAISE)
+		return _blend(_pose_from, _wave_arc(lerpf(aim.x, WAVE_FROM_YAW, k),
+			lerpf(aim.y, WAVE_FROM_PITCH, k), k), k)
+	if t < WAVE_WIND:
+		var s := (t - WAVE_RAISE) / (WAVE_WIND - WAVE_RAISE)
 		var shake := 0.012 * s * s
-		var pose := _heavy_arc(HEAVY_FROM_YAW + 0.1 * s + sin(t * 57.0) * shake,
-			HEAVY_FROM_PITCH + 0.06 * s + sin(t * 43.0 + 1.3) * shake, 1.0 + 0.15 * s)
+		var pose := _wave_arc(WAVE_FROM_YAW + 0.1 * s + sin(t * 57.0) * shake,
+			WAVE_FROM_PITCH + 0.06 * s + sin(t * 43.0 + 1.3) * shake, 1.0 + 0.15 * s)
 		return pose
-	if t < HEAVY_CUT:
-		var s := smoothstep(0.0, 1.0, (t - HEAVY_WIND) / (HEAVY_CUT - HEAVY_WIND))
-		return _heavy_arc(lerpf(HEAVY_FROM_YAW + 0.1, HEAVY_TO_YAW, s),
-			lerpf(HEAVY_FROM_PITCH + 0.06, HEAVY_TO_PITCH, s), 1.15 * (1.0 - s) * (1.0 - s))
-	if t < HEAVY_HOLD:
-		return _heavy_arc(HEAVY_TO_YAW, HEAVY_TO_PITCH, 0.0)
-	var r := smoothstep(0.0, 1.0, (t - HEAVY_HOLD) / (HEAVY_END - HEAVY_HOLD))
+	if t < WAVE_CUT:
+		var s := smoothstep(0.0, 1.0, (t - WAVE_WIND) / (WAVE_CUT - WAVE_WIND))
+		return _wave_arc(lerpf(WAVE_FROM_YAW + 0.1, WAVE_TO_YAW, s),
+			lerpf(WAVE_FROM_PITCH + 0.06, WAVE_TO_PITCH, s), 1.15 * (1.0 - s) * (1.0 - s))
+	if t < WAVE_HOLD:
+		return _wave_arc(WAVE_TO_YAW, WAVE_TO_PITCH, 0.0)
+	var r := smoothstep(0.0, 1.0, (t - WAVE_HOLD) / (WAVE_END - WAVE_HOLD))
 	var home := _aim_of(_rest_pose())
-	return _blend(_arc_pose(lerpf(HEAVY_TO_YAW, home.x, r), lerpf(HEAVY_TO_PITCH, home.y, r), true),
+	return _blend(_arc_pose(lerpf(WAVE_TO_YAW, home.x, r), lerpf(WAVE_TO_PITCH, home.y, r), true),
 		_rest_pose(), r)
 
 
-## The camera through the heavy slash: (roll deg, pitch deg, drop m, fov deg).
+## The camera through the wave slash: (roll deg, pitch deg, drop m, fov deg).
 ## The wind-up leans back and over to the right, head up a little, crouching,
 ## the view drawn in tight and trembling more the longer it is held; the cut
 ## throws the lean over to the left and down (the punch and the shake are
 ## `_fire_wave`'s); the recovery eases it all back.
-func _heavy_effort() -> Vector4:
-	if _pose_kind != &"heavy" or _pose_time < 0.0:
+func _wave_effort() -> Vector4:
+	if _pose_kind == &"heavy" and _pose_time >= 0.0:
+		return _heavy_effort()
+	if _pose_kind != &"wave" or _pose_time < 0.0:
 		return Vector4.ZERO
 	var t := _pose_time
-	var coil := Vector4(-heavy_effort_roll * 0.7, 2.5, heavy_effort_drop * 0.6, -heavy_effort_fov)
-	var drive := Vector4(heavy_effort_roll, -4.0, heavy_effort_drop, heavy_effort_fov * 0.4)
-	if t < HEAVY_WIND:
-		var k := clampf(t / HEAVY_RAISE, 0.0, 1.0)
+	var coil := Vector4(-wave_effort_roll * 0.7, 2.5, wave_effort_drop * 0.6, -wave_effort_fov)
+	var drive := Vector4(wave_effort_roll, -4.0, wave_effort_drop, wave_effort_fov * 0.4)
+	if t < WAVE_WIND:
+		var k := clampf(t / WAVE_RAISE, 0.0, 1.0)
 		k = 1.0 - (1.0 - k) * (1.0 - k)
 		var e := coil * k
-		var strain := clampf((t - HEAVY_RAISE * 0.5) / (HEAVY_WIND - HEAVY_RAISE * 0.5), 0.0, 1.0)
+		var strain := clampf((t - WAVE_RAISE * 0.5) / (WAVE_WIND - WAVE_RAISE * 0.5), 0.0, 1.0)
 		var n := float(Time.get_ticks_msec()) / 1000.0 * 38.0
 		e.x += _bob_noise.get_noise_2d(n, 5.0) * 1.2 * strain * strain
 		e.y += _bob_noise.get_noise_2d(n, 23.0) * 0.6 * strain * strain
 		e.z += absf(_bob_noise.get_noise_2d(n, 41.0)) * 0.01 * strain
 		return e
-	if t < HEAVY_HOLD:
-		var s := smoothstep(0.0, 1.0, (t - HEAVY_WIND) / (HEAVY_CUT - HEAVY_WIND))
+	if t < WAVE_HOLD:
+		var s := smoothstep(0.0, 1.0, (t - WAVE_WIND) / (WAVE_CUT - WAVE_WIND))
 		return coil.lerp(drive, s)
-	var r := smoothstep(0.0, 1.0, (t - HEAVY_HOLD) / (HEAVY_END - HEAVY_HOLD))
+	var r := smoothstep(0.0, 1.0, (t - WAVE_HOLD) / (WAVE_END - WAVE_HOLD))
 	return drive * (1.0 - r)
 
 
-## The gold on the blade as the heavy slash winds up: a glowing sheath along it
+## The heavy swipe in head space (note 162): carried round the arc from wherever
+## the blade is to cocked back over the right shoulder (HEAVY_RAISE), held there
+## creeping further back with a slight tremble to HEAVY_WIND; then swept flat
+## round the arc to low on the far left (HEAVY_CUT), on the cut's own pitch
+## (`_cut_pitch`) by the time it reaches the middle, so it passes through the
+## crosshair as a plain cut does; held, and brought home like a cut's recovery.
+func _heavy_pose(t: float) -> Transform3D:
+	if t < HEAVY_RAISE:
+		var k := t / HEAVY_RAISE
+		k = 1.0 - (1.0 - k) * (1.0 - k)
+		var aim := _aim_of(_pose_from)
+		var pose := _arc_pose(lerpf(aim.x, HEAVY_FROM_YAW, k), lerpf(aim.y, HEAVY_FROM_PITCH, k), true)
+		pose.origin += HEAVY_LIFT * k
+		return _blend(_pose_from, pose, k)
+	if t < HEAVY_WIND:
+		var s := (t - HEAVY_RAISE) / (HEAVY_WIND - HEAVY_RAISE)
+		var shake := 0.006 * s * s
+		var pose := _arc_pose(HEAVY_FROM_YAW + 0.12 * s + sin(t * 61.0) * shake,
+			HEAVY_FROM_PITCH + 0.04 * s + sin(t * 47.0 + 0.7) * shake, true)
+		pose.origin += HEAVY_LIFT * (1.0 + 0.2 * s)
+		return pose
+	var from_yaw := HEAVY_FROM_YAW + 0.12
+	var from_pitch := HEAVY_FROM_PITCH + 0.04
+	if t < HEAVY_CUT:
+		var s := smoothstep(0.0, 1.0, (t - HEAVY_WIND) / (HEAVY_CUT - HEAVY_WIND))
+		var yaw := lerpf(from_yaw, HEAVY_TO_YAW, s)
+		# Onto the cut's pitch by the middle of the view.
+		var onto := smoothstep(0.0, 1.0, clampf((from_yaw - yaw) / from_yaw, 0.0, 1.0))
+		var pose := _arc_pose(yaw, lerpf(from_pitch, _cut_pitch(yaw, true), onto), true)
+		pose.origin += HEAVY_LIFT * 1.2 * (1.0 - s) * (1.0 - s)
+		return pose
+	var low := _cut_pitch(HEAVY_TO_YAW, true)
+	if t < HEAVY_HOLD:
+		return _arc_pose(HEAVY_TO_YAW, low, true)
+	var r := smoothstep(0.0, 1.0, (t - HEAVY_HOLD) / (HEAVY_END - HEAVY_HOLD))
+	var home := _aim_of(_rest_pose())
+	return _blend(_arc_pose(lerpf(HEAVY_TO_YAW, home.x, r), lerpf(low, home.y, r), true), _rest_pose(), r)
+
+
+## The camera through the heavy swipe: (roll deg, pitch deg, drop m, fov deg),
+## as the wave slash's but smaller -- a lean back to the right and a little crouch
+## through the delay, thrown over to the left on the cut, eased out after.
+func _heavy_effort() -> Vector4:
+	var t := _pose_time
+	var coil := Vector4(-4.0, 1.5, 0.04, -2.0)
+	var drive := Vector4(5.0, -2.5, 0.05, 1.0)
+	if t < HEAVY_WIND:
+		var k := clampf(t / HEAVY_RAISE, 0.0, 1.0)
+		return coil * (1.0 - (1.0 - k) * (1.0 - k))
+	if t < HEAVY_HOLD:
+		return coil.lerp(drive, smoothstep(0.0, 1.0, (t - HEAVY_WIND) / (HEAVY_CUT - HEAVY_WIND)))
+	return drive * (1.0 - smoothstep(0.0, 1.0, (t - HEAVY_HOLD) / (HEAVY_END - HEAVY_HOLD)))
+
+
+## The heavy swipe's cut begins: a lurch into it along the view's heading, the
+## view punched in and shaken.
+func _heavy_lunge() -> void:
+	_heavy_lunged = true
+	var ahead := -camera.global_basis.z
+	ahead.y = 0.0
+	if ahead.length_squared() < 1e-4:
+		ahead = -global_basis.z
+	ahead = ahead.normalized()
+	velocity.x += ahead.x * heavy_lunge
+	velocity.z += ahead.z * heavy_lunge
+	_swing_kick = maxf(_swing_kick, 1.3)
+	_shake = maxf(_shake, 0.12)
+
+
+## The gold on the blade as the wave slash winds up: a glowing sheath along it
 ## (the wave's shader), building from nothing as the blade goes up to full as
 ## the cut begins, and gone by the follow-through. Built on first use, under the
 ## sword model so it goes wherever the blade does.
@@ -3115,12 +3291,12 @@ var _blade_glow: MeshInstance3D
 
 func _update_blade_glow() -> void:
 	var on := 0.0
-	if _pose_kind == &"heavy" and _pose_time >= 0.0 and held_item() == &"sword":
+	if _pose_kind == &"wave" and _pose_time >= 0.0 and held_item() == &"sword":
 		var t := _pose_time
-		if t < HEAVY_WIND:
-			on = smoothstep(0.1, HEAVY_WIND, t)
-		elif t < HEAVY_HOLD:
-			on = 1.0 - smoothstep(HEAVY_FIRE, HEAVY_HOLD, t)
+		if t < WAVE_WIND:
+			on = smoothstep(0.1, WAVE_WIND, t)
+		elif t < WAVE_HOLD:
+			on = 1.0 - smoothstep(WAVE_FIRE, WAVE_HOLD, t)
 	if on <= 0.0:
 		if _blade_glow != null and _blade_glow.visible:
 			_blade_glow.visible = false
@@ -3163,7 +3339,7 @@ func _make_blade_glow() -> MeshInstance3D:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var glow := MeshInstance3D.new()
-	glow.name = "HeavyGlow"
+	glow.name = "WaveGlow"
 	glow.mesh = mesh
 	glow.material_override = SwordWave.material()
 	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -3748,17 +3924,18 @@ func attack_cooldowns() -> Array:
 	var now := _now()
 	var recover := maxf(maxf(_slam_recover_until, _flinch_until) - now, 0.0)
 	if held == &"sword":
-		# A cut waits for the stroke in progress to stop biting (the heavy slash
-		# blocks it until it has followed through); the heavy slash waits only for
-		# one not yet followed through.
+		# A cut waits for the stroke in progress to stop biting (a committed one
+		# until it has followed through); the heavy swipe waits only for a
+		# committed stroke; the wave (F) for the slam's clock (note 162).
 		var cut := 0.0
 		if _attacking and _pose_time >= 0.0:
 			cut = maxf(_bite_end() - _pose_time, 0.0) * attack_time_scale
 		var heavy := 0.0
-		if _pose_kind == &"heavy" and _pose_time >= 0.0 and not _heavy_released():
-			heavy = (HEAVY_HOLD - _pose_time) * attack_time_scale
+		if _committed():
+			heavy = (_bite_end() - _pose_time) * attack_time_scale
+		var ult := &"slam" if sword_slam else &"wave"
 		return [
-			[&"slam", maxf(_slam_ready_at - now, recover), slam_cooldown, "F"],
+			[ult, maxf(_slam_ready_at - now, recover), slam_cooldown, "F"],
 			[&"heavy", maxf(heavy, recover), HEAVY_HOLD * attack_time_scale, "Q"],
 			[&"slash", maxf(cut, recover), SWING_HOLD * attack_time_scale, "LMB"],
 		]
@@ -4031,7 +4208,10 @@ func _resolve_hits() -> void:
 			continue
 		if body.has_method("take_damage"):
 			body.take_damage(_stroke_damage, push_dir)
-		knock(body, push_dir * attack_push, attack_stun, slash_stagger_chance)
+		if _pose_kind == &"heavy":
+			knock(body, push_dir * heavy_push, heavy_stun, heavy_stagger_chance)
+		else:
+			knock(body, push_dir * attack_push, attack_stun, slash_stagger_chance)
 
 ## Horizontal half-width of a body, from its collision shape.
 func _body_radius_of(body: Node) -> float:
@@ -4097,7 +4277,7 @@ func _dash_pressed() -> bool:
 func _can_dash(down: bool) -> bool:
 	return not down and not _slamming and not is_drinking() and not _swimming \
 		and not hands_busy and not _dead and not in_cutscene \
-		and not (_pose_kind == &"heavy" and not _heavy_released()) \
+		and not _committed() \
 		and not _pose_kind in [&"haft", &"stab", &"raise", &"slam"]
 
 
@@ -4452,7 +4632,7 @@ func dodge_charge() -> float:
 ## --- Upgrades (the crystal mine's workbench, workbench.gd, 2026-10-11) -----------
 ##
 ## Gold crystals buy levels. A weapon's level scales everything it deals by
-## `UPGRADE_DAMAGE` a level (sword: cut, heavy slash, slam; spear: stab, dash, blast; axe: slash, throw);
+## `UPGRADE_DAMAGE` a level (sword: cut, wave slash, slam; spear: stab, dash, blast; axe: slash, throw);
 ## armor takes `ARMOR_STEP` a level off every hit and beam (`damage_negation`).
 ## Small steps on purpose. Levels start at 1 and are saved with the game.
 
@@ -5146,7 +5326,7 @@ func _knock_view() -> Vector3:
 ## start (`is_flinching`; the attack icons wait it out). One clock: the moment
 ## they can move they can swing. The attack under way
 ## stops before it can bite: a cut, an axe chop, a throw's wind-up and a spear
-## dash are cut off where they are, a heavy slash not yet thrown its wave is cut off, a
+## dash are cut off where they are, a wave slash not yet thrown its wave is cut off, a
 ## slam lands as a dud. Guard, dash, drink and jump stay free: the way out of
 ## the next blow is still there.
 ##
@@ -5189,7 +5369,8 @@ func _flinch(blow: Vector3) -> void:
 	_shake = maxf(_shake, 0.3)
 	# Whatever was swinging stops here.
 	_hit_window_open = false
-	if _pose_kind in [&"slash", &"chop"] or (_pose_kind == &"heavy" and not _wave_fired):
+	if _pose_kind in [&"slash", &"chop"] or (_pose_kind == &"wave" and not _wave_fired) \
+			or (_pose_kind == &"heavy" and _pose_time < HEAVY_WIND):
 		_attacking = false
 		_trail_on = false
 		_begin_pose(&"unblock")

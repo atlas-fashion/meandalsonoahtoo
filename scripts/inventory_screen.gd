@@ -435,18 +435,17 @@ func _stats_for(id: StringName) -> Array:
 				"Attack", [
 					["Level", str(player.weapon_level(&"sword"))],
 					["Cut", str(roundi(player.attack_damage * player.weapon_damage_scale(&"sword")))],
-					["Heavy slash", "%d, a wave" % roundi(player.heavy_damage * player.weapon_damage_scale(&"sword"))],
-					["Slam", str(roundi(player.slam_damage * player.weapon_damage_scale(&"sword")))],
-					["Slam reach", "%.1f m" % player.slam_radius],
-					["Slam cooldown", "%d s" % roundi(player.slam_cooldown)],
+					["Heavy swipe", str(roundi(player.heavy_damage * player.weapon_damage_scale(&"sword")))],
+					["Wave slash", "%d, a wave" % roundi(player.wave_damage * player.weapon_damage_scale(&"sword"))],
+					["Wave cooldown", "%d s" % roundi(player.slam_cooldown)],
 					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],
 					["Parry", "-%d%%" % roundi((1.0 - player.parry_damage_taken) * 100.0)],
 					["Parry return", "%d%%" % roundi(player.parry_reflect * 100.0)],
 				],
 				"Controls", [
 					["Cut", "LMB / RB"],
-					["Heavy slash", "Q / RT"],
-					["Slam", "F / LT"],
+					["Heavy swipe", "Q / RT"],
+					["Wave slash", "F / LT"],
 					["Block", "hold RMB / LB"],
 					["Parry", "RMB / LB as it lands"],
 					["Dodge dash", "L-Ctrl / L3"],
@@ -1142,7 +1141,8 @@ func _build_character() -> Control:
 	rows.add_child(_rule())
 	_bars.append(_meter(rows, "Health", Color(0.66, 0.13, 0.12), "health"))
 	_bars.append(_meter(rows, "Dash", Color(0.2, 0.36, 0.66), "dash"))
-	_bars.append(_meter(rows, "Slam", Color(0.26, 0.5, 0.24), "slam"))
+	# The sword's F: the wave slash, on the slam's clock (note 162).
+	_bars.append(_meter(rows, "Wave", Color(0.62, 0.48, 0.16), "slam"))
 	return framed[0]
 
 

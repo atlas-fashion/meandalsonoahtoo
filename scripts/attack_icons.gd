@@ -196,7 +196,15 @@ func _draw_glyph(t: Dictionary) -> void:
 			_blade(g, c + Vector2(-s * 0.55, s * 0.6), c + Vector2(s * 0.75, -s * 0.8), 3.0)
 			g.draw_arc(c + Vector2(-s * 0.3, s * 0.2), s * 1.05, -PI * 0.15, PI * 0.55, 18, INK_DIM, 2.0, true)
 		&"heavy":
-			# The heavy slash (note 160): the blade, and the gold crescent it throws.
+			# The heavy swipe (note 162): the blade cocked back, a wide flat sweep
+			# doubled, and the beat of the delay before it.
+			_blade(g, c + Vector2(s * 0.55, s * 0.55), c + Vector2(s * 1.0, -s * 0.85), 3.5)
+			g.draw_arc(c + Vector2(s * 0.1, s * 0.45), s * 1.15, PI * 1.05, PI * 1.85, 20, INK, 3.0, true)
+			g.draw_arc(c + Vector2(s * 0.1, s * 0.45), s * 0.85, PI * 1.1, PI * 1.8, 16, INK_DIM, 2.0, true)
+			for k in 3:
+				g.draw_circle(c + Vector2(-s * 1.0 + float(k) * s * 0.32, s * 0.95), 1.8, INK_DIM)
+		&"wave":
+			# The wave slash (notes 160, 162): the blade, and the gold crescent it throws.
 			_blade(g, c + Vector2(-s * 0.85, s * 0.75), c + Vector2(s * 0.1, -s * 0.2), 2.0)
 			var gold := Color(1.0, 0.78, 0.35)
 			g.draw_arc(c + Vector2(-s * 0.35, s * 0.1), s * 1.0, -PI * 0.42, PI * 0.12, 18, gold, 4.0, true)
