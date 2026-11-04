@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cus4hu5u6c034"
-path.s3tc="res://.godot/imported/player_knight_knight_emission.jpg-d09806d674bb3ed965557223237c58b3.s3tc.ctex"
+uid="uid://btt4xq3vowxib"
+path.s3tc="res://.godot/imported/player_knight_knight_orm.jpg-28884609289d53a6ed2598a81c1b9175.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "2287045c8156468bd28950ace7638e0e"
+"md5": "b92d48554a5c5849a868ef4224c7b95e"
 }
 
 [deps]
 
-source_file="res://models/player_knight_knight_emission.jpg"
-dest_files=["res://.godot/imported/player_knight_knight_emission.jpg-d09806d674bb3ed965557223237c58b3.s3tc.ctex"]
+source_file="res://models/player_knight_knight_orm.jpg"
+dest_files=["res://.godot/imported/player_knight_knight_orm.jpg-28884609289d53a6ed2598a81c1b9175.s3tc.ctex"]
 
 [params]
 

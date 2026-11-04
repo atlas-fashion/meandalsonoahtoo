@@ -7,6 +7,8 @@ What this does to it:
   - keeps only the arms: every vertex whose strongest bone is an Arm, ForeArm or
     Hand (the pauldrons ride the Shoulder bones and would sit on the camera);
     faces that touch anything else are cut away;
+  - welds the UV-seam copies and caps every opening left (the shoulder cut,
+    the sleeve under the pauldron), so the arms are closed (note 166);
   - closes both hands into fists: the rig has no finger bones, so the fingers
     are bent in the mesh, round the knuckle line, about a handle the size of
     the sword's grip (`CURL_R`), the thumb left lying over it;
@@ -39,8 +41,14 @@ KEEP = {"LeftArm", "LeftForeArm", "LeftHand", "RightArm", "RightForeArm", "Right
 # the thumb at 0.87-0.93 (hanging forward, -Y) and the fingers from 0.94, where
 # the hand narrows to them (note 159; the Meshy knight's were 0.918 / 1.355).
 KNUCKLE = 0.935
-# Finger centre height (Blender Z) and the radius they wrap round.
-FINGER_Z = 1.333
+# Finger centre height (Blender Z) and the radius they wrap round. The dark
+# knight's gauntlet (note 166) has the same knuckle line, its fingers at
+# z 1.32-1.37 from 0.94 out.
+FINGER_Z = 1.340
+# Seam copies closer than this are one vertex.
+WELD = 1e-5
+# Edges sharper than this stay hard when the welded arms' normals are rebuilt.
+SHARP = math.radians(40.0)
 CURL_R = 0.026
 CURL_MAX = 2.75
 
@@ -65,6 +73,28 @@ drop = [f for f in bm.faces if any(v.index not in keep for v in f.verts)]
 bmesh.ops.delete(bm, geom=drop, context="FACES_ONLY")
 bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
 
+# Closed (note 166): weld the copies Tripo split along its UV seams (the body
+# build gave them the same weights, so they move as one), then fill every
+# opening left -- the cut at the shoulder, the sleeve's open end under the
+# pauldron -- so nothing in the view can be seen through. UVs are per corner
+# and survive the weld; a filled face's corners take the UV that corner's
+# vertex already has (its rim's own texels, stretched across the cap).
+before_weld = len(bm.verts)
+bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=WELD)
+open_edges = [e for e in bm.edges if e.is_boundary]
+print("arms: %d vertices welded to %d; %d open edges" % (before_weld, len(bm.verts), len(open_edges)))
+uvl = bm.loops.layers.uv.active
+had = set(bm.faces)
+filled = bmesh.ops.holes_fill(bm, edges=open_edges, sides=0)["faces"]
+caps = bmesh.ops.triangulate(bm, faces=filled)["faces"]
+for f in caps:
+    for loop in f.loops:
+        other = next((l for l in loop.vert.link_loops if l.face in had), None)
+        if other is not None:
+            loop[uvl].uv = other[uvl].uv.copy()
+left = sum(1 for e in bm.edges if e.is_boundary)
+print("arms: %d openings capped with %d triangles; %d open edges left" % (len(filled), len(caps), left))
+
 
 def curl(p: Vector) -> Vector:
     """A finger point bent down (toward the palm, -Z) round the knuckle line."""
@@ -85,6 +115,10 @@ for v in bm.verts:
     v.co = inv @ curl(mw @ v.co)
 bm.to_mesh(mesh.data)
 bm.free()
+# Normals rebuilt on the welded, curled mesh: smooth, hard past `SHARP`.
+for poly in mesh.data.polygons:
+    poly.use_smooth = True
+mesh.data.set_sharp_from_angle(angle=SHARP)
 mesh.data.update()
 print("arms: %d vertices, %d faces" % (len(mesh.data.vertices), len(mesh.data.polygons)))
 

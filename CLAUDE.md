@@ -270,8 +270,8 @@ Tripo golem (`models/source/proel_builder/`). Rebuild, never hand-edit; always r
 second after the first. See note 149 and `tools/README.md`.
 
 `models/player_knight.glb` (the player's body) is a build artifact from
-`tools/build_player_knight.py`, out of the user's fantasy armor
-(`models/source/armor/`, Tripo, no rig) skinned onto the Meshy knight's skeleton
+`tools/build_player_knight.py`, out of the user's dark fantasy knight
+(`models/source/armor/dark_knight.glb`, Tripo, no rig; note 166) skinned onto the Meshy knight's skeleton
 (`models/source/knight/`, note 159). Rebuild, never hand-edit; the bones are posed in code
 (`scripts/coop_avatar.gd`), so keep Meshy's bone names. See note 155.
 
@@ -348,7 +348,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   its mark, berserk; note 84), `player.gd` (movement: walk, Shift sprint `_pace`, Left Ctrl dash `_update_dash` with 14 invulnerable frames (note 161); sword (Q the delayed heavy swipe `_start_heavy`, note 162; F the ult, the gold wave slash `_start_wave` and `sword_wave.gd`, notes 160, 162, on the slam's 20 s clock; the slam `_start_slam` kept unbound, `sword_slam`), block/parry `_start_block`
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `held_potion.gd`,
-  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the knight in the user's fantasy armor (note 159): alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its arms in your own view: the right fist solved onto what is held, note 156; the left arm the guard, block and parry on springs, notes 157, 158 -- there is no hand torch).
+  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the user's dark fantasy knight (note 166): alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its arms in your own view: the right fist solved onto what is held, note 156; the left arm the guard, block and parry on springs, notes 157, 158 -- there is no hand torch).
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
   hands; `skeleton_shield.gd`; note 93), `proel_builder.gd` (the hammer hand, the Proel builder, note 149: the user's rusted golem with two hammers, baked clips, `proel_builder_hammers.gd`; a slow walk pounding the floor, a very heavy spin), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
@@ -595,6 +595,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 163 | 2026-11-04 | The user's own sword and spear (his Blender files, `models/source/weapons/`) fitted by `tools/build_weapons.py` to the old conventions (sword pommel 0 / tip 2.65 on +Y; spear on -Z, hand at 0, butt +0.67, point -2.07): first person, thrown (the head lit) and on the co-op body; `_measure_sword` reads every surface | [docs/notes/163-the-users-sword-and-spear.md](docs/notes/163-the-users-sword-and-spear.md) |
 | 164 | 2026-11-04 | A keybinds menu (Settings > Key bindings: `keybinds.gd` autoload, `keybinds_panel.gd`; a keyboard and a controller column per action, swap on conflict, saved to user://keybinds.cfg, Esc/Start reserved, `Coop.resplit`, live labels in the inventory and HUD); the slash reworked (gather, load, cut past the arc with wrist roll and dig, rebound, home; bites from 0.125 not 0.07 pose, +69 ms; kick and lunge on the cut, `_strike_cut`); dash wait 0.65 -> 0.4875 s; pad dash on B, not L3 | [docs/notes/164-keybinds-menu-later-slash-faster-dash-pad-b.md](docs/notes/164-keybinds-menu-later-slash-faster-dash-pad-b.md) |
 | 165 | 2026-11-04 | Walk and sprint both +0.75 m/s (walk 2.5 -> 3.25, sprint 4.25 -> 5.0), the 1.75 m/s gap and the blend kept; the Remnant still 1.35 x the sprint | [docs/notes/165-walk-and-sprint-faster.md](docs/notes/165-walk-and-sprint-faster.md) |
+| 166 | 2026-11-04 | The player is the user's dark fantasy knight (Tripo, no rig: skinned onto the same Meshy skeleton, weights per welded place so seams cannot open, the arms nudged 3.5 cm back); a PBR finish baked in Cycles from the albedo alone (normal 4096, AO + roughness + metal ORM 2048; gold seams polished metal, plate worn steel, no glow); the first-person arms welded and capped, 0 open edges, drawn double-sided; GRIP (0.935, 1.314, -0.0736) | [docs/notes/166-dark-knight.md](docs/notes/166-dark-knight.md) |
 
 ## Notes by source file
 
@@ -621,8 +622,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80, 164
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163
-- `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166
+- `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163, 166
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -739,8 +740,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18
-- `tools/build_player_knight.py`: 155, 156, 159
-- `tools/build_player_knight_arms.py`: 156, 159
+- `tools/build_player_knight.py`: 155, 156, 159, 166
+- `tools/build_player_knight_arms.py`: 156, 159, 166
 - `tools/build_potion.py`: 6.19
 - `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18

@@ -1,7 +1,7 @@
 extends Node3D
 
-## The knight's own arms in the first-person view (note 156): the fantasy
-## armor's gauntlets (note 159) holding what is in hand. A child of the player's Head, made by
+## The knight's own arms in the first-person view (note 156): the dark
+## knight's gauntlets (note 166) holding what is in hand. A child of the player's Head, made by
 ## player.gd `_ready`.
 ##
 ## Nothing is animated here. Every weapon already poses itself -- the sword on
@@ -41,9 +41,9 @@ const BODY_SCALE := 1.05
 ## 1.6 m up at BODY_SCALE.
 const EYE := Vector3(0.0, 1.524, 0.04)
 ## The middle of each closed fist, where a haft passes through it (glTF space,
-## the left fist; the right mirrored). Printed by the arms build (the fantasy
-## armor's gauntlet, note 159).
-const GRIP := Vector3(0.935, 1.307, -0.0554)
+## the left fist; the right mirrored). Printed by the arms build (the dark
+## knight's gauntlet, note 166).
+const GRIP := Vector3(0.935, 1.314, -0.0736)
 ## Where the elbow is pushed (head space, the right arm; mirrored for the left):
 ## down, out to the side and a little back.
 const POLE := Vector3(0.55, -1.0, 0.35)
@@ -182,6 +182,9 @@ func _knight_material() -> Material:
 	if m.emission_enabled:
 		m.emission_energy_multiplier = GLOW
 	m.use_z_clip_scale = true
+	# Both faces: a hand's breadth from the eye no face may vanish edge-on or from
+	# inside a cuff (note 166; the mesh is closed, this is belt and braces).
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	m.z_clip_scale = float(player.get("sword_draw_depth"))
 	return m
 
