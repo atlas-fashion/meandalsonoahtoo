@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 157), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 158), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -345,7 +345,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   its mark, berserk; note 84), `player.gd` (movement, sword, block/parry `_start_block`
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `held_potion.gd`,
-  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the molten rust knight: alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its arms in your own view: the right fist solved onto what is held, note 156; the left arm the guard, block and parry on springs, note 157 -- there is no hand torch).
+  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the molten rust knight: alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its arms in your own view: the right fist solved onto what is held, note 156; the left arm the guard, block and parry on springs, notes 157, 158 -- there is no hand torch).
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
   hands; `skeleton_shield.gd`; note 93), `proel_builder.gd` (the hammer hand, the Proel builder, note 149: the user's rusted golem with two hammers, baked clips, `proel_builder_hammers.gd`; a slow walk pounding the floor, a very heavy spin), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
@@ -584,6 +584,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 155 | 2026-11-03 | The player is the molten rust knight: generated on Higgsfield (Meshy multi-image, rigged; through the Supercomputer agent), glowing cracks cut from the albedo (`tools/build_player_knight.py`); alone it only casts your shadow, in co-op it is the body the other player sees (`coop_avatar.gd`), every bone posed from the player; `Graphics.body_shadow`; 71.1 -> 70.6 fps | [docs/notes/155-the-player-knight.md](docs/notes/155-the-player-knight.md) |
 | 156 | 2026-11-03 | The knight's arms in first person: an arms-only cut of the knight with fists (`tools/build_player_knight_arms.py`), solved every frame onto the sword, spear, axe, flask and a held rat by two-bone IK (`first_person_arms.gd`), drawn at what it holds' scale, in front of walls; no left arm (the torch's handle is under the view); 71.1 -> 70.4 fps, GPU the same | [docs/notes/156-the-knights-arms-in-first-person.md](docs/notes/156-the-knights-arms-in-first-person.md) |
 | 157 | 2026-11-03 | No torch; the left arm blocks and parries: the hand torch deleted (and the co-op body's); the guard is the knight's left forearm across the view, on springs (elbow leads, overshoot, breath, look lag), a blocked blow a recoil into the face and a shudder, a parry an upright beat out to the left; the weapon only drawn back (`GUARD_DRAW`); 70.2 fps, as before | [docs/notes/157-left-arm-block-and-parry.md](docs/notes/157-left-arm-block-and-parry.md) |
+| 158 | 2026-11-03 | The guard flat across the view, braced, stiff: elbow and fist at one height and depth, the elbow 1.5 cm ahead, the upper arm thrust forward (each placed at the arm's measured bone lengths so the IK lands it); springs near critical (overshoot 18 -> 1.6 mm), no tremble, little look lag, a block a 20 mm jolt (was ~84); 69.0 fps, as before | [docs/notes/158-guard-flat-and-braced.md](docs/notes/158-guard-flat-and-braced.md) |
 
 ## Notes by source file
 
@@ -611,7 +612,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157
-- `scripts/first_person_arms.gd`: 156, 157
+- `scripts/first_person_arms.gd`: 156, 157, 158
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126

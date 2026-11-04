@@ -65,14 +65,18 @@ const LEFT := 1
 const DOWN_ELBOW := Vector3(-0.30, -0.60, 0.04)
 const DOWN_WRIST := Vector3(-0.20, -0.82, -0.10)
 const DOWN_BACK := Vector3(-0.4, -0.2, -1.0)
-## The guard: the elbow out and forward, the forearm across the lower half of
-## the view rising to the fist right of centre, the plate square to the front;
-## the shoulder brought forward and in behind it (`GUARD_SHOULDER`), as a body
-## braces behind a forearm.
-const GUARD_ELBOW := Vector3(-0.28, -0.30, -0.17)
-const GUARD_WRIST := Vector3(0.04, -0.17, -0.27)
-const GUARD_BACK := Vector3(0.0, 0.3, -1.0)
-const GUARD_SHOULDER := Vector3(0.05, 0.02, -0.10)
+## The guard (note 158): the forearm laid flat across the lower half of the
+## view, square to it -- elbow and fist at one height and one depth, the elbow
+## a hand's breadth left of centre and 1.5 cm ahead of the fist, driven forward
+## as into a door; the upper arm thrust forward from the shoulder, which comes
+## forward and in behind it (`GUARD_SHOULDER`), the body's weight behind the
+## bar. The elbow is placed at the upper arm's length from that braced shoulder
+## and the wrist at the forearm's from the elbow, so the IK lands it exactly.
+## The plate to the front, tipped up.
+const GUARD_ELBOW := Vector3(-0.22, -0.14, -0.263)
+const GUARD_WRIST := Vector3(0.094, -0.14, -0.248)
+const GUARD_BACK := Vector3(0.0, 0.35, -1.0)
+const GUARD_SHOULDER := Vector3(0.06, 0.03, -0.13)
 ## The parry's beat: the forearm swung up and out round the elbow, standing
 ## upright to the left of the view, the plate turned out -- the blow batted wide. Held for
 ## `PARRY_BEAT`, then `PARRY_HOLD` more before the arm may go down.
@@ -82,24 +86,29 @@ const PARRY_BACK := Vector3(-1.0, 0.1, -0.5)
 const PARRY_BEAT := 0.16
 const PARRY_HOLD := 0.18
 ## Springs: (stiffness in rad/s, damping ratio). The elbow stiffer than the
-## wrist, so it leads; under 1, so each overshoots a touch and settles.
-const ELBOW_SPRING := Vector2(34.0, 0.62)
-const WRIST_SPRING := Vector2(27.0, 0.55)
-const BACK_SPRING := Vector2(24.0, 0.7)
-const PARRY_SPRING := Vector2(48.0, 0.5)
+## wrist, so it leads. Near critical damping (note 158): the arm snaps up and
+## locks, with well under a centimetre of overshoot -- a braced arm, not a
+## wobbling one.
+const ELBOW_SPRING := Vector2(44.0, 0.92)
+const WRIST_SPRING := Vector2(36.0, 0.88)
+const BACK_SPRING := Vector2(32.0, 0.95)
+const PARRY_SPRING := Vector2(56.0, 0.8)
 ## Going down the springs are this much softer: the arm drops, heavy.
 const DROP_SPRING := 0.55
-## How far a turn of the head leaves the raised arm behind (m per radian).
-const LOOK_LAG := 0.12
-## A blow's recoil: its own softer spring, on top of the pose, so the fist is
-## driven back at the face and comes back over a third of a second. The kick
-## each gives it (m/s: a block back and down at the face, a parry out wide).
-const RECOIL_SPRING := Vector2(14.0, 0.5)
-const BLOCK_KICK := Vector3(0.35, -0.7, 2.0)
-const PARRY_KICK := Vector3(-1.3, 0.6, -1.2)
+## How far a turn of the head leaves the raised arm behind (m per radian):
+## little, the arm locked to the body.
+const LOOK_LAG := 0.04
+## Held up, how much it breathes (m at the wrist) -- no tremble.
+const BREATH := 0.002
+## A blow's recoil: its own spring, on top of the pose. The braced arm gives a
+## short, hard jolt back at the face and drives straight back into place. The
+## kick each gives it (m/s: a block back and down at the face, a parry out wide).
+const RECOIL_SPRING := Vector2(26.0, 0.85)
+const BLOCK_KICK := Vector3(0.15, -0.3, 1.2)
+const PARRY_KICK := Vector3(-1.0, 0.45, -1.0)
 ## A blow's shudder through the plate: metres at full, and how fast it dies.
-const SHUDDER := 0.007
-const SHUDDER_FADE := 9.0
+const SHUDDER := 0.003
+const SHUDDER_FADE := 14.0
 
 var player: Node3D
 var _material: Material
@@ -382,12 +391,11 @@ func _update_guard(delta: float) -> void:
 		wrist_goal = PARRY_WRIST
 		back_goal = PARRY_BACK
 	if up:
-		# Held up: it breathes, and never quite stills.
+		# Held up: it only breathes, a couple of millimetres; locked, no tremble.
 		_held_t += delta
 		var breath := sin(_held_t * 1.9)
-		var tremble := Vector3(sin(_held_t * 11.3), sin(_held_t * 13.7 + 1.0), sin(_held_t * 9.1 + 2.0))
-		wrist_goal += Vector3(0.0, 0.005 * breath, 0.003 * breath) + tremble * 0.0012
-		elbow_goal += Vector3(0.0, 0.004 * breath, 0.0)
+		wrist_goal += Vector3(0.0, BREATH * breath, 0.6 * BREATH * breath)
+		elbow_goal += Vector3(0.0, 0.8 * BREATH * breath, 0.0)
 	else:
 		_held_t = 0.0
 	# A turn of the head: the arm, having weight, is left behind a little.
@@ -454,11 +462,11 @@ func _on_guarded(parried: bool, _attacker: Node3D) -> void:
 	if parried:
 		_parry_t = 0.0
 		_recoil_v += PARRY_KICK
-		_back_v += Vector3(-4.0, 0.0, 1.5)
+		_back_v += Vector3(-3.0, 0.0, 1.2)
 		_shudder = maxf(_shudder, 0.6)
 	else:
 		_recoil_v += BLOCK_KICK
-		_back_v += Vector3(0.0, 2.2, 1.0)
+		_back_v += Vector3(0.0, 1.2, 0.6)
 		_shudder = 1.0
 	_shudder_t = 0.0
 
