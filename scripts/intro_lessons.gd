@@ -29,7 +29,7 @@ var LESSONS: Array[Dictionary] = [
 	{"id": &"pack", "title": "Check your pack", "kb": "[k]TAB[/k] opens your inventory. Close it again.", "pad": "[k]Y[/k] opens your inventory. Close it again."},
 	{"id": &"map", "title": "Look at your map", "kb": "[k]M[/k] opens your map. It fills in as you explore. Close it again.", "pad": "[k]SELECT[/k] opens your map. It fills in as you explore. Close it again."},
 	{"id": &"cut", "title": "Strike a training post  ·  3 times", "kb": "[k]LEFT CLICK[/k] swings your sword.", "pad": "[k]RB[/k] swings your sword."},
-	{"id": &"spin", "title": "Spin", "kb": "[k]Q[/k] spins the blade in a full circle.", "pad": "[k]RT[/k] spins the blade in a full circle."},
+	{"id": &"heavy", "title": "Heavy slash", "kb": "[k]Q[/k]: a long wind-up, then a cut that sends a gold wave down the hall.", "pad": "[k]RT[/k]: a long wind-up, then a cut that sends a gold wave down the hall."},
 	{"id": &"slam", "title": "Slam", "kb": "[k]F[/k] brings the blade down hard. In the air, it dives.", "pad": "[k]LT[/k] brings the blade down hard. In the air, it dives."},
 	{"id": &"to_spear", "title": "Take up the spear", "kb": "Hold [k]C[/k], point at the spear, let go.", "pad": "Hold [k]R3[/k], point at the spear with the stick, let go."},
 	{"id": &"stab", "title": "Stab a post  ·  3 times", "kb": "[k]LEFT CLICK[/k] stabs.", "pad": "[k]RB[/k] stabs."},
@@ -202,7 +202,7 @@ func _fresh_track(p: Node) -> Dictionary:
 			posts_hits[k] = int(posts_hits.get(k, 0)) + int(h[k])
 	var spear = p.get("spear")
 	return {"yaw": (p as Node3D).rotation.y, "pitch": float(p.get("_look_pitch")), "looked": 0.0,
-		"air_at": -INF, "opened": false, "map_opened": false, "spin": false, "slam": false,
+		"air_at": -INF, "opened": false, "map_opened": false, "heavy": false, "slam": false,
 		"hits0": posts_hits, "dash0": float(spear.get("_dash_until")) if spear != null else 0.0,
 		"ghost_t": 0.0, "drank": false}
 
@@ -283,8 +283,8 @@ func _done_now(p: Node, t: Dictionary, delta: float) -> bool:
 			return bool(t["map_opened"]) and inv != null and not inv.call("is_open")
 		&"cut":
 			return _hits_since(t, &"sword") >= 3
-		&"spin":
-			return p.get("_pose_kind") == &"spin"
+		&"heavy":
+			return p.get("_pose_kind") == &"heavy"
 		&"slam":
 			return p.get("_slamming") == true or p.get("_pose_kind") == &"slam"
 		&"to_spear":

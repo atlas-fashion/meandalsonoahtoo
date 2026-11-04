@@ -208,7 +208,7 @@ func _process(delta: float) -> void:
 	if player.get("_blocking") == true:
 		upper = Vector3(-0.25, -0.9, 0.2)
 		fore = Vector3(-0.05, -0.2, 0.95)
-	elif kind in [&"slash", &"chop", &"spin", &"slam", &"raise", &"stab", &"haft"] and t >= 0.0:
+	elif kind in [&"slash", &"chop", &"heavy", &"slam", &"raise", &"stab", &"haft"] and t >= 0.0:
 		var c := clampf(t / 0.35, 0.0, 1.0)
 		upper = Vector3(-0.35, 0.85, 0.3).lerp(Vector3(0.25, -0.55, 0.8), c)
 		fore = Vector3(-0.25, 1.0, -0.15).lerp(Vector3(0.55, -0.55, 0.6), c)

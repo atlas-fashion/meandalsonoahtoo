@@ -435,7 +435,7 @@ func _stats_for(id: StringName) -> Array:
 				"Attack", [
 					["Level", str(player.weapon_level(&"sword"))],
 					["Cut", str(roundi(player.attack_damage * player.weapon_damage_scale(&"sword")))],
-					["Spin", "%d all round" % roundi(player.attack_damage * player.weapon_damage_scale(&"sword"))],
+					["Heavy slash", "%d, a wave" % roundi(player.heavy_damage * player.weapon_damage_scale(&"sword"))],
 					["Slam", str(roundi(player.slam_damage * player.weapon_damage_scale(&"sword")))],
 					["Slam reach", "%.1f m" % player.slam_radius],
 					["Slam cooldown", "%d s" % roundi(player.slam_cooldown)],
@@ -445,7 +445,7 @@ func _stats_for(id: StringName) -> Array:
 				],
 				"Controls", [
 					["Cut", "LMB / RB"],
-					["Spin", "Q / RT"],
+					["Heavy slash", "Q / RT"],
 					["Slam", "F / LT"],
 					["Block", "hold RMB / LB"],
 					["Parry", "RMB / LB as it lands"],

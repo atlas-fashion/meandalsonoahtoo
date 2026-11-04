@@ -316,17 +316,25 @@ extends CharacterBody3D
 @export var parry_color := Color(0.66, 0.28, 1.0)
 @export var block_spark_color := Color(1.0, 0.82, 0.55)
 
-@export_group("Spin")
-## Q with the sword: one full circle round the player (`_start_spin`). It cuts
-## for `attack_damage` like a cut but throws harder -- `spin_push` against a
-## cut's `attack_push` -- and stuns longer.
-@export var spin_push := 11.0
-@export var spin_stun := 0.35
-## The camera's effort through it (`_spin_effort`): the lean into the turn
-## (degrees), the crouch (metres) and the rush of field of view (degrees).
-@export var spin_effort_roll := 6.0
-@export var spin_effort_drop := 0.07
-@export var spin_effort_fov := 6.0
+@export_group("Heavy slash")
+## Q with the sword (note 160; it was the spin): a long wind-up with the blade
+## hauled up over the right shoulder, the player all but planted
+## (`heavy_move_scale` of walking pace), then one heavy diagonal cut that throws
+## a slow gold wave straight ahead (sword_wave.gd). The WAVE does the damage --
+## `heavy_damage` to everything it passes through, once each -- not the blade.
+@export var heavy_damage := 80.0
+@export_range(0.0, 1.0) var heavy_move_scale := 0.15
+## The wave: metres a second, how far it goes, and its shove and stun.
+@export var wave_speed := 7.0
+@export var wave_reach := 30.0
+@export var wave_push := 9.0
+@export var wave_stun := 0.5
+## The camera's effort through it (`_heavy_effort`): the lean back into the
+## wind-up and over into the cut (degrees), the crouch (metres) and the field of
+## view drawn in through the wind-up (degrees).
+@export var heavy_effort_roll := 7.0
+@export var heavy_effort_drop := 0.08
+@export var heavy_effort_fov := 5.0
 
 @export_group("Lunge look")
 ## The lunge's look (the spear's dash): white speed lines rushing outward (the
@@ -720,10 +728,10 @@ func _stab_effort() -> Vector4:
 ## start its attack over (enemy.gd `_staggered`). A blow that does not stagger
 ## still hurts but neither moves nor interrupts it.
 ##
-## Sword: cut `slash_stagger_chance`, spin and slam always. Spear (spear.gd):
-## stab 10%, dash and the thrown spear's blast always.
+## Sword: cut `slash_stagger_chance`, the heavy slash's wave and slam always.
+## Spear (spear.gd): stab 10%, dash and the thrown spear's blast always.
 @export_range(0.0, 1.0) var slash_stagger_chance := 0.4
-@export_range(0.0, 1.0) var spin_stagger_chance := 1.0
+@export_range(0.0, 1.0) var wave_stagger_chance := 1.0
 @export_range(0.0, 1.0) var slam_stagger_chance := 1.0
 ## The shortest a stagger lasts, whatever the stroke's own stun.
 @export var stagger_min_time := 0.45
@@ -1149,7 +1157,7 @@ var _slam_started_at := 0.0
 ## This slam began on the ground: no dive, the sword is raised and brought down.
 var _slam_grounded := false
 var _slam_ready_at := 0.0
-## Damage the stroke in progress deals (a cut's; the spin cuts the same).
+## Damage the stroke in progress deals (a cut's; the heavy slash's wave carries its own).
 var _stroke_damage := 0.0
 ## Guarding: whether the block is up, when it went up (wall clock, for the
 ## parry window), and the decaying 0..1 shove a guarded blow gives the sword.
@@ -1287,6 +1295,7 @@ func _process(delta: float) -> void:
 	_update_dash_view(delta)
 	_update_head(delta)
 	_update_pose(delta)
+	_update_blade_glow()
 	_update_sweep_trail(delta)
 	_update_colour(delta)
 	if _damage_mark > 0.0:
@@ -1300,7 +1309,7 @@ func _update_dash_view(delta: float) -> void:
 	# The base is the player's Field of view setting.
 	_base_fov = Graphics.field_of_view
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
-			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"spin" \
+			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"heavy" \
 			and _remnant_hunt <= 0.0 and _stab_fov == 0.0:
 		if camera.fov != _base_fov:
 			camera.fov = _base_fov
@@ -1320,9 +1329,9 @@ func _update_dash_view(delta: float) -> void:
 	# both instead of whichever ran last.
 	camera.fov = _base_fov + dash_fov_kick * dash - attack_fov_kick * swing \
 		+ jump_fov_kick * sin(PI * (1.0 - _jump_kick)) - haft_zoom * _cine_z - _scene_zoom \
-		+ lunge_fov_kick * lunge_intensity() + _spin_effort().w + _remnant_fov() + _stab_fov
+		+ lunge_fov_kick * lunge_intensity() + _heavy_effort().w + _remnant_fov() + _stab_fov
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
-			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"spin" \
+			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"heavy" \
 			and _remnant_hunt <= 0.0 and _stab_fov == 0.0:
 		# Land exactly back on the authored value rather than near it.
 		camera.fov = _base_fov
@@ -1432,9 +1441,9 @@ func _update_head(delta: float) -> void:
 		shake_offset = Vector3(_bob_noise.get_noise_2d(t, 11.0), _bob_noise.get_noise_2d(t, 37.0), 0.0) * 0.09 * quake
 		shake_pitch = _bob_noise.get_noise_2d(t, 73.0) * deg_to_rad(5.0) * quake
 		shake_roll = _bob_noise.get_noise_2d(t, 91.0) * deg_to_rad(7.0) * quake
-	# The spin's effort: a lean, a nod and a crouch (its FOV is in
+	# The heavy slash's effort: a lean, a nod and a crouch (its FOV is in
 	# `_update_dash_view`).
-	var effort := _spin_effort()
+	var effort := _heavy_effort()
 	if _stab_strain > 0.0:
 		_stab_strain = maxf(_stab_strain - delta * 1.1 / attack_time_scale, 0.0)
 	var stab := _stab_effort()
@@ -1466,7 +1475,7 @@ func _update_head(delta: float) -> void:
 		+ deg_to_rad(haft_roll) * _cine_roll * _cine_z + deg_to_rad(_scene_roll) + deg_to_rad(effort.x)
 	# The haft strike's turn onto its target. Only ever here, on the head: the
 	# body's yaw is the player's aim and is never touched.
-	head.rotation.y = _cine_aim.x * _cine_a + _spin_view_yaw(delta / attack_time_scale)
+	head.rotation.y = _cine_aim.x * _cine_a
 
 
 ## Puts the sword away when something else is in hand (or the hands are busy,
@@ -1730,7 +1739,7 @@ func _look_scale() -> float:
 ## push turns fast. Every rule mouse look obeys holds here too: nothing in a
 ## menu, a scene or while a wheel is open (`wheel_open`, set by radial_menu.gd,
 ## which reads the stick itself then); clamped to the gap in a hiding place;
-## nothing while a spin owns the view.
+## (the heavy slash leaves the look free).
 
 @export var pad_look_speed := 3.4
 ## Pitch is a little slower than yaw at the same tilt.
@@ -1751,8 +1760,6 @@ func _pad_look(delta: float) -> void:
 		var yaw: float = rotation.y - v.x * k
 		rotation.y = _hide_yaw + clampf(wrapf(yaw - _hide_yaw, -PI, PI), -HIDE_LOOK_YAW, HIDE_LOOK_YAW)
 		_look_pitch = clampf(_look_pitch - v.y * k * pad_pitch_share, -HIDE_LOOK_PITCH, HIDE_LOOK_PITCH)
-		return
-	if _pose_kind == &"spin" and not _spin_released():
 		return
 	# On a vat, no turning (note 111).
 	if latched_to == null:
@@ -1794,11 +1801,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if wheel_open:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		# The spin owns the view while it turns: always exactly one full circle,
-		# so mouse look is ignored until the turn is complete (not saved up for
-		# later) -- and is back the instant it is, while the blade comes home.
-		if _pose_kind == &"spin" and not _spin_released():
-			return
+		# (The heavy slash leaves the look free: the wave goes where they aim.)
 		# Yaw turns the whole body so movement follows the view; pitch stays on
 		# the head alone, otherwise looking up would tilt the capsule.
 		# Holding a vat (note 111: "The player shouldnt be able to turn when
@@ -1843,10 +1846,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 	elif event.is_action_pressed("thrust"):
 		_attack_key_spills_drink()
-		# Q: the spin with the sword; the dash with the spear; the axe thrown.
+		# Q: the heavy slash with the sword; the dash with the spear; the axe thrown.
 		if Coop.aim_ready(self) and held_item() == &"sword" \
 				and not _ghosting:
-			_start_spin()
+			_start_heavy()
 		elif Coop.aim_ready(self) and held_item() == &"spear" \
 				and _spear_free():
 			spear.dash()
@@ -2046,7 +2049,7 @@ func _physics_process(delta: float) -> void:
 
 		# Swinging slows you. Without it the faster strokes would let you cover
 		# ground at full walking pace while permanently mid-attack.
-		var walk := move_speed * (attack_move_scale if _attack_slows() else 1.0) \
+		var walk := move_speed * _attack_move_scale() \
 			* (block_move_scale if _blocking else 1.0) \
 			* (drink_move_scale if is_drinking() else 1.0) \
 			* (wade_speed_scale if depth > 0.3 else 1.0) * carry_speed_scale * _beam_speed_scale() \
@@ -2087,7 +2090,7 @@ func _physics_process(delta: float) -> void:
 		var air_input := _move_input()
 		if air_input != Vector2.ZERO:
 			var wish := (global_basis * Vector3(air_input.x, 0.0, air_input.y)).normalized()
-			var air_walk := move_speed * (attack_move_scale if _attack_slows() else 1.0) \
+			var air_walk := move_speed * _attack_move_scale() \
 				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() * _axe_speed() \
 				* _flinch_speed_scale()
 			var target_velocity := wish * air_walk
@@ -2193,21 +2196,15 @@ func _update_sweep_trail(delta: float) -> void:
 		# kick and lunge carried the camera on after the blade had passed, so the
 		# streak sat well above the crosshair, stepped at every frame's join.
 		var point := _sword_rest * _trail_point()
-		if _pose_kind == &"slash" or _pose_kind == &"chop" or _pose_kind == &"spin":
+		if _pose_kind == &"slash" or _pose_kind == &"chop" or _pose_kind == &"heavy":
 			var from_t := _trail_pose_t if _trail_pose_t >= 0.0 and _trail_pose_t < _pose_time else _pose_time
 			var steps := maxi(1, ceili((_pose_time - from_t) / TRAIL_STEP))
 			for k in range(1, steps + 1):
 				var f := float(k) / float(steps)
 				var at := lerpf(from_t, _pose_time, f)
-				if _pose_kind == &"spin":
-					# The head itself turns through a spin, so in the head's frame
-					# the blade barely moves and there would be no trail. Kept in
-					# the BODY's frame instead, the head's turn at that instant
-					# rebuilt from `_spin_yaw_at` -- the streak stays in the world
-					# and pours off the blade as the view comes round.
-					var turn := Transform3D(Basis.from_euler(Vector3(head.rotation.x,
-						_cine_aim.x * _cine_a + _spin_yaw_at(at), head.rotation.z)), head.position)
-					_tip_trail.push_front([turn * (_spin_pose(at) * point), lerpf(before, now, f), true])
+				if _pose_kind == &"heavy":
+					# The heavy slash's streak is gold and wide (a third element, true).
+					_tip_trail.push_front([_heavy_pose(at) * point, lerpf(before, now, f), true])
 				else:
 					var pose := _swing_pose(at, _pose_kind == &"chop")
 					_tip_trail.push_front([pose * point, lerpf(before, now, f)])
@@ -2226,16 +2223,14 @@ func _update_sweep_trail(delta: float) -> void:
 	sweep_trail.global_transform = Transform3D.IDENTITY
 	var eye := camera.global_position
 	var to_world := head.global_transform
-	# Samples from a spin are in the body's frame (a third element, true).
-	var from_body := global_transform
 	# Gathered first: a surface begun with no vertices (every segment degenerate,
 	# as while the stroke is held at its end) errors and jams the mesh.
 	var verts: Array = []
 	for i in _tip_trail.size() - 1:
 		var s0: Array = _tip_trail[i]
 		var s1: Array = _tip_trail[i + 1]
-		var p0: Vector3 = (from_body if s0.size() > 2 else to_world) * (s0[0] as Vector3)
-		var p1: Vector3 = (from_body if s1.size() > 2 else to_world) * (s1[0] as Vector3)
+		var p0: Vector3 = to_world * (s0[0] as Vector3)
+		var p1: Vector3 = to_world * (s1[0] as Vector3)
 		var along := p1 - p0
 		if along.length_squared() < 1e-8:
 			continue
@@ -2243,10 +2238,14 @@ func _update_sweep_trail(delta: float) -> void:
 		# Thin at the tip's newest point, thinning and fading to nothing behind.
 		var f0 := 1.0 - clampf((now - float(_tip_trail[i][1])) / sweep_trail_life, 0.0, 1.0)
 		var f1 := 1.0 - clampf((now - float(_tip_trail[i + 1][1])) / sweep_trail_life, 0.0, 1.0)
-		var w0 := side * sweep_trail_width * f0
-		var w1 := side * sweep_trail_width * f1
-		var c0 := Color(1.0, 1.0, 1.0, f0 * sweep_trail_alpha)
-		var c1 := Color(1.0, 1.0, 1.0, f1 * sweep_trail_alpha)
+		# The heavy slash's samples (a third element): gold, three times as wide.
+		var gold := s0.size() > 2
+		var wide := HEAVY_TRAIL_WIDTH if gold else 1.0
+		var w0 := side * sweep_trail_width * wide * f0
+		var w1 := side * sweep_trail_width * wide * f1
+		var tint := HEAVY_TRAIL_COLOR if gold else Color(1.0, 1.0, 1.0)
+		var c0 := Color(tint, f0 * sweep_trail_alpha)
+		var c1 := Color(tint, f1 * sweep_trail_alpha)
 		verts.append_array([[p0 - w0, c0], [p0 + w0, c0], [p1 + w1, c1], [p0 - w0, c0], [p1 + w1, c1], [p1 - w1, c1]])
 	sweep_trail.visible = not verts.is_empty()
 	if verts.is_empty():
@@ -2357,45 +2356,93 @@ func _take_queued_attack() -> void:
 
 
 ## When the stroke in progress stops biting -- the earliest a new one may begin.
-## A spin is committed through its full turn and hands control back the
-## instant the turn is complete (SPIN_TURN); its recovery can be cut into.
+## The heavy slash is committed until its cut has followed through
+## (HEAVY_HOLD); its recovery can be cut into.
 func _bite_end() -> float:
-	return SPIN_TURN if _pose_kind == &"spin" else SWING_HOLD
+	return HEAVY_HOLD if _pose_kind == &"heavy" else SWING_HOLD
 
 
-## The spin's turn is complete: from here the player has full control again --
-## look, walk, attack, block -- while the blade finishes coming home.
-func _spin_released() -> bool:
-	return _pose_kind == &"spin" and _pose_time >= SPIN_TURN
+## The heavy slash has followed through: from here the player has full control
+## again -- walk, attack, block -- while the blade comes home.
+func _heavy_released() -> bool:
+	return _pose_kind == &"heavy" and _pose_time >= HEAVY_HOLD
 
 
-## An attack is slowing the player down (a cut, a spin until its turn ends).
+## An attack is slowing the player down (a cut; the heavy slash until it has
+## followed through).
 func _attack_slows() -> bool:
-	return _attacking and not _spin_released()
+	return _attacking and not _heavy_released()
 
 
-## Q ("thrust" action) with the sword: one full turn, blade held out, cutting
-## all round. The same hit as a cut -- `attack_damage`, `attack_push`,
-## `attack_stun`, once per body -- through the same swept-blade test; the price
-## of the reach is the long, committed animation (SPIN_END).
-func _start_spin() -> void:
+## Walking pace through an attack: a cut's `attack_move_scale`, all but planted
+## (`heavy_move_scale`) from the heavy slash's wind-up to its follow-through.
+func _attack_move_scale() -> float:
+	if not _attack_slows():
+		return 1.0
+	return heavy_move_scale if _pose_kind == &"heavy" else attack_move_scale
+
+
+## Q ("thrust" action) with the sword (note 160): the heavy slash. HEAVY_WIND of
+## wind-up nearly planted, the blade hauled up over the right shoulder and the
+## gold building on it (`_blade_glow`), then one heavy cut from high right to
+## low left that throws the wave (`_fire_wave`, at HEAVY_FIRE). Committed until
+## it has followed through (HEAVY_HOLD); a blow taken before the wave is out
+## cuts it off (`_flinch`).
+func _start_heavy() -> void:
 	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
 			or _ghosting or is_drinking() or is_flinching():
 		return
 	# Q overrides a cut in progress, as the heavy attack does: the slash or chop
-	# is dropped where it is and the spin begins (it winds up from wherever the
-	# blade is). Only a spin still turning refuses another.
-	if _pose_kind == &"spin" and not _spin_released():
+	# is dropped where it is and the wind-up begins from wherever the blade is.
+	# Only a heavy slash not yet followed through refuses another.
+	if _pose_kind == &"heavy" and not _heavy_released():
 		return
 	_attack_queued = false
 	_attacking = true
-	_stroke_damage = attack_damage * weapon_damage_scale(&"sword")
+	_stroke_damage = 0.0
 	_trail_on = false
+	_hit_window_open = false
 	_hit_this_swing.clear()
 	_blade_prev.clear()
-	_begin_pose(&"spin")
-	# The turn is the roll; the punch of the view comes as the spin lets go.
+	_wave_fired = false
+	_begin_pose(&"heavy")
+	# The cut runs from high right to low left: the view rolls with it.
 	_swing_roll = 1.0
+
+
+## Set once the wave is thrown, so it is thrown once a stroke.
+var _wave_fired := false
+
+
+## The wave off the cut: from the chest, a little ahead, level along the way the
+## player faces, tilted to the cut's diagonal (sword_wave.gd).
+func _fire_wave() -> void:
+	_wave_fired = true
+	var ahead := -camera.global_basis.z
+	ahead.y = 0.0
+	if ahead.length_squared() < 1e-4:
+		ahead = -global_basis.z
+	ahead = ahead.normalized()
+	var from := global_position + Vector3(0.0, WAVE_HEIGHT, 0.0) + ahead * WAVE_AHEAD
+	# Not launched inside a wall the player is pressed against: back to the stone's face.
+	var ray := PhysicsRayQueryParameters3D.create(global_position + Vector3(0.0, WAVE_HEIGHT, 0.0), from, geometry_mask)
+	ray.exclude = [get_rid()]
+	var wall := get_world_3d().direct_space_state.intersect_ray(ray)
+	if not wall.is_empty():
+		from = (wall["position"] as Vector3) - ahead * 0.3
+	var wave := SwordWave.launch(get_parent(), self, from, ahead, WAVE_TILT)
+	wave.set("damage", heavy_damage * weapon_damage_scale(&"sword"))
+	wave.set("speed", wave_speed)
+	wave.set("reach", wave_reach)
+	wave.set("push", wave_push)
+	wave.set("stun", wave_stun)
+	wave.set("stagger_chance", wave_stagger_chance)
+	# The cut's punch: the view snaps in, rolls with the stroke and shakes.
+	_swing_kick = maxf(_swing_kick, 1.4)
+	_shake = maxf(_shake, 0.28)
+	# A lurch into the cut (the wind-up gave none).
+	velocity.x += ahead.x * HEAVY_LURCH
+	velocity.z += ahead.z * HEAVY_LURCH
 
 
 ## --- Block and parry -----------------------------------------------------------
@@ -2416,8 +2463,8 @@ func _start_block() -> void:
 		return
 	if _slamming or _now() < _slam_recover_until or _pose_kind in [&"haft", &"stab", &"raise", &"slam"]:
 		return
-	# Waits out a cut; a spin only until its turn is complete.
-	if (_attacking or _pose_kind in [&"slash", &"chop", &"spin"]) and not _spin_released():
+	# Waits out a cut; the heavy slash only until it has followed through.
+	if (_attacking or _pose_kind in [&"slash", &"chop", &"heavy"]) and not _heavy_released():
 		return
 	# The spear's own attacks wait the same way, and a thrown spear takes its
 	# haft -- and the shield in it -- with it until it is caught.
@@ -2773,7 +2820,7 @@ const REST_POS := Vector3(0.34, -0.85, -0.35)
 const REST_ROT := Vector3(-1.113895, 0.0, -0.244346)
 ## A stroke's timeline, seconds: into the wind-up, the cut, the follow-through
 ## held, and back to rest. The blade bites from SWING_WIND to SWING_HOLD. These
-## and the spin's and slam's below run on `_pose_time`, which `attack_time_scale`
+## and the heavy slash's and slam's below run on `_pose_time`, which `attack_time_scale`
 ## stretches (`ATTACK_POSES`), so in real seconds each is that much longer.
 const SWING_WIND := 0.07
 const SWING_CUT := 0.21
@@ -2790,21 +2837,35 @@ const SWING_CROSS := 2.0
 const SWING_TILT := 0.42
 ## How far above the floor the struck tip rests.
 const SLAM_TIP_LIFT := 0.03
-## The spin's timeline: the blade wound back out to the right and the view
-## coiled a little against the turn (SPIN_WIND), then the VIEW turns one full
-## circle to the left with the blade held out leading it (SPIN_WIND to
-## SPIN_TURN -- it bites all the way round), then the blade is brought home
-## (SPIN_END). Only the head turns, never the body, so the aim is exactly where
-## it was afterwards. The slash is done by 0.42 s; the spin takes a full second
-## and cannot be cut short (`_bite_end`), which is what stops it being spammed.
-const SPIN_WIND := 0.2
-const SPIN_TURN := 0.62
-const SPIN_END := 1.0
-## How far the view turns back against the spin in the wind-up (radians), and
-## where the blade is held through the turn: yaw from straight ahead, leading
-## the turn on the left.
-const SPIN_COIL := 0.3
-const SPIN_LEAD := -0.45
+## The heavy slash's timeline (note 160), pose seconds (x `attack_time_scale` in
+## real ones): the blade hauled up over the right shoulder by HEAVY_RAISE and
+## held there straining, the gold building on it, to HEAVY_WIND; the cut from
+## high right to low left to HEAVY_CUT, the wave thrown at HEAVY_FIRE as the
+## blade crosses the middle; held to HEAVY_HOLD, when the player has their legs
+## back; home by HEAVY_END. A cut is done by 0.42.
+const HEAVY_RAISE := 0.32
+const HEAVY_WIND := 0.82
+const HEAVY_CUT := 0.95
+const HEAVY_FIRE := 0.885
+const HEAVY_HOLD := 1.02
+const HEAVY_END := 1.36
+## Where the blade is wound to and cut to: yaw from straight ahead (+ right) and
+## pitch; and how far the hand is lifted and drawn back at the top (head space).
+const HEAVY_FROM_YAW := 0.75
+const HEAVY_FROM_PITCH := 0.9
+const HEAVY_TO_YAW := -1.75
+const HEAVY_TO_PITCH := -0.7
+const HEAVY_LIFT := Vector3(0.02, 0.28, 0.0)
+## The streak off the cut: gold, and this many times a cut's width.
+const HEAVY_TRAIL_COLOR := Color(1.0, 0.74, 0.28)
+const HEAVY_TRAIL_WIDTH := 3.0
+## The wave leaves this high off the floor, this far ahead, tilted this far
+## (radians round its way, the cut's diagonal); the cut lurches them this much.
+const WAVE_HEIGHT := 1.05
+const WAVE_AHEAD := 0.8
+const WAVE_TILT := -0.45
+const HEAVY_LURCH := 2.2
+const SwordWave := preload("res://scripts/sword_wave.gd")
 ## The guard: the weapon drawn back this far (head space) while the left arm
 ## blocks (note 157), and how long the guard takes to go up and down.
 const GUARD_DRAW := Vector3(0.1, -0.11, 0.12)
@@ -2812,7 +2873,7 @@ const GUARD_UP := 0.1
 const GUARD_DOWN := 0.16
 ## The poses that are attacks, on `attack_time_scale`. The guard and the scripted
 ## poses (a haft strike, the cage stab) keep their own time.
-const ATTACK_POSES: Array[StringName] = [&"slash", &"chop", &"spin", &"raise", &"slam"]
+const ATTACK_POSES: Array[StringName] = [&"slash", &"chop", &"heavy", &"raise", &"slam"]
 
 func _begin_pose(kind: StringName) -> void:
 	if _stab_depth and kind != &"stab":
@@ -2853,8 +2914,8 @@ func _update_pose(delta: float) -> void:
 		length = slam_recover_time + SLAM_STRIKE
 	elif _pose_kind == &"haft":
 		length = HAFT_END
-	elif _pose_kind == &"spin":
-		length = SPIN_END
+	elif _pose_kind == &"heavy":
+		length = HEAVY_END
 	elif _pose_kind == &"block":
 		length = INF
 	elif _pose_kind == &"unblock":
@@ -2883,18 +2944,14 @@ func _update_pose(delta: float) -> void:
 		if not _haft_landed and _pose_time >= HAFT_HIT:
 			_land_haft()
 		return
-	if _pose_kind == &"spin":
-		sword_pivot.transform = _spin_pose(_pose_time)
-		# Bites from the moment the turn starts to the moment it ends: the
-		# blade is out the whole way round.
-		# (A spin that took a blow turns on with its blade dead: `_flinch`.)
-		_hit_window_open = _pose_time >= SPIN_WIND and _pose_time <= SPIN_TURN and not is_flinching()
-		# The cut's white trail, all the way round (`_update_sweep_trail`).
-		_trail_on = _pose_time >= SPIN_WIND * 0.6 and _pose_time <= SPIN_TURN + 0.03 and not is_flinching()
-		if _pose_time >= SPIN_TURN and _pose_time - step < SPIN_TURN:
-			# The release: a punch of the view and a shake as it comes round.
-			_swing_kick = maxf(_swing_kick, 0.9)
-			_shake = maxf(_shake, 0.2)
+	if _pose_kind == &"heavy":
+		sword_pivot.transform = _heavy_pose(_pose_time)
+		# The blade never bites: the wave it throws is the damage.
+		_hit_window_open = false
+		# The gold streak through the cut (`_update_sweep_trail`).
+		_trail_on = _pose_time >= HEAVY_WIND - 0.02 and _pose_time <= HEAVY_HOLD
+		if not _wave_fired and _pose_time >= HEAVY_FIRE and not _dead:
+			_fire_wave()
 		return
 	if _pose_kind == &"block":
 		var k := clampf(_pose_time / GUARD_UP, 0.0, 1.0)
@@ -2944,100 +3001,138 @@ func _update_lunge(delta: float) -> void:
 		_lunge_age = -1.0
 
 
-## The blade's pitch all the way round, solved once: level, SPIN_DROP below the
-## pitch that would pass the crosshair point straight ahead. Exactly at eye
-## height the circle -- and its trail -- is seen edge-on and collapses into a
-## flat line along the horizon; at chest height it reads as a sweep arcing
-## across the lower half of the view, and still cuts through a skeleton's torso.
-## (The blade is held at `SPIN_LEAD`, not straight ahead, but the pitch is the
-## same all the way round.)
-const SPIN_DROP := 0.25
-var _spin_pitch := NAN
+## The blade on the heavy slash's arc at `yaw` / `pitch`, the hand lifted and
+## drawn back by `lift` (0..1) of HEAVY_LIFT, travelling left.
+func _heavy_arc(yaw: float, pitch: float, lift: float) -> Transform3D:
+	var pose := _arc_pose(yaw, pitch, true)
+	pose.origin += HEAVY_LIFT * lift
+	return pose
 
 
-func _spin_level() -> float:
-	if is_nan(_spin_pitch):
-		_spin_pitch = _cut_pitch(0.0, true) - SPIN_DROP
-	return _spin_pitch
-
-
-## The blade through the spin, in head space: wound out to the right as the
-## view coils, swept across to `SPIN_LEAD` on the left in the first quarter of
-## the turn and held there, leading it, at a level pitch while the HEAD turns
-## the full circle (`_spin_view_yaw`) -- so in the world the blade sweeps the
-## whole circle round the player -- then brought home like a cut's recovery.
-func _spin_pose(t: float) -> Transform3D:
-	var level := _spin_level()
-	if t < SPIN_WIND:
-		var k := t / SPIN_WIND
+## The heavy slash in head space: hauled up from wherever the blade is to high
+## over the right shoulder (HEAVY_RAISE), held there straining -- a slow creep
+## further back and a tremble that builds -- to HEAVY_WIND; then cut round the
+## arc to low on the left (fast in the middle, HEAVY_CUT), held, and brought
+## home like a cut's recovery.
+func _heavy_pose(t: float) -> Transform3D:
+	if t < HEAVY_RAISE:
+		var k := t / HEAVY_RAISE
 		k = 1.0 - (1.0 - k) * (1.0 - k)
 		var aim := _aim_of(_pose_from)
-		return _blend(_pose_from, _arc_pose(lerpf(aim.x, SWING_OPEN, k),
-			lerpf(aim.y, level, k), true), k)
-	if t < SPIN_TURN:
-		var s := smoothstep(0.0, 1.0, (t - SPIN_WIND) / ((SPIN_TURN - SPIN_WIND) * 0.25))
-		return _arc_pose(lerpf(SWING_OPEN, SPIN_LEAD, s), level, true)
-	var r := smoothstep(0.0, 1.0, (t - SPIN_TURN) / (SPIN_END - SPIN_TURN))
+		return _blend(_pose_from, _heavy_arc(lerpf(aim.x, HEAVY_FROM_YAW, k),
+			lerpf(aim.y, HEAVY_FROM_PITCH, k), k), k)
+	if t < HEAVY_WIND:
+		var s := (t - HEAVY_RAISE) / (HEAVY_WIND - HEAVY_RAISE)
+		var shake := 0.012 * s * s
+		var pose := _heavy_arc(HEAVY_FROM_YAW + 0.1 * s + sin(t * 57.0) * shake,
+			HEAVY_FROM_PITCH + 0.06 * s + sin(t * 43.0 + 1.3) * shake, 1.0 + 0.15 * s)
+		return pose
+	if t < HEAVY_CUT:
+		var s := smoothstep(0.0, 1.0, (t - HEAVY_WIND) / (HEAVY_CUT - HEAVY_WIND))
+		return _heavy_arc(lerpf(HEAVY_FROM_YAW + 0.1, HEAVY_TO_YAW, s),
+			lerpf(HEAVY_FROM_PITCH + 0.06, HEAVY_TO_PITCH, s), 1.15 * (1.0 - s) * (1.0 - s))
+	if t < HEAVY_HOLD:
+		return _heavy_arc(HEAVY_TO_YAW, HEAVY_TO_PITCH, 0.0)
+	var r := smoothstep(0.0, 1.0, (t - HEAVY_HOLD) / (HEAVY_END - HEAVY_HOLD))
 	var home := _aim_of(_rest_pose())
-	return _blend(_arc_pose(lerpf(SPIN_LEAD, home.x, r), lerpf(level, home.y, r), true), _rest_pose(), r)
+	return _blend(_arc_pose(lerpf(HEAVY_TO_YAW, home.x, r), lerpf(HEAVY_TO_PITCH, home.y, r), true),
+		_rest_pose(), r)
 
 
-## The head's extra yaw through a spin at pose time `t`: back against it in the
-## wind-up, then a full turn to the LEFT (+rotation.y), fast in the middle,
-## ending on exactly a whole turn -- the same as none, so the view lands where
-## it started.
-func _spin_yaw_at(t: float) -> float:
-	if t < 0.0:
-		return 0.0
-	if t < SPIN_WIND:
-		var k := t / SPIN_WIND
-		return -SPIN_COIL * (1.0 - (1.0 - k) * (1.0 - k))
-	if t < SPIN_TURN:
-		var s := smoothstep(0.0, 1.0, (t - SPIN_WIND) / (SPIN_TURN - SPIN_WIND))
-		return lerpf(-SPIN_COIL, TAU, s)
-	return 0.0
-
-
-## `ahead`: the head is placed (`_update_head`) before `_update_pose` advances
-## the stroke by the same delta, so it asks for the turn where the stroke WILL
-## be this frame -- otherwise the view lags the blade and its trail by a frame
-## (~0.37 rad at full speed) and the streak runs on past the blade.
-func _spin_view_yaw(ahead := 0.0) -> float:
-	if _pose_kind != &"spin" or _pose_time < 0.0:
-		return 0.0
-	return _spin_yaw_at(_pose_time + ahead)
-
-
-## The camera through a spin, selling the effort without turning the view:
-## (roll deg, pitch deg, drop m, fov deg). Wind-up: leaning back into the coil,
-## head low, the view drawing in tight. The drive: leaning hard into the turn,
-## crouched lower, the view rushing open, trembling with the strain while the
-## blade is fastest. The release (with a punch and a shake, `_update_pose`):
-## everything eases back.
-func _spin_effort() -> Vector4:
-	if _pose_kind != &"spin" or _pose_time < 0.0:
+## The camera through the heavy slash: (roll deg, pitch deg, drop m, fov deg).
+## The wind-up leans back and over to the right, head up a little, crouching,
+## the view drawn in tight and trembling more the longer it is held; the cut
+## throws the lean over to the left and down (the punch and the shake are
+## `_fire_wave`'s); the recovery eases it all back.
+func _heavy_effort() -> Vector4:
+	if _pose_kind != &"heavy" or _pose_time < 0.0:
 		return Vector4.ZERO
 	var t := _pose_time
-	var coil := Vector4(spin_effort_roll * -0.6, -2.0, spin_effort_drop * 0.55, -3.0)
-	var drive := Vector4(spin_effort_roll, -1.0, spin_effort_drop, spin_effort_fov)
-	if t < SPIN_WIND:
-		var k := t / SPIN_WIND
+	var coil := Vector4(-heavy_effort_roll * 0.7, 2.5, heavy_effort_drop * 0.6, -heavy_effort_fov)
+	var drive := Vector4(heavy_effort_roll, -4.0, heavy_effort_drop, heavy_effort_fov * 0.4)
+	if t < HEAVY_WIND:
+		var k := clampf(t / HEAVY_RAISE, 0.0, 1.0)
 		k = 1.0 - (1.0 - k) * (1.0 - k)
 		var e := coil * k
-		# Straining against the coil: a tremor that builds.
-		e.x += sin(t * 61.0) * 0.35 * k
+		var strain := clampf((t - HEAVY_RAISE * 0.5) / (HEAVY_WIND - HEAVY_RAISE * 0.5), 0.0, 1.0)
+		var n := float(Time.get_ticks_msec()) / 1000.0 * 38.0
+		e.x += _bob_noise.get_noise_2d(n, 5.0) * 1.2 * strain * strain
+		e.y += _bob_noise.get_noise_2d(n, 23.0) * 0.6 * strain * strain
+		e.z += absf(_bob_noise.get_noise_2d(n, 41.0)) * 0.01 * strain
 		return e
-	if t < SPIN_TURN:
-		var s := (t - SPIN_WIND) / (SPIN_TURN - SPIN_WIND)
-		var e := coil.lerp(drive, smoothstep(0.0, 0.35, s))
-		var strain := sin(PI * s)
-		var n := float(Time.get_ticks_msec()) / 1000.0 * 40.0
-		e.x += _bob_noise.get_noise_2d(n, 5.0) * 1.4 * strain
-		e.y += _bob_noise.get_noise_2d(n, 23.0) * 0.8 * strain
-		e.z += absf(_bob_noise.get_noise_2d(n, 41.0)) * 0.012 * strain
-		return e
-	var r := smoothstep(0.0, 1.0, (t - SPIN_TURN) / (SPIN_END - SPIN_TURN))
+	if t < HEAVY_HOLD:
+		var s := smoothstep(0.0, 1.0, (t - HEAVY_WIND) / (HEAVY_CUT - HEAVY_WIND))
+		return coil.lerp(drive, s)
+	var r := smoothstep(0.0, 1.0, (t - HEAVY_HOLD) / (HEAVY_END - HEAVY_HOLD))
 	return drive * (1.0 - r)
+
+
+## The gold on the blade as the heavy slash winds up: a glowing sheath along it
+## (the wave's shader), building from nothing as the blade goes up to full as
+## the cut begins, and gone by the follow-through. Built on first use, under the
+## sword model so it goes wherever the blade does.
+var _blade_glow: MeshInstance3D
+
+
+func _update_blade_glow() -> void:
+	var on := 0.0
+	if _pose_kind == &"heavy" and _pose_time >= 0.0 and held_item() == &"sword":
+		var t := _pose_time
+		if t < HEAVY_WIND:
+			on = smoothstep(0.1, HEAVY_WIND, t)
+		elif t < HEAVY_HOLD:
+			on = 1.0 - smoothstep(HEAVY_FIRE, HEAVY_HOLD, t)
+	if on <= 0.0:
+		if _blade_glow != null and _blade_glow.visible:
+			_blade_glow.visible = false
+		return
+	if _blade_glow == null:
+		if sword_model == null:
+			return
+		_blade_glow = _make_blade_glow()
+	_blade_glow.visible = true
+	# A pulse, quickening as it fills.
+	var pulse := 0.85 + 0.15 * sin(_pose_time * (14.0 + 22.0 * on))
+	_blade_glow.set_instance_shader_parameter(&"fade", 1.0 - on * pulse)
+
+
+## A cross of two thin quads along the blade from the guard to the tip (sword
+## model space), so it reads from any angle; UV.x along the blade, UV.y out from
+## its spine to the glow's edge on both faces.
+func _make_blade_glow() -> MeshInstance3D:
+	var along := _blade_tip - _blade_base
+	var length := along.length()
+	var y := along / maxf(length, 0.001)
+	var x := (Vector3.RIGHT - y * Vector3.RIGHT.dot(y)).normalized()
+	var z := x.cross(y)
+	var half := length * 0.1
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var idx := PackedInt32Array()
+	for side: Vector3 in [x, z]:
+		for sgn: float in [1.0, -1.0]:
+			var b := verts.size()
+			var out := side * half * sgn
+			verts.append_array([_blade_base, _blade_tip, _blade_tip + out * 0.4, _blade_base + out])
+			uvs.append_array([Vector2(0.18, 0.0), Vector2(0.82, 0.0), Vector2(0.82, 1.0), Vector2(0.18, 1.0)])
+			idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var glow := MeshInstance3D.new()
+	glow.name = "HeavyGlow"
+	glow.mesh = mesh
+	glow.material_override = SwordWave.material()
+	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	glow.set_instance_shader_parameter(&"fade", 1.0)
+	sword_model.add_child(glow)
+	if _viewmodel_layer != 0:
+		glow.layers = _viewmodel_layer
+	return glow
 
 
 ## The pivot pose that puts the hilt (the guard) at `at` with the blade aimed
@@ -3614,17 +3709,18 @@ func attack_cooldowns() -> Array:
 	var now := _now()
 	var recover := maxf(maxf(_slam_recover_until, _flinch_until) - now, 0.0)
 	if held == &"sword":
-		# A cut waits for the stroke in progress to stop biting (a spin blocks it
-		# until its turn is done); a spin waits only for a spin still turning.
+		# A cut waits for the stroke in progress to stop biting (the heavy slash
+		# blocks it until it has followed through); the heavy slash waits only for
+		# one not yet followed through.
 		var cut := 0.0
 		if _attacking and _pose_time >= 0.0:
 			cut = maxf(_bite_end() - _pose_time, 0.0) * attack_time_scale
-		var spin := 0.0
-		if _pose_kind == &"spin" and _pose_time >= 0.0 and not _spin_released():
-			spin = (SPIN_TURN - _pose_time) * attack_time_scale
+		var heavy := 0.0
+		if _pose_kind == &"heavy" and _pose_time >= 0.0 and not _heavy_released():
+			heavy = (HEAVY_HOLD - _pose_time) * attack_time_scale
 		return [
 			[&"slam", maxf(_slam_ready_at - now, recover), slam_cooldown, "F"],
-			[&"spin", maxf(spin, recover), SPIN_TURN * attack_time_scale, "Q"],
+			[&"heavy", maxf(heavy, recover), HEAVY_HOLD * attack_time_scale, "Q"],
 			[&"slash", maxf(cut, recover), SWING_HOLD * attack_time_scale, "LMB"],
 		]
 	var list: Array = []
@@ -3853,7 +3949,7 @@ func _resolve_hits() -> void:
 	var b0: Vector3 = now_pts[0]
 	var b1: Vector3 = now_pts[1]
 	_blade_prev = now_pts
-	# The slash, the chop and the spin all sweep the blade sideways: the volume
+	# The slash and the chop both sweep the blade sideways: the volume
 	# is the slab between where it was last tick and where it is now.
 	var pts := PackedVector3Array()
 	var normal := (b1 - b0).cross(a1 - b1)
@@ -3896,10 +3992,7 @@ func _resolve_hits() -> void:
 			continue
 		if body.has_method("take_damage"):
 			body.take_damage(_stroke_damage, push_dir)
-		if _pose_kind == &"spin":
-			knock(body, push_dir * spin_push, spin_stun, spin_stagger_chance)
-		else:
-			knock(body, push_dir * attack_push, attack_stun, slash_stagger_chance)
+		knock(body, push_dir * attack_push, attack_stun, slash_stagger_chance)
 
 ## Horizontal half-width of a body, from its collision shape.
 func _body_radius_of(body: Node) -> float:
@@ -4229,7 +4322,7 @@ func dodge_charge() -> float:
 ## --- Upgrades (the crystal mine's workbench, workbench.gd, 2026-10-11) -----------
 ##
 ## Gold crystals buy levels. A weapon's level scales everything it deals by
-## `UPGRADE_DAMAGE` a level (sword: cut, spin, slam; spear: stab, dash, blast; axe: slash, throw);
+## `UPGRADE_DAMAGE` a level (sword: cut, heavy slash, slam; spear: stab, dash, blast; axe: slash, throw);
 ## armor takes `ARMOR_STEP` a level off every hit and beam (`damage_negation`).
 ## Small steps on purpose. Levels start at 1 and are saved with the game.
 
@@ -4916,7 +5009,7 @@ func _knock_view() -> Vector3:
 ## start (`is_flinching`; the attack icons wait it out). One clock: the moment
 ## they can move they can swing. The attack under way
 ## stops before it can bite: a cut, an axe chop, a throw's wind-up and a spear
-## dash are cut off where they are, a spin keeps turning with its blade dead, a
+## dash are cut off where they are, a heavy slash not yet thrown its wave is cut off, a
 ## slam lands as a dud. Guard, ghost, drink and jump stay free: the way out of
 ## the next blow is still there.
 ##
@@ -4959,7 +5052,7 @@ func _flinch(blow: Vector3) -> void:
 	_shake = maxf(_shake, 0.3)
 	# Whatever was swinging stops here.
 	_hit_window_open = false
-	if _pose_kind in [&"slash", &"chop"]:
+	if _pose_kind in [&"slash", &"chop"] or (_pose_kind == &"heavy" and not _wave_fired):
 		_attacking = false
 		_trail_on = false
 		_begin_pose(&"unblock")

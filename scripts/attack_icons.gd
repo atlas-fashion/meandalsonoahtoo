@@ -195,12 +195,12 @@ func _draw_glyph(t: Dictionary) -> void:
 		&"slash":
 			_blade(g, c + Vector2(-s * 0.55, s * 0.6), c + Vector2(s * 0.75, -s * 0.8), 3.0)
 			g.draw_arc(c + Vector2(-s * 0.3, s * 0.2), s * 1.05, -PI * 0.15, PI * 0.55, 18, INK_DIM, 2.0, true)
-		&"spin":
-			g.draw_arc(c, s * 0.95, -PI * 0.2, PI * 1.45, 28, INK, 3.0, true)
-			var tip := c + Vector2(cos(-PI * 0.2), sin(-PI * 0.2)) * s * 0.95
-			g.draw_colored_polygon(PackedVector2Array([tip + Vector2(-2, -9), tip + Vector2(8, 2),
-				tip + Vector2(-7, 6)]), INK)
-			_blade(g, c + Vector2(-s * 0.35, s * 0.35), c + Vector2(s * 0.35, -s * 0.35), 2.0)
+		&"heavy":
+			# The heavy slash (note 160): the blade, and the gold crescent it throws.
+			_blade(g, c + Vector2(-s * 0.85, s * 0.75), c + Vector2(s * 0.1, -s * 0.2), 2.0)
+			var gold := Color(1.0, 0.78, 0.35)
+			g.draw_arc(c + Vector2(-s * 0.35, s * 0.1), s * 1.0, -PI * 0.42, PI * 0.12, 18, gold, 4.0, true)
+			g.draw_arc(c + Vector2(-s * 0.55, s * 0.2), s * 0.95, -PI * 0.36, PI * 0.06, 14, INK_DIM, 2.0, true)
 		&"slam":
 			_blade(g, c + Vector2(0.0, -s * 1.15), c + Vector2(0.0, s * 0.55), 3.0)
 			for k in 5:
