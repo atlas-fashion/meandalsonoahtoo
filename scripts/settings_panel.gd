@@ -78,6 +78,9 @@ var _widgets := {}
 var _syncing := false
 var _debounce: Timer
 var _buttons: HBoxContainer
+## The settings themselves, and the keybinds page shown in their place (note 164).
+var _main: Control
+var _keys = null
 
 
 func _init() -> void:
@@ -116,6 +119,7 @@ func add_button(text: String, action: Callable) -> void:
 
 func _build() -> void:
 	var box := panel_box(self, 640)
+	_main = box.get_parent()
 	box.add_child(title_label("SETTINGS"))
 
 	box.add_child(section_label("CONTROLS"))
@@ -170,6 +174,21 @@ func _build() -> void:
 		_hint.text = "How much of the world the view takes in, top to bottom. 75° is the game's own.")
 	frow.mouse_filter = Control.MOUSE_FILTER_PASS
 	box.add_child(frow)
+	var krow := HBoxContainer.new()
+	krow.custom_minimum_size.y = ROW_HEIGHT
+	var kl := Label.new()
+	kl.text = "Key bindings"
+	kl.custom_minimum_size.x = 210
+	krow.add_child(kl)
+	var kb := Button.new()
+	kb.text = "Change..."
+	kb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	kb.pressed.connect(func() -> void: show_keybinds(true))
+	krow.add_child(kb)
+	krow.mouse_entered.connect(func() -> void:
+		_hint.text = "Every action's key, mouse button and controller button.")
+	krow.mouse_filter = Control.MOUSE_FILTER_PASS
+	box.add_child(krow)
 	box.add_child(_rule())
 
 	box.add_child(section_label("GRAPHICS"))
@@ -220,6 +239,28 @@ func _build() -> void:
 	_buttons = HBoxContainer.new()
 	_buttons.add_child(menu_button("Back", func() -> void: back_pressed.emit(), 150))
 	box.add_child(_buttons)
+
+	_keys = preload("res://scripts/keybinds_panel.gd").new()
+	_keys.visible = false
+	_keys.back_pressed.connect(func() -> void: show_keybinds(false))
+	add_child(_keys)
+
+
+## The keybinds page in place of the settings, or the settings back.
+func show_keybinds(on: bool) -> void:
+	_main.visible = not on
+	_keys.visible = on
+	if on:
+		_keys.open()
+
+
+## Escape / B on the keybinds page steps back to the settings, not out of them.
+## In `_input`, ahead of the menu holding this page (its child comes first); the
+## page itself, listening for a binding, comes ahead of this.
+func _input(event: InputEvent) -> void:
+	if _keys != null and _keys.visible and is_visible_in_tree() and not _keys.listening() and event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		show_keybinds(false)
 
 
 func _row(entry: Dictionary) -> Control:
@@ -292,6 +333,8 @@ func _row(entry: Dictionary) -> Control:
 func sync() -> void:
 	if _preset_picker == null:
 		return
+	# Opened afresh: on the settings, not the keybinds page left open last time.
+	show_keybinds(false)
 	_syncing = true
 	_preset_picker.select(Graphics.preset)
 	sensitivity_slider.value = Graphics.mouse_sensitivity

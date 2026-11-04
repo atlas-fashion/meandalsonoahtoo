@@ -25,9 +25,10 @@ const BOTTOM := -16.0
 const GAP := 18.0
 const SEPARATION := 10.0
 
-## The keys as a controller labels them (project.godot: light attack RB,
-## medium RT, heavy LT). Shown once a pad was the last thing used.
-const PAD_KEYS := {"LMB": "RB", "Q": "RT", "F": "LT"}
+## The action each attack's default key stands for: the tile shows that action's
+## binding as it is now (the keybinds page, note 164), the controller's once a
+## pad was the last thing used.
+const KEY_ACTIONS := {"LMB": &"attack", "Q": &"thrust", "F": &"slam"}
 
 var player: Node
 var _tiles: Array[Dictionary] = []
@@ -149,7 +150,12 @@ func _process(delta: float) -> void:
 			(t["glyph"] as Control).queue_redraw()
 		# Co-op: player 2 always on the pad, player 1 never (coop.gd).
 		var pad := Coop.on_pad(player) if Coop.active else _pad
-		(t["key"] as Label).text = PAD_KEYS.get(String(entry[3]), "") if pad else String(entry[3])
+		var action: StringName = KEY_ACTIONS.get(String(entry[3]), &"")
+		if action == &"":
+			(t["key"] as Label).text = "" if pad else String(entry[3])
+		else:
+			var shown := Keybinds.text(action, Keybinds.PAD if pad else Keybinds.KEYBOARD)
+			(t["key"] as Label).text = "" if shown == "--" else shown
 		var left: float = entry[1]
 		var total: float = entry[2]
 		_show(t, left, total, delta)

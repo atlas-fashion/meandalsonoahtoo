@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 163), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 164), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -593,6 +593,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 161 | 2026-11-04 | Ghost mode replaced by a dash (Left Ctrl / L3: 34 m/s on the very next tick, eased out over 0.24 s, straight back from a stand; 14 invulnerable frames, 14/60 s of game time, in which blows, knockdowns, shoves and beams are not taken; the next only after 0.65 s, a press 0.12 s early held); Shift a sprint at the old 4.25, the walk 3.3, on a damped spring between; berserk and the Remnant keep their speeds | [docs/notes/161-dash-sprint-slower-walk.md](docs/notes/161-dash-sprint-slower-walk.md) |
 | 162 | 2026-11-04 | The gold wave slash moved to the sword's F, the ult: 130 damage, once every `slam_cooldown` 20 s on the slam's clock (`_start_wave`, pose `&"wave"`); the slam kept whole but unbound (`sword_slam`); Q a delayed heavy swipe (`_start_heavy`, pose `&"heavy"`: cocked back and held, the cut lands 0.68 s after Q for 45 with a lurch, committed, a blow in the wind-up cuts it off); the walk 3.3 -> 2.5, sprint still 4.25 | [docs/notes/162-wave-on-f-heavy-swipe-slower-walk.md](docs/notes/162-wave-on-f-heavy-swipe-slower-walk.md) |
 | 163 | 2026-11-04 | The user's own sword and spear (his Blender files, `models/source/weapons/`) fitted by `tools/build_weapons.py` to the old conventions (sword pommel 0 / tip 2.65 on +Y; spear on -Z, hand at 0, butt +0.67, point -2.07): first person, thrown (the head lit) and on the co-op body; `_measure_sword` reads every surface | [docs/notes/163-the-users-sword-and-spear.md](docs/notes/163-the-users-sword-and-spear.md) |
+| 164 | 2026-11-04 | A keybinds menu (Settings > Key bindings: `keybinds.gd` autoload, `keybinds_panel.gd`; a keyboard and a controller column per action, swap on conflict, saved to user://keybinds.cfg, Esc/Start reserved, `Coop.resplit`, live labels in the inventory and HUD); the slash reworked (gather, load, cut past the arc with wrist roll and dig, rebound, home; bites from 0.125 not 0.07 pose, +69 ms; kick and lunge on the cut, `_strike_cut`); dash wait 0.65 -> 0.4875 s; pad dash on B, not L3 | [docs/notes/164-keybinds-menu-later-slash-faster-dash-pad-b.md](docs/notes/164-keybinds-menu-later-slash-faster-dash-pad-b.md) |
 
 ## Notes by source file
 
@@ -609,7 +610,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scenes/torch.tscn`: 6.15, 6.18, 7, 19, 24, 27, 46
 - `scripts/archer.gd`: 20, 77, 92, 93
 - `scripts/arrow.gd`: 20, 79, 93
-- `scripts/attack_icons.gd`: 24, 77, 79, 84, 160, 162
+- `scripts/attack_icons.gd`: 24, 77, 79, 84, 160, 162, 164
 - `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91, 143, 144, 157, 161
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
@@ -617,7 +618,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159
 - `scripts/chest.gd`: 18, 79
 - `scripts/consumable_type.gd`: 130
-- `scripts/coop.gd`: 79, 80
+- `scripts/coop.gd`: 79, 80, 164
 - `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163
 - `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163
@@ -643,13 +644,14 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/holding_cell.gd`: 153, 154
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
-- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162
+- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164
 - `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111, 130
-- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130, 144, 160, 161, 162
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130, 144, 160, 161, 162, 164
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
 - `scripts/item_icon.gd`: 6.19, 77, 84, 111, 130
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12, 153, 154
+- `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
 - `scripts/manhole.gd`: 50, 51, 79, 121
 - `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159
 - `scripts/maze_graph.gd`: 6.16
@@ -661,7 +663,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
@@ -679,7 +681,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
-- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159
+- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159, 164
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92, 130, 131, 147

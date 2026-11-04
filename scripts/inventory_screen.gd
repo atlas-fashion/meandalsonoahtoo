@@ -443,14 +443,14 @@ func _stats_for(id: StringName) -> Array:
 					["Parry return", "%d%%" % roundi(player.parry_reflect * 100.0)],
 				],
 				"Controls", [
-					["Cut", "LMB / RB"],
-					["Heavy swipe", "Q / RT"],
-					["Wave slash", "F / LT"],
-					["Block", "hold RMB / LB"],
-					["Parry", "RMB / LB as it lands"],
-					["Dodge dash", "L-Ctrl / L3"],
-					["Sprint", "hold Shift / full stick"],
-					["Haft strike", "E / X"],
+					["Cut", Keybinds.label(&"attack")],
+					["Heavy swipe", Keybinds.label(&"thrust")],
+					["Wave slash", Keybinds.label(&"slam")],
+					["Block", "hold " + Keybinds.label(&"block")],
+					["Parry", Keybinds.label(&"block") + " as it lands"],
+					["Dodge dash", Keybinds.label(&"dodge")],
+					["Sprint", "hold %s / full stick" % Keybinds.text(&"sprint", Keybinds.KEYBOARD)],
+					["Haft strike", Keybinds.label(&"interact")],
 				],
 			]
 		&"spear":
@@ -469,12 +469,12 @@ func _stats_for(id: StringName) -> Array:
 					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],
 				],
 				"Controls", [
-					["Stab", "LMB / RB"],
-					["Dash", "Q / RT"],
-					["Throw", "F / LT"],
-					["Block", "hold RMB / LB"],
-					["Dodge dash", "L-Ctrl / L3"],
-					["Sprint", "hold Shift / full stick"],
+					["Stab", Keybinds.label(&"attack")],
+					["Dash", Keybinds.label(&"thrust")],
+					["Throw", Keybinds.label(&"slam")],
+					["Block", "hold " + Keybinds.label(&"block")],
+					["Dodge dash", Keybinds.label(&"dodge")],
+					["Sprint", "hold %s / full stick" % Keybinds.text(&"sprint", Keybinds.KEYBOARD)],
 				],
 			]
 		&"axe":
@@ -492,12 +492,12 @@ func _stats_for(id: StringName) -> Array:
 					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],
 				],
 				"Controls", [
-					["Slash", "LMB / RB"],
-					["Throw", "Q / RT"],
-					["Berserk", "F / LT"],
-					["Block", "hold RMB / LB"],
-					["Dodge dash", "L-Ctrl / L3"],
-					["Sprint", "hold Shift / full stick"],
+					["Slash", Keybinds.label(&"attack")],
+					["Throw", Keybinds.label(&"thrust")],
+					["Berserk", Keybinds.label(&"slam")],
+					["Block", "hold " + Keybinds.label(&"block")],
+					["Dodge dash", Keybinds.label(&"dodge")],
+					["Sprint", "hold %s / full stick" % Keybinds.text(&"sprint", Keybinds.KEYBOARD)],
 				],
 			]
 		&"coins":
@@ -518,7 +518,7 @@ func _stats_for(id: StringName) -> Array:
 					["For", "%d s" % roundi(rat.SCARE_TIME)],
 					["Carried", str(player.inventory.count(id))],
 				],
-				"Use", [["In hand", "quick wheel / D-pad"], ["Throw", "LMB / RB"], ["Put away", "RMB / LB"],
+				"Use", [["In hand", "quick wheel / D-pad"], ["Throw", Keybinds.label(&"attack")], ["Put away", Keybinds.label(&"block")],
 					["Caught", "E, quickly"]],
 			]
 		&"robot_rat":
@@ -532,16 +532,16 @@ func _stats_for(id: StringName) -> Array:
 					["Built from", "rat + %d gold" % rc.CRAFT_COST],
 				],
 				"Controls", [
-					["Set down", "LMB / RB"],
+					["Set down", Keybinds.label(&"attack")],
 					["Drive", "WASD / stick"],
-					["Detonate", "LMB / RB"],
+					["Detonate", Keybinds.label(&"attack")],
 				],
 			]
 	var type: ConsumableType = player._consumable_for(id)
 	if type != null:
 		return [
 			"Effect", [["Heals", str(roundi(type.heal_amount))], ["Carried", str(player.inventory.count(id))]],
-			"Use", [["Quick wheel", "hold X"], ["Pad", "D-pad"]],
+			"Use", [["Quick wheel", "hold " + Keybinds.text(&"quick_wheel", Keybinds.KEYBOARD)], ["Pad", "D-pad"]],
 		]
 	return ["", [], "", []]
 

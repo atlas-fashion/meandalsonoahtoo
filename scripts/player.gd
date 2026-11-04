@@ -112,17 +112,18 @@ const SCENE_WALK_SPEED := 3.3
 @export var respawn_delay := 1.5
 
 @export_group("Dash")
-## Tap "dodge" (Left Ctrl, L3 on a pad; note 161, it replaced ghost mode): a burst
+## Tap "dodge" (Left Ctrl, B on a pad; note 161, it replaced ghost mode): a burst
 ## the way you are moving -- straight back with no direction held -- at full
 ## speed on the very tick of the press, easing out to walking pace over
 ## `dash_move_time`. Nothing touches you for the first `dash_iframes` (14 frames
 ## at 60): a blow, a knockdown, a shove or a beam landing inside them is simply
 ## not taken, so a dodge has to be timed. Another dash waits until the whole
-## `dash_time` has run; a press up to `dash_buffer` early is held for that moment.
+## `dash_time` has run (0.65 s until note 164 took it to 75% of that); a press up
+## to `dash_buffer` early is held for that moment.
 @export var dash_speed := 34.0
 @export var dash_move_time := 0.24
 @export var dash_iframes := 14.0 / 60.0
-@export var dash_time := 0.65
+@export var dash_time := 0.4875
 @export var dash_buffer := 0.12
 ## The body under the view: how far the head drops into the dash and comes back
 ## up over `dash_time`, and how far it tips with it.
@@ -1124,6 +1125,8 @@ var _dash_lateral := 0.0
 var _base_fov := 75.0
 ## Decaying 0..1 driving the swing's view punch.
 var _swing_kick := 0.0
+## This slash's cut has begun: its view kick and lunge are spent (`_strike_cut`).
+var _cut_struck := true
 ## +1 or -1, so alternating strokes roll the view opposite ways.
 var _swing_roll := 1.0
 ## Decaying 0..1 driving the landing dip -- the same pattern as _swing_kick
@@ -2349,7 +2352,7 @@ func _trail_point() -> Vector3:
 		var best := INF
 		_trail_frac = 1.0
 		var t := SWING_WIND
-		while t <= SWING_CUT:
+		while t <= SWING_HOLD:
 			var pose := _swing_pose(t, false)
 			var g := pose * base
 			var u := pose.basis * span
@@ -2404,9 +2407,16 @@ func _start_attack() -> void:
 	# Alternating strokes roll the view opposite ways, so a combo reads as two
 	# distinct cuts rather than the same one twice.
 	_swing_roll = 1.0 if _next_attack == 0 else -1.0
-	_swing_kick = maxf(_swing_kick, 1.0)
 	_next_attack = (_next_attack + 1) % ATTACKS.size()
+	# The view kick and the step in come with the cut, not the click: through the
+	# gather and the load the body is still (`_strike_cut`, note 164).
+	_cut_struck = false
 
+
+## The cut begins (SWING_WIND): the view kicks with it and the body steps in.
+func _strike_cut() -> void:
+	_cut_struck = true
+	_swing_kick = maxf(_swing_kick, 1.0)
 	# A swing carries you forward: one impulse, bled off by the raised damping
 	# below rather than by a clock of its own.
 	var facing := -global_basis.z
@@ -2938,14 +2948,39 @@ func _warm_guard_flash() -> void:
 ## Idle clip, frame 0: where every pose ends.
 const REST_POS := Vector3(0.34, -0.85, -0.35)
 const REST_ROT := Vector3(-1.113895, 0.0, -0.244346)
-## A stroke's timeline, seconds: into the wind-up, the cut, the follow-through
-## held, and back to rest. The blade bites from SWING_WIND to SWING_HOLD. These
-## and the wave slash's and slam's below run on `_pose_time`, which `attack_time_scale`
-## stretches (`ATTACK_POSES`), so in real seconds each is that much longer.
-const SWING_WIND := 0.07
-const SWING_CUT := 0.21
-const SWING_HOLD := 0.27
-const SWING_END := 0.42
+## A stroke's timeline, seconds (note 164, the user: "a more elaborate, hyper
+## realistic animation to where the sword hits a little later"; it bit from 0.07):
+## the GATHER, the blade drawn back past the start of its arc and up into a
+## chamber, the hand back and high, quick off and slowing in, to SWING_GATHER;
+## the LOAD, creeping on a little further as the arm tenses, to SWING_WIND; the
+## CUT, accelerating hard to its fastest across the middle and on past the end of
+## the arc (SWING_OVER), decelerating, the wrist rolling the edge over and the
+## blade dropping through the target, to SWING_HOLD; a small rebound off the end
+## of it to SWING_SETTLE; home by SWING_END. The blade bites from SWING_WIND to
+## SWING_HOLD -- the whole of the cut. These and the wave slash's and slam's below
+## run on `_pose_time`, which `attack_time_scale` stretches (`ATTACK_POSES`), so in
+## real seconds each is that much longer.
+const SWING_GATHER := 0.08
+const SWING_WIND := 0.125
+const SWING_HOLD := 0.31
+const SWING_SETTLE := 0.37
+const SWING_END := 0.54
+## The gather: drawn back this far past the start of the arc (radians), then this
+## much more through the load; pitched up into the chamber this much; the hand
+## there (head space, +x toward the wind-up's side).
+const SWING_PULL := 0.22
+const SWING_CREEP := 0.07
+const SWING_CHAMBER := 0.2
+const SWING_CHAMBER_HAND := Vector3(0.05, 0.05, 0.07)
+## The cut: on past the end of the arc this far, dropping this much at its end,
+## the edge rolled over this far; the hand driven forward at its middle and drawn
+## across and down at its end; and a rebound of this much off the end.
+const SWING_OVER := 0.24
+const SWING_DIG := -0.14
+const SWING_ROLL := 0.5
+const SWING_REACH := Vector3(0.0, 0.0, -0.07)
+const SWING_ACROSS := Vector3(-0.05, -0.04, 0.02)
+const SWING_RECOIL := 0.06
 ## The slam's: blade down onto the floor ahead, held, then up as the player rises.
 const SLAM_STRIKE := 0.05
 const SLAM_HOLD := 0.14
@@ -3115,7 +3150,9 @@ func _update_pose(delta: float) -> void:
 		return
 	sword_pivot.transform = _swing_pose(_pose_time, _pose_kind == &"chop")
 	_hit_window_open = _pose_time >= SWING_WIND and _pose_time <= SWING_HOLD
-	_trail_on = _pose_time >= SWING_WIND * 0.6 and _pose_time <= SWING_HOLD + 0.03
+	_trail_on = _pose_time >= SWING_WIND - 0.01 and _pose_time <= SWING_HOLD + 0.03
+	if not _cut_struck and _pose_time >= SWING_WIND and not _dead:
+		_strike_cut()
 
 
 func _rest_pose() -> Transform3D:
@@ -3795,40 +3832,95 @@ static func _blend(a: Transform3D, b: Transform3D, t: float) -> Transform3D:
 ## `pitch`, travelling left (`leftward`) or right. The hand follows the blade
 ## round a little, and the flat stays level with its edge leading, so the cut is
 ## a sweep and not a stab.
-func _arc_pose(yaw: float, pitch: float, leftward: bool) -> Transform3D:
+func _arc_pose(yaw: float, pitch: float, leftward: bool, hand_off := Vector3.ZERO, roll := 0.0) -> Transform3D:
 	var dir := Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
-	var hand := Vector3(0.1 + 0.28 * sin(yaw), -0.52, -0.3 - 0.15 * cos(yaw))
+	var hand := Vector3(0.1 + 0.28 * sin(yaw), -0.52, -0.3 - 0.15 * cos(yaw)) + hand_off
 	var edge := Vector3(cos(yaw), 0.0, sin(yaw)) * (-1.0 if leftward else 1.0)
+	# The wrist turning the edge over: about the blade's own line.
+	if roll != 0.0:
+		edge = edge.rotated(dir.normalized(), roll)
 	return _blade_pose(hand, dir, edge)
 
 
 ## Right to left (`backhand` false), or left to right: wound up on one side,
 ## swept through straight ahead, followed through low on the other.
 func _swing_pose(t: float, backhand: bool) -> Transform3D:
-	var from_yaw := -SWING_OPEN if backhand else SWING_OPEN
-	var to_yaw := SWING_OPEN if backhand else -SWING_OPEN
+	# The side it winds up on: +1 the right (the slash), -1 the left (the backhand).
+	var side := -1.0 if backhand else 1.0
+	var from_yaw := SWING_OPEN * side
+	var to_yaw := -SWING_OPEN * side
 	var leftward := not backhand
-	# Into the wind-up and back to rest the blade also travels ROUND the arc,
-	# carried from where it is pointing now. Blending the two orientations
-	# directly swung the 2.65 m blade up overhead on its way there (the tip 3 m
-	# up).
-	if t < SWING_WIND:
-		var k := t / SWING_WIND
-		k = 1.0 - (1.0 - k) * (1.0 - k)
+	var cocked := from_yaw + SWING_PULL * side
+	var loaded := cocked + SWING_CREEP * side
+	var through := to_yaw - SWING_OVER * side
+	var chamber := SWING_CHAMBER_HAND * Vector3(side, 1.0, 1.0)
+	var high := _cut_pitch(from_yaw, leftward) + SWING_CHAMBER
+	# THE GATHER. Into the chamber the blade also travels ROUND the arc, carried
+	# from where it is pointing now. Blending the two orientations directly swung
+	# the 2.65 m blade up overhead on its way there (the tip 3 m up).
+	if t < SWING_GATHER:
+		var k := t / SWING_GATHER
+		k = k * k * (3.0 - 2.0 * k)
 		var aim := _aim_of(_pose_from)
-		return _blend(_pose_from, _arc_pose(lerpf(aim.x, from_yaw, k),
-			lerpf(aim.y, _cut_pitch(from_yaw, leftward), k), leftward), k)
-	if t < SWING_CUT:
-		var s := smoothstep(0.0, 1.0, (t - SWING_WIND) / (SWING_CUT - SWING_WIND))
-		# Round the arc itself, so the tip keeps its distance the whole way.
-		var yaw := lerpf(from_yaw, to_yaw, s)
-		return _arc_pose(yaw, _cut_pitch(yaw, leftward), leftward)
-	var low := _cut_pitch(to_yaw, leftward)
+		return _blend(_pose_from, _arc_pose(lerpf(aim.x, cocked, k), lerpf(aim.y, high, k), leftward,
+			chamber * k), k)
+	# THE LOAD: a little further back, the hand drawn in tighter, the arm tensing.
+	if t < SWING_WIND:
+		var k := smoothstep(0.0, 1.0, (t - SWING_GATHER) / (SWING_WIND - SWING_GATHER))
+		return _arc_pose(lerpf(cocked, loaded, k), high + SWING_CHAMBER * 0.15 * k, leftward,
+			chamber * (1.0 + 0.3 * k))
+	# THE CUT: one curve from the chamber to past the end of the arc, slow off the
+	# mark, fastest across the middle, slowing through the end (a smootherstep).
+	# Round the arc itself, so the tip keeps its distance from the eye.
 	if t < SWING_HOLD:
-		return _arc_pose(to_yaw, low, leftward)
-	var r := smoothstep(0.0, 1.0, (t - SWING_HOLD) / (SWING_END - SWING_HOLD))
+		var u := (t - SWING_WIND) / (SWING_HOLD - SWING_WIND)
+		var s := u * u * u * (u * (u * 6.0 - 15.0) + 10.0)
+		var yaw := lerpf(loaded, through, s)
+		return _arc_pose(yaw, _cut_pitch_through(yaw, leftward, u), leftward, _cut_hand(u, side, chamber),
+			SWING_ROLL * smoothstep(0.55, 1.0, u) * side)
+	var low := _cut_pitch_through(through, leftward, 1.0)
+	var end_hand := _cut_hand(1.0, side, chamber)
+	var end_roll := SWING_ROLL * side
+	# A small rebound off the end of it, and settled.
+	if t < SWING_SETTLE:
+		var k := (t - SWING_HOLD) / (SWING_SETTLE - SWING_HOLD)
+		var back := SWING_RECOIL * sin(PI * k) * side
+		return _arc_pose(through + back, low, leftward, end_hand, end_roll)
+	# Home, the wrist turning on the way so the edge arrives as it rests. Left to
+	# the blend alone, the forehand's edge was near half a turn from the rest
+	# pose's and the slerp flipped across in a frame (250 m/s at the tip).
+	var r := smoothstep(0.0, 1.0, (t - SWING_SETTLE) / (SWING_END - SWING_SETTLE))
 	var home := _aim_of(_rest_pose())
-	return _blend(_arc_pose(lerpf(to_yaw, home.x, r), lerpf(low, home.y, r), leftward), _rest_pose(), r)
+	var home_roll := _roll_onto_rest(home, leftward, end_roll)
+	return _blend(_arc_pose(lerpf(through, home.x, r), lerpf(low, home.y, r), leftward,
+		end_hand * (1.0 - r), lerpf(end_roll, home_roll, r)), _rest_pose(), r)
+
+
+## The roll (`_arc_pose`) that turns the arc's edge at the rest pose's aim onto
+## the rest pose's own edge, taken the short way round from `near`.
+func _roll_onto_rest(home: Vector2, leftward: bool, near: float) -> float:
+	var arc := _arc_pose(home.x, home.y, leftward)
+	var dir := (arc.basis * _blade_frame.y).normalized()
+	var have := arc.basis * _blade_frame.x
+	var want := _rest_pose().basis * _blade_frame.x
+	want = (want - dir * want.dot(dir)).normalized()
+	var angle := atan2(dir.dot(have.cross(want)), have.dot(want))
+	return near + wrapf(angle - near, -PI, PI)
+
+
+## The cut's pitch at `yaw`, `u` of the way through it: through the crosshair
+## (`_cut_pitch`), still up in the chamber off the mark, dropping through the
+## target at the end.
+func _cut_pitch_through(yaw: float, leftward: bool, u: float) -> float:
+	return _cut_pitch(yaw, leftward) + SWING_CHAMBER * 1.15 * (1.0 - smoothstep(0.0, 0.45, u)) \
+		+ SWING_DIG * smoothstep(0.55, 1.0, u)
+
+
+## The hand through the cut: out of the chamber, driven forward at its middle,
+## drawn across the body and down at its end.
+func _cut_hand(u: float, side: float, chamber: Vector3) -> Vector3:
+	return chamber * 1.3 * (1.0 - smoothstep(0.0, 0.4, u)) + SWING_REACH * sin(PI * u) \
+		+ SWING_ACROSS * Vector3(side, 1.0, 1.0) * smoothstep(0.6, 1.0, u)
 
 
 ## The blade's pitch at `yaw` in a cut: aimed so that the blade passes THROUGH
@@ -4269,9 +4361,10 @@ func _update_dash(delta: float, down: bool) -> void:
 		_start_dash()
 
 
-## A fresh press of "dodge" (Left Ctrl, L3) this tick, made in play.
+## A fresh press of "dodge" (Left Ctrl, B) this tick, made in play: not with a
+## wheel up, where B is what closes it (radial_menu.gd).
 func _dash_pressed() -> bool:
-	if remote_view or ui_open or _dead or _play_resumed or _system_chord():
+	if remote_view or ui_open or wheel_open or _dead or _play_resumed or _system_chord():
 		return false
 	return Coop.just_pressed(self, &"dodge")
 

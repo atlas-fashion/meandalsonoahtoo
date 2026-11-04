@@ -62,6 +62,18 @@ func stop() -> void:
 	split = null
 
 
+## The bindings changed (the keybinds page, note 164): the split copies rebuilt
+## from them. Nothing to do outside co-op.
+func resplit() -> void:
+	if _split_actions.is_empty():
+		return
+	for a in _split_actions:
+		if InputMap.has_action(a):
+			InputMap.erase_action(a)
+	_split_actions.clear()
+	_split_input()
+
+
 func _split_input() -> void:
 	if not _split_actions.is_empty():
 		return

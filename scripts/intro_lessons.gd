@@ -40,7 +40,7 @@ var LESSONS: Array[Dictionary] = [
 	{"id": &"axe_throw", "title": "Throw the axe", "kb": "[k]Q[/k] throws it end over end. It comes back.", "pad": "[k]RT[/k] throws it end over end. It comes back."},
 	{"id": &"berserk", "title": "Berserk", "kb": "[k]F[/k]: a roar, then seconds of speed and fury that heal you.", "pad": "[k]LT[/k]: a roar, then seconds of speed and fury that heal you."},
 	{"id": &"to_sword", "title": "Back to the sword", "kb": "Hold [k]C[/k], point at the sword, let go.", "pad": "Hold [k]R3[/k], point at the sword, let go."},
-	{"id": &"dodge", "title": "Dash  ·  2 times", "kb": "Tap [k]LEFT CTRL[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands.", "pad": "Click [k]L3[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands."},
+	{"id": &"dodge", "title": "Dash  ·  2 times", "kb": "Tap [k]LEFT CTRL[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands.", "pad": "Press [k]B[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands."},
 	{"id": &"block", "title": "Block  ·  2 blows", "kb": "Hold [k]RIGHT CLICK[/k] to raise your guard as its glaive comes down.", "pad": "Hold [k]LB[/k] to raise your guard as its glaive comes down."},
 	{"id": &"parry", "title": "Parry", "kb": "Tap [k]RIGHT CLICK[/k] the moment its glaive flashes. A parry throws it back.", "pad": "Tap [k]LB[/k] the moment its glaive flashes. A parry throws it back."},
 	{"id": &"fell", "title": "Bring it down", "kb": "Anything you have learned.", "pad": "Anything you have learned."},
