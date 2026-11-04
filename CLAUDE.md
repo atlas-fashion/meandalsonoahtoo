@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 158), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 159), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -268,8 +268,9 @@ Tripo golem (`models/source/proel_builder/`). Rebuild, never hand-edit; always r
 second after the first. See note 149 and `tools/README.md`.
 
 `models/player_knight.glb` (the player's body) is a build artifact from
-`tools/build_player_knight.py`, out of the user's Higgsfield / Meshy knight
-(`models/source/knight/`). Rebuild, never hand-edit; the bones are posed in code
+`tools/build_player_knight.py`, out of the user's fantasy armor
+(`models/source/armor/`, Tripo, no rig) skinned onto the Meshy knight's skeleton
+(`models/source/knight/`, note 159). Rebuild, never hand-edit; the bones are posed in code
 (`scripts/coop_avatar.gd`), so keep Meshy's bone names. See note 155.
 
 `models/player_knight_arms.glb` (the first-person arms) is a build artifact from
@@ -345,7 +346,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   its mark, berserk; note 84), `player.gd` (movement, sword, block/parry `_start_block`
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `held_potion.gd`,
-  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the molten rust knight: alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its arms in your own view: the right fist solved onto what is held, note 156; the left arm the guard, block and parry on springs, notes 157, 158 -- there is no hand torch).
+  `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the knight in the user's fantasy armor (note 159): alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its arms in your own view: the right fist solved onto what is held, note 156; the left arm the guard, block and parry on springs, notes 157, 158 -- there is no hand torch).
 - Enemies: `prosthetic.gd` (the skeleton types -- drill, sword, hammer, shield
   hands; `skeleton_shield.gd`; note 93), `proel_builder.gd` (the hammer hand, the Proel builder, note 149: the user's rusted golem with two hammers, baked clips, `proel_builder_hammers.gd`; a slow walk pounding the floor, a very heavy spin), `sword_skeleton.gd` (the sword hand, the Proel swordsman, note 139, its code keeping the old name: the user's
   rusty metal golem with baked clips, `sword_skeleton_react.gd`, `sword_skeleton_blade.gd`;
@@ -585,6 +586,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 156 | 2026-11-03 | The knight's arms in first person: an arms-only cut of the knight with fists (`tools/build_player_knight_arms.py`), solved every frame onto the sword, spear, axe, flask and a held rat by two-bone IK (`first_person_arms.gd`), drawn at what it holds' scale, in front of walls; no left arm (the torch's handle is under the view); 71.1 -> 70.4 fps, GPU the same | [docs/notes/156-the-knights-arms-in-first-person.md](docs/notes/156-the-knights-arms-in-first-person.md) |
 | 157 | 2026-11-03 | No torch; the left arm blocks and parries: the hand torch deleted (and the co-op body's); the guard is the knight's left forearm across the view, on springs (elbow leads, overshoot, breath, look lag), a blocked blow a recoil into the face and a shudder, a parry an upright beat out to the left; the weapon only drawn back (`GUARD_DRAW`); 70.2 fps, as before | [docs/notes/157-left-arm-block-and-parry.md](docs/notes/157-left-arm-block-and-parry.md) |
 | 158 | 2026-11-03 | The guard flat across the view, braced, stiff: elbow and fist at one height and depth, the elbow 1.5 cm ahead, the upper arm thrust forward (each placed at the arm's measured bone lengths so the IK lands it); springs near critical (overshoot 18 -> 1.6 mm), no tremble, little look lag, a block a 20 mm jolt (was ~84); 69.0 fps, as before | [docs/notes/158-guard-flat-and-braced.md](docs/notes/158-guard-flat-and-braced.md) |
+| 159 | 2026-11-03 | The player is the user's fantasy armor (Tripo, no rig: skinned onto the Meshy knight's skeleton unchanged, weights from its nearest surface; the fists re-measured, `GRIP`); torch shadows drawn from 2x2-cell shadow-only blocks at the lowest LOD, and every big static room mesh by a low-LOD shadow copy; `Graphics.hold_60` steps the 3D scale down (FSR) only where the GPU runs over; `--bench --ab=` interleaved A/B, `--fullscreen`. 3060 at 3440x1440 with a busy background GPU: 48-54 -> 63-65 fps; chest rooms and surgery 53-58 | [docs/notes/159-fantasy-armor-and-60fps.md](docs/notes/159-fantasy-armor-and-60fps.md) |
 
 ## Notes by source file
 
@@ -606,13 +608,13 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
-- `scripts/brick_level.gd`: 27, 96, 102, 114, 121
+- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159
 - `scripts/chest.gd`: 18, 79
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157
-- `scripts/first_person_arms.gd`: 156, 157, 158
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159
+- `scripts/first_person_arms.gd`: 156, 157, 158, 159
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -628,7 +630,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82, 117
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
-- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155
+- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155, 159
 - `scripts/hand_torch.gd`: 24, 29 (deleted in 157)
 - `scripts/held_potion.gd`: 6.19, 130
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
@@ -643,7 +645,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30
 - `scripts/jail_cell.gd`: 12, 153, 154
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154
@@ -671,7 +673,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
-- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155
+- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92, 130, 131, 147
@@ -719,15 +721,15 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39, 121
 - `tools/anim_proel_builder.py`, `tools/build_proel_builder.py`: 149, 150, 151
 - `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146
-- `tools/benchmark.gd`: 6.11, 33, 112, 155
+- `tools/benchmark.gd`: 6.11, 33, 112, 155, 159
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66
 - `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18
-- `tools/build_player_knight.py`: 155, 156
-- `tools/build_player_knight_arms.py`: 156
+- `tools/build_player_knight.py`: 155, 156, 159
+- `tools/build_player_knight_arms.py`: 156, 159
 - `tools/build_potion.py`: 6.19
 - `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18

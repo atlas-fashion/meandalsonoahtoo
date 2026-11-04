@@ -30,6 +30,19 @@ var _overrides := {}
 ## `--at=<station>`: where `--ablate` measures (default the boss room edge).
 var _ablate_at := "boss room edge"
 var _only: PackedStringArray = []
+## `--ab=key=value,key=value`: those knobs against the settings in effect,
+## SWITCHED BACK AND FORTH every AB_SLICE seconds at every station (or only
+## `--at=`), so a GPU whose speed drifts through a run (other programs drawing,
+## clocks) moves both sides alike (note 159). `--ab=code` switches nothing in
+## Graphics and flips `Benchmark.ab_on` instead, for a change in code to read.
+var _ab := {}
+var _ab_given := false
+var _ab_at := ""
+const AB_SLICE := 1.5
+const AB_SETTLE := 0.35
+const AB_ROUNDS := 6
+## Read by code under test during `--ab=code`: true on the variant's slices.
+static var ab_on := false
 
 
 func _ready() -> void:
@@ -61,8 +74,17 @@ func _ready() -> void:
 				if kv.size() == 2:
 					_overrides[kv[0]] = str_to_var(kv[1])
 			_tag += "+" + arg.substr(6)
+		elif arg.begins_with("--ab="):
+			_ab_given = true
+			_tag = "a/b " + arg.substr(5)
+			if arg.substr(5) != "code":
+				for pair in arg.substr(5).split(","):
+					var kv := pair.split("=")
+					if kv.size() == 2:
+						_ab[kv[0]] = str_to_var(kv[1])
 		elif arg.begins_with("--at="):
 			_ablate_at = arg.substr(5)
+			_ab_at = _ablate_at
 		elif arg.begins_with("--only="):
 			_only = arg.substr(7).split(",")
 		elif arg.begins_with("--size="):
@@ -74,8 +96,15 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	# Fixed window, so two runs are actually comparable. --resolution on the
 	# command line loses to the project's fullscreen window mode.
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	DisplayServer.window_set_size(_size)
+	# `--fullscreen`: as the game is played (project window mode 3), at the
+	# screen's own size. A window leaves the desktop live behind it -- on the
+	# user's PC an animated wallpaper kept the GPU 10-30% busy (note 159).
+	if "--fullscreen" in OS.get_cmdline_user_args():
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		_tag += "+fullscreen"
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_size(_size)
 	var layer := CanvasLayer.new()
 	layer.layer = 100
 	add_child(layer)
@@ -203,6 +232,15 @@ func _run() -> void:
 
 	if _ablate:
 		await _run_ablation(stations.get(_ablate_at, stations["boss room edge"]))
+	elif _ab_given:
+		for name in stations:
+			# A prefix will do (`--at=chest`): a space in an argument is awkward
+			# to pass from some shells.
+			if _ab_at == "" or name.begins_with(_ab_at):
+				await _ab_station(name, stations[name])
+		_report_ab()
+		get_tree().quit()
+		return
 	else:
 		for name in stations:
 			await _station(name, stations[name])
@@ -543,6 +581,77 @@ func _park(where: Vector3, phase: float) -> void:
 func _tick() -> float:
 	await get_tree().process_frame
 	return get_process_delta_time()
+
+
+var _ab_rows: Array[Dictionary] = []
+
+
+func _ab_side(on: bool, base: Dictionary) -> void:
+	ab_on = on
+	if _ab.is_empty():
+		return
+	for key in _ab:
+		Graphics.set(key, _ab[key] if on else base[key])
+	Graphics.vsync = false
+	Graphics.fps_cap = 0
+	Graphics.apply_all()
+
+
+## `--ab`: AB_ROUNDS rounds of A then B (B then A on odd rounds, so neither side
+## always follows the switch), AB_SLICE seconds each, the first AB_SETTLE of a
+## slice thrown away; the player spins through it all as `_station` does.
+func _ab_station(name: String, where: Vector3) -> void:
+	var base := {}
+	for key in _ab:
+		base[key] = Graphics.get(key)
+	var frames := [[] as Array[float], [] as Array[float]]
+	var gpu := [0.0, 0.0]
+	var prims := [0.0, 0.0]
+	var n := [0, 0]
+	var t := 0.0
+	var span := AB_SLICE * 2.0 * AB_ROUNDS + 2.0
+	_ab_side(false, base)
+	while t < 2.0:
+		_park(where, t / span)
+		t += await _tick()
+	for round in AB_ROUNDS:
+		for half in 2:
+			var side := half if round % 2 == 0 else 1 - half
+			_ab_side(side == 1, base)
+			var s := 0.0
+			while s < AB_SLICE:
+				_label.text = "a/b %s: %s, round %d" % [name, "B" if side == 1 else "A", round + 1]
+				_park(where, t / span)
+				var dt := await _tick()
+				s += dt
+				t += dt
+				if s < AB_SETTLE:
+					continue
+				(frames[side] as Array[float]).append(dt * 1000.0)
+				gpu[side] += RenderingServer.viewport_get_measured_render_time_gpu(
+					get_viewport().get_viewport_rid())
+				prims[side] += Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
+				n[side] += 1
+	_ab_side(false, base)
+	for side in 2:
+		var f: Array[float] = frames[side]
+		f.sort()
+		_ab_rows.append({
+			"station": "%s %s" % [name, "B" if side == 1 else "A"],
+			"avg_ms": _mean(f), "p99_ms": _pct(f, 0.99),
+			"gpu_ms": gpu[side] / maxi(n[side], 1),
+			"prims": prims[side] / maxi(n[side], 1),
+		})
+
+
+func _report_ab() -> void:
+	print("")
+	print("A = settings in effect, B = %s" % ("Benchmark.ab_on" if _ab.is_empty() else str(_ab)))
+	print("%-22s %8s %8s %8s %10s" % ["station", "avg ms", "p99 ms", "gpu ms", "prims"])
+	for r in _ab_rows:
+		print("%-22s %8.2f %8.2f %8.2f %10.0f" % [r["station"], r["avg_ms"], r["p99_ms"],
+			r["gpu_ms"], r["prims"]])
+	print("=== END BENCHMARK ===")
 
 
 func _mean(a: Array[float]) -> float:

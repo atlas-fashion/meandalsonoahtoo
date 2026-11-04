@@ -1,8 +1,8 @@
 extends Node3D
 
-## The player's body: the molten rust knight (note 155; models/player_knight.glb,
-## built by tools/build_player_knight.py from the user's Higgsfield / Meshy
-## knight). The game is first person -- you see its arms (first_person_arms.gd)
+## The player's body: the knight in the user's fantasy armor (note 159;
+## models/player_knight.glb, built by tools/build_player_knight.py from the
+## user's Tripo armor on the Meshy knight's skeleton, note 155). The game is first person -- you see its arms (first_person_arms.gd)
 ## -- so the body is seen two ways:
 ##
 ## - ALONE: shadows only. The knight casts the player's shadow for the moon and
@@ -29,7 +29,7 @@ extends Node3D
 const KNIGHT := preload("res://models/player_knight.glb")
 const CLOTH := [Color(0.42, 0.12, 0.08), Color(0.13, 0.22, 0.38)]
 const NAMES := ["PLAYER 1", "PLAYER 2"]
-## The Meshy knight is 1.70 m to the top of the helmet; at 1.05 its visor sits
+## The knight is 1.70 m to the top of the helmet (the armor built to it); at 1.05 its visor sits
 ## at the camera's 1.6 m and its crest at 1.79, inside the 1.8 m capsule.
 const SCALE := 1.05
 ## How bright the molten cracks glow (the emission map the build cut out of the

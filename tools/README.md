@@ -680,12 +680,24 @@ what is left of the clip to `SPIN_RECOVER`. Also `SPIN_A`, `SPIN_JOIN`, `REEL_JO
 is the turn, in radians.
 `models/proel_builder.glb.import` must keep `animation/fps=60`, and the three maps `compress/mode=2`.
 
-# The player's knight (2026-11-03, Higgsfield / Meshy, note 155)
+# The player's knight (2026-11-03, notes 155 and 159)
 
 ```
 blender -b --factory-startup -P tools/build_player_knight.py
 ```
 
+**Since note 159 the body is the user's fantasy armor**
+(`models/source/armor/fantasy_armor.glb`, Tripo: 10.5k triangles, one 4096
+albedo, T-pose facing glTF +Z, NO skeleton, 0.845 high). The script scales it
+to 1.70 m, nudges it 2.5 cm back onto the bones (`NUDGE`, from slices through
+both bodies), and skins it with the Meshy knight's rig below: the skeleton kept
+exactly (so the arms' IK and the guard's measured bone lengths, note 158, hold),
+each vertex taking the knight's weights at the nearest point of its surface,
+smoothed three times along the armor's edges, four influences at most. The
+albedo is renamed `Image_0` so `models/player_knight_Image_0.jpg.import` (VRAM
+compressed) carries over. Then the emission and metal as below.
+
+The rig donor -- once the body itself -- is
 `models/source/knight/knight_meshy.glb`: Meshy multi-image to 3D (run through
 Higgsfield's Supercomputer) from the user's front and back views
 (`knight_front.png`, `knight_back.png`), textured and auto-rigged: 31k
@@ -706,7 +718,8 @@ blender -b --factory-startup -P tools/build_player_knight_arms.py
 Run after `build_player_knight.py`: it reads `models/player_knight.glb`. Keeps
 every vertex whose strongest bone is an Arm, ForeArm or Hand (8.3k triangles;
 the pauldrons ride the Shoulder bones and are cut), bends the fingers into fists
-round the knuckle line (`KNUCKLE`, `CURL_R`; the rig has no finger bones), and
+round the knuckle line (`KNUCKLE`, `FINGER_Z`, `CURL_R`; the rig has no finger
+bones; measured off each body's gauntlet, the armor's 0.935 / 1.333), and
 writes `models/player_knight_arms.glb` with the whole skeleton and NO materials:
 `scripts/first_person_arms.gd` dresses it in the body's own material. It prints
 each fist's grip point; `first_person_arms.gd` `GRIP` holds it, so change both

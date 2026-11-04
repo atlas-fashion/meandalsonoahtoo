@@ -573,6 +573,7 @@ static func bed_material() -> Material:
 static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view_range: float) -> void:
 	var jitter := RandomNumberGenerator.new()
 	var counts := {}
+	var shadow_blocks := 0
 	# `-- --brick-skip=bed,cap` leaves pieces out, for measuring what they cost.
 	var skip: PackedStringArray = []
 	for a in OS.get_cmdline_user_args():
@@ -617,11 +618,155 @@ static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view
 			mmi.position = origin
 			mmi.visibility_range_end = view_range + 4.0 * out.cell_size * 0.708
 			mmi.visibility_range_end_margin = out.cell_size
-			mmi.cast_shadow = (GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if piece in NO_SHADOW
-				else GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+			var split: bool = not (piece in NO_SHADOW or piece in MOON_ONLY)
+			mmi.cast_shadow = (GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				if piece in NO_SHADOW or split else GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 			if piece in MOON_ONLY:
 				mmi.layers = MOON_ONLY_LAYER
 			holder.add_child(mmi)
+			if split:
+				mmi.set_meta("shadow_split", true)
+				shadow_blocks += _emit_shadows(holder, mesh, list, piece, chunk, view_range,
+					SHADOW_BLOCK * out.cell_size)
 			counts[piece] = int(counts.get(piece, 0)) + list.size()
 	holder.set_meta("counts", counts)
-	print("[brick] ", counts)
+	print("[brick] ", counts, "  shadow blocks ", shadow_blocks)
+
+
+## --- Shadows in small blocks (note 159) -------------------------------------------
+##
+## A light's shadow pass draws every caster whose box its range touches, and a
+## MultiMesh is one box: a torch whose 14 m reach clipped a corner of a 4 x 4
+## cell chunk drew all of it, every wall, vault and arch in 24 x 24 m, twice
+## (two hemispheres). Twelve torches did that every frame -- 10M of the chest
+## room's 13M triangles, 8.5 of its 23 ms.
+##
+## So the chunks stay as they were for the camera (big, few draw calls) but
+## cast no shadow, and each is shadowed by a copy cut into SHADOW_BLOCK x
+## SHADOW_BLOCK cell blocks, shadows only: the same meshes, the same transforms,
+## so every shadow falls exactly where it did, but a torch now draws only the
+## blocks near it. The moon's cascades are culled the same way.
+##
+## The blocks also draw each piece's lowest LOD (the import's own, about half
+## the triangles: wall 7,000 -> 4,655, vault 7,000 -> 3,500, arch 6,000 ->
+## 3,000). A shadow is a silhouette seen from the torch; pictured A/B in the
+## corridors the change was under the frame-to-frame flicker of the torches
+## themselves.
+const SHADOW_BLOCK := 2
+const SHADOW_LOD_BIAS := 0.001
+
+
+## The same for everything else the level built (the rooms: the surgery's
+## raised brick and beams, the chest rooms' prisons, the boss hall, the
+## morgue), called by maze.gd once the level stands and before anything is
+## spawned: each static mesh of `SHADOW_LOD_MIN` triangles or more that has
+## LODs and casts gets a shadows-only copy of itself at its lowest LOD, as a
+## CHILD, so it moves, hides and is freed with it; the original stops casting.
+## Skinned meshes are left alone (a copy would skin twice).
+const SHADOW_LOD_MIN := 2000
+
+
+static func shadow_lods(root: Node) -> int:
+	var made := 0
+	var saved := 0
+	var tris_of := {}
+	for node in root.find_children("*", "GeometryInstance3D", true, false):
+		var g := node as GeometryInstance3D
+		if g.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_ON \
+				or String(g.name).contains("_shadow_") or g.has_meta("shadow_split"):
+			continue
+		var mesh: Mesh = null
+		var count := 1
+		if g is MeshInstance3D:
+			var mi := g as MeshInstance3D
+			if mi.skin != null or not mi.skeleton.is_empty() and mi.get_node_or_null(mi.skeleton) is Skeleton3D:
+				continue
+			mesh = mi.mesh
+		elif g is MultiMeshInstance3D and (g as MultiMeshInstance3D).multimesh != null:
+			mesh = (g as MultiMeshInstance3D).multimesh.mesh
+			count = (g as MultiMeshInstance3D).multimesh.instance_count
+		if mesh == null:
+			continue
+		if not tris_of.has(mesh):
+			tris_of[mesh] = _lod_tris(mesh)
+		var t: Vector2i = tris_of[mesh]
+		if t.x < SHADOW_LOD_MIN or t.y >= t.x:
+			continue
+		var copy: GeometryInstance3D
+		if g is MeshInstance3D:
+			var mc := MeshInstance3D.new()
+			mc.mesh = mesh
+			# Alpha-cut materials cut the shadow too: keep the same ones.
+			var mi := g as MeshInstance3D
+			for s in mi.get_surface_override_material_count():
+				mc.set_surface_override_material(s, mi.get_surface_override_material(s))
+			copy = mc
+		else:
+			var mmc := MultiMeshInstance3D.new()
+			mmc.multimesh = (g as MultiMeshInstance3D).multimesh
+			copy = mmc
+		copy.name = "lod_shadow"
+		copy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		copy.lod_bias = SHADOW_LOD_BIAS
+		copy.material_override = g.material_override
+		copy.layers = g.layers
+		copy.visibility_range_end = g.visibility_range_end
+		copy.visibility_range_end_margin = g.visibility_range_end_margin
+		copy.visibility_range_begin = g.visibility_range_begin
+		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.add_child(copy)
+		made += 1
+		saved += (t.x - t.y) * count
+	print("[brick] shadow LOD copies: %d meshes, %d fewer shadow triangles a pass at most" % [made, saved])
+	return made
+
+
+## (triangles at LOD 0, at the lowest LOD), every surface together.
+static func _lod_tris(mesh: Mesh) -> Vector2i:
+	var full := 0
+	var low := 0
+	for s in mesh.get_surface_count():
+		var d: Dictionary = RenderingServer.mesh_get_surface(mesh.get_rid(), s)
+		var stride := 2 if int(d.get("vertex_count", 0)) <= 65535 else 4
+		var ib: PackedByteArray = d.get("index_data", PackedByteArray())
+		var n := ib.size() / stride / 3
+		full += n
+		var lods: Array = d.get("lods", [])
+		low += ((lods.back()["index_data"] as PackedByteArray).size() / stride / 3) if not lods.is_empty() else n
+	return Vector2i(full, low)
+
+
+static func _emit_shadows(holder: Node3D, mesh: Mesh, list: Array, piece: String,
+		chunk: Vector2i, view_range: float, block: float) -> int:
+	var groups := {}
+	for xf: Transform3D in list:
+		var key := Vector2i(floori(xf.origin.x / block), floori(xf.origin.z / block))
+		if not groups.has(key):
+			groups[key] = []
+		groups[key].append(xf)
+	var radius := mesh.get_aabb().size.length() * 0.5
+	for key in groups:
+		var g: Array = groups[key]
+		var centre := Vector3.ZERO
+		for xf: Transform3D in g:
+			centre += xf.origin
+		centre /= g.size()
+		var reach := 0.0
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = g.size()
+		for i in g.size():
+			var xf: Transform3D = g[i]
+			mm.set_instance_transform(i, Transform3D(xf.basis, xf.origin - centre))
+			reach = maxf(reach, xf.origin.distance_to(centre))
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "%s_%d_%d_shadow_%d_%d" % [piece, chunk.x, chunk.y, key.x, key.y]
+		mmi.multimesh = mm
+		mmi.position = centre
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		mmi.lod_bias = SHADOW_LOD_BIAS
+		mmi.visibility_range_end = view_range + reach + radius
+		mmi.visibility_range_end_margin = block * 0.5
+		holder.add_child(mmi)
+	return groups.size()

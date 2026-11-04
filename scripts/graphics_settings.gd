@@ -31,7 +31,7 @@ const PRESET_NAMES := ["Ultra", "High", "Medium", "Low", "Potato", "Custom"]
 const PRESETS := {
 	Preset.ULTRA: {
 		"render_scale": 1.0, "msaa": 2, "shadows": 2, "shadow_atlas": 4096,
-		"torch_lights": 16.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 2, "effects": true, "damp": true, "body_shadow": true,
+		"torch_lights": 16.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 2, "effects": true, "damp": true, "body_shadow": true, "hold_60": false,
 		"light_detail": 1.15, "view_distance": 1.25, "texture_detail": 2,
 		"lod_threshold": 1.0, "anim_quality": 2, "npc_detail": 1.25,
 	},
@@ -41,27 +41,29 @@ const PRESETS := {
 	# awake round the player (sim range 1.0 -> 0.9: boss room edge 21.7 -> 12.9
 	# ms). High: 73.6 fps overall, worst p99 23.1 ms (was 54.2 / 51.7).
 	# Medium adds render scale 0.85: 76.1 fps, every station's avg under 16.7.
+	# Both also hold 60 (note 159): native wherever the GPU keeps up, the 3D
+	# drawn smaller and FSR-sharpened only in the rooms where it cannot.
 	Preset.HIGH: {
 		"render_scale": 1.0, "msaa": 0, "shadows": 1, "shadow_atlas": 4096,
-		"torch_lights": 12.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 1, "effects": true, "damp": true, "body_shadow": true,
+		"torch_lights": 12.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 1, "effects": true, "damp": true, "body_shadow": true, "hold_60": true,
 		"light_detail": 1.0, "view_distance": 1.0, "texture_detail": 2,
 		"lod_threshold": 1.0, "anim_quality": 1, "npc_detail": 0.9,
 	},
 	Preset.MEDIUM: {
 		"render_scale": 0.85, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
-		"torch_lights": 12.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 1, "effects": true, "damp": true, "body_shadow": true,
+		"torch_lights": 12.0, "coop_torch_share": 0.5, "ssao": true, "glow": true, "fog": true, "volumetric_fog": 1, "effects": true, "damp": true, "body_shadow": true, "hold_60": true,
 		"light_detail": 1.0, "view_distance": 1.0, "texture_detail": 2,
 		"lod_threshold": 2.0, "anim_quality": 1, "npc_detail": 0.9,
 	},
 	Preset.LOW: {
 		"render_scale": 0.62, "msaa": 0, "shadows": 1, "shadow_atlas": 2048,
-		"torch_lights": 8.0, "coop_torch_share": 0.5, "ssao": false, "glow": false, "fog": true, "volumetric_fog": 0, "effects": true, "damp": true, "body_shadow": true,
+		"torch_lights": 8.0, "coop_torch_share": 0.5, "ssao": false, "glow": false, "fog": true, "volumetric_fog": 0, "effects": true, "damp": true, "body_shadow": true, "hold_60": false,
 		"light_detail": 0.9, "view_distance": 0.9, "texture_detail": 2,
 		"lod_threshold": 4.0, "anim_quality": 1, "npc_detail": 0.75,
 	},
 	Preset.POTATO: {
 		"render_scale": 0.45, "msaa": 0, "shadows": 0, "shadow_atlas": 256,
-		"torch_lights": 6.0, "coop_torch_share": 0.5, "ssao": false, "glow": false, "fog": false, "volumetric_fog": 0, "effects": false, "damp": false, "body_shadow": false,
+		"torch_lights": 6.0, "coop_torch_share": 0.5, "ssao": false, "glow": false, "fog": false, "volumetric_fog": 0, "effects": false, "damp": false, "body_shadow": false, "hold_60": false,
 		"light_detail": 0.7, "view_distance": 0.75, "texture_detail": 0,
 		"lod_threshold": 8.0, "anim_quality": 0, "npc_detail": 0.55,
 	},
@@ -103,6 +105,12 @@ var damp := true
 ## skinned mesh in the shadow passes of the moon and the lit torches near them.
 ## Off, the lone player has no shadow; a co-op body is still drawn, unshadowed.
 var body_shadow := true
+## Hold 60 fps (note 159): when the GPU's own time per frame runs over budget
+## (heavy rooms: the chest rooms, the surgery), the 3D scene is drawn a step
+## smaller -- `DYN_STEPS` of `render_scale`, down to 72% -- and scaled back up
+## with FSR's sharpening; when there is room again it steps back up. Native
+## wherever the frame fits. Off: always exactly `render_scale`.
+var hold_60 := true
 ## Scales the reach of the dressing lights (torches, chandeliers).
 var light_detail := 0.9
 ## Scales every authored visibility_range_end in the level.
@@ -147,6 +155,83 @@ func _ready() -> void:
 	# needs touching does not exist yet at startup.
 	get_tree().node_added.connect(_on_node_added)
 	apply_all.call_deferred()
+
+
+# --- hold 60: the dynamic render scale (note 159) -------------------------------
+## Fractions of `render_scale`, one step at a time.
+const DYN_STEPS := [1.0, 0.92, 0.85, 0.78, 0.72]
+## The GPU's time per frame (`viewport_get_measured_render_time_gpu`) to keep
+## under. The whole frame runs about 3 ms over the GPU's own time here (the
+## present and the CPU's share; 3.5-4 ms in every run, note 159), so 12.8
+## holds 16.7.
+const DYN_OVER := 12.8
+## Step back up only when the step above is predicted (time goes with the
+## pixels) to land under this.
+const DYN_UNDER := 11.6
+## The GPU time is smoothed over about this long (seconds).
+const DYN_SMOOTH := 0.35
+## At least this long between a step down and the next change, and longer
+## before stepping back up (a hitch each time the buffers are re-made).
+const DYN_DOWN_WAIT := 0.6
+const DYN_UP_WAIT := 2.5
+var _dyn_step := 0
+var _dyn_gpu := 0.0
+var _dyn_wait := 0.0
+var _dyn_measuring := false
+
+
+func _process(delta: float) -> void:
+	var vp := get_viewport()
+	if vp == null:
+		return
+	# Paused (a menu over the frozen view): hold the step where it is.
+	if get_tree().paused:
+		return
+	# Co-op draws in two sub-viewports (split_screen.gd): left at render_scale.
+	if not hold_60 or (Coop.split != null and is_instance_valid(Coop.split)):
+		if _dyn_step != 0:
+			_dyn_step = 0
+			_apply_dyn(vp)
+		return
+	var rid := vp.get_viewport_rid()
+	if not _dyn_measuring:
+		RenderingServer.viewport_set_measure_render_time(rid, true)
+		_dyn_measuring = true
+		return
+	var gpu := RenderingServer.viewport_get_measured_render_time_gpu(rid)
+	if gpu <= 0.0:
+		return
+	_dyn_gpu = lerpf(_dyn_gpu if _dyn_gpu > 0.0 else gpu, gpu, 1.0 - exp(-delta / DYN_SMOOTH))
+	_dyn_wait -= delta
+	if _dyn_wait > 0.0:
+		return
+	var step := _dyn_step
+	if _dyn_gpu > DYN_OVER and step < DYN_STEPS.size() - 1:
+		step += 1
+	elif step > 0:
+		var up: float = DYN_STEPS[step - 1] / DYN_STEPS[step]
+		if _dyn_gpu * up * up < DYN_UNDER:
+			step -= 1
+	if step != _dyn_step:
+		_dyn_wait = DYN_DOWN_WAIT if step > _dyn_step else DYN_UP_WAIT
+		_dyn_step = step
+		# The measurement of the old size means nothing now.
+		_dyn_gpu = 0.0
+		_apply_dyn(vp)
+
+
+## The render scale in use now: `render_scale`, or a step under it.
+func current_scale() -> float:
+	return render_scale * (DYN_STEPS[_dyn_step] if hold_60 else 1.0)
+
+
+func _apply_dyn(vp: Viewport) -> void:
+	var s := current_scale()
+	vp.scaling_3d_scale = s
+	# Under the player's own scale, FSR's sharpening keeps the edges: plain
+	# bilinear showed the step as a blur. At their own scale, as before.
+	vp.scaling_3d_mode = (Viewport.SCALING_3D_MODE_FSR if s < render_scale - 0.001
+		else Viewport.SCALING_3D_MODE_BILINEAR)
 
 
 func _on_node_added(node: Node) -> void:
@@ -241,6 +326,8 @@ func apply_to_viewport(vp: Viewport) -> void:
 	# the hardware this is for.
 	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	vp.scaling_3d_scale = render_scale
+	if vp == get_viewport():
+		_apply_dyn(vp)
 	vp.msaa_3d = msaa
 	vp.mesh_lod_threshold = lod_threshold
 	vp.positional_shadow_atlas_size = shadow_atlas
@@ -469,7 +556,7 @@ func _materials_of(g: GeometryInstance3D) -> Array:
 const SAVE_PATH := "user://graphics.cfg"
 const KEYS := [
 	"render_scale", "msaa", "shadows", "shadow_atlas", "torch_lights", "coop_torch_share", "ssao", "glow", "fog", "volumetric_fog",
-	"effects", "damp", "body_shadow", "light_detail", "view_distance", "texture_detail",
+	"effects", "damp", "body_shadow", "hold_60", "light_detail", "view_distance", "texture_detail",
 	"lod_threshold", "anim_quality", "npc_detail", "vsync", "fps_cap",
 ]
 

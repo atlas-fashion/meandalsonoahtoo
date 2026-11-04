@@ -20,6 +20,8 @@ const SPEC := [
 	{"key": "render_scale", "label": "Resolution scale", "type": "slider",
 		"min": 0.4, "max": 1.0, "step": 0.05, "suffix": "%", "mul": 100.0,
 		"hint": "Renders the 3D scene smaller and scales it up. The biggest single win."},
+	{"key": "hold_60", "label": "Hold 60 fps", "type": "check",
+		"hint": "In the heaviest rooms, draws the 3D a little smaller (FSR-sharpened) to keep 60 fps. Full resolution everywhere else."},
 	{"key": "msaa", "label": "Anti-aliasing", "type": "option",
 		"choices": [["Off (FXAA)", 0], ["2x MSAA", 1], ["4x MSAA", 2]],
 		"hint": "MSAA is per-pixel and expensive. FXAA is nearly free."},

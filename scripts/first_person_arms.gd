@@ -1,7 +1,7 @@
 extends Node3D
 
-## The knight's own arms in the first-person view (note 156): the molten rust
-## gauntlets holding what is in hand. A child of the player's Head, made by
+## The knight's own arms in the first-person view (note 156): the fantasy
+## armor's gauntlets (note 159) holding what is in hand. A child of the player's Head, made by
 ## player.gd `_ready`.
 ##
 ## Nothing is animated here. Every weapon already poses itself -- the sword on
@@ -41,8 +41,9 @@ const BODY_SCALE := 1.05
 ## 1.6 m up at BODY_SCALE.
 const EYE := Vector3(0.0, 1.524, 0.04)
 ## The middle of each closed fist, where a haft passes through it (glTF space,
-## the left fist; the right mirrored). Printed by the arms build.
-const GRIP := Vector3(0.918, 1.329, -0.0544)
+## the left fist; the right mirrored). Printed by the arms build (the fantasy
+## armor's gauntlet, note 159).
+const GRIP := Vector3(0.935, 1.307, -0.0554)
 ## Where the elbow is pushed (head space, the right arm; mirrored for the left):
 ## down, out to the side and a little back.
 const POLE := Vector3(0.55, -1.0, 0.35)

@@ -664,6 +664,10 @@ func _ready() -> void:
 	_seal_cells()
 	if save.has("seed"):
 		restore_world(save)
+	# Every big static mesh the level built shadows at its lowest LOD (note 159);
+	# before anything is spawned.
+	if modules:
+		load("res://scripts/brick_level.gd").shadow_lods(self)
 	_populate()
 	if save.has("seed"):
 		restore_player(save)

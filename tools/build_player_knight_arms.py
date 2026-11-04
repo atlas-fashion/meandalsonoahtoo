@@ -35,11 +35,12 @@ SRC = os.path.join(ROOT, "models", "player_knight.glb")
 OUT = os.path.join(ROOT, "models", "player_knight_arms.glb")
 KEEP = {"LeftArm", "LeftForeArm", "LeftHand", "RightArm", "RightForeArm", "RightHand"}
 # The knuckle line, as distance from the body's centre along the arm (Blender X,
-# the T-pose arm). The hand runs 0.77 -> 1.00; the fingers start at 0.925,
-# where the hand narrows to them, and the thumb lies inside that.
-KNUCKLE = 0.918
+# the T-pose arm). The armor's gauntlet runs 0.77 -> 1.00; slices through it put
+# the thumb at 0.87-0.93 (hanging forward, -Y) and the fingers from 0.94, where
+# the hand narrows to them (note 159; the Meshy knight's were 0.918 / 1.355).
+KNUCKLE = 0.935
 # Finger centre height (Blender Z) and the radius they wrap round.
-FINGER_Z = 1.355
+FINGER_Z = 1.333
 CURL_R = 0.026
 CURL_MAX = 2.75
 
