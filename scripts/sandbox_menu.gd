@@ -219,7 +219,7 @@ func _build_switches() -> Control:
 	col.add_child(_hitboxes)
 	_noclip = _switch("Noclip (fly through walls)", _set_noclip)
 	col.add_child(_noclip)
-	col.add_child(SP.dim_label("Fly where you look: WASD, Space up, Ctrl down,\nShift faster (pad: A up, B down, ghost button)"))
+	col.add_child(SP.dim_label("Fly where you look: WASD, Space up, Ctrl down,\nShift faster (pad: A up, B down, stick all the way)"))
 	col.add_child(SP.spacer(10))
 	col.add_child(SP.section_label("WEAPON LEVELS"))
 	for entry in [[&"sword", "Sword"], [&"spear", "Spear"], [&"axe", "Axe"], [&"armor", "Armor"]]:

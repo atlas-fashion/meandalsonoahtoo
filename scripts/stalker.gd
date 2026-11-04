@@ -40,11 +40,11 @@ const ITEM_DROP := preload("res://scripts/item_drop.gd")
 
 @export_group("Moving")
 @export var wander_speed := 1.9
-## Times the player's walking pace while hunting. 1.35 (was 1.07): it gains
-## ~1.5 m every second the player walks, so walking away fails outright; ghost
-## mode (2.5x walking for up to 4 s, 5 s to refill) still opens a lead of ~20 m
-## a burst, so getting away means using it -- then breaking line of sight or
-## hiding.
+## Times the player's sprinting pace while hunting (5.7 m/s). 1.35 (was 1.07):
+## it gains ~1.5 m every second the player sprints, so running away fails
+## outright; dashing back to back (3.2 m a dash, one every 0.65 s) still outruns
+## it, so getting away means using them -- then breaking line of sight or hiding.
+## (Ghost mode opened ~20 m a burst before note 161.)
 @export var hunt_speed_ratio := 1.35
 @export var acceleration := 9.0
 @export var pause_min := 0.6
@@ -428,7 +428,8 @@ func _pick_wander() -> void:
 
 
 func _hunt_speed(player: Node3D) -> float:
-	var pace: float = player.get("move_speed") if player.get("move_speed") != null else 4.25
+	# Against the sprint (the old walk, note 161), so its pace is what it was.
+	var pace: float = player.get("sprint_speed") if player.get("sprint_speed") != null else 4.25
 	return pace * hunt_speed_ratio
 
 

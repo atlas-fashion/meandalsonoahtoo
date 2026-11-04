@@ -4,7 +4,7 @@ extends Node
 ## taught every control, one at a time, each watched for in the player's own
 ## state (no fake buttons): looking, walking, jumping, using things, the pack and
 ## the map, the sword's three attacks, the weapon wheel, the spear's and the
-## axe's, ghost mode, blocking and parrying the sentinel, putting it down, and
+## axe's, the dash, blocking and parrying the sentinel, putting it down, and
 ## drinking from the quick wheel. Then the altar, and `finished`.
 ##
 ## A card at the top of each player's view says what to do and with which key
@@ -23,7 +23,7 @@ var sentinel: CharacterBody3D
 ## Each: {id, title, kb, pad}. The checks are in `_done_now`.
 var LESSONS: Array[Dictionary] = [
 	{"id": &"look", "title": "Look around", "kb": "Move the [k]MOUSE[/k] to look around.", "pad": "Tilt the [k]RIGHT STICK[/k] to look around."},
-	{"id": &"walk", "title": "Walk up to the gate", "kb": "[k]W A S D[/k] to walk.", "pad": "The [k]LEFT STICK[/k] to walk."},
+	{"id": &"walk", "title": "Walk up to the gate", "kb": "[k]W A S D[/k] to walk. Hold [k]SHIFT[/k] to sprint.", "pad": "The [k]LEFT STICK[/k] to walk. Push it all the way to sprint."},
 	{"id": &"jump", "title": "Jump the fallen trunk", "kb": "[k]SPACE[/k] to jump.", "pad": "[k]A[/k] to jump."},
 	{"id": &"read", "title": "Read the standing stone", "kb": "Look at it and press [k]E[/k]. E uses anything: doors, chests, ladders.", "pad": "Look at it and press [k]X[/k]. X uses anything: doors, chests, ladders."},
 	{"id": &"pack", "title": "Check your pack", "kb": "[k]TAB[/k] opens your inventory. Close it again.", "pad": "[k]Y[/k] opens your inventory. Close it again."},
@@ -40,7 +40,7 @@ var LESSONS: Array[Dictionary] = [
 	{"id": &"axe_throw", "title": "Throw the axe", "kb": "[k]Q[/k] throws it end over end. It comes back.", "pad": "[k]RT[/k] throws it end over end. It comes back."},
 	{"id": &"berserk", "title": "Berserk", "kb": "[k]F[/k]: a roar, then seconds of speed and fury that heal you.", "pad": "[k]LT[/k]: a roar, then seconds of speed and fury that heal you."},
 	{"id": &"to_sword", "title": "Back to the sword", "kb": "Hold [k]C[/k], point at the sword, let go.", "pad": "Hold [k]R3[/k], point at the sword, let go."},
-	{"id": &"ghost", "title": "Ghost", "kb": "Hold [k]SHIFT[/k] to slip into ghost form: fast, and hard to hurt. It runs out; let it refill.", "pad": "Hold [k]L3[/k] to slip into ghost form: fast, and hard to hurt. It runs out; let it refill."},
+	{"id": &"dodge", "title": "Dash  ·  2 times", "kb": "Tap [k]LEFT CTRL[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands.", "pad": "Click [k]L3[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands."},
 	{"id": &"block", "title": "Block  ·  2 blows", "kb": "Hold [k]RIGHT CLICK[/k] to raise your guard as its glaive comes down.", "pad": "Hold [k]LB[/k] to raise your guard as its glaive comes down."},
 	{"id": &"parry", "title": "Parry", "kb": "Tap [k]RIGHT CLICK[/k] the moment its glaive flashes. A parry throws it back.", "pad": "Tap [k]LB[/k] the moment its glaive flashes. A parry throws it back."},
 	{"id": &"fell", "title": "Bring it down", "kb": "Anything you have learned.", "pad": "Anything you have learned."},
@@ -204,7 +204,7 @@ func _fresh_track(p: Node) -> Dictionary:
 	return {"yaw": (p as Node3D).rotation.y, "pitch": float(p.get("_look_pitch")), "looked": 0.0,
 		"air_at": -INF, "opened": false, "map_opened": false, "heavy": false, "slam": false,
 		"hits0": posts_hits, "dash0": float(spear.get("_dash_until")) if spear != null else 0.0,
-		"ghost_t": 0.0, "drank": false}
+		"dashes0": int(p.get("dash_count")), "drank": false}
 
 
 func _setup(id: StringName) -> void:
@@ -248,7 +248,7 @@ func _advance() -> void:
 
 
 ## Whether player `p` has done the current lesson (`t` is its tracking).
-func _done_now(p: Node, t: Dictionary, delta: float) -> bool:
+func _done_now(p: Node, t: Dictionary, _delta: float) -> bool:
 	var id: StringName = LESSONS[index]["id"]
 	var n := p as Node3D
 	if p.get("in_cutscene") == true:
@@ -311,10 +311,8 @@ func _done_now(p: Node, t: Dictionary, delta: float) -> bool:
 		&"to_sword":
 			var axe = p.get("axe")
 			return p.call("held_item") == &"sword" and (axe == null or not bool(axe.call("is_away")))
-		&"ghost":
-			if p.get("_ghosting") == true:
-				t["ghost_t"] = float(t["ghost_t"]) + delta
-			return float(t["ghost_t"]) > 0.7
+		&"dodge":
+			return int(p.get("dash_count")) - int(t["dashes0"]) >= 2
 		&"block":
 			return sentinel != null and int(sentinel.get("blocked")) + int(sentinel.get("parried")) >= 2
 		&"parry":

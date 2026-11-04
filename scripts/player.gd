@@ -1,11 +1,23 @@
 extends CharacterBody3D
 
 ## First-person character: WASD moves relative to where you are facing, F
-## jumps, Space (held) blocks, right click (held) is ghost mode, R drinks a potion, the mouse looks around,
+## jumps, right click (held) blocks, Left Ctrl dashes, Shift (held) sprints, the mouse looks around,
 ## left click swings the sword, Escape releases the mouse.
 
-## Walking pace, m/s. Was 5.0; brought down 15% on request (2026-10-01).
-@export var move_speed := 4.25
+## Walking pace, m/s. Was 5.0; brought down 15% on request (2026-10-01); 4.25 ->
+## 3.3 when Shift became a sprint at the old 4.25 (note 161). Everything that
+## moves the body at "walking pace" reads `_pace()`, the two blended.
+@export var move_speed := 3.3
+## Sprinting pace (Shift held, or the pad's stick pushed all the way), m/s: the
+## old walk (note 161).
+@export var sprint_speed := 4.25
+## How long the pace takes to ease between walking and sprinting (a critically
+## damped spring on `_sprint_k`, so it has no corner at either end).
+@export var sprint_blend_time := 0.3
+## Degrees the view opens out at a full sprint.
+@export var sprint_fov_kick := 2.5
+## How far the pad's left stick must be pushed to sprint (no button is free).
+@export_range(0.5, 1.0) var pad_sprint_tilt := 0.92
 @export var acceleration := 14.0
 @export var jump_velocity := 5.0
 ## Grace period after walking off an edge in which a jump still counts. Long
@@ -96,28 +108,32 @@ extends CharacterBody3D
 @export var guarded_invulnerable_time := 0.25
 @export var respawn_delay := 1.5
 
-@export_group("Ghost mode")
-## Hold "dodge" (Shift): the player rises a little off the ground and moves at
-## `ghost_speed_scale` x walking pace, passing through every enemy, while the
-## bar runs down. It replaced a one-shot dash (2026-10-01).
-@export var ghost_speed_scale := 2.5
-## Seconds of ghost a full bar holds, and seconds to refill it from empty.
-@export var ghost_duration := 2.0
-@export var ghost_refill := 4.0
-## The least bar a ghost can be started on, so a nearly empty bar does not
-## flicker it on and off.
-@export var ghost_min_start := 0.08
-## Share of the whole bar taken the moment a ghost starts. No attacking while
-## in it either: a ghost is for getting somewhere, not for fighting.
-@export_range(0.0, 1.0) var ghost_entry_cost := 0.1
-## Height it floats above the floor, and how quickly it rises to it.
-@export var ghost_hover := 0.3
-@export var ghost_hover_rate := 9.0
-## How much harder it steers than walking, so 2.5x speed stays controllable.
-@export var ghost_acceleration_scale := 2.0
-## Share of incoming damage still taken while a ghost: 0.2 is 80% off.
-@export_range(0.0, 1.0) var ghost_damage_taken := 0.2
-## Ghost goes straight through anything alive. Walls and floors still stop it.
+@export_group("Dash")
+## Tap "dodge" (Left Ctrl, L3 on a pad; note 161, it replaced ghost mode): a burst
+## the way you are moving -- straight back with no direction held -- at full
+## speed on the very tick of the press, easing out to walking pace over
+## `dash_move_time`. Nothing touches you for the first `dash_iframes` (14 frames
+## at 60): a blow, a knockdown, a shove or a beam landing inside them is simply
+## not taken, so a dodge has to be timed. Another dash waits until the whole
+## `dash_time` has run; a press up to `dash_buffer` early is held for that moment.
+@export var dash_speed := 34.0
+@export var dash_move_time := 0.24
+@export var dash_iframes := 14.0 / 60.0
+@export var dash_time := 0.65
+@export var dash_buffer := 0.12
+## The body under the view: how far the head drops into the dash and comes back
+## up over `dash_time`, and how far it tips with it.
+@export var dash_dip := 0.075
+@export var dash_pitch_degrees := 1.6
+## How far the weapon in hand is swept down by it (of fully put away).
+@export_range(0.0, 1.0) var dash_weapon_dip := 0.14
+## Of full colour while the invulnerable frames last, so they can be seen.
+@export_range(0.0, 1.0) var dash_saturation := 0.35
+## Berserk's pace, m/s (axe.gd): ghost mode's 2.5 x the old walk (notes 91, 161),
+## and how much harder it steers there.
+@export var berserk_speed := 10.625
+@export var berserk_acceleration_scale := 2.0
+## The dash goes straight through anything alive. Walls and floors still stop it.
 @export var dodge_phases_through_enemies := true
 ## How far around you the dash looks for things to pass through, checked every
 ## frame of the dash. Only needs to cover a frame's travel plus a body's width,
@@ -129,7 +145,7 @@ extends CharacterBody3D
 ## it. Anything you are up on stays solid: a chest you can climb has to hold
 ## your weight, or the mimic pretending to be one is a hole in the floor.
 @export var dodge_phase_step_height := 0.6
-## Longest ghost will keep something intangible after it ends. A backstop
+## Longest the dash will keep something intangible after it ends. A backstop
 ## only: normally solidity returns the moment you step clear.
 @export var dodge_phase_hold_max := 4.0
 
@@ -179,7 +195,7 @@ extends CharacterBody3D
 @export var dash_roll_degrees := 3.2
 ## How long the whole flourish takes to fall away. Kept a little longer than
 ## the dash itself so it settles rather than stopping dead.
-@export var dash_effect_time := 0.32
+@export var dash_effect_time := 0.45
 ## Brightness of the streaks at the rim of the view. Kept faint: they are
 ## peripheral motion, not something to read.
 @export_range(0.0, 1.0) var dash_streak_strength := 0.26
@@ -394,6 +410,8 @@ signal died
 signal inventory_changed
 signal consumable_gained(type: ConsumableType, amount: int)
 signal dodged
+## A blow (or a knockdown, a shove, a beam) met the dash's invulnerable frames.
+signal blow_dodged
 ## Emitted after death has returned the player to the start. The level builder
 ## uses this to restore the world.
 signal respawned
@@ -599,7 +617,7 @@ func begin_cutscene(hurts := false) -> void:
 	unlatch()
 	in_cutscene = true
 	_cutscene_hurts = hurts
-	_ghosting = false
+	_cancel_dash()
 	_end_block()
 	velocity.x = 0.0
 	velocity.z = 0.0
@@ -617,7 +635,7 @@ var _spear_dash_vel := Vector3.ZERO
 
 ## Nothing in the way of using the spear right now.
 func _spear_free() -> bool:
-	return not _blocking and not _ghosting and not is_drinking() and not _slamming and not hands_busy \
+	return not _blocking and not _dashing and not is_drinking() and not _slamming and not hands_busy \
 		and not _dead and _now() >= _slam_recover_until and not is_flinching()
 
 
@@ -650,13 +668,13 @@ func _axe_planted() -> bool:
 
 
 ## Walking pace multiplier: axe.gd `CARRY_SPEED` with the axe in hand; while
-## berserk, ghost mode's pace (`ghost_speed_scale`) instead, the axe's weight
-## and all (note 91).
+## berserk, `berserk_speed` (ghost mode's old pace) instead, the axe's weight
+## and all, walking or sprinting (notes 91, 161).
 func _axe_speed() -> float:
 	if axe == null:
 		return 1.0
 	var carry: float = axe.CARRY_SPEED if held_item() == &"axe" and not axe.is_away() else 1.0
-	return lerpf(carry, ghost_speed_scale, axe.berserk_amount())
+	return lerpf(carry, berserk_speed / maxf(_pace(), 0.1), axe.berserk_amount())
 
 
 ## Thrown and not yet caught: the player has no weapon at all.
@@ -810,7 +828,7 @@ func hide_in(spot: Node3D, at: Vector3, yaw: float) -> void:
 	unlatch()
 	_end_block()
 	_cancel_drink()
-	_ghosting = false
+	_cancel_dash()
 	_attacking = false
 	_hidden_in = spot
 	_hide_yaw = yaw
@@ -1044,17 +1062,29 @@ var _held_potion: Node3D
 var _coyote_until := 0.0
 ## A jump pressed in the air, spent on the first tick there is a floor (note 151).
 var _jump_queued := false
-## Ghost mode: whether it is on, the bar (1 full, 0 empty), and whether the
-## key has to be let go before it can start again (after running the bar dry,
-## or after it was held through a menu, a scene, a death or a lost focus --
-## note 113).
-var _ghosting := false
-var _ghost_meter := 1.0
-var _ghost_locked := true
+## The dash (note 161): whether the burst is moving the body; game seconds since
+## it began on the physics clock (-1 never), which sets the invulnerable frames
+## and when another may start; the same on the render clock, for the view; its
+## way (flat, world) and the pace it eases out to; a press made too soon, held
+## for `dash_buffer`; and a sword click made during the burst, swung as it ends.
+var _dashing := false
+var _dash_age := -1.0
+var _dash_vis := -1.0
+var _dash_dir := Vector3.ZERO
+var _dash_exit := 0.0
+var _dash_fwd := 0.0
+var _dash_buffer_left := 0.0
+var _dash_attack_queued := false
+## Dashes made and blows they slipped (read by the intro's lesson and the tests).
+var dash_count := 0
+var blows_dodged := 0
+## Sprint (note 161): 0 walking, 1 sprinting, eased by a spring (`_sprint_v`).
+var _sprint_k := 0.0
+var _sprint_v := 0.0
 ## Last physics frame the player was in play, and whether this frame follows a
-## gap in that (`_physics_process`): a key held across the gap needs a fresh press.
-var _ghost_frame := -10
-var _ghost_resumed := false
+## gap in that (`_physics_process`): no dash on the first frame back (note 113).
+var _play_frame := -10
+var _play_resumed := false
 ## Noclip (the sandbox menu's switch, note 152): flying, and the collision mask
 ## that comes back when they stop.
 const NOCLIP_SPEED := 14.0
@@ -1064,7 +1094,7 @@ var _flying := false
 var _solid_mask := 0
 ## Pad device ids `_pad_held` asks (Godot's joypad slots).
 const PAD_SLOTS := 16
-## 1.0 while a ghost is on, decaying to 0 after. One clock drives the field of
+## 1.0 as a dash starts, decaying to 0 after. One clock drives the field of
 ## view, the bank and the HUD's streaks, so they can never drift apart.
 var _dash_view := 0.0
 ## -1 for a dash straight left, +1 straight right, 0 dead ahead.
@@ -1264,7 +1294,6 @@ func _ready() -> void:
 	_bob_noise.seed = randi()
 	_bob_noise.frequency = 1.0
 	_bob_noise.fractal_octaves = 2
-	_ghost_meter = 1.0
 
 	var world := get_tree().get_first_node_in_group("world_environment") as WorldEnvironment
 	if world != null and world.environment != null:
@@ -1292,6 +1321,10 @@ func _process(delta: float) -> void:
 		_guard_kick = maxf(_guard_kick - delta / 0.25, 0.0)
 	_guard_level = move_toward(_guard_level, 1.0 if _blocking else 0.0,
 		delta / (GUARD_UP if _blocking else GUARD_DOWN))
+	if _dash_vis >= 0.0:
+		_dash_vis += delta
+		if _dash_vis >= dash_time:
+			_dash_vis = -1.0
 	_update_dash_view(delta)
 	_update_head(delta)
 	_update_pose(delta)
@@ -1310,13 +1343,11 @@ func _update_dash_view(delta: float) -> void:
 	_base_fov = Graphics.field_of_view
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
 			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"heavy" \
-			and _remnant_hunt <= 0.0 and _stab_fov == 0.0:
+			and _remnant_hunt <= 0.0 and _stab_fov == 0.0 and _sprint_k <= 0.0005:
 		if camera.fov != _base_fov:
 			camera.fov = _base_fov
 		return
-	# Held at full while a ghost is on; it only falls away once the ghost ends.
-	# (Decaying here and re-setting it at the physics rate made the view pulse.)
-	if _dash_view > 0.0 and not _ghosting:
+	if _dash_view > 0.0:
 		_dash_view = maxf(_dash_view - delta / maxf(dash_effect_time, 0.001), 0.0)
 	if _swing_kick > 0.0:
 		_swing_kick = maxf(_swing_kick - delta / maxf(attack_kick_time * attack_time_scale, 0.001), 0.0)
@@ -1329,10 +1360,11 @@ func _update_dash_view(delta: float) -> void:
 	# both instead of whichever ran last.
 	camera.fov = _base_fov + dash_fov_kick * dash - attack_fov_kick * swing \
 		+ jump_fov_kick * sin(PI * (1.0 - _jump_kick)) - haft_zoom * _cine_z - _scene_zoom \
-		+ lunge_fov_kick * lunge_intensity() + _heavy_effort().w + _remnant_fov() + _stab_fov
+		+ lunge_fov_kick * lunge_intensity() + _heavy_effort().w + _remnant_fov() + _stab_fov \
+		+ sprint_fov_kick * _sprint_k
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
 			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind != &"heavy" \
-			and _remnant_hunt <= 0.0 and _stab_fov == 0.0:
+			and _remnant_hunt <= 0.0 and _stab_fov == 0.0 and _sprint_k <= 0.0005:
 		# Land exactly back on the authored value rather than near it.
 		camera.fov = _base_fov
 
@@ -1458,9 +1490,11 @@ func _update_head(delta: float) -> void:
 	effort.x += wake.z + 38.0 * crushed
 	effort.y += wake.y - 25.0 * crushed
 	effort.z += wake.x + 1.35 * crushed
+	# The dash: the body drops into it and comes back up over the whole dash.
+	var dash_body := dash_motion()
 	head.position = _head_rest + _bob_offset + shake_offset + _scene_lean \
-		- Vector3(0, landing_bob_height * land + jump_bob_height * push + slam_crouch_depth * crouch + effort.z,
-			spear_effort_push * _stab_k)
+		- Vector3(0, landing_bob_height * land + jump_bob_height * push + slam_crouch_depth * crouch + effort.z
+			+ dash_dip * dash_body, spear_effort_push * _stab_k)
 	# Look is added untouched, never smoothed -- lagging the crosshair behind
 	# the mouse would feel like input lag, not like weight.
 	# The swing punch joins the same composition as everything else, for the
@@ -1468,7 +1502,8 @@ func _update_head(delta: float) -> void:
 	var swing := _swing_kick * _swing_kick
 	head.rotation.x = _look_pitch + _bob_pitch + deg_to_rad(attack_view_kick) * swing \
 		- deg_to_rad(landing_view_kick) * land + deg_to_rad(jump_view_kick) * lift \
-		- deg_to_rad(7.0) * crouch + shake_pitch + _cine_aim.y * _cine_a + deg_to_rad(effort.y)
+		- deg_to_rad(7.0) * crouch + shake_pitch + _cine_aim.y * _cine_a + deg_to_rad(effort.y) \
+		- deg_to_rad(dash_pitch_degrees) * dash_body * _dash_fwd
 	head.rotation.z = _bob_roll + deg_to_rad(dash_roll_degrees) \
 		* (_dash_view * _dash_view) * _dash_lateral \
 		+ deg_to_rad(attack_view_roll) * swing * _swing_roll + shake_roll \
@@ -1675,8 +1710,9 @@ static func _landing_shape(t: float) -> float:
 func _update_colour(delta: float) -> void:
 	if _environment == null:
 		return
-	var target: float = 0.0 if is_dodging() \
-		else _base_saturation * _health_saturation() * _wake_colour()
+	var target: float = _base_saturation * _health_saturation() * _wake_colour()
+	if is_dash_invulnerable():
+		target = minf(target, _base_saturation * dash_saturation)
 	# Out fast, back slowly: the drop should register instantly, the return
 	# should feel like coming up for air.
 	var rate: float = delta / maxf(
@@ -1829,8 +1865,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			# The button does whatever the weapon in hand does: the sword swings,
 			# the spear stabs. (Potions are drunk from the quick-item wheel.)
 			if held_item() == &"sword":
-				# Nothing attacks out of ghost mode.
-				if not _ghosting:
+				# Nothing attacks in the dash's burst: a click there is swung the
+				# moment it ends (`_end_dash`).
+				if _dashing:
+					_dash_attack_queued = true
+				else:
 					_start_attack()
 			elif held_item() == &"spear":
 				if _spear_free():
@@ -1840,7 +1879,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					axe.slash()
 			elif held_item() == &"robot_rat":
 				# Set down, and the view goes to its eyes (rat_control.gd).
-				if not _ghosting and not is_drinking():
+				if not _dashing and not is_drinking():
 					rats.deploy()
 		else:
 			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
@@ -1848,7 +1887,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_attack_key_spills_drink()
 		# Q: the heavy slash with the sword; the dash with the spear; the axe thrown.
 		if Coop.aim_ready(self) and held_item() == &"sword" \
-				and not _ghosting:
+				and not _dashing:
 			_start_heavy()
 		elif Coop.aim_ready(self) and held_item() == &"spear" \
 				and _spear_free():
@@ -1860,7 +1899,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_attack_key_spills_drink()
 		# F: the heavy attack. With the sword, a dive in the air or the blade
 		# brought down where you stand; with the spear, the throw.
-		if Coop.aim_ready(self) and not _ghosting and not _flying \
+		if Coop.aim_ready(self) and not _dashing and not _flying \
 				and held_item() == &"sword" and not _slamming and _now() >= _slam_recover_until \
 				and _pose_kind != &"haft" and not is_drinking() and not is_flinching():
 			_end_block()
@@ -1891,13 +1930,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
 	# Out of play -- held, hidden, on a ladder or a vat, in a scene, or the game
-	# paused (no call at all) -- leaves a gap in `_ghost_frame`, and a ghost key
-	# still down across it has to be let go before it starts one (note 113).
+	# paused (no call at all) -- leaves a gap in `_play_frame`; the first frame
+	# back starts no dash (note 113).
 	_update_noclip()
 	var frame := Engine.get_physics_frames()
 	if not (is_hidden() or climbing or restrained_by != null or latched_to != null or in_cutscene):
-		_ghost_resumed = frame - _ghost_frame > 1
-		_ghost_frame = frame
+		_play_resumed = frame - _play_frame > 1
+		_play_frame = frame
 	else:
 		_jump_queued = false
 	if is_hidden() or climbing or restrained_by != null:
@@ -1928,7 +1967,7 @@ func _physics_process(delta: float) -> void:
 	# Jump pressed with nothing to jump off: held for the landing (note 151). Read
 	# here so a press in the air during a dash or a dive counts as one.
 	var jump_pressed := Coop.just_pressed(self, &"jump") and not ui_open and not remote_view
-	if jump_pressed and not is_on_floor() and _now() >= _coyote_until and not _swimming and not _ghosting:
+	if jump_pressed and not is_on_floor() and _now() >= _coyote_until and not _swimming and not _dashing:
 		_jump_queued = true
 	# The berserk roar and the throw's wind-up: stopped dead (axe.gd).
 	if _axe_planted():
@@ -1952,7 +1991,7 @@ func _physics_process(delta: float) -> void:
 	if _spear_dash_until > 0.0:
 		# Out of the dash at walking pace, not coasting on at its speed.
 		_spear_dash_until = 0.0
-		var flat := Vector2(velocity.x, velocity.z).limit_length(move_speed)
+		var flat := Vector2(velocity.x, velocity.z).limit_length(_pace())
 		velocity.x = flat.x
 		velocity.z = flat.y
 	# A slam is fully committed: straight down, no steering, until it lands. On
@@ -1980,14 +2019,15 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var was_grounded := _was_grounded
-	# Getting up after a slam: no moving, no jumping, no ghost.
+	# Getting up after a slam: no moving, no jumping, no dash.
 	var down := _now() < _slam_recover_until
 
-	_update_ghost(delta)
+	_update_dash(delta, down)
+	_update_sprint(delta)
 
 	# Deep water (the drowning court): the body floats with its head out.
 	var depth := water_depth()
-	_swimming = not _ghosting and depth > SWIM_FLOAT - 0.1
+	_swimming = not _dashing and depth > SWIM_FLOAT - 0.1
 	if _swimming:
 		var lift := clampf((depth - SWIM_FLOAT) * 4.0, -2.5, 3.0)
 		if velocity.y > lift + 0.5:
@@ -1995,7 +2035,7 @@ func _physics_process(delta: float) -> void:
 			velocity += get_gravity() * delta
 		else:
 			velocity.y = move_toward(velocity.y, lift, 18.0 * delta)
-	elif not is_on_floor() and not _ghosting:
+	elif not is_on_floor() and not _dashing:
 		velocity += get_gravity() * delta
 
 	# Coyote time. Walking off a ledge and pressing jump a moment later is what
@@ -2005,8 +2045,8 @@ func _physics_process(delta: float) -> void:
 	# hand out a second jump in mid-air.
 	if is_on_floor():
 		_coyote_until = _now() + coyote_time
-	var can_jump := not ui_open and not down and not _ghosting and not remote_view
-	# Nothing to spend it on any more (a dive's landing, a blow, ghost mode, a menu):
+	var can_jump := not ui_open and not down and not _dashing and not remote_view
+	# Nothing to spend it on any more (a dive's landing, a blow, a dash, a menu):
 	# forgotten, as the spear's held click is.
 	if not can_jump:
 		_jump_queued = false
@@ -2027,20 +2067,21 @@ func _physics_process(delta: float) -> void:
 		var stop := KNOCK_FRICTION if is_knocked_down() else acceleration * 2.0
 		velocity.x = move_toward(velocity.x, 0.0, stop * delta)
 		velocity.z = move_toward(velocity.z, 0.0, stop * delta)
-	elif _ghosting:
-		# Full steering at ghost speed, a little off the floor.
-		var ghost_input := _move_input()
-		var ghost_dir := (global_basis * Vector3(ghost_input.x, 0.0, ghost_input.y)).normalized()
-		var ghost_target := ghost_dir * move_speed * ghost_speed_scale * _beam_speed_scale() * _flinch_speed_scale()
-		var ghost_accel := acceleration * ghost_acceleration_scale
-		velocity.x = move_toward(velocity.x, ghost_target.x, ghost_accel * delta)
-		velocity.z = move_toward(velocity.z, ghost_target.z, ghost_accel * delta)
-		velocity.y = _ghost_lift(delta)
+	elif _dashing:
+		# Committed along its way: full speed on the tick of the press, easing
+		# out (squared) to the pace it was walking at, so it hands straight over
+		# to walking with no lurch. Level in the air: no fall during the burst.
+		var u := clampf(_dash_age / maxf(dash_move_time, 0.001), 0.0, 1.0)
+		var dash_v := lerpf(_dash_exit, dash_speed, (1.0 - u) * (1.0 - u)) * _beam_speed_scale()
+		velocity.x = _dash_dir.x * dash_v
+		velocity.z = _dash_dir.z * dash_v
+		if not is_on_floor():
+			velocity.y = 0.0
 	elif _swimming:
 		# Treading water: full steering, slowly.
 		var swim_input := _move_input()
 		var swim_dir := (global_basis * Vector3(swim_input.x, 0.0, swim_input.y)).normalized()
-		var swim_target := swim_dir * move_speed * swim_speed_scale * _flinch_speed_scale()
+		var swim_target := swim_dir * _pace() * swim_speed_scale * _flinch_speed_scale()
 		velocity.x = move_toward(velocity.x, swim_target.x, acceleration * 0.6 * delta)
 		velocity.z = move_toward(velocity.z, swim_target.z, acceleration * 0.6 * delta)
 	elif is_on_floor():
@@ -2049,7 +2090,7 @@ func _physics_process(delta: float) -> void:
 
 		# Swinging slows you. Without it the faster strokes would let you cover
 		# ground at full walking pace while permanently mid-attack.
-		var walk := move_speed * _attack_move_scale() \
+		var walk := _pace() * _attack_move_scale() \
 			* (block_move_scale if _blocking else 1.0) \
 			* (drink_move_scale if is_drinking() else 1.0) \
 			* (wade_speed_scale if depth > 0.3 else 1.0) * carry_speed_scale * _beam_speed_scale() \
@@ -2058,9 +2099,9 @@ func _physics_process(delta: float) -> void:
 		# Damping is raised during a swing so the lunge surge is gone well before
 		# the stroke ends, leaving the back half of it visibly slower.
 		var damp := acceleration * (attack_damp_scale if _attack_slows() else 1.0)
-		# Berserk picks up speed as ghost mode does, not at walking's rate.
+		# Berserk picks up speed as ghost mode did, not at walking's rate.
 		if axe != null:
-			damp *= lerpf(1.0, ghost_acceleration_scale, axe.berserk_amount())
+			damp *= lerpf(1.0, berserk_acceleration_scale, axe.berserk_amount())
 		if is_flinching():
 			damp *= FLINCH_PLANT
 		velocity.x = move_toward(velocity.x, target_velocity.x, damp * delta)
@@ -2090,7 +2131,7 @@ func _physics_process(delta: float) -> void:
 		var air_input := _move_input()
 		if air_input != Vector2.ZERO:
 			var wish := (global_basis * Vector3(air_input.x, 0.0, air_input.y)).normalized()
-			var air_walk := move_speed * _attack_move_scale() \
+			var air_walk := _pace() * _attack_move_scale() \
 				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() * _axe_speed() \
 				* _flinch_speed_scale()
 			var target_velocity := wish * air_walk
@@ -2129,18 +2170,16 @@ func _update_noclip() -> void:
 	if want:
 		_solid_mask = collision_mask
 		collision_mask = 0
-		_ghosting = false
+		_cancel_dash()
 		_swimming = false
 	else:
 		collision_mask = _solid_mask
 		velocity = Vector3.ZERO
-		# Shift was the boost, not a ghost: it waits for a fresh press (note 113).
-		_ghost_locked = true
 
 
 ## Noclip's flight: full steering the way the view points, Space / A straight up,
-## Ctrl / B straight down, Shift / the ghost button faster. Nothing is in the
-## mask, so nothing stops it; weapons still swing.
+## Ctrl / B straight down, sprint (Shift / the stick pushed all the way) faster.
+## Nothing is in the mask, so nothing stops it; weapons still swing.
 func _fly(delta: float) -> void:
 	var move := _move_input()
 	var wish := global_basis * Basis(Vector3.RIGHT, _look_pitch) * Vector3(move.x, 0.0, move.y)
@@ -2149,7 +2188,7 @@ func _fly(delta: float) -> void:
 			wish += Vector3.UP
 		if Input.is_physical_key_pressed(KEY_CTRL) or Input.is_action_pressed(&"ui_cancel"):
 			wish += Vector3.DOWN
-	var speed := NOCLIP_SPEED * (NOCLIP_BOOST if _dodge_held() else 1.0)
+	var speed := NOCLIP_SPEED * (NOCLIP_BOOST if _sprint_wanted() else 1.0)
 	velocity = velocity.move_toward(wish.limit_length() * speed, NOCLIP_ACCEL * delta)
 	move_and_slide()
 	_update_locomotion()
@@ -2312,7 +2351,7 @@ func _silence_viewmodel_shadows(from: Node) -> void:
 
 func _start_attack() -> void:
 	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
-			or _ghosting or is_drinking() or is_flinching():
+			or _dashing or is_drinking() or is_flinching():
 		return
 	# A new stroke may cut into the last one's recovery, so a combo flows. Clicked
 	# for sooner than that it is not dropped but held, and begun the moment it may
@@ -2390,7 +2429,7 @@ func _attack_move_scale() -> float:
 ## cuts it off (`_flinch`).
 func _start_heavy() -> void:
 	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
-			or _ghosting or is_drinking() or is_flinching():
+			or _dashing or is_drinking() or is_flinching():
 		return
 	# Q overrides a cut in progress, as the heavy attack does: the slash or chop
 	# is dropped where it is and the wind-up begins from wherever the blade is.
@@ -2459,7 +2498,7 @@ func _fire_wave() -> void:
 
 func _start_block() -> void:
 	if _blocking or _dead or in_cutscene or ui_open or hands_busy or latched_to != null or not Inventory.is_weapon(held_item()) \
-			or is_drinking() or _ghosting:
+			or is_drinking() or _dashing:
 		return
 	if _slamming or _now() < _slam_recover_until or _pose_kind in [&"haft", &"stab", &"raise", &"slam"]:
 		return
@@ -2530,7 +2569,7 @@ func _check_block() -> void:
 	# Switching weapons drops it; `_hold_guard` puts it straight back up with
 	# the new one if the button is still held.
 	if not _action_held(&"block") or held_item() != _block_item \
-			or hands_busy or in_cutscene or ui_open or _dead or _slamming or _ghosting \
+			or hands_busy or in_cutscene or ui_open or _dead or _slamming or _dashing \
 			or _pose_kind != &"block":
 		_end_block()
 
@@ -2578,7 +2617,7 @@ func _guard(blow: Vector3, attacker: Node3D = null) -> int:
 ## window parries it. Each attack sets its own cue and window (decrepit.gd's
 ## moves: `cue` and `listen` in `_spec`), so a slow, telegraphed blow can be
 ## forgiving and a fast one tight. A press counts if it could have raised the
-## guard (a weapon in hand, not drinking, ghosting, dead, in a scene or a menu,
+## guard (a weapon in hand, not drinking, dashing, dead, in a scene or a menu,
 ## knocked down or in a slam's recovery) -- mid-attack too: it is the press that is timed, not the guard.
 
 ## When block was last pressed (and could have counted), `_now()` seconds.
@@ -2614,7 +2653,7 @@ func _take_parry_cue(attacker: Node3D):
 ## Whether the press that just came would count toward a cued parry.
 func _note_block_press() -> void:
 	if _dead or in_cutscene or ui_open or latched_to != null or not Inventory.is_weapon(held_item()) \
-			or is_drinking() or _ghosting:
+			or is_drinking() or _dashing:
 		return
 	# Down on the floor (knocked down) or in a slam's recovery: no guard to raise.
 	if _slamming or _now() < _slam_recover_until:
@@ -3748,7 +3787,7 @@ func slam_charge() -> float:
 
 func _start_slam() -> void:
 	_slamming = true
-	_ghosting = false
+	_cancel_dash()
 	_slam_started_at = _now()
 	_slam_grounded = is_on_floor()
 	# Decided on commitment so the landing knows which effect to play, and so a
@@ -4021,74 +4060,177 @@ func _is_blocked(origin: Vector3, body: Node3D) -> bool:
 	return not get_world_3d().direct_space_state.intersect_ray(params).is_empty()
 
 
-## Ghost mode, held on "dodge" (Shift). On while the key is held and there is
-## bar left; the bar drains over `ghost_duration` and refills over
-## `ghost_refill` whenever it is off. Run dry, the key has to be let go before
-## it will start again -- otherwise it would flicker on and off at the refill.
-## While on, the dash's whole look is held: no colour, the view opened out,
-## the edge streaks, a bank into sideways motion.
+## The dash (note 161; it replaced ghost mode). Run every tick in play, before the
+## body is moved. Ages the dash on the physics clock (game time, so the 14
+## invulnerable frames are the same 0.233 s at any frame rate), ends the burst,
+## and starts a new one on a fresh press of "dodge" -- or on one made up to
+## `dash_buffer` before the last one's `dash_time` ran out.
 ##
-## A ghost only ever starts on a fresh press (note 113). A key that was already
-## down when play resumed -- a menu closed (Shift-click in the inventory), a
-## scene ended, the game unpaused, a respawn, the window back in focus -- or
-## one pressed as part of a system chord (Win+Shift+S, Ctrl/Alt+Shift) locks
-## it until it is let go, where before it set a ghost off by itself.
-func _update_ghost(delta: float) -> void:
-	var held := _dodge_held()
-	if not held:
-		_ghost_locked = false
-	elif ui_open or _dead or _ghost_resumed or _system_chord():
-		_ghost_locked = true
-	var want := held and not _ghost_locked and not _slamming and _now() >= _slam_recover_until \
-		and not is_drinking()
-	var was := _ghosting
-	if _ghosting and not want:
-		_ghosting = false
-	elif not _ghosting and want and _ghost_meter >= ghost_min_start:
-		_ghosting = true
-		# Going ghost costs a slice of the bar up front, so tapping it over and
-		# over is not a way to move at ghost speed for free.
-		_ghost_meter = maxf(_ghost_meter - ghost_entry_cost, 0.0)
-		dodged.emit()
-	if _ghosting:
-		_ghost_meter = maxf(_ghost_meter - delta / maxf(ghost_duration, 0.01), 0.0)
-		if _ghost_meter <= 0.0:
-			_ghosting = false
-			_ghost_locked = true
-	else:
-		_ghost_meter = minf(_ghost_meter + delta / maxf(ghost_refill, 0.01), 1.0)
-	if _ghosting:
-		_dash_view = 1.0
-		var flat := Vector3(velocity.x, 0.0, velocity.z)
-		var lateral := 0.0
-		if flat.length() > 0.5:
-			lateral = clampf(flat.normalized().dot(head.global_basis.x), -1.0, 1.0)
-		_dash_lateral = lerpf(_dash_lateral, lateral, 1.0 - exp(-6.0 * delta))
-	if was and not _ghosting:
-		# Solid again only once clear of whatever it was passing through.
+## Only a press made in play starts one (note 113): `just_pressed` is an edge, so
+## a key already down when a menu closed, a scene ended, the game unpaused, a
+## respawn or the window came back never fires it; nor the first frame back from
+## any of those (`_play_resumed`), nor a press with Alt or Win down (a system
+## shortcut). `down`: getting up from a slam or a knockdown.
+func _update_dash(delta: float, down: bool) -> void:
+	if _dash_age >= 0.0:
+		_dash_age += delta
+		if _dashing and _dash_age >= dash_move_time:
+			_end_dash()
+	if _dash_pressed():
+		_dash_buffer_left = dash_buffer
+	elif _dash_buffer_left > 0.0:
+		_dash_buffer_left -= delta
+	if _dash_buffer_left > 0.0 and dodge_ready() and _can_dash(down):
+		_dash_buffer_left = 0.0
+		_start_dash()
+
+
+## A fresh press of "dodge" (Left Ctrl, L3) this tick, made in play.
+func _dash_pressed() -> bool:
+	if remote_view or ui_open or _dead or _play_resumed or _system_chord():
+		return false
+	return Coop.just_pressed(self, &"dodge")
+
+
+## Nothing in the way of starting a dash. A flinch does not stop one: it is the
+## way out of the next blow (note 143).
+func _can_dash(down: bool) -> bool:
+	return not down and not _slamming and not is_drinking() and not _swimming \
+		and not hands_busy and not _dead and not in_cutscene \
+		and not (_pose_kind == &"heavy" and not _heavy_released()) \
+		and not _pose_kind in [&"haft", &"stab", &"raise", &"slam"]
+
+
+func _start_dash() -> void:
+	var input := _move_input()
+	var way := global_basis * Vector3(input.x, 0.0, input.y)
+	way.y = 0.0
+	# Moving, it eases out to the pace it was walking at and walks on; from a
+	# stand it is a step straight back, out of what is in front, that plants.
+	_dash_exit = _pace()
+	if way.length_squared() < 0.01:
+		way = global_basis.z
+		way.y = 0.0
+		_dash_exit = 0.0
+	_dash_dir = way.normalized()
+	_dash_age = 0.0
+	_dash_vis = 0.0
+	_dashing = true
+	_dash_attack_queued = false
+	dash_count += 1
+	var right := global_basis.x
+	right.y = 0.0
+	var ahead := -global_basis.z
+	ahead.y = 0.0
+	_dash_lateral = clampf(_dash_dir.dot(right.normalized()), -1.0, 1.0)
+	_dash_fwd = clampf(_dash_dir.dot(ahead.normalized()), -1.0, 1.0)
+	_dash_view = 1.0
+	_end_block()
+	dodged.emit()
+
+
+## The burst is over: walking again at the pace it eased out to, solid again once
+## clear of whatever it passed through, and a sword click made in it swung now.
+func _end_dash() -> void:
+	_dashing = false
+	_phase_hold_until = _now() + dodge_phase_hold_max
+	var flat := Vector2(velocity.x, velocity.z).limit_length(maxf(_dash_exit, _pace()))
+	velocity.x = flat.x
+	velocity.z = flat.y
+	if _dash_attack_queued:
+		_dash_attack_queued = false
+		if held_item() == &"sword" and Coop.aim_ready(self) and not ui_open:
+			_start_attack()
+
+
+## Stopped by something taking the body over (a scene, a hiding place, a slam,
+## noclip): the burst and its invulnerable frames end here; the wait for the next
+## dash runs on as before.
+func _cancel_dash() -> void:
+	_dash_attack_queued = false
+	_dash_buffer_left = 0.0
+	if _dash_age >= 0.0:
+		_dash_age = maxf(_dash_age, maxf(dash_move_time, dash_iframes))
+	if _dashing:
+		_dashing = false
 		_phase_hold_until = _now() + dodge_phase_hold_max
 
 
-## Whether the ghost key (Shift) is down RIGHT NOW.
-func _dodge_held() -> bool:
-	# Not while the view is a robot rat's: the body stays put.
-	return not remote_view and _action_held(&"dodge")
+## Inside the dash's invulnerable frames: nothing lands. `DASH_EPS`: the age is a
+## sum of physics deltas, and 14 of 1/60 can come out a hair under 14/60, which
+## would give a 15th frame now and then.
+const DASH_EPS := 0.0005
 
 
-func _notification(what: int) -> void:
-	# The window lost focus (Alt+Tab, a snipping overlay): whatever is down now
-	# was pressed for something else, so the ghost waits for a fresh press.
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		_ghost_locked = true
+func is_dash_invulnerable() -> bool:
+	return _dash_age >= 0.0 and _dash_age + DASH_EPS < dash_iframes
 
 
-## Ctrl, Alt or the Windows key down with the keyboard player's Shift: a system
-## shortcut (Win+Shift+S, the Copilot key, Ctrl+Shift+Esc), never a ghost. The
-## game binds none of them.
+## A blow, knockdown, shove or beam the dash slipped.
+func _dodge_blow() -> void:
+	blows_dodged += 1
+	blow_dodged.emit()
+
+
+## 0..1, the body under the view through the dash (render clock): a drop over
+## its first 0.05 s, then eased back up over the rest of `dash_time`.
+func dash_motion() -> float:
+	if _dash_vis < 0.0:
+		return 0.0
+	var into := smoothstep(0.0, 0.05, _dash_vis)
+	var out := 1.0 - smoothstep(0.05, dash_time, _dash_vis)
+	return into * out
+
+
+## Shift held (the keyboard player), or the pad's left stick pushed all the way
+## (`pad_sprint_tilt`; every pad button is taken).
+func _sprint_wanted() -> bool:
+	if remote_view or ui_open:
+		return false
+	if _action_held(&"sprint"):
+		return true
+	if Coop.active and Coop.index_of(self) == 0:
+		return false
+	var tilt := 0.0
+	for device in PAD_SLOTS:
+		tilt = maxf(tilt, Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X),
+			Input.get_joy_axis(device, JOY_AXIS_LEFT_Y)).length())
+	return tilt >= pad_sprint_tilt
+
+
+## Eases `_sprint_k` toward 1 while sprinting with a direction held, else 0, on a
+## critically damped spring: the pace leaves walking and arrives at a sprint with
+## no corner at either end, and turns back the same way part-way through.
+func _update_sprint(delta: float) -> void:
+	var goal := 1.0 if _sprint_wanted() and _move_input().length_squared() > 0.01 else 0.0
+	var omega := 2.0 / maxf(sprint_blend_time, 0.001)
+	var x := omega * delta
+	var decay := 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x)
+	var change := _sprint_k - goal
+	var temp := (_sprint_v + omega * change) * delta
+	_sprint_v = (_sprint_v - omega * temp) * decay
+	_sprint_k = goal + (change + temp) * decay
+	if _sprint_k < 0.0 or _sprint_k > 1.0:
+		_sprint_k = clampf(_sprint_k, 0.0, 1.0)
+		_sprint_v = 0.0
+
+
+## Walking pace now: walking, sprinting, or on the way between (note 161).
+func _pace() -> float:
+	return lerpf(move_speed, sprint_speed, _sprint_k)
+
+
+## 0 walking, 1 at a full sprint.
+func sprint_amount() -> float:
+	return _sprint_k
+
+
+## Alt or the Windows key down with the keyboard player's dash key: a system
+## shortcut, never a dash. (Ctrl is the dash's own key now.)
 func _system_chord() -> bool:
 	if Coop.active and Coop.index_of(self) == 1:
 		return false
-	for k in [KEY_CTRL, KEY_ALT, KEY_META]:
+	for k in [KEY_ALT, KEY_META]:
 		if Input.is_physical_key_pressed(k) or Input.is_key_pressed(k):
 			return true
 	return false
@@ -4144,19 +4286,6 @@ func _pad_held(e: InputEvent, deadzone: float) -> bool:
 				return true
 	return false
 
-
-## Vertical speed that holds a ghost `ghost_hover` above whatever floor is
-## under it. Floors are on the sight layer (2); enemies are not, so floating
-## over one does not lift you onto its head.
-func _ghost_lift(delta: float) -> float:
-	var from := global_position + Vector3(0.0, 0.5, 0.0)
-	var ray := PhysicsRayQueryParameters3D.create(from, from + Vector3(0.0, -3.0, 0.0), 2)
-	ray.exclude = [get_rid()]
-	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
-	if hit.is_empty():
-		return velocity.y + get_gravity().y * delta
-	var target_y: float = (hit["position"] as Vector3).y + ghost_hover
-	return (target_y - global_position.y) * ghost_hover_rate
 
 ## Lets the dash pass through anything alive without letting it pass through
 ## the level.
@@ -4228,9 +4357,9 @@ func _release_phasing(force := false) -> void:
 	_phased_through = still
 
 
-## Intangible to enemies for exactly as long as ghost mode is on.
+## Intangible to enemies for exactly as long as the dash's burst runs.
 func _phase_window_open() -> bool:
-	return _ghosting
+	return _dashing
 
 
 ## Are the two bodies still inside one another, horizontally?
@@ -4298,25 +4427,26 @@ func dash_lateral() -> float:
 	return _dash_lateral
 
 
-## True while a dash cannot hurt you. Distinct from being merely on cooldown.
+## True while nothing can hurt you: the grace after a hit, or a dash's frames.
 func is_invulnerable() -> bool:
-	return _now() < _invulnerable_until
+	return _now() < _invulnerable_until or is_dash_invulnerable()
 
 
-## True when a ghost can be started.
+## True when a dash can be started: the last one's whole `dash_time` has run.
 func dodge_ready() -> bool:
-	return _ghost_meter >= ghost_min_start and not _ghost_locked
+	return _dash_age < 0.0 or _dash_age + DASH_EPS >= dash_time
 
 
-## True while ghost mode is on. Named for the dash it replaced: the HUD, the
-## colour drain and anything else asking "is the player dodging" still ask this.
+## True while the dash's burst is moving the body.
 func is_dodging() -> bool:
-	return _ghosting
+	return _dashing
 
 
-## The ghost bar, 0 empty to 1 full -- for the HUD readout.
+## The dash's wait, 0 just dashed to 1 ready -- for the HUD's bar.
 func dodge_charge() -> float:
-	return _ghost_meter
+	if dodge_ready():
+		return 1.0
+	return clampf(_dash_age / maxf(dash_time, 0.001), 0.0, 1.0)
 
 ## `attacker`, when given, is whoever struck the blow: a parry throws it back.
 ## --- Upgrades (the crystal mine's workbench, workbench.gd, 2026-10-11) -----------
@@ -4379,6 +4509,11 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 	var now := _now()
 	if now < _invulnerable_until:
 		return
+	# Inside a dash's 14 frames the blow simply is not taken -- any blow, the
+	# Remnant's too, with no grace window after it (note 161).
+	if is_dash_invulnerable():
+		_dodge_blow()
+		return
 	# The sword up in front takes the blow -- 90% of it blocked, all of it
 	# parried (and half of it turned back on the attacker). Some blows (the
 	# Remnant's) go through any guard.
@@ -4396,9 +4531,6 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 			amount *= float(share) if share != null else block_damage_taken
 			_on_guarded(false, _from_direction, attacker)
 	_invulnerable_until = now + (guarded_invulnerable_time if guard > 0 else invulnerable_time)
-	# A ghost is mostly not there: it takes only ghost_damage_taken of a hit.
-	if _ghosting:
-		amount *= ghost_damage_taken
 	# The armor (workbench upgrades).
 	amount *= 1.0 - damage_negation()
 	# Sandbox: nothing hurts (the guard above still registered, for the enemy).
@@ -4438,11 +4570,12 @@ func drain_health(amount: float, floor_health := 0.0) -> float:
 ## Not a blow: it is held on the player, so it is paid by the frame. `dps` health a
 ## second and slowed to `beam_slow` (lingering `BEAM_LINGER` after it moves off),
 ## with no invulnerability window and no knockback. A guard raised toward it
-## takes `block_damage_taken` of it and half the slow; a ghost takes
-## `ghost_damage_taken`. A beam that hurts spills a drink, as a hit does. The
-## damage marker is raised for what has built up, every `BEAM_MARK_EVERY` s.
+## takes `block_damage_taken` of it and half the slow; a dash's invulnerable
+## frames take none of it, nor the slow. A beam that hurts spills a drink, as a
+## hit does. The damage marker is raised for what has built up, every
+## `BEAM_MARK_EVERY` s.
 
-## Of walking pace (and ghosting) while a beam is on the player.
+## Of walking pace (and the dash) while a beam is on the player.
 @export_range(0.05, 1.0) var beam_slow := 0.45
 const BEAM_LINGER := 0.35
 const BEAM_MARK_EVERY := 0.5
@@ -4455,6 +4588,8 @@ var _beam_marked_at := 0.0
 func beam_hit(dps: float, delta: float, blow: Vector3) -> void:
 	if _dead or (in_cutscene and not _cutscene_hurts) or is_hidden():
 		return
+	if is_dash_invulnerable():
+		return
 	var now := _now()
 	var guarded := _guard(blow) != 0
 	_beam_until = now + BEAM_LINGER
@@ -4464,8 +4599,6 @@ func beam_hit(dps: float, delta: float, blow: Vector3) -> void:
 		amount = 0.0
 	if guarded:
 		amount *= block_damage_taken
-	if _ghosting:
-		amount *= ghost_damage_taken
 	if amount <= 0.0:
 		return
 	_beam_owed += amount
@@ -4504,7 +4637,7 @@ func _move_input() -> Vector2:
 ## (the quick-item wheel is 4-7). A drink takes `drink_time`: the flask is used
 ## up as it starts and the healing flows in EVENLY over the drink
 ## (`_update_drink`). Meanwhile the player walks at `drink_move_scale`, cannot
-## block or go ghost, and the HUD counts it down. Attacking (any weapon key) or
+## block or dash, and the HUD counts it down. Attacking (any weapon key) or
 ## taking a hit cuts it short (`_interrupt_drink`): what has flowed in so far
 ## is all it gives, and the flask is gone. Returns false and keeps it if the
 ## slot holds no consumable, the player is at full health, or busy.
@@ -4849,10 +4982,11 @@ func _respawn() -> void:
 	health = max_health
 	_dead = false
 	_invulnerable_until = _now() + invulnerable_time
-	_ghosting = false
-	_ghost_meter = 1.0
-	# Up again with the key still down: no ghost until it is pressed afresh.
-	_ghost_locked = true
+	_cancel_dash()
+	_dash_age = -1.0
+	_dash_vis = -1.0
+	_sprint_k = 0.0
+	_sprint_v = 0.0
 	_slam_recover_until = 0.0
 	_knock_at = -1.0
 	_flinch_at = -1.0
@@ -4947,7 +5081,7 @@ func _reset_inventory(first_time := false) -> void:
 ## body slides back, then gets up over KNOCK_UP (0.5 s at first; 0.8 since the
 ## user asked for "a bit longer", 2026-10-15). No control meanwhile: the slam
 ## recovery's lock (`_slam_recover_until`) holds moving, jumping, swinging,
-## blocking and ghost,
+## blocking and dashing,
 ## and the slide bleeds off at KNOCK_FRICTION rather than the recovery's stop.
 ## Still hurtable on the floor. Not in a scene, not hidden, not dead.
 @export var knockdown_lift := 2.6
@@ -4960,6 +5094,9 @@ var _knock_side := 1.0
 
 func knock_down(dir: Vector3, push := 7.5) -> void:
 	if _dead or in_cutscene or is_hidden():
+		return
+	# Slipped in the dash's frames, as the blow that came with it was.
+	if is_dash_invulnerable():
 		return
 	unlatch()
 	var away := Vector3(dir.x, 0.0, dir.z)
@@ -5010,7 +5147,7 @@ func _knock_view() -> Vector3:
 ## they can move they can swing. The attack under way
 ## stops before it can bite: a cut, an axe chop, a throw's wind-up and a spear
 ## dash are cut off where they are, a heavy slash not yet thrown its wave is cut off, a
-## slam lands as a dud. Guard, ghost, drink and jump stay free: the way out of
+## slam lands as a dud. Guard, dash, drink and jump stay free: the way out of
 ## the next blow is still there.
 ##
 ## Not for a guarded blow, one taken on the floor or in a scene, a beam or a
@@ -5092,7 +5229,7 @@ func flinch_view() -> Vector3:
 
 ## How far the weapon in hand is knocked down, 0..FLINCH_WEAPON; a raised guard stays up.
 func weapon_dip() -> float:
-	return FLINCH_WEAPON * flinch_amount() * (1.0 - guard_amount())
+	return maxf(FLINCH_WEAPON * flinch_amount(), dash_weapon_dip * dash_motion()) * (1.0 - guard_amount())
 
 
 func _flinch_speed_scale() -> float:
@@ -5102,7 +5239,7 @@ func _flinch_speed_scale() -> float:
 ## Shoved by something in the world. Applied straight to velocity so the hit
 ## carries you, rather than being smoothed away by the movement code.
 func apply_knockback(impulse: Vector3, _stun_time := 0.0) -> void:
-	if _dead or in_cutscene:
+	if _dead or in_cutscene or is_dash_invulnerable():
 		return
 	_slamming = false
 	velocity += impulse

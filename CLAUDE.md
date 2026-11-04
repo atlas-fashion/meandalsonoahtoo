@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 160), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 161), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -343,7 +343,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
 
 **Systems** (all `scripts/`):
 - Player & combat: `axe.gd` (the third weapon: slash, a throw that stays in
-  its mark, berserk; note 84), `player.gd` (movement, sword (Q the heavy slash `_start_heavy` and its gold wave `sword_wave.gd`, note 160), block/parry `_start_block`
+  its mark, berserk; note 84), `player.gd` (movement: walk, Shift sprint `_pace`, Left Ctrl dash `_update_dash` with 14 invulnerable frames (note 161); sword (Q the heavy slash `_start_heavy` and its gold wave `sword_wave.gd`, note 160), block/parry `_start_block`
   `_guard` `_on_guarded`, parry cues `parry_cue` (note 62), spear dash/stab `stab_at`, `take_damage`, `_die`,
   `_respawn`, `hide_in`, held by the surgery's claw `restrain` / `release` (note 96)), `spear.gd`, `held_potion.gd`,
   `door_debris.gd` (kicked doors), `interact.gd` (shared E prompt), `coop_avatar.gd` (the player's body, the knight in the user's fantasy armor (note 159): alone only its shadow, in co-op what the other player sees; note 155), `first_person_arms.gd` (its arms in your own view: the right fist solved onto what is held, note 156; the left arm the guard, block and parry on springs, notes 157, 158 -- there is no hand torch).
@@ -588,6 +588,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 158 | 2026-11-03 | The guard flat across the view, braced, stiff: elbow and fist at one height and depth, the elbow 1.5 cm ahead, the upper arm thrust forward (each placed at the arm's measured bone lengths so the IK lands it); springs near critical (overshoot 18 -> 1.6 mm), no tremble, little look lag, a block a 20 mm jolt (was ~84); 69.0 fps, as before | [docs/notes/158-guard-flat-and-braced.md](docs/notes/158-guard-flat-and-braced.md) |
 | 159 | 2026-11-03 | The player is the user's fantasy armor (Tripo, no rig: skinned onto the Meshy knight's skeleton unchanged, weights from its nearest surface; the fists re-measured, `GRIP`); torch shadows drawn from 2x2-cell shadow-only blocks at the lowest LOD, and every big static room mesh by a low-LOD shadow copy; `Graphics.hold_60` steps the 3D scale down (FSR) only where the GPU runs over; `--bench --ab=` interleaved A/B, `--fullscreen`. 3060 at 3440x1440 with a busy background GPU: 48-54 -> 63-65 fps; chest rooms and surgery 53-58 | [docs/notes/159-fantasy-armor-and-60fps.md](docs/notes/159-fantasy-armor-and-60fps.md) |
 | 160 | 2026-11-03 | The sword's Q is a heavy slash, not the spin: a 1 s wind-up at 0.15 walking pace (blade raised, gold building on it), a cut from high right to low left, and a slow gold crescent wave (`sword_wave.gd`, 7 m/s, 30 m, 3 m wide) that passes through enemies for 80 each and stops at stone; a blow in the wind-up cuts it off; light and sparks only with effects; +0.02 ms | [docs/notes/160-heavy-gold-slash.md](docs/notes/160-heavy-gold-slash.md) |
+| 161 | 2026-11-04 | Ghost mode replaced by a dash (Left Ctrl / L3: 34 m/s on the very next tick, eased out over 0.24 s, straight back from a stand; 14 invulnerable frames, 14/60 s of game time, in which blows, knockdowns, shoves and beams are not taken; the next only after 0.65 s, a press 0.12 s early held); Shift a sprint at the old 4.25, the walk 3.3, on a damped spring between; berserk and the Remnant keep their speeds | [docs/notes/161-dash-sprint-slower-walk.md](docs/notes/161-dash-sprint-slower-walk.md) |
 
 ## Notes by source file
 
@@ -605,7 +606,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/archer.gd`: 20, 77, 92, 93
 - `scripts/arrow.gd`: 20, 79, 93
 - `scripts/attack_icons.gd`: 24, 77, 79, 84, 160
-- `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91, 143, 144, 157
+- `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91, 143, 144, 157, 161
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
@@ -636,11 +637,11 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/held_potion.gd`: 6.19, 130
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/holding_cell.gd`: 153, 154
-- `scripts/hud.gd`: 6.19, 24, 79, 84, 154
+- `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
-- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160
+- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161
 - `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111, 130
-- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130, 144, 160
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130, 144, 160, 161
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
 - `scripts/item_icon.gd`: 6.19, 77, 84, 111, 130
 - `scripts/item_slot.gd`: 6.19, 30
@@ -656,21 +657,21 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
 - `scripts/rat.gd`: 77, 78, 79
-- `scripts/rat_control.gd`: 77, 78, 79, 143
+- `scripts/rat_control.gd`: 77, 78, 79, 143, 161
 - `scripts/rat_look.gd`: 78
 - `scripts/rat_model.gd`: 77
 - `scripts/respawn_anchor.gd`: 8b, 32, 79, 154
 - `scripts/robot_rat.gd`: 77
 - `scripts/save_system.gd`: 19, 60, 79, 131
 - `scripts/sandbox.gd`: 60, 68, 152
-- `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130, 152
+- `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130, 152, 161
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
@@ -694,7 +695,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/surgeon_boss.gd`: 105, 109, 110, 111, 119
 - `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111, 128
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
-- `scripts/stalker.gd`: 11, 16, 22, 60, 79
+- `scripts/stalker.gd`: 11, 16, 22, 60, 79, 161
 - `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 149
 - `scripts/sword_wave.gd`: 160
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80

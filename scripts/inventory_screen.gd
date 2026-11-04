@@ -13,7 +13,7 @@ extends CanvasLayer
 ##           picture, what it is, live numbers, a line of lore
 ##   right   the character: the WEAPON wheel and the QUICK ITEM wheel, each as
 ##           four slots in a diamond (up 1, right 2, down 3, left 4) -- this is
-##           where the wheels are set up -- then coins, potions, health, ghost
+##           where the wheels are set up -- then coins, potions, health, dash
 ##           and slam
 ##
 ##   drag            move a stack onto another slot (merges or swaps); a wheel
@@ -449,7 +449,8 @@ func _stats_for(id: StringName) -> Array:
 					["Slam", "F / LT"],
 					["Block", "hold RMB / LB"],
 					["Parry", "RMB / LB as it lands"],
-					["Ghost", "hold Shift / L3"],
+					["Dodge dash", "L-Ctrl / L3"],
+					["Sprint", "hold Shift / full stick"],
 					["Haft strike", "E / X"],
 				],
 			]
@@ -473,7 +474,8 @@ func _stats_for(id: StringName) -> Array:
 					["Dash", "Q / RT"],
 					["Throw", "F / LT"],
 					["Block", "hold RMB / LB"],
-					["Ghost", "hold Shift / L3"],
+					["Dodge dash", "L-Ctrl / L3"],
+					["Sprint", "hold Shift / full stick"],
 				],
 			]
 		&"axe":
@@ -495,7 +497,8 @@ func _stats_for(id: StringName) -> Array:
 					["Throw", "Q / RT"],
 					["Berserk", "F / LT"],
 					["Block", "hold RMB / LB"],
-					["Ghost", "hold Shift / L3"],
+					["Dodge dash", "L-Ctrl / L3"],
+					["Sprint", "hold Shift / full stick"],
 				],
 			]
 		&"coins":
@@ -579,9 +582,9 @@ func _update_bars() -> void:
 			"health":
 				fill = player.health / maxf(player.max_health, 1.0)
 				text = "%d / %d" % [roundi(player.health), roundi(player.max_health)]
-			"ghost":
+			"dash":
 				fill = player.dodge_charge()
-				text = "%d%%" % roundi(fill * 100.0)
+				text = "Ready" if fill >= 1.0 else "%d%%" % roundi(fill * 100.0)
 			"slam":
 				fill = player.slam_charge()
 				text = "Ready" if fill >= 1.0 else "%d s" % ceili((1.0 - fill) * player.slam_cooldown)
@@ -1138,7 +1141,7 @@ func _build_character() -> Control:
 	_potions_value = _stat_line(rows, &"health_potion", "Potions")
 	rows.add_child(_rule())
 	_bars.append(_meter(rows, "Health", Color(0.66, 0.13, 0.12), "health"))
-	_bars.append(_meter(rows, "Ghost", Color(0.2, 0.36, 0.66), "ghost"))
+	_bars.append(_meter(rows, "Dash", Color(0.2, 0.36, 0.66), "dash"))
 	_bars.append(_meter(rows, "Slam", Color(0.26, 0.5, 0.24), "slam"))
 	return framed[0]
 

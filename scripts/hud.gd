@@ -282,7 +282,7 @@ func _bind_player() -> void:
 ## --- Health at the bottom (2026-10-10) ----------------------------------------
 ##
 ## The health bar sits centred at the bottom of the screen, the numbers on the
-## bar itself, the ghost bar a thin line beneath. (It sat under the hotbar,
+## bar itself, the dash bar (its wait, note 161) a thin line beneath. (It sat under the hotbar,
 ## which the wheels have since replaced; it keeps the hotbar's old width.) The
 ## orange slam bar is retired: the heavy attack's icon (attack_icons.gd) shows
 ## that cooldown now. Laid out here rather than in hud.tscn, so the scene stays
@@ -744,7 +744,7 @@ func _process(delta: float) -> void:
 		return
 	var charge: float = _player.dodge_charge()
 	dodge_bar.value = charge
-	# The ghost bar: lit while a ghost can be started.
+	# The dash bar: fills over the wait, lit once a dash can be started.
 	var dash_ready: bool = _player.dodge_ready() if _player.has_method("dodge_ready") \
 		else charge >= 1.0
 	_dodge_fill.bg_color = dodge_ready_color if dash_ready else dodge_charging_color

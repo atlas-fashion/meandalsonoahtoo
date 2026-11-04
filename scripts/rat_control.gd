@@ -189,7 +189,7 @@ func reset() -> void:
 
 func _busy() -> bool:
 	return player.get("_dead") == true or player.in_cutscene or player.ui_open or player.is_hidden() \
-		or player.get("climbing") == true or player.get("_ghosting") == true or is_driving()
+		or player.get("climbing") == true or player.get("_dashing") == true or is_driving()
 
 
 # --- Live rats -----------------------------------------------------------------------
