@@ -1348,6 +1348,7 @@ func _process(delta: float) -> void:
 			_dash_vis = -1.0
 	_update_dash_view(delta)
 	_update_head(delta)
+	_update_third_person(delta)
 	_update_pose(delta)
 	if _parry_t >= 0.0:
 		_parry_t += delta
@@ -1885,6 +1886,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	# A wheel is up (radial_menu.gd): it has the mouse; no attacking meanwhile.
 	if wheel_open:
+		return
+	# The scroll wheel: out of the knight's eyes into third person and back
+	# (note 170), a step a notch.
+	var wheel := event as InputEventMouseButton
+	if wheel != null and wheel.pressed and wheel.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		var out := 1.0 if wheel.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1.0
+		third_person = clampf(third_person + out * THIRD_STEP, 0.0, THIRD_MAX)
+		if third_person < THIRD_MIN:
+			third_person = 0.0 if out < 0.0 else THIRD_MIN
+		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		# (The wave slash leaves the look free: the wave goes where they aim.)
@@ -3105,6 +3116,87 @@ func _update_pose(delta: float) -> void:
 	_trail_on = _pose_time >= bite.x - 0.01 and _pose_time <= bite.y + 0.03
 	if not _cut_struck and _pose_time >= bite.x and not _dead:
 		_strike_cut()
+
+
+## --- Third person (note 170) ----------------------------------------------------
+##
+## For testing, Skyrim's way: the scroll wheel pulls the camera out of the
+## knight's eyes to behind its shoulder (`third_person`, metres; down the wheel
+## further, up it closer, past THIRD_MIN straight back into the eyes). The camera
+## orbits with the look, kept off the walls by a ray from the head. The knight
+## turns to face the way it walks rather than the way the camera looks
+## (`_body_yaw`, turned at THIRD_TURN), and back to the aim for anything it does
+## with its hands -- a stroke, the guard, the spear's moves -- so they go where
+## the crosshair is. What it holds turns with it (the head's yaw: everything held
+## is posed in the head's frame). A scene, death, hiding or a rat's eyes take it
+## back into first person while they last.
+const THIRD_STEP := 0.6
+const THIRD_MIN := 1.2
+const THIRD_MAX := 4.8
+## Over the right shoulder, and how close the camera may come to a wall.
+const THIRD_SHOULDER := Vector3(0.45, 0.25, 0.0)
+const THIRD_WALL := 0.2
+## How fast the knight turns to face its way, rad/s.
+const THIRD_TURN := 9.0
+var third_person := 0.0
+var _third := 0.0
+var _body_yaw := 0.0
+
+
+func in_third_person() -> bool:
+	return _third > 0.05 and not in_cutscene and not _dead and not remote_view and not is_hidden()
+
+
+func _update_third_person(delta: float) -> void:
+	_third = lerpf(_third, third_person, 1.0 - exp(-10.0 * delta))
+	if absf(_third - third_person) < 0.01:
+		_third = third_person
+	var on := in_third_person()
+	if _avatar != null and _avatar.has_method("set_third_person"):
+		_avatar.call("set_third_person", on)
+	if not on:
+		_body_yaw = 0.0
+		if _avatar != null:
+			_avatar.rotation.y = 0.0
+		camera.transform = Transform3D.IDENTITY
+		return
+	# The way it walks, or the aim while its hands are busy.
+	var want := _body_yaw
+	if _hands_at_work():
+		want = 0.0
+	else:
+		var v := global_basis.inverse() * velocity
+		if Vector2(v.x, v.z).length() > 0.6:
+			want = atan2(-v.x, -v.z)
+	_body_yaw = _body_yaw + clampf(wrapf(want - _body_yaw, -PI, PI), -THIRD_TURN * delta, THIRD_TURN * delta)
+	_body_yaw = wrapf(_body_yaw, -PI, PI)
+	_avatar.rotation.y = _body_yaw
+	# What is held goes with the body.
+	head.basis = Basis(Vector3.UP, _body_yaw) * head.basis
+	# The camera: over the shoulder, orbiting with the look, off the walls.
+	var look := Basis(Vector3.UP, global_rotation.y) * Basis(Vector3.RIGHT, _look_pitch)
+	var pivot := global_position + Vector3(0.0, head.position.y, 0.0)
+	var want_at := pivot + look * (THIRD_SHOULDER + Vector3(0.0, 0.0, _third))
+	# Whatever the player itself runs into, and the level.
+	var ray := PhysicsRayQueryParameters3D.create(pivot, want_at, geometry_mask | collision_mask)
+	ray.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+	var at := want_at
+	if not hit.is_empty():
+		var to := (hit["position"] as Vector3) - pivot
+		at = pivot + to.normalized() * maxf(to.length() - THIRD_WALL, 0.0)
+	camera.global_transform = Transform3D(look, at)
+
+
+## Anything the hands are doing that should go where the player aims.
+func _hands_at_work() -> bool:
+	if _pose_kind != &"" or _blocking or _attacking or _slamming:
+		return true
+	if spear != null and held_item() == &"spear" and spear.call("busy"):
+		return true
+	if axe != null and held_item() == &"axe" and axe.has_method("busy") and axe.call("busy"):
+		return true
+	return is_drinking()
 
 
 ## The clip move the body is in, [kind, pose seconds], or [] (coop_avatar.gd poses

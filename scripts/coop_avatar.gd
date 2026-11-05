@@ -70,6 +70,9 @@ var _meshes: Array[GeometryInstance3D] = []
 ## The same knight without its head, for the player's own camera.
 var _view_meshes: Array[GeometryInstance3D] = []
 var _label: Label3D
+## The player's own camera is behind the knight (player.gd third person, note
+## 170): it sees the whole knight, head and all, instead of the headless one.
+var _third := false
 var _phase := 0.0
 var _lie := 0.0
 var _stride := 0.0
@@ -129,15 +132,28 @@ func set_mode(layer: int, coop: bool) -> void:
 	_coop = coop
 	_layer = layer
 	name = "CoopAvatar" if coop else "Body"
-	var view := 1
-	if coop and int(player.get("_viewmodel_layer")) != 0:
-		view = int(player.get("_viewmodel_layer"))
+	var view := _view_layer()
 	for g in _meshes:
-		_set_layers(g, layer)
+		_set_layers(g, layer | (view if _third else 0))
 	for g in _view_meshes:
 		_set_layers(g, view)
 	_label.visible = coop
 	_apply_graphics()
+
+
+func _view_layer() -> int:
+	if _coop and int(player.get("_viewmodel_layer")) != 0:
+		return int(player.get("_viewmodel_layer"))
+	return 1
+
+
+## Into or out of third person: the whole knight for the player's own camera,
+## and its shadow, instead of the headless one.
+func set_third_person(on: bool) -> void:
+	if on == _third:
+		return
+	_third = on
+	set_mode(_layer, _coop)
 
 
 ## Hidden while its layers change: a lit instance whose layers change in place
@@ -155,7 +171,7 @@ static func _set_layers(g: GeometryInstance3D, layers: int) -> void:
 func _apply_graphics() -> void:
 	var cast := Graphics.body_shadow
 	for g in _meshes:
-		if _coop:
+		if _coop or _third:
 			g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast \
 				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			g.visible = true
@@ -289,7 +305,7 @@ func _process(delta: float) -> void:
 	_label.visible = _coop and not dead
 	# Down and dead, the eye is not in it: the player's own camera draws none of it.
 	for g in _view_meshes:
-		g.visible = _lie < 0.05
+		g.visible = _lie < 0.05 and not _third
 	# Everything from rest each frame: the clip may have turned bones the walk
 	# never touches (the neck, the shoulders), and they must not stay turned.
 	_skel.reset_bone_poses()

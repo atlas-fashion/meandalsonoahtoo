@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 169), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 170), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -599,6 +599,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 167 | 2026-11-05 | Every attack and the parry are Higgsfield motion clips (Meshy action library; motion only, on the game's own knight) played by the body and the first-person view alike (`player_motion.gd`: baked FK, time-warped through monotone-cubic knots for dynamic speed, blended in/out; `tools/strip_anim_clip.py`, `models/anims/`): swipes alternate forehand/backhand (Left_Slash) and bite at 0.225 s (was 0.156), the heavy (Charged_Slash) at 0.78 s (was 0.59), the ult is Sword_Judgment (crouch, leap, airborne cut throws the wave, landing, flourish), a parry recoil; cuts auto-aimed through the crosshair (`_aim_fix`); spear LMB jab-jab-lunge (16, +1.1 m) combo, spear Q a delayed low sweep (22) that knocks down (`knock_down_from` on the decrepit and the proels); proel blows x1.3 (TEMPO 2.24) | [docs/notes/167-higgsfield-attack-clips-spear-combo-sweep-faster-proels.md](docs/notes/167-higgsfield-attack-clips-spear-combo-sweep-faster-proels.md) |
 | 168 | 2026-11-05 | One knight seen from its own eyes: the body drawn for its own camera with head and pauldrons cut away, no first-person arms model or co-op props, weapons at real depth in the knight's hand (sword 1.25 m, hit reach 2.15 blade lengths), the camera rides the clip's head (Settings: Head sway), the clips slowed to 1.3-1.7x, the first-person clip mapping removed | [docs/notes/168-one-knight-seen-from-its-own-eyes.md](docs/notes/168-one-knight-seen-from-its-own-eyes.md) |
 | 169 | 2026-11-05 | The knight's hands get finger and thumb bones (tools/build_player_knight.py: a three-joint finger chain and a two-joint thumb each, the gauntlet's fingers and thumb skinned only to them); the weapon leads the grip: outside clips the hand is IK'd exactly onto the weapon's grip (knuckles along the edge; out of reach the weapon comes back with the wrist), through clips the arm is the capture's and the weapon in that fist; fingers close by contact round each handle (`_grip_curl`, `HANDLE_R`) | [docs/notes/169-fingers-and-a-weapon-led-grip.md](docs/notes/169-fingers-and-a-weapon-led-grip.md) |
+| 170 | 2026-11-05 | Third person for testing on the scroll wheel, Skyrim style: down pulls the camera out behind the shoulder (1.2-4.8 m, kept off walls), up back into the eyes; the knight faces the way it walks and turns back to the aim for anything its hands do; its own camera sees the whole knight (`_update_third_person`, coop_avatar.gd `set_third_person`) | [docs/notes/170-third-person-on-the-scroll-wheel.md](docs/notes/170-third-person-on-the-scroll-wheel.md) |
 
 ## Notes by source file
 
@@ -625,7 +626,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80, 164
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166, 167, 168, 169
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166, 167, 168, 169, 170
 - `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163, 166, 167, 168, 169
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
@@ -668,7 +669,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168, 170
 - `scripts/player_motion.gd`, `models/anims/*.glb`: 167, 168
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151, 167
