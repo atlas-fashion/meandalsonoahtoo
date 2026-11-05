@@ -3199,6 +3199,23 @@ func _hands_at_work() -> bool:
 	return is_drinking()
 
 
+## Whether the knight holds what is in hand in its stance (note 171; the clip
+## &"stance", coop_avatar.gd): a weapon in hand and the hands not posed by
+## anything else -- the slam, the haft strike, a scene's stab, the axe's moves,
+## the spear's throw. The sword's strokes and the guard are laid over the stance.
+func stance_wanted() -> bool:
+	if _dead or in_cutscene or is_hidden() or hands_busy or is_drinking():
+		return false
+	match held_item():
+		&"sword":
+			return _pose_kind in [&"", &"block", &"unblock"] or PlayerMotion.has_move(_pose_kind)
+		&"spear":
+			return spear != null and spear.call("stance_ok")
+		&"axe":
+			return axe != null and not axe.call("busy")
+	return false
+
+
 ## The clip move the body is in, [kind, pose seconds], or [] (coop_avatar.gd poses
 ## the knight from it; the camera rides its head, `_head_ride`). The sword's
 ## own, or the spear's (spear.gd `motion`).

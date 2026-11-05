@@ -38,9 +38,10 @@ const KNIGHT := preload("res://models/player_knight.glb")
 ## The bones whose triangles the player's own camera does not draw: the helmet
 ## and the neck, which would sit over the eye, and the pauldrons (they ride the
 ## shoulder bones, note 156), which sit at its height either side and filled the
-## bottom of the view through every cut. Seen from outside and in the shadow,
-## as ever.
-const HEAD_BONES := ["Head", "neck", "head_end", "headfront", "LeftShoulder", "RightShoulder"]
+## bottom of the view through every cut, and the left upper arm, which hung
+## under the eye as a dark blob at the corner of the view (note 171; its forearm
+## and fist, the guard, are drawn). Seen from outside and in the shadow, as ever.
+const HEAD_BONES := ["Head", "neck", "head_end", "headfront", "LeftShoulder", "RightShoulder", "LeftArm"]
 ## How much of the look's pitch the chest bends by under an attack clip: a cut
 ## aimed up or down goes there. And a lean into every attack on top (radians):
 ## the captures cut at shoulder height, which from the eyes is the arm across
@@ -87,6 +88,12 @@ var _parent: Array[int] = []
 ## of each arm bone (local), for first_person_arms.gd to blend its IK with.
 var motion_w := 0.0
 var _clip_local := {}
+## The stance under everything (note 171): how much it has the body, 0..1, and
+## its loop's clock.
+var _stance_w := 0.0
+var _stance_t := 0.0
+## How long the stance takes to come in or go (s).
+const STANCE_BLEND := 0.18
 var _rest_global: Array[Basis] = []
 var _rest_local: Array[Basis] = []
 var _b := {}
@@ -344,7 +351,8 @@ func _process(delta: float) -> void:
 		_goal_dir("lfore", Vector3(-0.85, 0.35, 0.4), 1.0 - exp(-30.0 * delta))
 	else:
 		_goal_dir("lupper", Vector3(0.18, -cos(lb), sin(lb)), k)
-		_goal_dir("lfore", Vector3(0.08, -0.75, 0.65), k)
+		# Hanging easy at the side, below the view from the eyes.
+		_goal_dir("lfore", Vector3(0.12, -0.92, 0.32), k)
 
 	# The sword arm: forward with the blade out; cutting through a stroke;
 	# drawn back on guard (the left arm blocks); the spear held level.
@@ -392,7 +400,17 @@ func _apply_motion(dead: bool, pitch: float) -> void:
 	motion_w = 0.0
 	_clip_local.clear()
 	if dead:
+		_stance_w = 0.0
 		return
+	var dt := get_process_delta_time()
+	# The stance first, whenever the hands are free to hold the weapon in it.
+	var want: bool = player.call("stance_wanted")
+	_stance_w = move_toward(_stance_w, 1.0 if want else 0.0, dt / STANCE_BLEND)
+	_stance_t += dt
+	if _stance_w > 0.0:
+		_apply_clip(&"stance", _stance_t, _stance_w, false)
+		motion_w = _stance_w
+	# Then an attack or the parry over it.
 	var m: Array = player.call("body_motion")
 	var parry_t: float = player.get("_parry_t")
 	var kind := &""
@@ -405,12 +423,27 @@ func _apply_motion(dead: bool, pitch: float) -> void:
 		kind = &"parry"
 		t = parry_t
 		upper_only = true
-	if kind == &"" or not PlayerMotion.has_move(kind):
+	var w := 0.0
+	if kind != &"" and PlayerMotion.has_move(kind):
+		w = PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
+	if w > 0.0:
+		_apply_clip(kind, t, w, upper_only)
+		motion_w = 1.0 - (1.0 - motion_w) * (1.0 - w)
+	if motion_w <= 0.0:
 		return
-	var w := PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
-	if w <= 0.0:
-		return
-	motion_w = w
+	# The chest bent with the look under any clip, and leaning into an attack: a
+	# cut goes where they look.
+	for bn in ["Spine01", "Spine"]:
+		var i: int = _b[bn]
+		var par := _parent[i]
+		var axis := (_skel.get_bone_global_pose(par).basis.orthonormalized().inverse() * (_k2s * Vector3.RIGHT)).normalized()
+		var bend := Quaternion(axis, (-pitch * LOOK_BEND * motion_w + ATTACK_LEAN * w) * 0.5)
+		_skel.set_bone_pose_rotation(i, bend * _skel.get_bone_pose_rotation(i))
+
+
+## One clip laid over the pose so far by `w`. Its arm (the pure clip, blended
+## with what was laid before) is kept for first_person_arms.gd (`clip_arm`).
+func _apply_clip(kind: StringName, t: float, w: float, upper_only: bool) -> void:
 	var walk := clampf(_stride * 1.6, 0.0, 1.0)
 	var not_left: bool = PlayerMotion.move(kind).get("right_only", false)
 	var pose := PlayerMotion.body_pose(kind, t)
@@ -423,7 +456,8 @@ func _apply_motion(dead: bool, pitch: float) -> void:
 		var par := _parent[i]
 		var want: Basis = glob[i] if par < 0 else (glob[par] as Basis).inverse() * (glob[i] as Basis)
 		if bn.ends_with("Arm") or bn.ends_with("Hand"):
-			_clip_local[i] = want.get_rotation_quaternion()
+			var q := want.get_rotation_quaternion()
+			_clip_local[i] = (_clip_local[i] as Quaternion).slerp(q, w) if _clip_local.has(i) else q
 		var bw := w
 		# A one-handed sword: the left arm keeps to the walk (or the guard) through
 		# the sword's clips, which were captured with a shield on it.
@@ -444,14 +478,8 @@ func _apply_motion(dead: bool, pitch: float) -> void:
 		var d: Vector3 = pose["_hips"]
 		var off := Vector3(d.x * 0.4, d.y, d.z * 0.4) * (1.0 - walk) + Vector3(0.0, d.y, 0.0) * walk
 		var hips: int = _b["Hips"]
-		_skel.set_bone_pose_position(hips, _skel.get_bone_rest(hips).origin + _k2s_pos * off * w)
-	# The chest bent with the look, over the clip: a cut goes where they look.
-	for bn in ["Spine01", "Spine"]:
-		var i: int = _b[bn]
-		var par := _parent[i]
-		var axis := (_skel.get_bone_global_pose(par).basis.orthonormalized().inverse() * (_k2s * Vector3.RIGHT)).normalized()
-		var bend := Quaternion(axis, (-pitch * LOOK_BEND + ATTACK_LEAN) * 0.5 * w)
-		_skel.set_bone_pose_rotation(i, bend * _skel.get_bone_pose_rotation(i))
+		var base := _skel.get_bone_pose_position(hips)
+		_skel.set_bone_pose_position(hips, base.lerp(_skel.get_bone_rest(hips).origin + _k2s_pos * off, w))
 
 
 ## The clip's own local turn of arm bone `i` this frame, or null outside a clip.

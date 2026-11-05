@@ -188,6 +188,12 @@ func time_scale() -> float:
 	return player.attack_time_scale
 
 
+## Whether the knight may hold it in its stance (note 171): in hand, and doing
+## nothing posed of its own (the throw's wind-up, the catch, the step back).
+func stance_ok() -> bool:
+	return _flying == null and _pose in [Pose.REST, Pose.STAB, Pose.SWEEP]
+
+
 ## The clip the spear is playing, [move, pose seconds], or [] (player.gd
 ## `body_motion`: the body plays it too).
 func motion() -> Array:

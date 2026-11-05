@@ -299,7 +299,7 @@ func _pose_right(held: Dictionary) -> void:
 	var turn := Basis(h, back, g) * a.fist_rest.inverse()
 	var wrist := p - turn * (a.grip - a.rest_hand.origin)
 	var q := _solve(a, shoulder, wrist, turn, back, _h2s(a).basis * POLE)
-	var w: float = _body.get("motion_w") if held["kind"] in [&"sword", &"spear"] else 0.0
+	var w: float = _body.get("motion_w") if held["kind"] in [&"sword", &"spear", &"axe"] else 0.0
 	var bones := [a.upper, a.fore, a.hand]
 	for k in 3:
 		var rot: Quaternion = q[k]

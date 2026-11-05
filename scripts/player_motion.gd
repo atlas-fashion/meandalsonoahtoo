@@ -36,6 +36,7 @@ const CLIPS := {
 	&"spear_jabs": "res://models/anims/spear_jabs.glb",          # Punch_Combo_3 (203)
 	&"spear_lunge": "res://models/anims/spear_lunge.glb",        # Thrust_Slash (240)
 	&"spear_sweep": "res://models/anims/spear_sweep.glb",        # Axe_Spin_Attack (238)
+	&"sword_guard": "res://models/anims/sword_guard.glb",        # Sword_Parry (147): the stance, a held high guard
 }
 
 ## Each move: its clip; `knots` [pose s, clip s] (the warp); `in` the blend from
@@ -44,6 +45,12 @@ const CLIPS := {
 ## `right_only`, the left arm left to the walk or the guard (the sword's: the
 ## captures carried a shield on it).
 const MOVES := {
+	# The hold whenever the hands are free (note 171): Sword_Parry's high guard,
+	# the weapon raised across the body, breathing on a loop -- in view from the
+	# eyes. (Combat_Stance held it low at the hip, out of the view.) Everything
+	# else is laid over it and blends back into it (coop_avatar.gd `_apply_motion`).
+	&"stance": {"right_only": true, "clip": &"sword_guard", "loop": true, "in": 0.0, "out": 1e9, "end": 1e9,
+		"ref": 0.0, "knots": [[0.0, 0.0], [1.0, 1.0]]},
 	# The forehand: drawn back and up behind the right shoulder, a hang at the
 	# top, cut from right to left, ending high on the left -- exactly where the
 	# backhand starts.
@@ -141,6 +148,8 @@ static func length(kind: StringName) -> float:
 
 ## Clip second for pose second `t` of `kind` -- the warp.
 static func clip_time(kind: StringName, t: float) -> float:
+	if MOVES[kind].get("loop", false):
+		return fposmod(t, clip(MOVES[kind]["clip"]).length)
 	return _warp(MOVES[kind]["knots"], t)
 
 
@@ -166,8 +175,8 @@ static func _smooth(k: float) -> float:
 
 # --- The body -----------------------------------------------------------------------
 
-## Every bone's turn from rest (knight space) and the hips' offset (knight space,
-## clip metres) for `kind` at pose second `t`: {bone: Quaternion}, "_hips":
+## Every bone's turn from rest (knight space) and the hips' offset from the
+## capture's rest (knight space, clip metres) for `kind` at pose second `t`: {bone: Quaternion}, "_hips":
 ## Vector3.
 static func body_pose(kind: StringName, t: float) -> Dictionary:
 	var c := clip(MOVES[kind]["clip"])
@@ -177,9 +186,9 @@ static func body_pose(kind: StringName, t: float) -> Dictionary:
 	for b in c.bones:
 		var arr: Array = c.turn[b]
 		out[b] = (arr[f[0]] as Quaternion).slerp(arr[f[1]], f[2])
-	var ref := _frame(c, float(MOVES[kind]["ref"]))
-	var hp: Vector3 = c.hips[f[0]].lerp(c.hips[f[1]], f[2])
-	out["_hips"] = hp - c.hips[ref[0]]
+	# From the capture's own rest, not the move's stance: a crouched stance puts
+	# the hips down, or the bent legs would push the feet through the floor.
+	out["_hips"] = (c.hips[f[0]] as Vector3).lerp(c.hips[f[1]], f[2])
 	return out
 
 
