@@ -33,7 +33,7 @@ var LESSONS: Array[Dictionary] = [
 	{"id": &"wave", "title": "Wave slash", "kb": "[k]F[/k]: a long wind-up, then a cut that sends a gold wave down the hall. Once every 20 seconds.", "pad": "[k]LT[/k]: a long wind-up, then a cut that sends a gold wave down the hall. Once every 20 seconds."},
 	{"id": &"to_spear", "title": "Take up the spear", "kb": "Hold [k]C[/k], point at the spear, let go.", "pad": "Hold [k]R3[/k], point at the spear with the stick, let go."},
 	{"id": &"stab", "title": "Stab a post  ·  3 times", "kb": "[k]LEFT CLICK[/k] stabs.", "pad": "[k]RB[/k] stabs."},
-	{"id": &"dash", "title": "Spear dash", "kb": "[k]Q[/k] charges forward with the spear braced.", "pad": "[k]RT[/k] charges forward with the spear braced."},
+	{"id": &"dash", "title": "Spear sweep", "kb": "[k]Q[/k]: wound up, then swept low through the legs. It knocks them down.", "pad": "[k]RT[/k]: wound up, then swept low through the legs. It knocks them down."},
 	{"id": &"throw", "title": "Throw the spear", "kb": "[k]F[/k] hurls it. It bursts where it strikes and comes back.", "pad": "[k]LT[/k] hurls it. It bursts where it strikes and comes back."},
 	{"id": &"to_axe", "title": "Take up the axe", "kb": "Hold [k]C[/k], point at the axe, let go.", "pad": "Hold [k]R3[/k], point at the axe, let go."},
 	{"id": &"chop", "title": "Chop a post", "kb": "[k]LEFT CLICK[/k]: slow, and very heavy.", "pad": "[k]RB[/k]: slow, and very heavy."},
@@ -203,7 +203,7 @@ func _fresh_track(p: Node) -> Dictionary:
 	var spear = p.get("spear")
 	return {"yaw": (p as Node3D).rotation.y, "pitch": float(p.get("_look_pitch")), "looked": 0.0,
 		"air_at": -INF, "opened": false, "map_opened": false, "heavy": false, "slam": false,
-		"hits0": posts_hits, "dash0": float(spear.get("_dash_until")) if spear != null else 0.0,
+		"hits0": posts_hits, "dash0": float(spear.get("_sweep_ready_at")) if spear != null else 0.0,
 		"dashes0": int(p.get("dash_count")), "drank": false}
 
 
@@ -297,7 +297,7 @@ func _done_now(p: Node, t: Dictionary, _delta: float) -> bool:
 			return _hits_since(t, &"spear") >= 3
 		&"dash":
 			var spear = p.get("spear")
-			return spear != null and float(spear.get("_dash_until")) > float(t["dash0"]) + 0.01
+			return spear != null and float(spear.get("_sweep_ready_at")) > float(t["dash0"]) + 0.01
 		&"throw":
 			var spear = p.get("spear")
 			return spear != null and bool(spear.call("is_away"))

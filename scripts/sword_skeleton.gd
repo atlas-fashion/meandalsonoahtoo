@@ -506,15 +506,15 @@ func scare(from: Vector3, time: float) -> bool:
 ## and it reels back on its own feet, as far as the clip steps (`_slide`), stunned for
 ## the length of it. Its fellows may step in at once. The leap parried is thrown over on
 ## its back instead (note 146), for as long as that takes to get up from.
-func reel_from(away: Vector3) -> void:
+func reel_from(away: Vector3, thrown := false) -> void:
 	if _dying or caged:
 		return
 	if anim == null:
-		super.apply_knockback(away * 3.0, REEL_TIME)
+		super.apply_knockback(away * 3.0, THROWN_TIME if thrown else REEL_TIME)
 		return
 	_knockback = Vector3.ZERO
 	_attack_connected = true
-	var over := _leaping
+	var over := _leaping or thrown
 	if state != State.CHASE:
 		_enter_chase()
 	var now := _now()
@@ -534,6 +534,12 @@ func reel_from(away: Vector3) -> void:
 	_blow_t = 0.0
 	_blow_scale = 1.0
 	_carry = Vector3.ZERO
+
+
+## Swept off its feet (the spear's Q, spear.gd `_knock_down`, note 167): over on
+## its back, as a parried leap throws it.
+func knock_down_from(away: Vector3) -> void:
+	reel_from(away, true)
 
 
 func _end_reel() -> void:

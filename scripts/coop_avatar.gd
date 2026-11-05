@@ -19,6 +19,12 @@ extends Node3D
 ## up and cuts with their strokes, the left forearm comes up to guard, the whole knight
 ## lies down when they die and is gone while they hide.
 ##
+## Every attack and the parry are the Higgsfield clips the first-person view
+## plays (note 167, player_motion.gd): `_apply_motion` lays the clip's pose over
+## the walking one, every bone, blended in and out with the move -- the legs
+## left to the stride while they are walking -- so the body does exactly what the
+## first-person sword and arm do.
+##
 ## Posing: a target is a DIRECTION for a limb segment in the knight's own space
 ## (+Z forward, +X its left, +Y up), reached by the shortest turn from the
 ## segment's rest direction, relative to its parent's turn (`_aim`); trunk and
@@ -61,6 +67,16 @@ var _lie := 0.0
 var _stride := 0.0
 ## Knight space (the glTF scene root: +Z forward) -> skeleton space.
 var _k2s := Basis.IDENTITY
+## The same, with the skeleton's scale: for positions (the hips' offset).
+var _k2s_pos := Basis.IDENTITY
+## Bones parents first, and each one's parent (-1 for the root).
+var _order: Array[int] = []
+var _parent: Array[int] = []
+## The knight's right fist at rest (knight space), for the blade's grip.
+var _hand_rest_k := Basis.IDENTITY
+var _fore_rest_k := Vector3.LEFT
+## The pose the clip has the body in, 0..1 (the props follow the fist by it).
+var _motion_w := 0.0
 var _rest_global: Array[Basis] = []
 var _rest_local: Array[Basis] = []
 var _b := {}
@@ -126,6 +142,17 @@ func _apply_graphics() -> void:
 func _read_rig() -> void:
 	# The skeleton's frame relative to the knight's root (the glTF scene space).
 	_k2s = _rel_transform(_skel, _knight).basis.orthonormalized().inverse()
+	_k2s_pos = _rel_transform(_skel, _knight).basis.inverse()
+	var stack: Array[int] = []
+	for r in _skel.get_parentless_bones():
+		stack.append(r)
+	while not stack.is_empty():
+		var b: int = stack.pop_front()
+		_order.append(b)
+		for ch in _skel.get_bone_children(b):
+			stack.append(ch)
+	for i in _skel.get_bone_count():
+		_parent.append(_skel.get_bone_parent(i))
 	for i in _skel.get_bone_count():
 		_b[_skel.get_bone_name(i)] = i
 		_rest_global.append(_skel.get_bone_global_rest(i).basis.orthonormalized())
@@ -137,6 +164,11 @@ func _read_rig() -> void:
 		var a: Vector3 = _skel.get_bone_global_rest(_b[pair[0]]).origin
 		var c: Vector3 = _skel.get_bone_global_rest(_b[pair[1]]).origin
 		_rest_dir[pair[0]] = (c - a).normalized()
+	var to_k := _rel_transform(_skel, _knight)
+	var rh: int = _b["RightHand"]
+	var rf: int = _b["RightForeArm"]
+	_hand_rest_k = (to_k.basis * _skel.get_bone_global_rest(rh).basis).orthonormalized()
+	_fore_rest_k = (to_k * _skel.get_bone_global_rest(rh).origin - to_k * _skel.get_bone_global_rest(rf).origin).normalized()
 
 
 ## `node`'s transform relative to `root`, from local transforms (before either
@@ -167,6 +199,9 @@ func _process(delta: float) -> void:
 	_sword.visible = held == &"sword" and _lie < 0.3
 	_spear.visible = held == &"spear" and _lie < 0.3
 	_label.visible = _coop and not dead
+	# Everything from rest each frame: the clip may have turned bones the walk
+	# never touches (the neck, the shoulders), and they must not stay turned.
+	_skel.reset_bone_poses()
 
 	# Pace: stride, bob and swing with how fast they move on the ground.
 	var v: Vector3 = player.get("velocity")
@@ -238,8 +273,69 @@ func _process(delta: float) -> void:
 	_aim("RightLeg", _goal["rshin"], _aim("RightUpLeg", _goal["rthigh"], hips))
 	_aim("LeftForeArm", _goal["lfore"], _aim("LeftArm", _goal["lupper"], chest))
 	_aim("RightForeArm", _goal["rfore"], _aim("RightArm", _goal["rupper"], chest))
+	_apply_motion(dead)
 	if _coop:
 		_place_props()
+
+
+## The attack or parry clip over the walking pose (note 167): each bone turned
+## from ITS rest the way the clip's turned from the capture's rest (knight space,
+## so neither rig's bone axes matter), blended by the move's own in/out. The
+## legs and the hips' travel give way to the stride while walking, or the feet
+## would skate; the parry plays on the upper body over the guard.
+func _apply_motion(dead: bool) -> void:
+	_motion_w = 0.0
+	if dead:
+		return
+	var m: Array = player.call("body_motion")
+	var parry_t: float = player.get("_parry_t")
+	var kind := &""
+	var t := 0.0
+	var upper_only := false
+	if not m.is_empty():
+		kind = m[0]
+		t = m[1]
+	elif parry_t >= 0.0:
+		kind = &"parry"
+		t = parry_t
+		upper_only = true
+	if kind == &"" or not PlayerMotion.has_move(kind):
+		return
+	var w := PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
+	if w <= 0.0:
+		return
+	_motion_w = w
+	var walk := clampf(_stride * 1.6, 0.0, 1.0)
+	var pose := PlayerMotion.body_pose(kind, t)
+	var glob := {}
+	for i in _order:
+		var bn := _skel.get_bone_name(i)
+		var rg := _rest_global[i]
+		var turn := Basis(pose.get(bn, Quaternion.IDENTITY) as Quaternion)
+		glob[i] = (_k2s * turn * _k2s.inverse()) * rg
+		var par := _parent[i]
+		var want: Basis = glob[i] if par < 0 else (glob[par] as Basis).inverse() * (glob[i] as Basis)
+		var bw := w
+		if _is_leg(bn):
+			bw *= 1.0 - walk
+			if upper_only:
+				bw = 0.0
+		elif upper_only and bn == "Hips":
+			bw = 0.0
+		if bw <= 0.0:
+			continue
+		var now := _skel.get_bone_pose_rotation(i)
+		_skel.set_bone_pose_rotation(i, now.slerp(want.get_rotation_quaternion(), bw))
+	if not upper_only:
+		# The hips ride the clip's rise and fall, and a little of its travel.
+		var d: Vector3 = pose["_hips"]
+		var off := Vector3(d.x * 0.4, d.y, d.z * 0.4) * (1.0 - walk) + Vector3(0.0, d.y, 0.0) * walk
+		var hips: int = _b["Hips"]
+		_skel.set_bone_pose_position(hips, _skel.get_bone_rest(hips).origin + _k2s_pos * off * w)
+
+
+static func _is_leg(bn: String) -> bool:
+	return bn.ends_with("UpLeg") or bn.ends_with("Leg") or bn.ends_with("Foot") or bn.ends_with("ToeBase")
 
 
 func _goal_dir(key: String, dir: Vector3, k: float) -> void:
@@ -300,11 +396,24 @@ func _arc(from: Vector3, to: Vector3) -> Quaternion:
 ## of the forearms (props are children of the knight's root: knight space).
 func _place_props() -> void:
 	var to_k := _rel_transform(_skel, _knight)
-	var hand_r := to_k * _skel.get_bone_global_pose(_b["RightHand"]).origin
+	var hand := to_k * _skel.get_bone_global_pose(_b["RightHand"])
+	var hand_r := hand.origin
 	var fore_r: Vector3 = _goal["rfore"]
 	var grip := hand_r + fore_r * 0.07
-	_sword.transform = Transform3D(_along(fore_r + Vector3(0.0, 0.65, 0.6)), grip)
-	_spear.transform = Transform3D(_along(fore_r), grip)
+	var sword_dir := fore_r + Vector3(0.0, 0.65, 0.6)
+	var spear_dir := fore_r
+	if _motion_w > 0.0:
+		# In a clip the weapon is where the capture's fist holds it (as in first
+		# person, PlayerMotion.fp_sword): the blade out of the thumb side, the
+		# spear along the forearm.
+		var hb := hand.basis.orthonormalized() * _hand_rest_k.inverse()
+		var fore_now := (hb * _fore_rest_k).normalized()
+		var clip_grip := hand_r + fore_now * PlayerMotion.GRIP_OUT
+		sword_dir = sword_dir.normalized().lerp((hb * PlayerMotion.BLADE_REST).normalized(), _motion_w)
+		spear_dir = fore_r.normalized().lerp(fore_now, _motion_w)
+		grip = grip.lerp(clip_grip, _motion_w)
+	_sword.transform = Transform3D(_along(sword_dir), grip)
+	_spear.transform = Transform3D(_along(spear_dir), grip)
 
 
 ## A basis whose +Y runs along `dir`.

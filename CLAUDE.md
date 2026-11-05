@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 165), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 167), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -596,6 +596,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 164 | 2026-11-04 | A keybinds menu (Settings > Key bindings: `keybinds.gd` autoload, `keybinds_panel.gd`; a keyboard and a controller column per action, swap on conflict, saved to user://keybinds.cfg, Esc/Start reserved, `Coop.resplit`, live labels in the inventory and HUD); the slash reworked (gather, load, cut past the arc with wrist roll and dig, rebound, home; bites from 0.125 not 0.07 pose, +69 ms; kick and lunge on the cut, `_strike_cut`); dash wait 0.65 -> 0.4875 s; pad dash on B, not L3 | [docs/notes/164-keybinds-menu-later-slash-faster-dash-pad-b.md](docs/notes/164-keybinds-menu-later-slash-faster-dash-pad-b.md) |
 | 165 | 2026-11-04 | Walk and sprint both +0.75 m/s (walk 2.5 -> 3.25, sprint 4.25 -> 5.0), the 1.75 m/s gap and the blend kept; the Remnant still 1.35 x the sprint | [docs/notes/165-walk-and-sprint-faster.md](docs/notes/165-walk-and-sprint-faster.md) |
 | 166 | 2026-11-04 | The player is the user's dark fantasy knight (Tripo, no rig: skinned onto the same Meshy skeleton, weights per welded place so seams cannot open, the arms nudged 3.5 cm back); a PBR finish baked in Cycles from the albedo alone (normal 4096, AO + roughness + metal ORM 2048; gold seams polished metal, plate worn steel, no glow); the first-person arms welded and capped, 0 open edges, drawn double-sided; GRIP (0.935, 1.314, -0.0736) | [docs/notes/166-dark-knight.md](docs/notes/166-dark-knight.md) |
+| 167 | 2026-11-05 | Every attack and the parry are Higgsfield motion clips (Meshy action library; motion only, on the game's own knight) played by the body and the first-person view alike (`player_motion.gd`: baked FK, time-warped through monotone-cubic knots for dynamic speed, blended in/out; `tools/strip_anim_clip.py`, `models/anims/`): swipes alternate forehand/backhand (Left_Slash) and bite at 0.225 s (was 0.156), the heavy (Charged_Slash) at 0.78 s (was 0.59), the ult is Sword_Judgment (crouch, leap, airborne cut throws the wave, landing, flourish), a parry recoil; cuts auto-aimed through the crosshair (`_aim_fix`); spear LMB jab-jab-lunge (16, +1.1 m) combo, spear Q a delayed low sweep (22) that knocks down (`knock_down_from` on the decrepit and the proels); proel blows x1.3 (TEMPO 2.24) | [docs/notes/167-higgsfield-attack-clips-spear-combo-sweep-faster-proels.md](docs/notes/167-higgsfield-attack-clips-spear-combo-sweep-faster-proels.md) |
 
 ## Notes by source file
 
@@ -612,7 +613,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scenes/torch.tscn`: 6.15, 6.18, 7, 19, 24, 27, 46
 - `scripts/archer.gd`: 20, 77, 92, 93
 - `scripts/arrow.gd`: 20, 79, 93
-- `scripts/attack_icons.gd`: 24, 77, 79, 84, 160, 162, 164
+- `scripts/attack_icons.gd`: 24, 77, 79, 84, 160, 162, 164, 167
 - `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91, 143, 144, 157, 161
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
@@ -622,13 +623,13 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80, 164
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166
-- `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163, 166
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166, 167
+- `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163, 166, 167
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
 - `scripts/damp.gd`: 39, 40, 41
-- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92
+- `scripts/decrepit.gd`: 56, 57, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 77, 81, 92, 167
 - `scripts/decrepit_react.gd`: 56, 59
 - `scripts/door_debris.gd`: 6.19
 - `scripts/dungeon_room.gd`: 22, 24, 79, 93, 114, 120, 122, 126, 139, 149
@@ -646,9 +647,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/holding_cell.gd`: 153, 154
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
-- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164
+- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167
 - `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111, 130
-- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130, 144, 160, 161, 162, 164
+- `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130, 144, 160, 161, 162, 164, 167
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
 - `scripts/item_icon.gd`: 6.19, 77, 84, 111, 130
 - `scripts/item_slot.gd`: 6.19, 30
@@ -665,9 +666,10 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167
+- `scripts/player_motion.gd`, `models/anims/*.glb`: 167
 - `scripts/portcullis.gd`: 6.18
-- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151
+- `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151, 167
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
 - `scripts/puzzle_room.gd`: 18, 22, 79
 - `scripts/radial_menu.gd`: 25, 30, 44, 77, 79
@@ -693,7 +695,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_sword.gd`: 24, 93, 135
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
-- `scripts/spear.gd`: 14, 78, 79, 143, 144, 157, 163
+- `scripts/spear.gd`: 14, 78, 79, 143, 144, 157, 163, 167
 - `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120, 128
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109, 121
@@ -704,7 +706,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111, 128
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79, 161, 165
-- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 149
+- `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 149, 167
 - `scripts/sword_wave.gd`: 160
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
@@ -732,7 +734,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/vine_leaf.gdshader`: 6.18
 - `shaders/water_drip.gdshader`: 39, 121
 - `tools/anim_proel_builder.py`, `tools/build_proel_builder.py`: 149, 150, 151
-- `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146
+- `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 167
 - `tools/benchmark.gd`: 6.11, 33, 112, 155, 159
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
@@ -754,6 +756,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_wood_texture.py`: 6.19
 - `tools/grade_texture.py`: 6.05
 - `tools/preview_module_level.gd`: 6.11, 6.14
+- `tools/strip_anim_clip.py`: 167
 - `tools/tripo.ps1`: 7, 155
 - `tools/tripo_image.ps1`: 41, 45, 47
 - `tools/tripo_texture.ps1`: 40, 41

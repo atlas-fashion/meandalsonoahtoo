@@ -227,6 +227,12 @@ func _draw_glyph(t: Dictionary) -> void:
 			for k in 2:
 				var y := (float(k) - 0.5) * s * 0.7
 				g.draw_line(c + Vector2(s * 0.55, y), c + Vector2(s * 1.15, y * 1.4), INK_DIM, 2.0, true)
+		&"sweep":
+			# The spear's Q (note 167): the haft swept low from left to right,
+			# and what it takes off its feet.
+			_spear(g, c + Vector2(-s * 0.9, -s * 0.55), c + Vector2(s * 0.95, s * 0.55))
+			g.draw_arc(c + Vector2(0.0, -s * 0.6), s * 1.15, PI * 0.15, PI * 0.85, 18, INK_DIM, 2.0, true)
+			g.draw_line(c + Vector2(-s * 1.1, s * 1.0), c + Vector2(s * 1.1, s * 1.0), INK, 2.0, true)
 		&"dash":
 			_spear(g, c + Vector2(-s * 0.6, 0.0), c + Vector2(s * 1.15, 0.0))
 			for k in 3:

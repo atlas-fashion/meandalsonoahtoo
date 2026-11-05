@@ -300,7 +300,10 @@ func _pose(a: Arm, target: Array) -> void:
 	var p: Vector3 = to_skel * (target[1] as Vector3)
 	var g: Vector3 = (to_skel.basis * (target[2] as Vector3)).normalized()
 	var mirror := -1.0 if a.side == RIGHT else 1.0
-	var shoulder := _shoulder(a, h2s)
+	# In an attack clip the shoulder goes where the capture's did (note 167):
+	# the torso's twist carries it, as it carries the fist.
+	var shift: Vector3 = player.call("motion_shoulder_shift") if a.side == RIGHT else Vector3.ZERO
+	var shoulder := _shoulder(a, h2s, shift)
 	# The fist: its haft along g, the forearm coming at it from the shoulder.
 	var h := (p - shoulder) - g * (p - shoulder).dot(g)
 	if h.length_squared() < 1e-8:

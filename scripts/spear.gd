@@ -3,15 +3,25 @@ extends Node3D
 ## The spear (2026-10-08): the second weapon, held when the hotbar slot in hand
 ## holds `&"spear"`. Lives under the player's Head as the first-person model
 ## and does all of its own fighting; `player.gd` only routes the keys to it
-## (`stab`, `dash`, `throw`) and moves the body for the dash
+## (`stab`, `sweep`, `throw`) and carries the body forward for the lunge
 ## (`player.begin_spear_dash`).
 ##
-## - STAB (left click, "attack"): a quick jab straight down the crosshair, 10
-##   damage, a new one every `STAB_EVERY` s -- spammable, just.
-## - DASH (Q, "thrust"): the player charges forward with the spear braced,
-##   `DASH_SPEED` for `DASH_TIME`, running through everything in the way
-##   (`DASH_DAMAGE` and a shove to the side, once each), with the lunge's speed
-##   lines. `DASH_COOLDOWN` between dashes.
+## Every attack is a Higgsfield motion clip (note 167, player_motion.gd), played
+## by the body and by this first-person spear alike:
+## - STAB (left click, "attack"): a combo of three (note 167; the user: "2 short
+##   attacks and the third attack should wait a hair longer and move the player
+##   forward and do a little more damage than the other two, then wait a hair
+##   before starting the other little attacks"). Two short jabs, `STAB_DAMAGE`
+##   each, `STAB_EVERY` apart (&"jab_a", &"jab_b"); the third after
+##   `LUNGE_AFTER`, a lunge (&"lunge") that drives the player `LUNGE_STEP` forward
+##   for `LUNGE_DAMAGE`; then `LUNGE_REST` before the jabs begin again. A click
+##   held early fires on the beat; left alone for `COMBO_FORGET` the combo starts
+##   over.
+## - SWEEP (Q, "thrust"; the dash until note 167): the scout's delayed swipe
+##   (scout.gd). Wound up high on the left for `SWEEP_STRIKE`, then swept low
+##   through the legs, left to right: `SWEEP_DAMAGE` to everything in the arc and
+##   KNOCKED DOWN (`_knock_down`). `SWEEP_COOLDOWN` between sweeps; a blow in the
+##   wind-up cuts it off.
 ## - THROW (F, "slam"), once every `THROW_COOLDOWN` 10 s: drawn back over the shoulder and hurled down the
 ##   crosshair. Whatever it hits -- or `THROW_RANGE` out if it hits nothing --
 ##   it EXPLODES (`_explode`: `BLAST_DAMAGE` falling off to half at
@@ -19,7 +29,7 @@ extends Node3D
 ##   to the hand along a glowing tether, butt first. Nothing else can be done
 ##   with the spear until it is caught.
 ##
-## The stab's, dash's and wind-up's times here are all before `time_scale()`, the
+## The stab's, sweep's and wind-up's times here are all before `time_scale()`, the
 ## player's `attack_time_scale` (note 144).
 ##
 ## The model is built from primitives (an ash shaft, a leaf blade, an iron socket
@@ -28,22 +38,41 @@ extends Node3D
 ## thrown one is an ordinary copy.
 
 const STAB_DAMAGE := 10.0
-## Four jabs a second, evenly: out in 60 ms, home by 0.21 s, a beat at rest.
-## A click that comes too soon is not dropped but held (`_stab_queued`) and
-## fired the moment the next jab is due, so spam-clicking gives a steady
-## rhythm instead of one that depends on when each click happened to land.
+## Jabs four a second: out by STAB_OUT (where it bites), home by STAB_BACK. A
+## click that comes too soon is not dropped but held (`_stab_queued`) and fired
+## the moment the next is due, so spam-clicking gives a steady rhythm.
 const STAB_EVERY := 0.25
-const STAB_OUT := 0.06
-const STAB_BACK := 0.21
+const STAB_OUT := 0.07
+const STAB_BACK := 0.24
+## The third of the combo: after the second jab by LUNGE_AFTER (a hair longer
+## than STAB_EVERY), biting at LUNGE_OUT for LUNGE_DAMAGE, the player carried
+## LUNGE_STEP metres forward through it; the next jab LUNGE_REST after it. A
+## combo left COMBO_FORGET past its next beat starts over.
+const LUNGE_AFTER := 0.33
+const LUNGE_OUT := 0.2
+const LUNGE_DAMAGE := 16.0
+const LUNGE_REACH := 3.2
+const LUNGE_STEP := 1.1
+const LUNGE_STEP_TIME := 0.14
+const LUNGE_REST := 0.58
+const COMBO_FORGET := 0.4
+const COMBO := [&"jab_a", &"jab_b", &"lunge"]
 ## Eye to the furthest a stab reaches, and how wide it is.
 const STAB_REACH := 2.7
 const STAB_WIDTH := 0.45
 
-const DASH_SPEED := 17.0
-const DASH_TIME := 0.32
-const DASH_DAMAGE := 25.0
-const DASH_SHOVE := 9.0
-const DASH_COOLDOWN := 1.4
+## Q's sweep (the clip &"sweep"): it strikes at SWEEP_STRIKE (a long wind-up,
+## the scout's 0.6), everything within the low arc in front (SWEEP_REACH out,
+## SWEEP_WIDTH across, up to SWEEP_HIGH), knocked down for SWEEP_DOWN seconds and
+## thrown SWEEP_PUSH.
+const SWEEP_STRIKE := 0.55
+const SWEEP_DAMAGE := 22.0
+const SWEEP_REACH := 3.0
+const SWEEP_WIDTH := 3.6
+const SWEEP_HIGH := 1.3
+const SWEEP_DOWN := 1.4
+const SWEEP_PUSH := 6.0
+const SWEEP_COOLDOWN := 2.4
 
 const THROW_WINDUP := 0.24
 const THROW_SPEED := 46.0
@@ -58,9 +87,9 @@ const THROW_COOLDOWN := 10.0
 const BLAST_PUSH := 15.0
 
 ## Chance each blow staggers what it hits (`player.knock`): the stab seldom,
-## the dash and the thrown spear's blast (the heavy attack) always.
+## the lunge more often, the thrown spear's blast (the heavy attack) always.
 const STAB_STAGGER := 0.1
-const DASH_STAGGER := 1.0
+const LUNGE_STAGGER := 0.4
 const BLAST_STAGGER := 1.0
 
 ## From the hand to the point of the blade, and to the end of the butt: the
@@ -73,7 +102,7 @@ const BUTT_REACH := 0.67
 const REST_AT := Vector3(0.27, -0.36, -0.28)
 const AIM_FAR := Vector3(0.0, -0.05, -6.0)
 
-enum Pose { REST, STAB, DASH, WINDUP, AWAY, CATCH, BACK }
+enum Pose { REST, STAB, SWEEP, WINDUP, AWAY, CATCH, BACK }
 
 var player: CharacterBody3D
 
@@ -91,9 +120,14 @@ var _stab_hit := false
 ## The shoulder each stab is driven from, alternating (the player's view rolls
 ## to it -- `player._stab_effort`).
 var stab_side := 1.0
-var _dash_ready_at := 0.0
-var _dash_until := 0.0
-var _dash_hit := {}
+## Which of COMBO comes next, the one playing (a PlayerMotion move), and when
+## the combo is forgotten.
+var _combo := 0
+var _move := &""
+var _combo_until := 0.0
+var _lunged := false
+var _sweep_ready_at := 0.0
+var _swept := false
 var _released := false
 var _throw_ready_at := 0.0
 ## The thrown spear: null while in the hand.
@@ -145,7 +179,7 @@ func is_away() -> bool:
 ## In the middle of something a guard must wait for: a stab, a dash, a throw's
 ## wind-up, or away in flight.
 func busy() -> bool:
-	return is_away() or _pose in [Pose.STAB, Pose.DASH, Pose.WINDUP]
+	return is_away() or _pose in [Pose.STAB, Pose.SWEEP, Pose.WINDUP]
 
 
 ## What every spear attack's time is multiplied by.
@@ -153,23 +187,29 @@ func time_scale() -> float:
 	return player.attack_time_scale
 
 
-func dash_charge() -> float:
-	return clampf(1.0 - (_dash_ready_at - _now()) / (DASH_COOLDOWN * time_scale()), 0.0, 1.0)
+## The clip the spear is playing, [move, pose seconds], or [] (player.gd
+## `body_motion`: the body plays it too).
+func motion() -> Array:
+	if _pose == Pose.STAB and _move != &"":
+		return [_move, _pose_t]
+	if _pose == Pose.SWEEP:
+		return [&"sweep", _pose_t]
+	return []
 
 
-## For the HUD's attack icons (`player.attack_cooldowns`): throw, dash, stab as
+## For the HUD's attack icons (`player.attack_cooldowns`): throw, sweep, stab as
 ## [kind, seconds left, of how long, key]; -1 while the spear is away (the stab
-## and the dash cannot be used until it is caught). These clocks run whatever is
+## and the sweep cannot be used until it is caught). These clocks run whatever is
 ## in hand, so putting the spear away does not reset them.
 func attack_cooldowns() -> Array:
 	var now := _now()
 	var away := is_away()
 	var stab := maxf(_next_stab - _stab_clock, 0.0)
-	if _pose == Pose.DASH:
-		stab = maxf(stab, _dash_until - now)
+	if _pose == Pose.SWEEP:
+		stab = maxf(stab, (PlayerMotion.length(&"sweep") - _pose_t) * time_scale())
 	return [
 		[&"throw", maxf(_throw_ready_at - now, 0.0), THROW_COOLDOWN, "F"],
-		[&"dash", -1.0 if away else maxf(_dash_ready_at - now, 0.0), DASH_COOLDOWN * time_scale(), "Q"],
+		[&"sweep", -1.0 if away else maxf(_sweep_ready_at - now, 0.0), SWEEP_COOLDOWN * time_scale(), "Q"],
 		[&"stab", -1.0 if away else stab, STAB_EVERY * time_scale(), "LMB"],
 	]
 
@@ -186,7 +226,8 @@ func reset() -> void:
 	_flying = null
 	_pose = Pose.REST
 	_pose_t = 0.0
-	_dash_until = 0.0
+	_combo = 0
+	_move = &""
 	_released = false
 	_stab_queued = false
 	# A respawn starts the throw fresh, as it does the sword's slam.
@@ -198,7 +239,7 @@ func reset() -> void:
 # --- Keys -------------------------------------------------------------------------
 
 func stab() -> void:
-	if not ready_in_hand() or _pose == Pose.DASH:
+	if not ready_in_hand() or _pose == Pose.SWEEP:
 		return
 	if _stab_clock < _next_stab - 0.001:
 		# Too soon: held, and fired on the beat (`_physics_process`).
@@ -209,12 +250,25 @@ func stab() -> void:
 
 func _fire_stab() -> void:
 	_stab_queued = false
+	# Left too long, the combo starts over.
+	if _stab_clock > _combo_until:
+		_combo = 0
+	_move = COMBO[_combo]
 	# From the step it fires on. A held click fires on the very step it falls
-	# due, so held clicks come exactly STAB_EVERY apart -- and nothing, early
-	# or late, ever comes sooner than that.
-	_next_stab = _stab_clock + STAB_EVERY * time_scale()
+	# due, so held clicks come exactly on the beat -- and nothing, early or late,
+	# ever comes sooner than that: two jabs STAB_EVERY apart, the lunge a hair
+	# after (LUNGE_AFTER), then a breath (LUNGE_REST).
+	var gap: float = STAB_EVERY
+	if _combo == 1:
+		gap = LUNGE_AFTER
+	elif _combo == 2:
+		gap = LUNGE_REST
+	_next_stab = _stab_clock + gap * time_scale()
+	_combo_until = _next_stab + COMBO_FORGET * time_scale()
+	_combo = (_combo + 1) % COMBO.size()
 	_begin(Pose.STAB)
 	_stab_hit = false
+	_lunged = false
 	stab_side = -stab_side
 	player.spear_stabbed()
 
@@ -224,36 +278,29 @@ func stab_time() -> float:
 	return _pose_t if _pose == Pose.STAB else -1.0
 
 
-func dash() -> void:
+## Q: the delayed low sweep.
+func sweep() -> void:
 	var now := _now()
-	if not ready_in_hand() or _pose == Pose.DASH or now < _dash_ready_at:
+	if not ready_in_hand() or _pose == Pose.SWEEP or now < _sweep_ready_at:
 		return
-	var forward := -player.global_basis.z
-	forward.y = 0.0
-	if forward.length_squared() < 0.0001:
-		return
-	# Slower, not shorter: the same ground covered in a longer charge.
-	var time := DASH_TIME * time_scale()
-	_dash_ready_at = now + DASH_COOLDOWN * time_scale()
-	_dash_until = now + time
-	_dash_hit.clear()
-	_begin(Pose.DASH)
-	player.begin_spear_dash(forward.normalized() * DASH_SPEED / time_scale(), time)
+	_stab_queued = false
+	_sweep_ready_at = now + SWEEP_COOLDOWN * time_scale()
+	_swept = false
+	_begin(Pose.SWEEP)
 
 
 func throw() -> void:
-	if not ready_in_hand() or _pose == Pose.DASH or _now() < _throw_ready_at:
+	if not ready_in_hand() or _pose == Pose.SWEEP or _now() < _throw_ready_at:
 		return
 	_released = false
 	_begin(Pose.WINDUP)
 
 
-## A blow knocked them out of it (player.gd `_flinch`): the dash and the throw's
-## wind-up stop where they are. A stab bites as it starts, so it plays out.
+## A blow knocked them out of it (player.gd `_flinch`): the sweep's and the
+## throw's wind-up stop where they are. A stab bites as it starts, so it plays out.
 func interrupt() -> void:
 	_stab_queued = false
-	if _pose in [Pose.DASH, Pose.WINDUP]:
-		_dash_until = 0.0
+	if _pose == Pose.WINDUP or (_pose == Pose.SWEEP and not _swept):
 		_begin(Pose.BACK)
 
 
@@ -297,18 +344,21 @@ func _physics_process(delta: float) -> void:
 		# The held click, fired on the beat -- if the spear is still in hand
 		# and free (not blocking, drinking, ghosting...); otherwise forgotten.
 		if player.held_item() != &"spear" or not player._spear_free() \
-				or not ready_in_hand() or _pose == Pose.DASH:
+				or not ready_in_hand() or _pose == Pose.SWEEP:
 			_stab_queued = false
 		elif _stab_clock >= _next_stab - 0.001:
 			_fire_stab()
-	if _pose == Pose.STAB and not _stab_hit and _pose_t >= STAB_OUT * 0.6:
-		_stab_hit = true
-		_stab_strike()
-	if _pose == Pose.DASH:
-		if _now() < _dash_until:
-			_dash_strike()
-		else:
-			_begin(Pose.REST)
+	if _pose == Pose.STAB:
+		var lunge := _move == &"lunge"
+		if lunge and not _lunged and _pose_t >= LUNGE_OUT - 0.04:
+			_lunged = true
+			_lunge_step()
+		if not _stab_hit and _pose_t >= (LUNGE_OUT if lunge else STAB_OUT):
+			_stab_hit = true
+			_stab_strike(lunge)
+	if _pose == Pose.SWEEP and not _swept and _pose_t >= SWEEP_STRIKE:
+		_swept = true
+		_sweep_strike()
 	if _flying != null:
 		_update_flight(delta)
 
@@ -353,18 +403,16 @@ func _pose_transform() -> Transform3D:
 	var t := _pose_t
 	match _pose:
 		Pose.STAB:
-			var out := _aimed(Vector3(0.14, -0.26, -0.95), AIM_FAR, 0.1)
-			if t < STAB_OUT:
-				var k := t / STAB_OUT
-				return _from.interpolate_with(out, 1.0 - (1.0 - k) * (1.0 - k))
-			if t < STAB_BACK:
-				var k := (t - STAB_OUT) / (STAB_BACK - STAB_OUT)
-				return out.interpolate_with(_rest(), k * k * (3.0 - 2.0 * k))
-			_pose = Pose.REST
-			return _rest()
-		Pose.DASH:
-			var braced := _aimed(Vector3(0.16, -0.3, -0.6), AIM_FAR, 0.05)
-			return _from.interpolate_with(braced, minf(t / 0.08, 1.0))
+			if _move == &"" or t >= PlayerMotion.length(_move):
+				_pose = Pose.REST
+				_move = &""
+				return _rest()
+			return _motion_transform(_move, t)
+		Pose.SWEEP:
+			if t >= PlayerMotion.length(&"sweep"):
+				_pose = Pose.REST
+				return _rest()
+			return _motion_transform(&"sweep", t)
 		Pose.WINDUP:
 			var drawn := _aimed(Vector3(0.36, -0.02, 0.22), Vector3(0.2, 1.4, -6.0), 0.3)
 			var k := minf(t / THROW_WINDUP, 1.0)
@@ -383,17 +431,97 @@ func _pose_transform() -> Transform3D:
 	return _rest()
 
 
-# --- The stab and the dash --------------------------------------------------------
+## How far the first-person spear follows the capture's fist (note 167): the
+## jabs' short punches drive it this much further, the lunge's whole-body thrust
+## this much less; the sweep at its own size.
+const JAB_DRIVE := 1.9
+const LUNGE_DRIVE := 0.7
+## How far up the haft from the model's origin the fist holds it
+## (first_person_arms.gd SPEAR_UP).
+const GRIP_UP := 0.28
 
-func _stab_strike() -> void:
+
+## The clip `kind` at `t` in first person, played relative to the spear's rest
+## (PlayerMotion.fp_delta: the capture's fist since its stance). The jabs and the
+## lunge are driven down the crosshair, aimed at it all the way; the sweep turns
+## the spear with the fist, about the grip.
+func _motion_transform(kind: StringName, t: float) -> Transform3D:
+	var d := PlayerMotion.fp_delta(kind, t)
+	var w := PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
+	var rest := _rest()
+	var pose: Transform3D
+	if kind == &"sweep":
+		pose = _sweep_pose(t)
+	else:
+		var drive := LUNGE_DRIVE if kind == &"lunge" else JAB_DRIVE
+		var off := (d[1] as Vector3) * drive * w
+		# Down the crosshair: the punch's drift across the body halved.
+		off.x *= 0.5
+		pose = _aimed(REST_AT + off, AIM_FAR, 0.1 * w * stab_side)
+	var w_in := PlayerMotion.weight_in(kind, t)
+	return pose if w_in >= 1.0 else _from.interpolate_with(pose, w_in)
+
+
+## The sweep seen from inside the head (note 167). The capture behind it is a
+## whole-body spin -- its fist rises nearly a metre and the forearm turns end
+## over end -- so here it is posed on the clip's own timeline, with the body's
+## directions: wound up high on the left by SWEEP_WOUND, creeping to
+## SWEEP_STRIKE, swept low across from left to right by SWEEP_THROUGH, followed
+## through and home. Yaw (+ left) and pitch of where the spear points, and the
+## hand (head space), at the wind-up's top and the sweep's end.
+const SWEEP_WOUND := 0.40
+const SWEEP_THROUGH := 0.64
+const SWEEP_UP := Vector3(1.0, 0.55, 0.0)
+const SWEEP_DOWN_AIM := Vector3(-1.1, -0.4, 0.0)
+const SWEEP_HAND_UP := Vector3(0.04, -0.08, -0.55)
+const SWEEP_HAND_DOWN := Vector3(0.4, -0.52, -0.5)
+
+
+func _sweep_pose(t: float) -> Transform3D:
+	# 0..0.5 the wind-up, 0.5..1 the sweep: a hang at the top, then fast.
+	var s := PlayerMotion._warp([[0.0, 0.0], [SWEEP_WOUND, 0.46], [SWEEP_STRIKE, 0.5],
+		[SWEEP_THROUGH, 0.92], [0.78, 1.0]], t)
+	var aim: Vector3
+	var hand: Vector3
+	var rest_aim := Vector3(-0.06, 0.0, 0.0)
+	if s < 0.5:
+		var k := s / 0.5
+		aim = rest_aim.lerp(SWEEP_UP, k)
+		hand = REST_AT.lerp(SWEEP_HAND_UP, k)
+	else:
+		var k := (s - 0.5) / 0.5
+		aim = SWEEP_UP.lerp(SWEEP_DOWN_AIM, k)
+		# Out and low through the middle of it.
+		hand = SWEEP_HAND_UP.lerp(SWEEP_HAND_DOWN, k) + Vector3(0.0, -0.1, -0.1) * sin(PI * k)
+	var dir := Vector3(-sin(aim.x) * cos(aim.y), sin(aim.y), -cos(aim.x) * cos(aim.y))
+	var pose := _aimed(hand, hand + dir * 6.0, 0.4 * clampf(s * 2.0, 0.0, 1.0))
+	var home := PlayerMotion.weight_out(&"sweep", t)
+	return pose if home >= 1.0 else _rest().interpolate_with(pose, home)
+
+
+# --- The stab and the sweep -------------------------------------------------------
+
+## The lunge's step: the player carried forward with it (player.gd
+## `begin_spear_dash`, which stone stops as it stops anything).
+func _lunge_step() -> void:
+	var forward := -player.global_basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 0.0001:
+		return
+	var time := LUNGE_STEP_TIME * time_scale()
+	player.begin_spear_dash(forward.normalized() * LUNGE_STEP / time, time)
+
+
+func _stab_strike(lunge := false) -> void:
 	var cam: Camera3D = player.camera
 	var eye := cam.global_position
 	var fwd := -cam.global_basis.z
+	var reach := LUNGE_REACH if lunge else STAB_REACH
 	var box := BoxShape3D.new()
-	box.size = Vector3(STAB_WIDTH, STAB_WIDTH, STAB_REACH)
+	box.size = Vector3(STAB_WIDTH, STAB_WIDTH, reach)
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = box
-	q.transform = Transform3D(cam.global_basis, eye + fwd * STAB_REACH * 0.5)
+	q.transform = Transform3D(cam.global_basis, eye + fwd * reach * 0.5)
 	q.collision_mask = player.hitbox.collision_mask
 	q.exclude = [player.get_rid()]
 	var struck := false
@@ -403,38 +531,59 @@ func _stab_strike() -> void:
 			continue
 		if player._is_blocked(eye, body):
 			continue
-		body.take_damage(STAB_DAMAGE * _scale(), fwd)
-		player.knock(body, Vector3(fwd.x, 0.0, fwd.z).normalized() * 3.0, 0.1, STAB_STAGGER)
+		body.take_damage((LUNGE_DAMAGE if lunge else STAB_DAMAGE) * _scale(), fwd)
+		player.knock(body, Vector3(fwd.x, 0.0, fwd.z).normalized() * (5.0 if lunge else 3.0), 0.1,
+			LUNGE_STAGGER if lunge else STAB_STAGGER)
 		player.hit_landed.emit(body)
 		struck = true
 		break
-	player.set("_swing_kick", maxf(float(player.get("_swing_kick")), 0.6 if struck else 0.35))
+	var kick := (0.9 if struck else 0.6) if lunge else (0.6 if struck else 0.35)
+	player.set("_swing_kick", maxf(float(player.get("_swing_kick")), kick))
 
 
-func _dash_strike() -> void:
+## The sweep's blow: everything in the low arc in front, not behind stone, hurt
+## and knocked down.
+func _sweep_strike() -> void:
 	var fwd := -player.global_basis.z
 	fwd.y = 0.0
 	fwd = fwd.normalized()
-	var sphere := SphereShape3D.new()
-	sphere.radius = 0.9
+	var box := BoxShape3D.new()
+	box.size = Vector3(SWEEP_WIDTH, SWEEP_HIGH, SWEEP_REACH)
 	var q := PhysicsShapeQueryParameters3D.new()
-	q.shape = sphere
-	q.transform = Transform3D(Basis(), player.global_position + Vector3(0.0, 1.0, 0.0) + fwd * 0.9)
+	q.shape = box
+	var basis := Basis.looking_at(fwd, Vector3.UP)
+	q.transform = Transform3D(basis, player.global_position + Vector3(0.0, SWEEP_HIGH * 0.5, 0.0)
+		+ fwd * SWEEP_REACH * 0.5)
 	q.collision_mask = player.hitbox.collision_mask
 	q.exclude = [player.get_rid()]
-	for hit in player.get_world_3d().direct_space_state.intersect_shape(q, 16):
+	var eye: Vector3 = player.camera.global_position
+	var struck := false
+	for hit in player.get_world_3d().direct_space_state.intersect_shape(q, 24):
 		var body := hit["collider"] as Node3D
-		if body == null or _dash_hit.has(body) or not body.has_method("take_damage") or body.has_method("swat"):
+		if body == null or not body.has_method("take_damage") or body.has_method("swat"):
 			continue
-		_dash_hit[body] = true
-		body.take_damage(DASH_DAMAGE * _scale(), fwd)
-		# Thrown aside, off the line of the charge.
-		var side := player.global_basis.x
-		var to := body.global_position - player.global_position
-		side = side if to.dot(side) >= 0.0 else -side
-		player.knock(body, (side + fwd * 0.6).normalized() * DASH_SHOVE, 0.5, DASH_STAGGER)
+		if player._is_blocked(eye, body):
+			continue
+		var away := body.global_position - player.global_position
+		away.y = 0.0
+		away = away.normalized() if away.length_squared() > 1e-4 else fwd
+		body.take_damage(SWEEP_DAMAGE * _scale(), away)
+		_knock_down(body, away)
 		player.hit_landed.emit(body)
-		player.set("_shake", maxf(float(player.get("_shake")), 0.25))
+		struck = true
+	player.set("_swing_kick", maxf(float(player.get("_swing_kick")), 1.0 if struck else 0.6))
+	player.set("_shake", maxf(float(player.get("_shake")), 0.22 if struck else 0.08))
+
+
+## Off its feet: the enemies with a fall of their own take it
+## (`knock_down_from`: the decrepit's topple, the proels' throw onto the back);
+## the rest are thrown and stunned for as long as a fall would take.
+func _knock_down(body: Node3D, away: Vector3) -> void:
+	if body.has_method("knock_down_from"):
+		body.call("knock_down_from", away)
+		player.staggered_enemy.emit(body)
+		return
+	player.knock(body, away * SWEEP_PUSH, SWEEP_DOWN, 1.0)
 
 
 # --- The throw ------------------------------------------------------------------

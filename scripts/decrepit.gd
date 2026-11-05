@@ -1280,6 +1280,15 @@ func _on_staggered() -> void:
 
 # --- Parried: thrown on its back ------------------------------------------------------
 
+## Swept off its feet (the spear's Q, spear.gd `_knock_down`, note 167): over on
+## its back as a parry throws it, slid back the way it was swept.
+func knock_down_from(away: Vector3) -> void:
+	if _dying:
+		return
+	_knockback = Vector3(away.x, 0.0, away.z).normalized() * 5.0
+	_start_knockdown()
+
+
 func _start_knockdown() -> void:
 	if _dying or _knock_t >= 0.0:
 		return

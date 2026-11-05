@@ -73,7 +73,7 @@ TAU = math.tau
 # and BLOW_TEMPO with TEMPO. `reel` and the gaits are not blows and do not take it.
 LIGHT = (0.9, 0.24, 1.3)
 HEAVY = (1.25, 0.3, 1.85)
-TEMPO = 1.725  # 1.15 (note 142) x 1.5 (note 148)
+TEMPO = 2.24  # 1.15 (note 142) x 1.5 (note 148) x 1.3 (note 167)
 # How much of each recovery is keyed; the last of those keys is stretched to fill it,
 # running down to a stand (`Blow.clock`, note 138).
 LIGHT_KEYED, LIGHT_SETTLE = 1.0, 0.7

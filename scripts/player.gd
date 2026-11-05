@@ -730,6 +730,14 @@ func _spear_stabbing() -> bool:
 	return spear != null and spear.has_method("stab_time") and float(spear.call("stab_time")) >= 0.0
 
 
+## The spear's Q sweep is under way (note 167): planted into it like the heavy swipe.
+func _spear_sweeping() -> bool:
+	if spear == null or held_item() != &"spear" or not spear.has_method("motion"):
+		return false
+	var m: Array = spear.call("motion")
+	return not m.is_empty() and m[0] == &"sweep"
+
+
 ## (roll deg, pitch deg, drop m, fov deg) for the spear's stab; `_stab_k` is
 ## left as the drive, 0..1, for the push forward.
 func _stab_effort() -> Vector4:
@@ -1289,6 +1297,9 @@ func _ready() -> void:
 	# The knight's shadow (coop_avatar.gd); co-op turns it into the visible body.
 	if _avatar == null:
 		_make_body(load("res://scripts/coop_avatar.gd").SOLO_LAYER, false)
+	# Every attack clip baked now, with the level, not on the first swing of each
+	# (3-7 ms apiece, note 167).
+	PlayerMotion.warm.call_deferred()
 
 
 	var slam_shape := SphereShape3D.new()
@@ -1354,6 +1365,10 @@ func _process(delta: float) -> void:
 	_update_dash_view(delta)
 	_update_head(delta)
 	_update_pose(delta)
+	if _parry_t >= 0.0:
+		_parry_t += delta
+		if _parry_t >= PlayerMotion.length(&"parry"):
+			_parry_t = -1.0
 	_update_blade_glow()
 	_update_sweep_trail(delta)
 	_update_colour(delta)
@@ -1502,6 +1517,9 @@ func _update_head(delta: float) -> void:
 	# The wave slash's effort: a lean, a nod and a crouch (its FOV is in
 	# `_update_dash_view`).
 	var effort := _wave_effort()
+	# The clip's own rise and fall (note 167): the ult's leap and landing, every
+	# cut's dip into it.
+	effort.z -= _motion_rise()
 	if _stab_strain > 0.0:
 		_stab_strain = maxf(_stab_strain - delta * 1.1 / attack_time_scale, 0.0)
 	var stab := _stab_effort()
@@ -1915,13 +1933,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 	elif event.is_action_pressed("thrust"):
 		_attack_key_spills_drink()
-		# Q: the heavy swipe with the sword; the dash with the spear; the axe thrown.
+		# Q: the heavy swipe with the sword; the delayed low sweep with the spear
+		# (note 167); the axe thrown.
 		if Coop.aim_ready(self) and held_item() == &"sword" \
 				and not _dashing:
 			_start_heavy()
 		elif Coop.aim_ready(self) and held_item() == &"spear" \
 				and _spear_free():
-			spear.dash()
+			spear.sweep()
 		elif Coop.aim_ready(self) and held_item() == &"axe" \
 				and _spear_free():
 			axe.throw()
@@ -2129,7 +2148,8 @@ func _physics_process(delta: float) -> void:
 			* (block_move_scale if _blocking else 1.0) \
 			* (drink_move_scale if is_drinking() else 1.0) \
 			* (wade_speed_scale if depth > 0.3 else 1.0) * carry_speed_scale * _beam_speed_scale() \
-			* (spear_stab_move_scale if _spear_stabbing() else 1.0) * _axe_speed() * _flinch_speed_scale()
+			* (spear_stab_move_scale if _spear_stabbing() else (heavy_move_scale if _spear_sweeping() else 1.0)) \
+			* _axe_speed() * _flinch_speed_scale()
 		var target_velocity := direction * walk
 		# Damping is raised during a swing so the lunge surge is gone well before
 		# the stroke ends, leaving the back half of it visibly slower.
@@ -2276,14 +2296,14 @@ func _update_sweep_trail(delta: float) -> void:
 			for k in range(1, steps + 1):
 				var f := float(k) / float(steps)
 				var at := lerpf(from_t, _pose_time, f)
+				var pose := _motion_pose(_pose_kind, at)
 				if _pose_kind == &"wave":
 					# The wave slash's streak is gold and wide (a third element, true).
-					_tip_trail.push_front([_wave_pose(at) * point, lerpf(before, now, f), true])
+					_tip_trail.push_front([pose * point, lerpf(before, now, f), true])
 				elif _pose_kind == &"heavy":
 					# The heavy swipe's is white and wider (a third element, false).
-					_tip_trail.push_front([_heavy_pose(at) * point, lerpf(before, now, f), false])
+					_tip_trail.push_front([pose * point, lerpf(before, now, f), false])
 				else:
-					var pose := _swing_pose(at, _pose_kind == &"chop")
 					_tip_trail.push_front([pose * point, lerpf(before, now, f)])
 			_trail_pose_t = _pose_time
 		else:
@@ -2341,10 +2361,9 @@ var _trail_frac := -1.0
 
 
 ## The point on the blade (sword model space) the trail follows: the one that
-## actually passes through the crosshair. Found once by running a cut through
-## the pose function a millisecond at a time and taking, at the moment the blade
-## comes nearest the view's axis, the point on it nearest that axis. (A fixed
-## distance worked out from `SWING_CROSS` passed 4 cm high: 16 px.)
+## actually passes nearest the crosshair. Found once by running the forehand
+## (player_motion.gd) through a millisecond at a time and taking, at the moment
+## the blade comes nearest the view's axis, the point on it nearest that axis.
 func _trail_point() -> Vector3:
 	if _trail_frac < 0.0:
 		var base := _sword_rest * _blade_base
@@ -2354,7 +2373,7 @@ func _trail_point() -> Vector3:
 		_trail_frac = 1.0
 		var t := SWING_WIND
 		while t <= SWING_HOLD:
-			var pose := _swing_pose(t, false)
+			var pose := PlayerMotion.fp_sword(&"slash", t, _sword_grip(), _blade_frame)
 			var g := pose * base
 			var u := pose.basis * span
 			# Closest points between the blade's line and the view's axis.
@@ -2448,7 +2467,9 @@ func _bite_end() -> float:
 		return WAVE_HOLD
 	if _pose_kind == &"heavy":
 		return HEAVY_HOLD
-	return SWING_HOLD
+	if _pose_kind == &"chop":
+		return CHOP_BITE.y
+	return SLASH_BITE.y
 
 
 ## A committed stroke (the wave slash or the heavy swipe) is under way and has not
@@ -2773,6 +2794,8 @@ func _on_guarded(parry: bool, blow: Vector3, attacker: Node3D, blow_damage := 0.
 			toward = -camera.global_basis.z
 		at = eye + toward.normalized() * 1.15 + Vector3(0.0, -0.12, 0.0)
 	if parry:
+		# The recoil off it, in both views (note 167).
+		_parry_t = 0.0
 		if attacker != null and is_instance_valid(attacker) and attacker.has_method("apply_knockback"):
 			var away := attacker.global_position - global_position
 			away.y = 0.0
@@ -2949,69 +2972,33 @@ func _warm_guard_flash() -> void:
 ## Idle clip, frame 0: where every pose ends.
 const REST_POS := Vector3(0.34, -0.85, -0.35)
 const REST_ROT := Vector3(-1.113895, 0.0, -0.244346)
-## A stroke's timeline, seconds (note 164, the user: "a more elaborate, hyper
-## realistic animation to where the sword hits a little later"; it bit from 0.07):
-## the GATHER, the blade drawn back past the start of its arc and up into a
-## chamber, the hand back and high, quick off and slowing in, to SWING_GATHER;
-## the LOAD, creeping on a little further as the arm tenses, to SWING_WIND; the
-## CUT, accelerating hard to its fastest across the middle and on past the end of
-## the arc (SWING_OVER), decelerating, the wrist rolling the edge over and the
-## blade dropping through the target, to SWING_HOLD; a small rebound off the end
-## of it to SWING_SETTLE; home by SWING_END. The blade bites from SWING_WIND to
-## SWING_HOLD -- the whole of the cut. These and the wave slash's and slam's below
-## run on `_pose_time`, which `attack_time_scale` stretches (`ATTACK_POSES`), so in
-## real seconds each is that much longer.
-const SWING_GATHER := 0.08
-const SWING_WIND := 0.125
-const SWING_HOLD := 0.31
-const SWING_SETTLE := 0.37
-const SWING_END := 0.54
-## The gather: drawn back this far past the start of the arc (radians), then this
-## much more through the load; pitched up into the chamber this much; the hand
-## there (head space, +x toward the wind-up's side).
-const SWING_PULL := 0.22
-const SWING_CREEP := 0.07
-const SWING_CHAMBER := 0.2
-const SWING_CHAMBER_HAND := Vector3(0.05, 0.05, 0.07)
-## The cut: on past the end of the arc this far, dropping this much at its end,
-## the edge rolled over this far; the hand driven forward at its middle and drawn
-## across and down at its end; and a rebound of this much off the end.
-const SWING_OVER := 0.24
-const SWING_DIG := -0.14
-const SWING_ROLL := 0.5
-const SWING_REACH := Vector3(0.0, 0.0, -0.07)
-const SWING_ACROSS := Vector3(-0.05, -0.04, 0.02)
-const SWING_RECOIL := 0.06
+## The cuts (note 167): each a stretch of a Higgsfield clip played through a
+## time warp (player_motion.gd MOVES &"slash" / &"chop"); these are when its blade
+## bites, pose seconds. The forehand bites from 0.18 (0.225 s real; it was 0.156
+## in note 164) to 0.29; the backhand, which starts where the forehand ends, from
+## 0.15 to 0.26. SWING_WIND / SWING_HOLD are the forehand's, for whatever asks
+## of "a cut" in general (the HUD's tile, the trail's crosshair point).
+const SLASH_BITE := Vector2(0.18, 0.29)
+const CHOP_BITE := Vector2(0.15, 0.26)
+const SWING_WIND := 0.18
+const SWING_HOLD := 0.29
 ## The slam's: blade down onto the floor ahead, held, then up as the player rises.
 const SLAM_STRIKE := 0.05
 const SLAM_HOLD := 0.14
-## The stroke's arc: how far it opens either side of straight ahead, always the
-## same whatever is around. The blade crosses the crosshair SWING_CROSS metres
-## out (`_cut_pitch`), on a diagonal from high to low of SWING_TILT radians.
-const SWING_OPEN := 1.66
-const SWING_CROSS := 2.0
-const SWING_TILT := 0.42
 ## How far above the floor the struck tip rests.
 const SLAM_TIP_LIFT := 0.03
-## The wave slash's timeline (note 160), pose seconds (x `attack_time_scale` in
-## real ones): the blade hauled up over the right shoulder by WAVE_RAISE and
-## held there straining, the gold building on it, to WAVE_WIND; the cut from
-## high right to low left to WAVE_CUT, the wave thrown at WAVE_FIRE as the
-## blade crosses the middle; held to WAVE_HOLD, when the player has their legs
-## back; home by WAVE_END. A cut is done by 0.42.
-const WAVE_RAISE := 0.32
-const WAVE_WIND := 0.82
-const WAVE_CUT := 0.95
-const WAVE_FIRE := 0.885
-const WAVE_HOLD := 1.02
-const WAVE_END := 1.36
-## Where the blade is wound to and cut to: yaw from straight ahead (+ right) and
-## pitch; and how far the hand is lifted and drawn back at the top (head space).
-const WAVE_FROM_YAW := 0.75
-const WAVE_FROM_PITCH := 0.9
-const WAVE_TO_YAW := -1.75
-const WAVE_TO_PITCH := -0.7
-const WAVE_LIFT := Vector3(0.02, 0.28, 0.0)
+## The wave slash's timeline, pose seconds (x `attack_time_scale` in real ones):
+## the clip Sword Judgment (note 167, player_motion.gd &"wave"). A crouch to
+## WAVE_RAISE, the leap with the blade wheeled up and round, the gold building on
+## it, to WAVE_WIND; the airborne cut to WAVE_CUT, the wave thrown at WAVE_FIRE;
+## landed and committed to WAVE_HOLD; then the flourish and the last sweep, which
+## another stroke may cut into, home by WAVE_END.
+const WAVE_RAISE := 0.22
+const WAVE_WIND := 0.58
+const WAVE_CUT := 0.68
+const WAVE_FIRE := 0.64
+const WAVE_HOLD := 0.76
+const WAVE_END := 2.35
 ## The streak off the cut: gold, and this many times a cut's width.
 const WAVE_TRAIL_COLOR := Color(1.0, 0.74, 0.28)
 const WAVE_TRAIL_WIDTH := 3.0
@@ -3030,23 +3017,17 @@ const GUARD_DOWN := 0.16
 ## The poses that are attacks, on `attack_time_scale`. The guard and the scripted
 ## poses (a haft strike, the cage stab) keep their own time.
 const ATTACK_POSES: Array[StringName] = [&"slash", &"chop", &"wave", &"heavy", &"raise", &"slam"]
-## The heavy swipe's timeline (note 162), pose seconds (x `attack_time_scale` in
-## real ones: the cut lands ~0.6 s after Q, a plain cut's in ~0.1): the blade
-## cocked back over the right shoulder by HEAVY_RAISE, held there creeping back
-## to HEAVY_WIND; the cut round to low on the left by HEAVY_CUT, biting from
-## HEAVY_BITE (the blade already moving) to HEAVY_HOLD; home by HEAVY_END.
-const HEAVY_RAISE := 0.16
-const HEAVY_WIND := 0.47
-const HEAVY_BITE := 0.475
-const HEAVY_CUT := 0.6
-const HEAVY_HOLD := 0.68
-const HEAVY_END := 0.95
-## Cocked back to: yaw (+ right) and pitch of the blade, the hand lifted and
-## drawn back (head space). The cut ends wider than a plain one.
-const HEAVY_FROM_YAW := 1.05
-const HEAVY_FROM_PITCH := 0.32
-const HEAVY_LIFT := Vector3(0.06, 0.13, 0.08)
-const HEAVY_TO_YAW := -1.95
+## The heavy swipe's timeline, pose seconds (x `attack_time_scale` in real ones):
+## the clip Charged Slash (note 167, player_motion.gd &"heavy"; the cut lands
+## 0.78 s after Q, 0.59 in note 162). A long gathering sweep over to the left by
+## HEAVY_RAISE, held there creeping to HEAVY_WIND; the explosive backhand back
+## across to HEAVY_CUT, biting from HEAVY_BITE to HEAVY_HOLD; home by HEAVY_END.
+const HEAVY_RAISE := 0.3
+const HEAVY_WIND := 0.62
+const HEAVY_BITE := 0.62
+const HEAVY_CUT := 0.75
+const HEAVY_HOLD := 0.76
+const HEAVY_END := 1.15
 ## Its streak: a cut's, this many times as wide.
 const HEAVY_TRAIL_WIDTH := 1.8
 
@@ -3084,15 +3065,11 @@ func _update_pose(delta: float) -> void:
 	_pose_time += step
 	if _attack_queued:
 		_take_queued_attack()
-	var length := SWING_END
+	var length := PlayerMotion.length(_pose_kind) if PlayerMotion.has_move(_pose_kind) else 0.0
 	if _pose_kind == &"slam":
 		length = slam_recover_time + SLAM_STRIKE
 	elif _pose_kind == &"haft":
 		length = HAFT_END
-	elif _pose_kind == &"wave":
-		length = WAVE_END
-	elif _pose_kind == &"heavy":
-		length = HEAVY_END
 	elif _pose_kind == &"block":
 		length = INF
 	elif _pose_kind == &"unblock":
@@ -3122,7 +3099,7 @@ func _update_pose(delta: float) -> void:
 			_land_haft()
 		return
 	if _pose_kind == &"wave":
-		sword_pivot.transform = _wave_pose(_pose_time)
+		sword_pivot.transform = _motion_pose(&"wave", _pose_time)
 		# The blade never bites: the wave it throws is the damage.
 		_hit_window_open = false
 		# The gold streak through the cut (`_update_sweep_trail`).
@@ -3131,7 +3108,7 @@ func _update_pose(delta: float) -> void:
 			_fire_wave()
 		return
 	if _pose_kind == &"heavy":
-		sword_pivot.transform = _heavy_pose(_pose_time)
+		sword_pivot.transform = _motion_pose(&"heavy", _pose_time)
 		_hit_window_open = _pose_time >= HEAVY_BITE and _pose_time <= HEAVY_HOLD
 		_trail_on = _pose_time >= HEAVY_WIND and _pose_time <= HEAVY_HOLD + 0.03
 		if not _heavy_lunged and _pose_time >= HEAVY_WIND and not _dead:
@@ -3139,7 +3116,7 @@ func _update_pose(delta: float) -> void:
 		return
 	if _pose_kind == &"block":
 		var k := clampf(_pose_time / GUARD_UP, 0.0, 1.0)
-		sword_pivot.transform = _blend(_pose_from, _guard_pose(), 1.0 - (1.0 - k) * (1.0 - k))
+		sword_pivot.transform = _parried_pose(_blend(_pose_from, _guard_pose(), 1.0 - (1.0 - k) * (1.0 - k)))
 		return
 	if _pose_kind == &"unblock":
 		sword_pivot.transform = _blend(_pose_from, _rest_pose(),
@@ -3149,11 +3126,186 @@ func _update_pose(delta: float) -> void:
 		sword_pivot.transform = _stab_pose(_pose_time)
 		_update_stab_events()
 		return
-	sword_pivot.transform = _swing_pose(_pose_time, _pose_kind == &"chop")
-	_hit_window_open = _pose_time >= SWING_WIND and _pose_time <= SWING_HOLD
-	_trail_on = _pose_time >= SWING_WIND - 0.01 and _pose_time <= SWING_HOLD + 0.03
-	if not _cut_struck and _pose_time >= SWING_WIND and not _dead:
+	sword_pivot.transform = _motion_pose(_pose_kind, _pose_time)
+	var bite := CHOP_BITE if _pose_kind == &"chop" else SLASH_BITE
+	_hit_window_open = _pose_time >= bite.x and _pose_time <= bite.y
+	_trail_on = _pose_time >= bite.x - 0.01 and _pose_time <= bite.y + 0.03
+	if not _cut_struck and _pose_time >= bite.x and not _dead:
 		_strike_cut()
+
+
+## How far the view rides the body's rise and fall in a clip move (note 167): the
+## head bone's height over its stance, this much of it -- most of the ult's leap,
+## a little of every cut's dip.
+const MOTION_RISE := 0.35
+const MOTION_RISE_WAVE := 0.8
+
+
+func _motion_rise() -> float:
+	var m := body_motion()
+	if m.is_empty():
+		return 0.0
+	var kind: StringName = m[0]
+	var t: float = m[1]
+	var k := PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
+	return PlayerMotion.head_rise(kind, t) * k * (MOTION_RISE_WAVE if kind == &"wave" else MOTION_RISE)
+
+
+## The clip move the body is in, [kind, pose seconds], or [] (coop_avatar.gd poses
+## the knight from it; the view rides it, `_motion_rise`). The sword's own, or
+## the spear's (spear.gd `motion`).
+func body_motion() -> Array:
+	if PlayerMotion.has_move(_pose_kind) and _pose_time >= 0.0:
+		return [_pose_kind, _pose_time]
+	if spear != null and held_item() == &"spear" and spear.has_method("motion"):
+		return spear.call("motion")
+	return []
+
+
+## The first-person arm's shoulder, moved as the clip's (head space): weighted
+## in and out with the move (first_person_arms.gd `_pose`).
+func motion_shoulder_shift() -> Vector3:
+	var m := body_motion()
+	# The first-person sweep is posed, not the capture's spin (spear.gd
+	# `_sweep_pose`): its shoulder stays where the arm has it.
+	if not m.is_empty() and m[0] != &"sweep":
+		var kind: StringName = m[0]
+		var t: float = m[1]
+		var w := PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
+		var shift := PlayerMotion.fp_shoulder_shift(kind, t)
+		# The spear's moves are played relative to their stance.
+		if PlayerMotion.move(kind).get("relative", false):
+			shift -= PlayerMotion.fp_shoulder_shift(kind, 0.0)
+		return shift * w
+	if _parry_t >= 0.0:
+		var w := PlayerMotion.weight_in(&"parry", _parry_t) * PlayerMotion.weight_out(&"parry", _parry_t)
+		return (PlayerMotion.fp_shoulder_shift(&"parry", _parry_t) - PlayerMotion.fp_shoulder_shift(&"parry", 0.0)) * w * PARRY_SHIFT
+	return Vector3.ZERO
+
+
+## A clip move's sword (note 167): where the capture's fist puts it
+## (`PlayerMotion.fp_sword`), blended in from the pose it began from and out to
+## rest at its end -- so every move runs into every other.
+func _motion_pose(kind: StringName, t: float) -> Transform3D:
+	var pose := PlayerMotion.fp_sword(kind, t, _sword_grip(), _blade_frame)
+	# Aimed: the stroke turned about the eye so its blade crosses the line of the
+	# crosshair at CUT_ELEVATION (`_aim_fix`) -- in full through the bite, eased
+	# in over the wind-up and out over the recovery, so each move starts and ends
+	# as captured and runs into the next without a jolt.
+	pose = Transform3D(Basis(Vector3.RIGHT, _aim_fix(kind) * _aim_weight(kind, t)), Vector3.ZERO) * pose
+	var w_in := PlayerMotion.weight_in(kind, t)
+	if w_in < 1.0:
+		pose = _arc_blend(_pose_from, pose, w_in)
+	var w_out := PlayerMotion.weight_out(kind, t)
+	if w_out < 1.0:
+		pose = _arc_blend(_rest_pose(), pose, w_out)
+	return pose
+
+
+## Where a cut's blade crosses the crosshair's line, degrees below it: through
+## an enemy's chest. The captures cut high -- the backhand's tip crossed in front
+## 3 m up, the heavy's at 2-2.6 m, over a proel's head -- so each stroke is
+## turned down about the eye, as a whole, by however much it takes (worked out
+## once per move: `_aim_fix`), measured at the blade's sweet spot (CUT_SPOT).
+const CUT_ELEVATION := -7.0
+const CUT_SPOT := 0.6
+const AIM_FIX_MAX := 50.0
+var _aim_fixes := {}
+
+
+## The pitch (radians, about the head's X) that puts `kind`'s cut through
+## CUT_ELEVATION: its bite run through a millisecond at a time, and the height
+## at which the blade's sweet spot crosses the vertical plane through the
+## crosshair turned onto that elevation. Moves with no
+## bite (the parry) are left as they are.
+func _aim_fix(kind: StringName) -> float:
+	if _aim_fixes.has(kind):
+		return _aim_fixes[kind]
+	var bite := _bite_of(kind)
+	var fix := 0.0
+	if bite.x >= 0.0:
+		# The blade's sweet spot, CUT_SPOT of the way from the guard to the tip.
+		var spot := _sword_rest * _blade_base.lerp(_blade_tip, CUT_SPOT)
+		var sum := 0.0
+		var n := 0
+		var t := bite.x
+		var prev := Vector3.ZERO
+		var first := true
+		while t <= bite.y:
+			var at := PlayerMotion.fp_sword(kind, t, _sword_grip(), _blade_frame) * spot
+			# The moment it crosses x = 0, in front of the eye.
+			if not first and (prev.x <= 0.0) != (at.x <= 0.0) and at.z < -0.3:
+				var mid := prev.lerp(at, prev.x / (prev.x - at.x))
+				sum += atan2(mid.y, -mid.z)
+				n += 1
+			prev = at
+			first = false
+			t += 0.001
+		if n > 0:
+			fix = clampf(deg_to_rad(CUT_ELEVATION) - sum / n, -deg_to_rad(AIM_FIX_MAX), deg_to_rad(AIM_FIX_MAX))
+	_aim_fixes[kind] = fix
+	return fix
+
+
+func _aim_weight(kind: StringName, t: float) -> float:
+	var bite := _bite_of(kind)
+	if bite.x < 0.0:
+		return 0.0
+	var end := PlayerMotion.length(kind)
+	return smoothstep(0.0, bite.x, t) * (1.0 - smoothstep(bite.y, bite.y + (end - bite.y) * 0.6, t))
+
+
+## When `kind`'s blade bites (pose s), or (-1, -1) for a move that does not.
+func _bite_of(kind: StringName) -> Vector2:
+	match kind:
+		&"slash": return SLASH_BITE
+		&"chop": return CHOP_BITE
+		&"heavy": return Vector2(HEAVY_BITE, HEAVY_HOLD)
+		&"wave": return Vector2(WAVE_WIND, WAVE_CUT)
+	return Vector2(-1.0, -1.0)
+
+
+## Out and down from the eye while a pose blends between two (head space, at the
+## middle of the blend): a straight line from the follow-through high on the left
+## to rest low on the right ran the fist under the eye and the arm across it.
+const BLEND_ARC := Vector3(0.0, -0.18, -0.32)
+
+
+func _arc_blend(a: Transform3D, b: Transform3D, w: float) -> Transform3D:
+	var p := _blend(a, b, w)
+	p.origin += BLEND_ARC * (4.0 * w * (1.0 - w))
+	return p
+
+
+## Where the fist closes on the sword, in the pivot's frame: 0.42 of the way from
+## the guard to the pommel (first_person_arms.gd holds it there too).
+func _sword_grip() -> Vector3:
+	return _sword_rest * _blade_base.lerp(_blade_pommel, 0.42)
+
+
+## Seconds into the parry's recoil (note 167: the clip &"parry" played over the
+## guard), or -1.
+var _parry_t := -1.0
+
+
+## The guard with a parry's recoil on it: the clip's fist motion since its stance,
+## turned about the grip.
+func _parried_pose(guard: Transform3D) -> Transform3D:
+	if _parry_t < 0.0:
+		return guard
+	var d := PlayerMotion.fp_delta(&"parry", _parry_t)
+	var w := PlayerMotion.weight_in(&"parry", _parry_t) * PlayerMotion.weight_out(&"parry", _parry_t)
+	var turn := Basis.IDENTITY.slerp(d[0] as Basis, w * PARRY_TURN)
+	var grip := guard * _sword_grip()
+	var b := turn * guard.basis
+	return Transform3D(b, grip + (d[1] as Vector3) * w * PARRY_SHIFT - b * _sword_grip())
+
+
+## How much of the capture's parry the guard takes: its fist snaps back 0.5 m and
+## turns 60 degrees off a blow; over the guard, already drawn back, that put the
+## hilt in the face.
+const PARRY_TURN := 0.55
+const PARRY_SHIFT := 0.4
 
 
 func _rest_pose() -> Transform3D:
@@ -3187,44 +3339,6 @@ func _update_lunge(delta: float) -> void:
 		_lunge_age = -1.0
 
 
-## The blade on the wave slash's arc at `yaw` / `pitch`, the hand lifted and
-## drawn back by `lift` (0..1) of WAVE_LIFT, travelling left.
-func _wave_arc(yaw: float, pitch: float, lift: float) -> Transform3D:
-	var pose := _arc_pose(yaw, pitch, true)
-	pose.origin += WAVE_LIFT * lift
-	return pose
-
-
-## The wave slash in head space: hauled up from wherever the blade is to high
-## over the right shoulder (WAVE_RAISE), held there straining -- a slow creep
-## further back and a tremble that builds -- to WAVE_WIND; then cut round the
-## arc to low on the left (fast in the middle, WAVE_CUT), held, and brought
-## home like a cut's recovery.
-func _wave_pose(t: float) -> Transform3D:
-	if t < WAVE_RAISE:
-		var k := t / WAVE_RAISE
-		k = 1.0 - (1.0 - k) * (1.0 - k)
-		var aim := _aim_of(_pose_from)
-		return _blend(_pose_from, _wave_arc(lerpf(aim.x, WAVE_FROM_YAW, k),
-			lerpf(aim.y, WAVE_FROM_PITCH, k), k), k)
-	if t < WAVE_WIND:
-		var s := (t - WAVE_RAISE) / (WAVE_WIND - WAVE_RAISE)
-		var shake := 0.012 * s * s
-		var pose := _wave_arc(WAVE_FROM_YAW + 0.1 * s + sin(t * 57.0) * shake,
-			WAVE_FROM_PITCH + 0.06 * s + sin(t * 43.0 + 1.3) * shake, 1.0 + 0.15 * s)
-		return pose
-	if t < WAVE_CUT:
-		var s := smoothstep(0.0, 1.0, (t - WAVE_WIND) / (WAVE_CUT - WAVE_WIND))
-		return _wave_arc(lerpf(WAVE_FROM_YAW + 0.1, WAVE_TO_YAW, s),
-			lerpf(WAVE_FROM_PITCH + 0.06, WAVE_TO_PITCH, s), 1.15 * (1.0 - s) * (1.0 - s))
-	if t < WAVE_HOLD:
-		return _wave_arc(WAVE_TO_YAW, WAVE_TO_PITCH, 0.0)
-	var r := smoothstep(0.0, 1.0, (t - WAVE_HOLD) / (WAVE_END - WAVE_HOLD))
-	var home := _aim_of(_rest_pose())
-	return _blend(_arc_pose(lerpf(WAVE_TO_YAW, home.x, r), lerpf(WAVE_TO_PITCH, home.y, r), true),
-		_rest_pose(), r)
-
-
 ## The camera through the wave slash: (roll deg, pitch deg, drop m, fov deg).
 ## The wind-up leans back and over to the right, head up a little, crouching,
 ## the view drawn in tight and trembling more the longer it is held; the cut
@@ -3253,45 +3367,6 @@ func _wave_effort() -> Vector4:
 		return coil.lerp(drive, s)
 	var r := smoothstep(0.0, 1.0, (t - WAVE_HOLD) / (WAVE_END - WAVE_HOLD))
 	return drive * (1.0 - r)
-
-
-## The heavy swipe in head space (note 162): carried round the arc from wherever
-## the blade is to cocked back over the right shoulder (HEAVY_RAISE), held there
-## creeping further back with a slight tremble to HEAVY_WIND; then swept flat
-## round the arc to low on the far left (HEAVY_CUT), on the cut's own pitch
-## (`_cut_pitch`) by the time it reaches the middle, so it passes through the
-## crosshair as a plain cut does; held, and brought home like a cut's recovery.
-func _heavy_pose(t: float) -> Transform3D:
-	if t < HEAVY_RAISE:
-		var k := t / HEAVY_RAISE
-		k = 1.0 - (1.0 - k) * (1.0 - k)
-		var aim := _aim_of(_pose_from)
-		var pose := _arc_pose(lerpf(aim.x, HEAVY_FROM_YAW, k), lerpf(aim.y, HEAVY_FROM_PITCH, k), true)
-		pose.origin += HEAVY_LIFT * k
-		return _blend(_pose_from, pose, k)
-	if t < HEAVY_WIND:
-		var s := (t - HEAVY_RAISE) / (HEAVY_WIND - HEAVY_RAISE)
-		var shake := 0.006 * s * s
-		var pose := _arc_pose(HEAVY_FROM_YAW + 0.12 * s + sin(t * 61.0) * shake,
-			HEAVY_FROM_PITCH + 0.04 * s + sin(t * 47.0 + 0.7) * shake, true)
-		pose.origin += HEAVY_LIFT * (1.0 + 0.2 * s)
-		return pose
-	var from_yaw := HEAVY_FROM_YAW + 0.12
-	var from_pitch := HEAVY_FROM_PITCH + 0.04
-	if t < HEAVY_CUT:
-		var s := smoothstep(0.0, 1.0, (t - HEAVY_WIND) / (HEAVY_CUT - HEAVY_WIND))
-		var yaw := lerpf(from_yaw, HEAVY_TO_YAW, s)
-		# Onto the cut's pitch by the middle of the view.
-		var onto := smoothstep(0.0, 1.0, clampf((from_yaw - yaw) / from_yaw, 0.0, 1.0))
-		var pose := _arc_pose(yaw, lerpf(from_pitch, _cut_pitch(yaw, true), onto), true)
-		pose.origin += HEAVY_LIFT * 1.2 * (1.0 - s) * (1.0 - s)
-		return pose
-	var low := _cut_pitch(HEAVY_TO_YAW, true)
-	if t < HEAVY_HOLD:
-		return _arc_pose(HEAVY_TO_YAW, low, true)
-	var r := smoothstep(0.0, 1.0, (t - HEAVY_HOLD) / (HEAVY_END - HEAVY_HOLD))
-	var home := _aim_of(_rest_pose())
-	return _blend(_arc_pose(lerpf(HEAVY_TO_YAW, home.x, r), lerpf(low, home.y, r), true), _rest_pose(), r)
 
 
 ## The camera through the heavy swipe: (roll deg, pitch deg, drop m, fov deg),
@@ -3827,125 +3902,6 @@ func _blade_pose(at: Vector3, dir: Vector3, edge: Vector3) -> Transform3D:
 
 static func _blend(a: Transform3D, b: Transform3D, t: float) -> Transform3D:
 	return Transform3D(a.basis.orthonormalized().slerp(b.basis.orthonormalized(), t), a.origin.lerp(b.origin, t))
-
-
-## The blade at `yaw` (radians from straight ahead, + to the right) and
-## `pitch`, travelling left (`leftward`) or right. The hand follows the blade
-## round a little, and the flat stays level with its edge leading, so the cut is
-## a sweep and not a stab.
-func _arc_pose(yaw: float, pitch: float, leftward: bool, hand_off := Vector3.ZERO, roll := 0.0) -> Transform3D:
-	var dir := Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
-	var hand := Vector3(0.1 + 0.28 * sin(yaw), -0.52, -0.3 - 0.15 * cos(yaw)) + hand_off
-	var edge := Vector3(cos(yaw), 0.0, sin(yaw)) * (-1.0 if leftward else 1.0)
-	# The wrist turning the edge over: about the blade's own line.
-	if roll != 0.0:
-		edge = edge.rotated(dir.normalized(), roll)
-	return _blade_pose(hand, dir, edge)
-
-
-## Right to left (`backhand` false), or left to right: wound up on one side,
-## swept through straight ahead, followed through low on the other.
-func _swing_pose(t: float, backhand: bool) -> Transform3D:
-	# The side it winds up on: +1 the right (the slash), -1 the left (the backhand).
-	var side := -1.0 if backhand else 1.0
-	var from_yaw := SWING_OPEN * side
-	var to_yaw := -SWING_OPEN * side
-	var leftward := not backhand
-	var cocked := from_yaw + SWING_PULL * side
-	var loaded := cocked + SWING_CREEP * side
-	var through := to_yaw - SWING_OVER * side
-	var chamber := SWING_CHAMBER_HAND * Vector3(side, 1.0, 1.0)
-	var high := _cut_pitch(from_yaw, leftward) + SWING_CHAMBER
-	# THE GATHER. Into the chamber the blade also travels ROUND the arc, carried
-	# from where it is pointing now. Blending the two orientations directly swung
-	# the 2.65 m blade up overhead on its way there (the tip 3 m up).
-	if t < SWING_GATHER:
-		var k := t / SWING_GATHER
-		k = k * k * (3.0 - 2.0 * k)
-		var aim := _aim_of(_pose_from)
-		return _blend(_pose_from, _arc_pose(lerpf(aim.x, cocked, k), lerpf(aim.y, high, k), leftward,
-			chamber * k), k)
-	# THE LOAD: a little further back, the hand drawn in tighter, the arm tensing.
-	if t < SWING_WIND:
-		var k := smoothstep(0.0, 1.0, (t - SWING_GATHER) / (SWING_WIND - SWING_GATHER))
-		return _arc_pose(lerpf(cocked, loaded, k), high + SWING_CHAMBER * 0.15 * k, leftward,
-			chamber * (1.0 + 0.3 * k))
-	# THE CUT: one curve from the chamber to past the end of the arc, slow off the
-	# mark, fastest across the middle, slowing through the end (a smootherstep).
-	# Round the arc itself, so the tip keeps its distance from the eye.
-	if t < SWING_HOLD:
-		var u := (t - SWING_WIND) / (SWING_HOLD - SWING_WIND)
-		var s := u * u * u * (u * (u * 6.0 - 15.0) + 10.0)
-		var yaw := lerpf(loaded, through, s)
-		return _arc_pose(yaw, _cut_pitch_through(yaw, leftward, u), leftward, _cut_hand(u, side, chamber),
-			SWING_ROLL * smoothstep(0.55, 1.0, u) * side)
-	var low := _cut_pitch_through(through, leftward, 1.0)
-	var end_hand := _cut_hand(1.0, side, chamber)
-	var end_roll := SWING_ROLL * side
-	# A small rebound off the end of it, and settled.
-	if t < SWING_SETTLE:
-		var k := (t - SWING_HOLD) / (SWING_SETTLE - SWING_HOLD)
-		var back := SWING_RECOIL * sin(PI * k) * side
-		return _arc_pose(through + back, low, leftward, end_hand, end_roll)
-	# Home, the wrist turning on the way so the edge arrives as it rests. Left to
-	# the blend alone, the forehand's edge was near half a turn from the rest
-	# pose's and the slerp flipped across in a frame (250 m/s at the tip).
-	var r := smoothstep(0.0, 1.0, (t - SWING_SETTLE) / (SWING_END - SWING_SETTLE))
-	var home := _aim_of(_rest_pose())
-	var home_roll := _roll_onto_rest(home, leftward, end_roll)
-	return _blend(_arc_pose(lerpf(through, home.x, r), lerpf(low, home.y, r), leftward,
-		end_hand * (1.0 - r), lerpf(end_roll, home_roll, r)), _rest_pose(), r)
-
-
-## The roll (`_arc_pose`) that turns the arc's edge at the rest pose's aim onto
-## the rest pose's own edge, taken the short way round from `near`.
-func _roll_onto_rest(home: Vector2, leftward: bool, near: float) -> float:
-	var arc := _arc_pose(home.x, home.y, leftward)
-	var dir := (arc.basis * _blade_frame.y).normalized()
-	var have := arc.basis * _blade_frame.x
-	var want := _rest_pose().basis * _blade_frame.x
-	want = (want - dir * want.dot(dir)).normalized()
-	var angle := atan2(dir.dot(have.cross(want)), have.dot(want))
-	return near + wrapf(angle - near, -PI, PI)
-
-
-## The cut's pitch at `yaw`, `u` of the way through it: through the crosshair
-## (`_cut_pitch`), still up in the chamber off the mark, dropping through the
-## target at the end.
-func _cut_pitch_through(yaw: float, leftward: bool, u: float) -> float:
-	return _cut_pitch(yaw, leftward) + SWING_CHAMBER * 1.15 * (1.0 - smoothstep(0.0, 0.45, u)) \
-		+ SWING_DIG * smoothstep(0.55, 1.0, u)
-
-
-## The hand through the cut: out of the chamber, driven forward at its middle,
-## drawn across the body and down at its end.
-func _cut_hand(u: float, side: float, chamber: Vector3) -> Vector3:
-	return chamber * 1.3 * (1.0 - smoothstep(0.0, 0.4, u)) + SWING_REACH * sin(PI * u) \
-		+ SWING_ACROSS * Vector3(side, 1.0, 1.0) * smoothstep(0.6, 1.0, u)
-
-
-## The blade's pitch at `yaw` in a cut: aimed so that the blade passes THROUGH
-## the crosshair, `SWING_CROSS` metres down the view, as it sweeps across it, and
-## tilted from high (where the stroke starts) to low (where it ends) by
-## `SWING_TILT` over the whole arc -- the tilt is zero exactly where the blade
-## heads at that point, so the diagonal does not lift it off the crosshair.
-## Solved against the guard's real place on the model, a few times round.
-func _cut_pitch(yaw: float, leftward: bool) -> float:
-	var cross := Vector3(0.0, 0.0, -SWING_CROSS)
-	var guard := _sword_rest * _blade_base
-	var pitch := 0.0
-	for i in 3:
-		var to := cross - _arc_pose(yaw, pitch, leftward) * guard
-		var heading := atan2(to.x, -to.z)
-		var tilt := SWING_TILT * (yaw - heading) / (2.0 * SWING_OPEN) * (1.0 if leftward else -1.0)
-		pitch = atan2(to.y, Vector2(to.x, to.z).length()) + tilt
-	return pitch
-
-
-## Where a pivot pose points the blade, as (yaw, pitch) in the head's frame.
-func _aim_of(pose: Transform3D) -> Vector2:
-	var d := (pose.basis * _blade_frame.y).normalized()
-	return Vector2(atan2(d.x, -d.z), asin(clampf(d.y, -1.0, 1.0)))
 
 ## Down onto the floor ahead, held, then lifted back to rest as the player
 ## stands. The strike is aimed in the WORLD, every frame: the view is crouching,
