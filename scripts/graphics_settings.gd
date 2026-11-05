@@ -599,6 +599,18 @@ func set_head_sway(value: float) -> void:
 	save_settings()
 
 
+## How much weight the sword has (note 172), 0..1: how loose the springs that
+## carry it toward the clip are -- the blade trailing a fast stroke and swinging
+## on past it. 0 is the clip exactly (no walls stopping it either). Saved under
+## [controls].
+var sword_weight := 1.0
+
+
+func set_sword_weight(value: float) -> void:
+	sword_weight = clampf(value, 0.0, 1.0)
+	save_settings()
+
+
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("graphics", "preset", preset)
@@ -607,6 +619,7 @@ func save_settings() -> void:
 	cfg.set_value("controls", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("controls", "field_of_view", field_of_view)
 	cfg.set_value("controls", "head_sway", head_sway)
+	cfg.set_value("controls", "sword_weight", sword_weight)
 	cfg.save(SAVE_PATH)
 
 
@@ -632,3 +645,4 @@ func load_settings() -> void:
 		SENSITIVITY_MIN, SENSITIVITY_MAX)
 	field_of_view = clampf(float(cfg.get_value("controls", "field_of_view", 75.0)), FOV_MIN, FOV_MAX)
 	head_sway = clampf(float(cfg.get_value("controls", "head_sway", 0.25)), 0.0, 1.0)
+	sword_weight = clampf(float(cfg.get_value("controls", "sword_weight", 1.0)), 0.0, 1.0)

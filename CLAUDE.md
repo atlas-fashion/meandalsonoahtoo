@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 171), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 172), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -601,6 +601,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 169 | 2026-11-05 | The knight's hands get finger and thumb bones (tools/build_player_knight.py: a three-joint finger chain and a two-joint thumb each, the gauntlet's fingers and thumb skinned only to them); the weapon leads the grip: outside clips the hand is IK'd exactly onto the weapon's grip (knuckles along the edge; out of reach the weapon comes back with the wrist), through clips the arm is the capture's and the weapon in that fist; fingers close by contact round each handle (`_grip_curl`, `HANDLE_R`) | [docs/notes/169-fingers-and-a-weapon-led-grip.md](docs/notes/169-fingers-and-a-weapon-led-grip.md) |
 | 170 | 2026-11-05 | Third person for testing on the scroll wheel, Skyrim style: down pulls the camera out behind the shoulder (1.2-4.8 m, kept off walls), up back into the eyes; the knight faces the way it walks and turns back to the aim for anything its hands do; its own camera sees the whole knight (`_update_third_person`, coop_avatar.gd `set_third_person`) | [docs/notes/170-third-person-on-the-scroll-wheel.md](docs/notes/170-third-person-on-the-scroll-wheel.md) |
 | 171 | 2026-11-05 | A captured stance under everything: Higgsfield's Sword_Parry high guard (`models/anims/sword_guard.glb`) loops whenever the hands are free (`stance_wanted`), sword, spear and axe held raised across the body, in view from the eyes; attacks and the parry layer over it and blend back into it; hips take the capture's height; the left upper arm cut from the eye's copy | [docs/notes/171-a-captured-stance-under-everything.md](docs/notes/171-a-captured-stance-under-everything.md) |
+| 172 | 2026-11-05 | The sword with weight, a prototype physics layer over the clips (`scripts/sword_physics.gd`): the clip is the target, a simulated sword is carried toward it on a stiff hilt spring and a looser blade spring (lag, follow-through), kept out of walls (hilt and blade rays, bounce, clang sparks), bitten by landed cuts; the arm bent from the clip pose to hold it (`_bend_to`); hits still follow the clip (`_hit_pivot`); "Sword weight" setting, 0 = the clip exactly; backup at `backup/before-physics-arm` | [docs/notes/172-the-sword-with-weight.md](docs/notes/172-the-sword-with-weight.md) |
 
 ## Notes by source file
 
@@ -628,7 +629,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/coop.gd`: 79, 80, 164
 - `scripts/corner_slip.gd`: 92
 - `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166, 167, 168, 169, 170, 171
-- `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163, 166, 167, 168, 169, 171
+- `scripts/first_person_arms.gd`, `scripts/sword_physics.gd`: 156, 157, 158, 159, 163, 166, 167, 168, 169, 171, 172
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -644,7 +645,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82, 117
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
-- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155, 159, 168
+- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155, 159, 168, 172
 - `scripts/hand_torch.gd`: 24, 29 (deleted in 157)
 - `scripts/held_potion.gd`: 6.19, 130, 168
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
@@ -670,7 +671,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168, 170, 171
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168, 170, 171, 172
 - `scripts/player_motion.gd`, `models/anims/*.glb`: 167, 168, 171
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151, 167
@@ -689,7 +690,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
-- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159, 164, 168
+- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159, 164, 168, 172
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92, 130, 131, 147
