@@ -1150,12 +1150,6 @@ var _blade_tip := Vector3(0, 1, 0)
 ## The butt of the grip, which a haft strike leads with.
 var _blade_pommel := Vector3.ZERO
 var _blade_prev: Array = []
-## Where the clip has the sword's pivot this frame (global), before the sword's
-## weight carried the drawn one off it (first_person_arms.gd, note 172): the
-## hits follow the stroke as timed, so the weight is felt and seen, not a change
-## to what lands. Valid while `_hit_pivot_ok`.
-var _hit_pivot := Transform3D.IDENTITY
-var _hit_pivot_ok := false
 ## The blade's (width, hilt-to-tip, normal) in the pivot's frame.
 var _blade_frame := Basis.IDENTITY
 ## The pose being played on the sword pivot in code, its clock (-1 = none) and
@@ -4176,7 +4170,7 @@ func _resolve_hits() -> void:
 	# The blade where the swing puts it. The sword passes freely through walls
 	# (it is drawn in front of them); the line-of-sight test below is what stops
 	# anything being cut THROUGH the stone.
-	var xf := (_hit_pivot if _hit_pivot_ok else sword_pivot.global_transform) * _sword_rest
+	var xf := sword_pivot.global_transform * _sword_rest
 	# The blade bites `sword_hit_reach` times its length from the guard (note
 	# 168): the knight's sword is its real size, the reach is the game's.
 	var base_w := xf * _blade_base

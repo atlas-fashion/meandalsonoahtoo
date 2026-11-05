@@ -72,7 +72,6 @@ const SPEC := [
 var sensitivity_slider: HSlider
 var fov_slider: HSlider
 var sway_slider: HSlider
-var weight_slider: HSlider
 var _preset_picker: OptionButton
 var _readout: Label
 var _hint: Label
@@ -201,31 +200,6 @@ func _build() -> void:
 		_hint.text = "How much the view turns with the knight's head through an attack. It always rides the head's position.")
 	hrow.mouse_filter = Control.MOUSE_FILTER_PASS
 	box.add_child(hrow)
-	var wrow := HBoxContainer.new()
-	wrow.custom_minimum_size.y = ROW_HEIGHT
-	var wl := Label.new()
-	wl.text = "Sword weight"
-	wl.custom_minimum_size.x = 210
-	wrow.add_child(wl)
-	weight_slider = HSlider.new()
-	weight_slider.min_value = 0.0
-	weight_slider.max_value = 1.0
-	weight_slider.step = 0.05
-	weight_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	weight_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var wv := Label.new()
-	wv.custom_minimum_size.x = 64
-	wv.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	weight_slider.value_changed.connect(func(v: float) -> void:
-		wv.text = "%d%%" % roundi(v * 100.0)
-		if not _syncing:
-			Graphics.set_sword_weight(v))
-	wrow.add_child(weight_slider)
-	wrow.add_child(wv)
-	wrow.mouse_entered.connect(func() -> void:
-		_hint.text = "How much the sword swings with its own weight: trailing a fast cut, carrying on past it, stopping on walls. 0% plays the animation exactly.")
-	wrow.mouse_filter = Control.MOUSE_FILTER_PASS
-	box.add_child(wrow)
 	var krow := HBoxContainer.new()
 	krow.custom_minimum_size.y = ROW_HEIGHT
 	var kl := Label.new()
@@ -392,7 +366,6 @@ func sync() -> void:
 	sensitivity_slider.value = Graphics.mouse_sensitivity
 	fov_slider.value = Graphics.field_of_view
 	sway_slider.value = Graphics.head_sway
-	weight_slider.value = Graphics.sword_weight
 	for entry in SPEC:
 		var key: String = entry["key"]
 		var w: Control = _widgets.get(key)

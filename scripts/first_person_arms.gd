@@ -133,7 +133,6 @@ func setup(p: Node3D) -> void:
 	player = p
 	name = "KnightArms"
 	p.connect("guarded", _on_guarded)
-	p.connect("hit_landed", _on_hit)
 
 
 func _ready() -> void:
@@ -225,7 +224,7 @@ func _held() -> Dictionary:
 		var pivot := player.get("sword_pivot") as Node3D
 		var edge: Vector3 = pivot.global_basis * (player.get("_blade_frame") as Basis).x
 		# On the hilt, nearer the guard than the pommel.
-		return {"kind": &"sword", "node": pivot, "edged": true, "tip": t * tip,
+		return {"kind": &"sword", "node": pivot, "edged": true,
 			"frame": _frame_from(t * base.lerp(pommel, 0.42), z, edge)}
 	for kind: StringName in [&"spear", &"axe"]:
 		var w := player.get(kind) as Node3D
@@ -321,101 +320,8 @@ func _pose_right(held: Dictionary) -> void:
 			# Where it was posed, carried back with the wrist if the arm fell short.
 			held_at = frame
 			held_at.origin += to_world.basis * ((q[3] as Vector3) - wrist)
-		# The sword with weight (note 172): what the clip says is the target; the
-		# simulated sword is carried toward it, and the arm bent to hold it there.
-		player.set("_hit_pivot_ok", false)
-		if held["kind"] == &"sword" and Graphics.sword_weight > 0.0:
-			player.set("_hit_pivot", held_at * now.affine_inverse() * node.global_transform)
-			player.set("_hit_pivot_ok", true)
-			var body := Transform3D(to_world.basis.orthonormalized(), to_world.origin)
-			var length := (held["tip"] as Vector3).distance_to(frame.origin)
-			var sim := _sword.step(held_at, body, get_process_delta_time(), Graphics.sword_weight,
-				length, player.get_world_3d().direct_space_state, WALL_MASK, _wall_exclude(),
-				(get_parent() as Node3D).global_position)
-			_bend_to(a, held_at, sim)
-			held_at = _clip_frame(a, held["kind"])
-			if held_at.basis.x.dot(sim.basis.x) < 0.0:
-				held_at.basis = Basis(-held_at.basis.x, -held_at.basis.y, held_at.basis.z)
-			_take_clang()
-		else:
-			_sword.reset()
 		node.global_transform = held_at * now.affine_inverse() * node.global_transform
 	_curl(a, _grip_curl(a, held["kind"]), 0.0)
-
-
-# --- The sword with weight (note 172) ------------------------------------------------
-
-## What stops the blade: the world and the level's geometry (layers 1 and 2).
-## Anything that can be cut is passed through (sword_physics.gd) -- a cut that
-## lands bites instead (`_on_hit`).
-const WALL_MASK := 3
-const SwordPhysics := preload("res://scripts/sword_physics.gd")
-var _sword := SwordPhysics.new()
-
-
-func _wall_exclude() -> Array[RID]:
-	return [(player as CollisionObject3D).get_rid()]
-
-
-## The arm bent from the pose it has so that the fist's grip goes from `from` to
-## `to` (global grip frames), keeping the pose's own plane and twist: the elbow
-## opened or closed for the reach, the upper arm swung to point at it, and the
-## hand turned with the sword about the handle.
-func _bend_to(a: Arm, from: Transform3D, to: Transform3D) -> void:
-	var sk := a.skel
-	var to_skel := sk.global_transform.affine_inverse()
-	var rot := to_skel.basis.orthonormalized()
-	var turn := rot * (to.basis.orthonormalized() * from.basis.orthonormalized().inverse()) * rot.inverse()
-	var p0 := to_skel * from.origin
-	var p1 := to_skel * to.origin
-	var up_g := sk.get_bone_global_pose(a.upper)
-	var fore_g := sk.get_bone_global_pose(a.fore)
-	var hand_g := sk.get_bone_global_pose(a.hand)
-	var parent := sk.get_bone_global_pose(a.parent).basis.orthonormalized()
-	var s := up_g.origin
-	var e := fore_g.origin
-	var wr := hand_g.origin
-	# Where the wrist must be for the fist turned about the handle.
-	var want := p1 + turn * (wr - p0)
-	var hand_b := turn * hand_g.basis.orthonormalized()
-	var up_b := up_g.basis.orthonormalized()
-	var fore_b := fore_g.basis.orthonormalized()
-	# The elbow for the reach.
-	var lu := a.len_upper
-	var lf := a.len_fore
-	var d := clampf((want - s).length(), absf(lu - lf) + 0.001, (lu + lf) * 0.995)
-	var axis := (s - e).cross(wr - e)
-	if axis.length_squared() > 1e-10:
-		axis = axis.normalized()
-		var now_angle := (s - e).angle_to(wr - e)
-		var want_angle := acos(clampf((lu * lu + lf * lf - d * d) / (2.0 * lu * lf), -1.0, 1.0))
-		var flex := Basis(axis, want_angle - now_angle)
-		fore_b = flex * fore_b
-		wr = e + flex * (wr - e)
-	# The upper arm swung to point the wrist at it.
-	var swing := Basis(_arc(wr - s, want - s))
-	up_b = swing * up_b
-	fore_b = swing * fore_b
-	sk.set_bone_pose_rotation(a.upper, (parent.inverse() * up_b).get_rotation_quaternion())
-	sk.set_bone_pose_rotation(a.fore, (up_b.inverse() * fore_b).get_rotation_quaternion())
-	sk.set_bone_pose_rotation(a.hand, (fore_b.inverse() * hand_b).get_rotation_quaternion())
-
-
-## A hard meeting with a wall: sparks where the blade struck, and a jolt.
-func _take_clang() -> void:
-	if _sword.clang <= 0.0:
-		return
-	var hard := clampf(_sword.clang / 8.0, 0.0, 1.0)
-	_sword.clang = 0.0
-	if player.has_method("_guard_flash"):
-		player.call("_guard_flash", _sword.clang_at, player.get("block_spark_color"), false)
-	player.set("_shake", maxf(float(player.get("_shake")), 0.06 + 0.12 * hard))
-
-
-## A cut that lands bites into what it hit: the blade loses part of its swing.
-func _on_hit(_target: Node3D) -> void:
-	if player.call("held_item") == &"sword":
-		_sword.bite()
 
 
 ## Where the capture's fist holds the weapon (global grip frame): through the
