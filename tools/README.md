@@ -728,18 +728,17 @@ emission map out of the albedo where it is hot (the molten cracks), sets metalli
 `scripts/coop_avatar.gd` poses every bone from the player each frame, so any
 humanoid with those bone names drops in.
 
-## The knight's first-person arms (2026-11-03, note 156)
+## The knight's fingers (2026-11-05, note 169)
 
-```
-blender -b --factory-startup -P tools/build_player_knight_arms.py
-```
-
-Run after `build_player_knight.py`: it reads `models/player_knight.glb`. Keeps
-every vertex whose strongest bone is an Arm, ForeArm or Hand (8.3k triangles;
-the pauldrons ride the Shoulder bones and are cut), bends the fingers into fists
-round the knuckle line (`KNUCKLE`, `FINGER_Z`, `CURL_R`; the rig has no finger
-bones; measured off each body's gauntlet, the armor's 0.935 / 1.333), and
-writes `models/player_knight_arms.glb` with the whole skeleton and NO materials:
-`scripts/first_person_arms.gd` dresses it in the body's own material. It prints
-each fist's grip point; `first_person_arms.gd` `GRIP` holds it, so change both
-together. `-- --preview <dir>` renders the fists instead of writing the file.
+`build_player_knight.py` gives each hand the finger bones the borrowed rig lacks:
+`<Side>HandFinger1..3` (one chain for the four fingers, which are one gauntlet
+plate, from the knuckle line `KNUCKLE` out along `FINGER_JOINTS`) and
+`<Side>HandThumb1..2` (`THUMB_JOINTS`, the thumb forward of the palm). Every
+gauntlet vertex past the knuckle line goes to the finger chain, every thumb
+vertex (`THUMB_X`, `THUMB_Y`, `THUMB_Z`) to the thumb, blended at the joints,
+and ONLY to them (any forearm share left by the borrowed weights held the
+fingers half straight). It prints how many vertices each took.
+`scripts/first_person_arms.gd` closes them round whatever is held
+(`_grip_curl`). There is no separate first-person arms model any more (note
+168): the knight's own arms are seen from its eyes. (`build_player_knight_arms.py`
+and `models/player_knight_arms.glb`, note 156, are gone.)

@@ -18,10 +18,11 @@ extends Node3D
 
 const MODEL := preload("res://models/potion_held.glb")
 
-## Where it is held, in the head's frame, and how it is turned there.
-## Half the modelled size: 13.5 cm of flask held 21 cm from the eye.
-const SCALE := 0.5
-const HOLD := Vector3(0.17, -0.155, -0.21)
+## Where it is held, in the head's frame, and how it is turned there: full
+## size, 27 cm of flask held 42 cm from the eye, in the knight's own hand (note
+## 168: no half-size flask drawn close to the eye with an arm to match any more).
+const SCALE := 1.0
+const HOLD := Vector3(0.34, -0.31, -0.42)
 const TURN := Vector3(0.10, -0.45, 0.14)
 ## How far below HOLD it waits while put away.
 const LOWER := 0.3
@@ -157,7 +158,7 @@ func _process(delta: float) -> void:
 	# A slow sway, so it does not hang dead still in the hand.
 	var sway := Vector3(sin(_clock * 1.3) * 0.02, sin(_clock * 0.9 + 1.0) * 0.03, sin(_clock * 1.1) * 0.025)
 	# Drinking: up and in towards the mouth, tipped back over the lip.
-	position = HOLD + Vector3(-0.09 * d, 0.1 * d - LOWER * (1.0 - e), 0.05 * d)
+	position = HOLD + Vector3(-0.18 * d, 0.2 * d - LOWER * 2.0 * (1.0 - e), 0.1 * d)
 	rotation = TURN + sway + Vector3(1.25 * d + sip, 0.0, 0.35 * d)
 
 	if _liquid_mat != null:

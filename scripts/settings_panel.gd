@@ -71,6 +71,7 @@ const SPEC := [
 
 var sensitivity_slider: HSlider
 var fov_slider: HSlider
+var sway_slider: HSlider
 var _preset_picker: OptionButton
 var _readout: Label
 var _hint: Label
@@ -174,6 +175,31 @@ func _build() -> void:
 		_hint.text = "How much of the world the view takes in, top to bottom. 75° is the game's own.")
 	frow.mouse_filter = Control.MOUSE_FILTER_PASS
 	box.add_child(frow)
+	var hrow := HBoxContainer.new()
+	hrow.custom_minimum_size.y = ROW_HEIGHT
+	var hl := Label.new()
+	hl.text = "Head sway"
+	hl.custom_minimum_size.x = 210
+	hrow.add_child(hl)
+	sway_slider = HSlider.new()
+	sway_slider.min_value = 0.0
+	sway_slider.max_value = 1.0
+	sway_slider.step = 0.05
+	sway_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sway_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var hv := Label.new()
+	hv.custom_minimum_size.x = 64
+	hv.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sway_slider.value_changed.connect(func(v: float) -> void:
+		hv.text = "%d%%" % roundi(v * 100.0)
+		if not _syncing:
+			Graphics.set_head_sway(v))
+	hrow.add_child(sway_slider)
+	hrow.add_child(hv)
+	hrow.mouse_entered.connect(func() -> void:
+		_hint.text = "How much the view turns with the knight's head through an attack. It always rides the head's position.")
+	hrow.mouse_filter = Control.MOUSE_FILTER_PASS
+	box.add_child(hrow)
 	var krow := HBoxContainer.new()
 	krow.custom_minimum_size.y = ROW_HEIGHT
 	var kl := Label.new()
@@ -339,6 +365,7 @@ func sync() -> void:
 	_preset_picker.select(Graphics.preset)
 	sensitivity_slider.value = Graphics.mouse_sensitivity
 	fov_slider.value = Graphics.field_of_view
+	sway_slider.value = Graphics.head_sway
 	for entry in SPEC:
 		var key: String = entry["key"]
 		var w: Control = _widgets.get(key)

@@ -414,10 +414,15 @@ const SCENE_WALK_SPEED := 3.3
 @export var starting_counts: Array[int] = [3, 0]
 
 @export_group("Sword out of view")
-## How close to the eye the sword is DRAWN, as a fraction of its real depth
-## (`use_z_clip_scale` on its materials). It looks the same size and is lit the
-## same, but is in front of every wall and enemy: nothing can cover it.
-@export_range(0.05, 1.0) var sword_draw_depth := 0.12
+## How close to the eye what is held is DRAWN, as a fraction of its real depth
+## (`use_z_clip_scale` on its materials). 1, its real depth (note 168): the sword
+## is in the knight's own hand in the world, seen the same from every camera, and
+## a wall in front of it covers it. (It was 0.12, the first-person sword pulled
+## in front of everything, when that sword was a model of its own.)
+@export_range(0.05, 1.0) var sword_draw_depth := 1.0
+## How far the sword's blow reaches, in blade lengths from the guard (note 168):
+## the blade is SWORD_LENGTH, the bite this many times further.
+@export var sword_hit_reach := 2.15
 ## Where a put-away sword goes, relative to its pivot in the view: this far
 ## down and back, tipped this many radians back over the hand.
 @export var sword_duck_drop := 0.95
@@ -484,7 +489,6 @@ var _discarded := false
 var _avatar: Node3D
 ## The visual layer this player's first-person pieces are drawn on, co-op only.
 var _viewmodel_layer := 0
-var _layer_sweep := 0.0
 
 
 func _enter_tree() -> void:
@@ -521,7 +525,6 @@ func use_view_environment(env: Environment) -> void:
 ## half draws it), and their stand-in body for the other half on `avatar`.
 func set_view_layers(viewmodel: int, avatar: int) -> void:
 	_viewmodel_layer = viewmodel
-	_sweep_view_layers()
 	if _avatar == null:
 		_make_body(avatar, true)
 	else:
@@ -539,22 +542,6 @@ func _make_body(layer: int, coop: bool) -> void:
 	add_child(_avatar)
 
 
-## Everything drawn under the head -- sword, spear, potion, the torch in the
-## hand, rats in the hand -- onto this player's viewmodel layer. Re-run now and
-## then: some of it is built later (rat_control.gd, held_potion.gd).
-func _sweep_view_layers() -> void:
-	if _viewmodel_layer == 0:
-		return
-	for g in head.find_children("*", "GeometryInstance3D", true, false):
-		var gi := g as GeometryInstance3D
-		if gi.layers != _viewmodel_layer:
-			# Hidden while it changes: a lit instance whose layers change in
-			# place is left paired with its lights ("BUG, indexing did not
-			# unpair geometries from light", a flood of them).
-			var shown := gi.visible
-			gi.visible = false
-			gi.layers = _viewmodel_layer
-			gi.visible = shown
 
 ## Coins are carried in the inventory like anything else; this is their total.
 var currency: int:
@@ -1265,6 +1252,7 @@ func _ready() -> void:
 	if sword_model != null:
 		_sword_rest = sword_model.transform
 		_measure_sword()
+		_real_size_sword()
 		_draw_sword_on_top()
 		# After every node's _process, so the put-away motion is built on the
 		# pivot pose actually drawn this frame.
@@ -1288,15 +1276,16 @@ func _ready() -> void:
 	head.add_child(rats)
 	rats.setup(self)
 	get_tree().create_timer(0.4).timeout.connect(_warm_guard_flash)
-	# The knight's own arms: the right holding what is in hand, the left
-	# blocking and parrying (first_person_arms.gd, notes 156, 157). No torch.
+	# The knight (coop_avatar.gd, note 168): the one body, seen from its own eyes,
+	# by the other player and as the shadow.
+	if _avatar == null:
+		_make_body(load("res://scripts/coop_avatar.gd").SOLO_LAYER, false)
+	# Its arms: the right holding what is in hand, the left blocking and parrying
+	# (first_person_arms.gd, notes 156, 157, 168).
 	var arms := Node3D.new()
 	arms.set_script(load("res://scripts/first_person_arms.gd"))
 	arms.call("setup", self)
 	head.add_child(arms)
-	# The knight's shadow (coop_avatar.gd); co-op turns it into the visible body.
-	if _avatar == null:
-		_make_body(load("res://scripts/coop_avatar.gd").SOLO_LAYER, false)
 	# Every attack clip baked now, with the level, not on the first swing of each
 	# (3-7 ms apiece, note 167).
 	PlayerMotion.warm.call_deferred()
@@ -1343,11 +1332,6 @@ func _ready() -> void:
 ## Camera flourishes run here rather than in _physics_process: they are purely
 ## visual, and at 60 Hz physics a fast punch like this would visibly step.
 func _process(delta: float) -> void:
-	if _viewmodel_layer != 0:
-		_layer_sweep -= delta
-		if _layer_sweep <= 0.0:
-			_layer_sweep = 0.5
-			_sweep_view_layers()
 	_pad_look(delta)
 	_update_cine()
 	_update_scene_camera()
@@ -1517,9 +1501,7 @@ func _update_head(delta: float) -> void:
 	# The wave slash's effort: a lean, a nod and a crouch (its FOV is in
 	# `_update_dash_view`).
 	var effort := _wave_effort()
-	# The clip's own rise and fall (note 167): the ult's leap and landing, every
-	# cut's dip into it.
-	effort.z -= _motion_rise()
+	var ride := _head_ride()
 	if _stab_strain > 0.0:
 		_stab_strain = maxf(_stab_strain - delta * 1.1 / attack_time_scale, 0.0)
 	var stab := _stab_effort()
@@ -1536,7 +1518,7 @@ func _update_head(delta: float) -> void:
 	effort.z += wake.x + 1.35 * crushed
 	# The dash: the body drops into it and comes back up over the whole dash.
 	var dash_body := dash_motion()
-	head.position = _head_rest + _bob_offset + shake_offset + _scene_lean \
+	head.position = _head_rest + (ride[0] as Vector3) + _bob_offset + shake_offset + _scene_lean \
 		- Vector3(0, landing_bob_height * land + jump_bob_height * push + slam_crouch_depth * crouch + effort.z
 			+ dash_dip * dash_body, spear_effort_push * _stab_k)
 	# Look is added untouched, never smoothed -- lagging the crosshair behind
@@ -1555,6 +1537,10 @@ func _update_head(delta: float) -> void:
 	# The haft strike's turn onto its target. Only ever here, on the head: the
 	# body's yaw is the player's aim and is never touched.
 	head.rotation.y = _cine_aim.x * _cine_a
+	# The knight's head turning through an attack, as much as the player asked
+	# for (Settings: Head sway).
+	if ride[1] != Basis.IDENTITY:
+		head.basis = (ride[1] as Basis) * head.basis
 
 
 ## Puts the sword away when something else is in hand (or the hands are busy,
@@ -1602,6 +1588,22 @@ func _draw_sword_on_top() -> void:
 			copy.use_z_clip_scale = true
 			copy.z_clip_scale = sword_draw_depth
 			mi.set_surface_override_material(i, copy)
+
+## The sword at its one size (note 168): the model is built 2.65 long (the
+## first-person sword drawn big, note 163); the knight holds it SWORD_LENGTH
+## long, scaled about the grip so the hand stays where it was. The hit reaches
+## further than the blade (`sword_hit_reach`).
+const SWORD_MODEL_LENGTH := 2.65
+const SWORD_LENGTH := 1.25
+
+
+func _real_size_sword() -> void:
+	var k := SWORD_LENGTH / SWORD_MODEL_LENGTH
+	var grip := _sword_rest * _blade_base.lerp(_blade_pommel, 0.42)
+	_sword_rest = Transform3D(Basis().scaled(Vector3.ONE * k), grip * (1.0 - k)) * _sword_rest
+	sword_model.transform = _sword_rest
+	_measure_sword()
+
 
 ## Critically damped spring toward `target` (Game Programming Gems 4, 1.10):
 ## arrives in about `smooth_time` with no overshoot, and carries its speed
@@ -2290,25 +2292,16 @@ func _update_sweep_trail(delta: float) -> void:
 		# kick and lunge carried the camera on after the blade had passed, so the
 		# streak sat well above the crosshair, stepped at every frame's join.
 		var point := _sword_rest * _trail_point()
-		if _pose_kind in [&"slash", &"chop", &"wave", &"heavy"]:
-			var from_t := _trail_pose_t if _trail_pose_t >= 0.0 and _trail_pose_t < _pose_time else _pose_time
-			var steps := maxi(1, ceili((_pose_time - from_t) / TRAIL_STEP))
-			for k in range(1, steps + 1):
-				var f := float(k) / float(steps)
-				var at := lerpf(from_t, _pose_time, f)
-				var pose := _motion_pose(_pose_kind, at)
-				if _pose_kind == &"wave":
-					# The wave slash's streak is gold and wide (a third element, true).
-					_tip_trail.push_front([pose * point, lerpf(before, now, f), true])
-				elif _pose_kind == &"heavy":
-					# The heavy swipe's is white and wider (a third element, false).
-					_tip_trail.push_front([pose * point, lerpf(before, now, f), false])
-				else:
-					_tip_trail.push_front([pose * point, lerpf(before, now, f)])
-			_trail_pose_t = _pose_time
+		# Where the blade really is, in the knight's hand (note 168): sampled each
+		# frame. The wave slash's streak is gold and wide (a third element,
+		# true), the heavy swipe's white and wider (false).
+		var at_head := head.global_transform.affine_inverse() * (sword_model.global_transform * _trail_point())
+		if _pose_kind == &"wave":
+			_tip_trail.push_front([at_head, now, true])
+		elif _pose_kind == &"heavy":
+			_tip_trail.push_front([at_head, now, false])
 		else:
-			_tip_trail.push_front([head.global_transform.affine_inverse()
-				* (sword_model.global_transform * _trail_point()), now])
+			_tip_trail.push_front([at_head, now])
 	else:
 		_trail_pose_t = -1.0
 	while not _tip_trail.is_empty() and now - float(_tip_trail.back()[1]) > sweep_trail_life:
@@ -2360,35 +2353,15 @@ var _trail_pose_t := -1.0
 var _trail_frac := -1.0
 
 
-## The point on the blade (sword model space) the trail follows: the one that
-## actually passes nearest the crosshair. Found once by running the forehand
-## (player_motion.gd) through a millisecond at a time and taking, at the moment
-## the blade comes nearest the view's axis, the point on it nearest that axis.
+## The point on the blade (sword model space) the trail follows: TRAIL_SPOT of
+## the way from the guard to the tip (note 168: the blade is the knight's, in its
+## hand, and goes where the clip takes it; there is no one pass through the
+## crosshair to measure).
+const TRAIL_SPOT := 0.8
+
+
 func _trail_point() -> Vector3:
-	if _trail_frac < 0.0:
-		var base := _sword_rest * _blade_base
-		var span := _sword_rest * _blade_tip - base
-		var axis := Vector3(0.0, 0.0, -1.0)
-		var best := INF
-		_trail_frac = 1.0
-		var t := SWING_WIND
-		while t <= SWING_HOLD:
-			var pose := PlayerMotion.fp_sword(&"slash", t, _sword_grip(), _blade_frame)
-			var g := pose * base
-			var u := pose.basis * span
-			# Closest points between the blade's line and the view's axis.
-			var a := u.dot(u)
-			var b := u.dot(axis)
-			var denom := a - b * b
-			if denom > 1e-8:
-				var s := (b * axis.dot(g) - u.dot(g)) / denom
-				var r := (a * axis.dot(g) - b * u.dot(g)) / denom
-				var gap := (g + u * s - axis * r).length()
-				if s >= 0.0 and s <= 1.0 and r > 0.0 and gap < best:
-					best = gap
-					_trail_frac = s
-			t += 0.001
-	return _blade_base.lerp(_blade_tip, _trail_frac)
+	return _blade_base.lerp(_blade_tip, TRAIL_SPOT)
 
 
 ## Stops the first-person viewmodel from casting shadows.
@@ -2978,10 +2951,10 @@ const REST_ROT := Vector3(-1.113895, 0.0, -0.244346)
 ## in note 164) to 0.29; the backhand, which starts where the forehand ends, from
 ## 0.15 to 0.26. SWING_WIND / SWING_HOLD are the forehand's, for whatever asks
 ## of "a cut" in general (the HUD's tile, the trail's crosshair point).
-const SLASH_BITE := Vector2(0.18, 0.29)
-const CHOP_BITE := Vector2(0.15, 0.26)
-const SWING_WIND := 0.18
-const SWING_HOLD := 0.29
+const SLASH_BITE := Vector2(0.25, 0.40)
+const CHOP_BITE := Vector2(0.15, 0.31)
+const SWING_WIND := 0.25
+const SWING_HOLD := 0.40
 ## The slam's: blade down onto the floor ahead, held, then up as the player rises.
 const SLAM_STRIKE := 0.05
 const SLAM_HOLD := 0.14
@@ -2993,12 +2966,12 @@ const SLAM_TIP_LIFT := 0.03
 ## it, to WAVE_WIND; the airborne cut to WAVE_CUT, the wave thrown at WAVE_FIRE;
 ## landed and committed to WAVE_HOLD; then the flourish and the last sweep, which
 ## another stroke may cut into, home by WAVE_END.
-const WAVE_RAISE := 0.22
-const WAVE_WIND := 0.58
-const WAVE_CUT := 0.68
-const WAVE_FIRE := 0.64
-const WAVE_HOLD := 0.76
-const WAVE_END := 2.35
+const WAVE_RAISE := 0.27
+const WAVE_WIND := 0.65
+const WAVE_CUT := 0.80
+const WAVE_FIRE := 0.74
+const WAVE_HOLD := 0.92
+const WAVE_END := 3.3
 ## The streak off the cut: gold, and this many times a cut's width.
 const WAVE_TRAIL_COLOR := Color(1.0, 0.74, 0.28)
 const WAVE_TRAIL_WIDTH := 3.0
@@ -3022,12 +2995,12 @@ const ATTACK_POSES: Array[StringName] = [&"slash", &"chop", &"wave", &"heavy", &
 ## 0.78 s after Q, 0.59 in note 162). A long gathering sweep over to the left by
 ## HEAVY_RAISE, held there creeping to HEAVY_WIND; the explosive backhand back
 ## across to HEAVY_CUT, biting from HEAVY_BITE to HEAVY_HOLD; home by HEAVY_END.
-const HEAVY_RAISE := 0.3
-const HEAVY_WIND := 0.62
-const HEAVY_BITE := 0.62
-const HEAVY_CUT := 0.75
-const HEAVY_HOLD := 0.76
-const HEAVY_END := 1.15
+const HEAVY_RAISE := 0.4
+const HEAVY_WIND := 0.72
+const HEAVY_BITE := 0.72
+const HEAVY_CUT := 0.9
+const HEAVY_HOLD := 0.92
+const HEAVY_END := 1.45
 ## Its streak: a cut's, this many times as wide.
 const HEAVY_TRAIL_WIDTH := 1.8
 
@@ -3116,7 +3089,7 @@ func _update_pose(delta: float) -> void:
 		return
 	if _pose_kind == &"block":
 		var k := clampf(_pose_time / GUARD_UP, 0.0, 1.0)
-		sword_pivot.transform = _parried_pose(_blend(_pose_from, _guard_pose(), 1.0 - (1.0 - k) * (1.0 - k)))
+		sword_pivot.transform = _blend(_pose_from, _guard_pose(), 1.0 - (1.0 - k) * (1.0 - k))
 		return
 	if _pose_kind == &"unblock":
 		sword_pivot.transform = _blend(_pose_from, _rest_pose(),
@@ -3134,26 +3107,9 @@ func _update_pose(delta: float) -> void:
 		_strike_cut()
 
 
-## How far the view rides the body's rise and fall in a clip move (note 167): the
-## head bone's height over its stance, this much of it -- most of the ult's leap,
-## a little of every cut's dip.
-const MOTION_RISE := 0.35
-const MOTION_RISE_WAVE := 0.8
-
-
-func _motion_rise() -> float:
-	var m := body_motion()
-	if m.is_empty():
-		return 0.0
-	var kind: StringName = m[0]
-	var t: float = m[1]
-	var k := PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
-	return PlayerMotion.head_rise(kind, t) * k * (MOTION_RISE_WAVE if kind == &"wave" else MOTION_RISE)
-
-
 ## The clip move the body is in, [kind, pose seconds], or [] (coop_avatar.gd poses
-## the knight from it; the view rides it, `_motion_rise`). The sword's own, or
-## the spear's (spear.gd `motion`).
+## the knight from it; the camera rides its head, `_head_ride`). The sword's
+## own, or the spear's (spear.gd `motion`).
 func body_motion() -> Array:
 	if PlayerMotion.has_move(_pose_kind) and _pose_time >= 0.0:
 		return [_pose_kind, _pose_time]
@@ -3162,119 +3118,38 @@ func body_motion() -> Array:
 	return []
 
 
-## The first-person arm's shoulder, moved as the clip's (head space): weighted
-## in and out with the move (first_person_arms.gd `_pose`).
-func motion_shoulder_shift() -> Vector3:
-	var m := body_motion()
-	# The first-person sweep is posed, not the capture's spin (spear.gd
-	# `_sweep_pose`): its shoulder stays where the arm has it.
-	if not m.is_empty() and m[0] != &"sweep":
-		var kind: StringName = m[0]
-		var t: float = m[1]
-		var w := PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
-		var shift := PlayerMotion.fp_shoulder_shift(kind, t)
-		# The spear's moves are played relative to their stance.
-		if PlayerMotion.move(kind).get("relative", false):
-			shift -= PlayerMotion.fp_shoulder_shift(kind, 0.0)
-		return shift * w
-	if _parry_t >= 0.0:
-		var w := PlayerMotion.weight_in(&"parry", _parry_t) * PlayerMotion.weight_out(&"parry", _parry_t)
-		return (PlayerMotion.fp_shoulder_shift(&"parry", _parry_t) - PlayerMotion.fp_shoulder_shift(&"parry", 0.0)) * w * PARRY_SHIFT
-	return Vector3.ZERO
-
-
-## A clip move's sword (note 167): where the capture's fist puts it
-## (`PlayerMotion.fp_sword`), blended in from the pose it began from and out to
-## rest at its end -- so every move runs into every other.
+## Where the sword's hand is asked to be through a clip move: the pose it began
+## from, eased to rest. The clip itself is the knight's arm (coop_avatar.gd,
+## first_person_arms.gd blends to it by the move's weight and puts the sword in
+## its fist), so this only matters at the move's two ends, where it blends.
 func _motion_pose(kind: StringName, t: float) -> Transform3D:
-	var pose := PlayerMotion.fp_sword(kind, t, _sword_grip(), _blade_frame)
-	# Aimed: the stroke turned about the eye so its blade crosses the line of the
-	# crosshair at CUT_ELEVATION (`_aim_fix`) -- in full through the bite, eased
-	# in over the wind-up and out over the recovery, so each move starts and ends
-	# as captured and runs into the next without a jolt.
-	pose = Transform3D(Basis(Vector3.RIGHT, _aim_fix(kind) * _aim_weight(kind, t)), Vector3.ZERO) * pose
-	var w_in := PlayerMotion.weight_in(kind, t)
-	if w_in < 1.0:
-		pose = _arc_blend(_pose_from, pose, w_in)
-	var w_out := PlayerMotion.weight_out(kind, t)
-	if w_out < 1.0:
-		pose = _arc_blend(_rest_pose(), pose, w_out)
-	return pose
+	var k := clampf(t / maxf(float(PlayerMotion.move(kind)["in"]) * 2.0, 0.001), 0.0, 1.0)
+	return _blend(_pose_from, _rest_pose(), k * k * (3.0 - 2.0 * k))
 
 
-## Where a cut's blade crosses the crosshair's line, degrees below it: through
-## an enemy's chest. The captures cut high -- the backhand's tip crossed in front
-## 3 m up, the heavy's at 2-2.6 m, over a proel's head -- so each stroke is
-## turned down about the eye, as a whole, by however much it takes (worked out
-## once per move: `_aim_fix`), measured at the blade's sweet spot (CUT_SPOT).
-const CUT_ELEVATION := -7.0
-const CUT_SPOT := 0.6
-const AIM_FIX_MAX := 50.0
-var _aim_fixes := {}
-
-
-## The pitch (radians, about the head's X) that puts `kind`'s cut through
-## CUT_ELEVATION: its bite run through a millisecond at a time, and the height
-## at which the blade's sweet spot crosses the vertical plane through the
-## crosshair turned onto that elevation. Moves with no
-## bite (the parry) are left as they are.
-func _aim_fix(kind: StringName) -> float:
-	if _aim_fixes.has(kind):
-		return _aim_fixes[kind]
-	var bite := _bite_of(kind)
-	var fix := 0.0
-	if bite.x >= 0.0:
-		# The blade's sweet spot, CUT_SPOT of the way from the guard to the tip.
-		var spot := _sword_rest * _blade_base.lerp(_blade_tip, CUT_SPOT)
-		var sum := 0.0
-		var n := 0
-		var t := bite.x
-		var prev := Vector3.ZERO
-		var first := true
-		while t <= bite.y:
-			var at := PlayerMotion.fp_sword(kind, t, _sword_grip(), _blade_frame) * spot
-			# The moment it crosses x = 0, in front of the eye.
-			if not first and (prev.x <= 0.0) != (at.x <= 0.0) and at.z < -0.3:
-				var mid := prev.lerp(at, prev.x / (prev.x - at.x))
-				sum += atan2(mid.y, -mid.z)
-				n += 1
-			prev = at
-			first = false
-			t += 0.001
-		if n > 0:
-			fix = clampf(deg_to_rad(CUT_ELEVATION) - sum / n, -deg_to_rad(AIM_FIX_MAX), deg_to_rad(AIM_FIX_MAX))
-	_aim_fixes[kind] = fix
-	return fix
-
-
-func _aim_weight(kind: StringName, t: float) -> float:
-	var bite := _bite_of(kind)
-	if bite.x < 0.0:
-		return 0.0
-	var end := PlayerMotion.length(kind)
-	return smoothstep(0.0, bite.x, t) * (1.0 - smoothstep(bite.y, bite.y + (end - bite.y) * 0.6, t))
-
-
-## When `kind`'s blade bites (pose s), or (-1, -1) for a move that does not.
-func _bite_of(kind: StringName) -> Vector2:
-	match kind:
-		&"slash": return SLASH_BITE
-		&"chop": return CHOP_BITE
-		&"heavy": return Vector2(HEAVY_BITE, HEAVY_HOLD)
-		&"wave": return Vector2(WAVE_WIND, WAVE_CUT)
-	return Vector2(-1.0, -1.0)
-
-
-## Out and down from the eye while a pose blends between two (head space, at the
-## middle of the blend): a straight line from the follow-through high on the left
-## to rest low on the right ran the fist under the eye and the arm across it.
-const BLEND_ARC := Vector3(0.0, -0.18, -0.32)
-
-
-func _arc_blend(a: Transform3D, b: Transform3D, w: float) -> Transform3D:
-	var p := _blend(a, b, w)
-	p.origin += BLEND_ARC * (4.0 * w * (1.0 - w))
-	return p
+## The camera in the knight's head (note 168): where the head has gone since the
+## move's stance -- a leap, a lunge, a crouch -- and `Graphics.head_sway` of how
+## it has turned, both by the move's weight. Head space: [offset, turn].
+func _head_ride() -> Array:
+	var m := body_motion()
+	var kind := &""
+	var t := 0.0
+	if not m.is_empty():
+		kind = m[0]
+		t = m[1]
+	elif _parry_t >= 0.0:
+		kind = &"parry"
+		t = _parry_t
+	if kind == &"" or _dead or in_cutscene:
+		return [Vector3.ZERO, Basis.IDENTITY]
+	var w := PlayerMotion.weight(kind, t)
+	# Knight space (+Z forward, +X its left) -> the player's (-Z forward, +X right).
+	var k2p := Basis(Vector3.UP, PI)
+	var off := k2p * PlayerMotion.head_offset(kind, t) * w
+	var turn := Basis(Quaternion.IDENTITY.slerp(PlayerMotion.head_turn(kind, t), w * Graphics.head_sway))
+	# The look's own pitch is under the player's hand, so the head's offset is
+	# the body's, unpitched; the turn rides on top of where they look.
+	return [off, k2p * turn * k2p.inverse()]
 
 
 ## Where the fist closes on the sword, in the pivot's frame: 0.42 of the way from
@@ -3283,29 +3158,9 @@ func _sword_grip() -> Vector3:
 	return _sword_rest * _blade_base.lerp(_blade_pommel, 0.42)
 
 
-## Seconds into the parry's recoil (note 167: the clip &"parry" played over the
-## guard), or -1.
+## Seconds into the parry's recoil (the clip &"parry", on the knight's upper body
+## over the guard), or -1.
 var _parry_t := -1.0
-
-
-## The guard with a parry's recoil on it: the clip's fist motion since its stance,
-## turned about the grip.
-func _parried_pose(guard: Transform3D) -> Transform3D:
-	if _parry_t < 0.0:
-		return guard
-	var d := PlayerMotion.fp_delta(&"parry", _parry_t)
-	var w := PlayerMotion.weight_in(&"parry", _parry_t) * PlayerMotion.weight_out(&"parry", _parry_t)
-	var turn := Basis.IDENTITY.slerp(d[0] as Basis, w * PARRY_TURN)
-	var grip := guard * _sword_grip()
-	var b := turn * guard.basis
-	return Transform3D(b, grip + (d[1] as Vector3) * w * PARRY_SHIFT - b * _sword_grip())
-
-
-## How much of the capture's parry the guard takes: its fist snaps back 0.5 m and
-## turns 60 degrees off a blow; over the guard, already drawn back, that put the
-## hilt in the face.
-const PARRY_TURN := 0.55
-const PARRY_SHIFT := 0.4
 
 
 func _rest_pose() -> Transform3D:
@@ -3462,8 +3317,6 @@ func _make_blade_glow() -> MeshInstance3D:
 	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	glow.set_instance_shader_parameter(&"fade", 1.0)
 	sword_model.add_child(glow)
-	if _viewmodel_layer != 0:
-		glow.layers = _viewmodel_layer
 	return glow
 
 
@@ -4209,7 +4062,10 @@ func _resolve_hits() -> void:
 	# (it is drawn in front of them); the line-of-sight test below is what stops
 	# anything being cut THROUGH the stone.
 	var xf := sword_pivot.global_transform * _sword_rest
-	var now_pts := [xf * _blade_base, xf * _blade_tip]
+	# The blade bites `sword_hit_reach` times its length from the guard (note
+	# 168): the knight's sword is its real size, the reach is the game's.
+	var base_w := xf * _blade_base
+	var now_pts := [base_w, base_w + (xf * _blade_tip - base_w) * sword_hit_reach]
 	if _blade_prev.is_empty():
 		_blade_prev = now_pts
 		return

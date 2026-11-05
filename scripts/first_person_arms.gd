@@ -1,86 +1,64 @@
 extends Node3D
 
-## The knight's own arms in the first-person view (note 156): the dark
-## knight's gauntlets (note 166) holding what is in hand. A child of the player's Head, made by
-## player.gd `_ready`.
+## The knight's arms holding what is in hand (notes 156, 157, 168). A child of
+## the player's Head, made by player.gd `_ready`.
 ##
-## Nothing is animated here. Every weapon already poses itself -- the sword on
-## its clips, the spear's stab and dash, the axe's chop and throw, the flask
-## raised to drink -- so each arm is solved onto it every frame: the fist is put
-## on the thing's grip, turned to its haft, and the elbow and shoulder follow
-## by two-bone IK. Swings, guards, parries, ducks, queued strokes and anything
-## added later move the arms with no work here.
+## There is one knight (coop_avatar.gd, note 168): this solves ITS arms, the same
+## arms the other player sees and the shadow casts, seen here from its own eyes.
+## Nothing has a first-person model of its own any more.
 ##
-## - The mesh is models/player_knight_arms.glb (tools/build_player_knight_arms.py):
-##   the knight cut down to its arms, the fingers bent into fists. It is
-##   dressed in the body's own material (coop_avatar.gd's knight), drawn pulled
-##   toward the camera like the sword (`use_z_clip_scale`), so it is never cut
-##   by a wall, and casts no shadow (the body does that, note 155).
-## - The LEFT arm is the guard (note 157; the torch it held is gone): right
-##   click brings the forearm up across the view, plate to the front, a
-##   blocked blow drives it back at the face, a parry bats the blow out wide.
-##   Its elbow, wrist and plate run on springs (`_update_guard`). Down, it is
-##   under the view and hidden.
-## - One copy of the mesh per arm, the other arm of each folded to a point.
-## - What the hand holds is not all at one scale (the flask is half size 21 cm
-##   from the eye), so the arm is drawn at the size of what it holds
-##   (`SCALE_FOR`), scaled about the eye: it looks a full-sized arm wherever it
-##   is (`k`).
-## - The shoulder sits behind and below the eye, a little under the rig's joint
-##   (`SHOULDER_DROP`). Out of reach, it slides toward the grip -- the body
-##   leaning in, never seen.
+## Every weapon still poses itself in the head's frame -- the sword on its clips
+## and strokes, the spear's, the axe's chop and throw, the flask raised to drink
+## -- and that pose is where the hand is to be. Each frame (after the body has
+## been posed, its walk and any attack clip), the right arm is solved onto it:
+## the fist put on the thing's grip, turned to its haft, the elbow and shoulder
+## following by two-bone IK. Through an attack clip the weapon is carried by the
+## clip's own fist (blended in and out with the move, `motion_w`) and the arm
+## follows it with the clip's elbow, so the capture plays on the arm the eye sees.
+## The weapon LEADS and the hand holds it (note 169): the fist is put exactly on
+## its grip, turned with it, and the fingers (tools/build_player_knight.py gave
+## the knight its finger and thumb bones) close round it (`_curl`).
+##
+## - The LEFT arm is the guard (note 157): right click brings the forearm up
+##   across the view, plate to the front, a blocked blow drives it back at the
+##   face, a parry bats the blow out wide. Its elbow, wrist and plate run on
+##   springs (`_update_guard`). Down, the body's own walk has it.
+## - The shoulder is the body's own joint, wherever the body has it: never moved,
+##   so the arm never parts from the pauldron. Out of reach the fist stops short,
+##   and the thing held comes with it.
 ## - Held: the sword's hilt, the spear and the axe up their hafts (`SPEAR_UP`,
-##   `AXE_UP`), the flask, a live rat's tail. Nothing in hand, or it put away
-##   (it drops out of view as it goes), and the arm is hidden.
+##   `AXE_UP`), the flask, a live rat's tail.
 
-const ARMS := preload("res://models/player_knight_arms.glb")
-const KNIGHT := preload("res://models/player_knight.glb")
-## The body's scale (coop_avatar.gd SCALE).
-const BODY_SCALE := 1.05
-## The eye in the knight's glTF space (+Z forward, +X its left): at the visor,
-## 1.6 m up at BODY_SCALE.
-const EYE := Vector3(0.0, 1.524, 0.04)
-## The middle of each closed fist, where a haft passes through it (glTF space,
-## the left fist; the right mirrored). Printed by the arms build (the dark
-## knight's gauntlet, note 166).
-const GRIP := Vector3(0.935, 1.314, -0.0736)
+## Where a handle sits in each hand (glTF space, the left hand; the right
+## mirrored): in the palm, at the root of the fingers, just under the palm's
+## plate and across the middle of the hand's depth (note 169; slices of the dark
+## knight's gauntlet). The fingers close round it from there (`_grip_curl`).
+const GRIP := Vector3(0.925, 1.306, -0.0736)
 ## Where the elbow is pushed (head space, the right arm; mirrored for the left):
 ## down, out to the side and a little back.
 const POLE := Vector3(0.55, -1.0, 0.35)
-## An arm's scale for each kind of thing, against the knight's real size.
-const SCALE_FOR := {&"sword": 1.0, &"spear": 1.0, &"axe": 1.0, &"potion": 0.5, &"rat": 1.0}
-## How far up the haft the fist holds the spear and the axe (see `_right_target`).
+## How far up the haft the fist holds the spear and the axe (see `_held`).
 const SPEAR_UP := 0.28
 const AXE_UP := 0.12
-## The shoulder moved from the rig's joint (head space, metres, the right arm).
-const SHOULDER_DROP := Vector3(0.02, -0.09, 0.0)
-## The molten cracks' glow: dimmer than the body's 2.2, since here they are
-## a hand's breadth from the eye.
-const GLOW := 1.2
 const RIGHT := 0
 const LEFT := 1
 
 ## The left arm's poses (head space, metres; the eye at the origin, -Z ahead):
 ## where the elbow and the wrist go, and which way the back of the gauntlet --
-## the vambrace's outer plate -- faces. Down: out of the view under it.
+## the vambrace's outer plate -- faces. Down: below the view.
 const DOWN_ELBOW := Vector3(-0.30, -0.60, 0.04)
 const DOWN_WRIST := Vector3(-0.20, -0.82, -0.10)
 const DOWN_BACK := Vector3(-0.4, -0.2, -1.0)
 ## The guard (note 158): the forearm laid flat across the lower half of the
-## view, square to it -- elbow and fist at one height and one depth, the elbow
-## a hand's breadth left of centre and 1.5 cm ahead of the fist, driven forward
-## as into a door; the upper arm thrust forward from the shoulder, which comes
-## forward and in behind it (`GUARD_SHOULDER`), the body's weight behind the
-## bar. The elbow is placed at the upper arm's length from that braced shoulder
-## and the wrist at the forearm's from the elbow, so the IK lands it exactly.
-## The plate to the front, tipped up.
+## view, square to it -- elbow and fist at one height and one depth, the elbow a
+## hand's breadth left of centre, driven forward as into a door. The plate to
+## the front, tipped up.
 const GUARD_ELBOW := Vector3(-0.22, -0.14, -0.263)
 const GUARD_WRIST := Vector3(0.094, -0.14, -0.248)
 const GUARD_BACK := Vector3(0.0, 0.35, -1.0)
-const GUARD_SHOULDER := Vector3(0.06, 0.03, -0.13)
 ## The parry's beat: the forearm swung up and out round the elbow, standing
-## upright to the left of the view, the plate turned out -- the blow batted wide. Held for
-## `PARRY_BEAT`, then `PARRY_HOLD` more before the arm may go down.
+## upright to the left of the view, the plate turned out -- the blow batted wide.
+## Held for `PARRY_BEAT`, then `PARRY_HOLD` more before the arm may go down.
 const PARRY_ELBOW := Vector3(-0.30, -0.30, -0.20)
 const PARRY_WRIST := Vector3(-0.26, 0.0, -0.30)
 const PARRY_BACK := Vector3(-1.0, 0.1, -0.5)
@@ -88,31 +66,30 @@ const PARRY_BEAT := 0.16
 const PARRY_HOLD := 0.18
 ## Springs: (stiffness in rad/s, damping ratio). The elbow stiffer than the
 ## wrist, so it leads. Near critical damping (note 158): the arm snaps up and
-## locks, with well under a centimetre of overshoot -- a braced arm, not a
-## wobbling one.
+## locks -- a braced arm, not a wobbling one.
 const ELBOW_SPRING := Vector2(44.0, 0.92)
 const WRIST_SPRING := Vector2(36.0, 0.88)
 const BACK_SPRING := Vector2(32.0, 0.95)
 const PARRY_SPRING := Vector2(56.0, 0.8)
 ## Going down the springs are this much softer: the arm drops, heavy.
 const DROP_SPRING := 0.55
-## How far a turn of the head leaves the raised arm behind (m per radian):
-## little, the arm locked to the body.
+## How far a turn of the head leaves the raised arm behind (m per radian).
 const LOOK_LAG := 0.04
 ## Held up, how much it breathes (m at the wrist) -- no tremble.
 const BREATH := 0.002
-## A blow's recoil: its own spring, on top of the pose. The braced arm gives a
-## short, hard jolt back at the face and drives straight back into place. The
-## kick each gives it (m/s: a block back and down at the face, a parry out wide).
+## A blow's recoil: its own spring, on top of the pose, and the kick each gives
+## it (m/s: a block back and down at the face, a parry out wide).
 const RECOIL_SPRING := Vector2(26.0, 0.85)
 const BLOCK_KICK := Vector3(0.15, -0.3, 1.2)
 const PARRY_KICK := Vector3(-1.0, 0.45, -1.0)
 ## A blow's shudder through the plate: metres at full, and how fast it dies.
 const SHUDDER := 0.003
 const SHUDDER_FADE := 14.0
+## How long the guard arm takes to hand back to the body's walk once it is down.
+const GUARD_RELEASE := 0.2
 
 var player: Node3D
-var _material: Material
+var _body: Node3D
 var _arms: Array[Arm] = []
 ## The left arm's springs (head space) and its clocks.
 var _elbow := DOWN_ELBOW
@@ -129,17 +106,17 @@ var _shudder := 0.0
 var _shudder_t := 0.0
 var _last_yaw := 0.0
 var _last_pitch := 0.0
+## 0..1: how much the guard has the left arm (eased off as it comes down).
+var _guard_w := 0.0
 
 
 class Arm:
 	var side := RIGHT
-	var root: Node3D
 	var skel: Skeleton3D
-	var k := 1.0
 	var upper := -1
 	var fore := -1
 	var hand := -1
-	var shoulder_parent := Transform3D.IDENTITY
+	var parent := -1
 	var rest_upper := Transform3D.IDENTITY
 	var rest_fore := Transform3D.IDENTITY
 	var rest_hand := Transform3D.IDENTITY
@@ -155,66 +132,43 @@ class Arm:
 func setup(p: Node3D) -> void:
 	player = p
 	name = "KnightArms"
-	_material = _knight_material()
-	_arms.append(_make_arm(RIGHT))
-	_arms.append(_make_arm(LEFT))
 	p.connect("guarded", _on_guarded)
 
 
 func _ready() -> void:
-	# After the player (and the head bob), the weapons and the AnimationPlayer
-	# that swings the sword have all posed this frame.
+	# After the player, the weapons, the AnimationPlayer that swings the sword
+	# and the body (coop_avatar.gd) have all posed this frame.
 	process_priority = 900
 
 
-## The body's material, its emission as bright as the body's, drawn on top.
-func _knight_material() -> Material:
-	var k := KNIGHT.instantiate()
-	var mat: Material = null
-	for g in k.find_children("*", "MeshInstance3D", true, false):
-		var mi := g as MeshInstance3D
-		if mi.mesh != null and mi.mesh.get_surface_count() > 0:
-			mat = mi.mesh.surface_get_material(0)
-			break
-	k.free()
-	var m := (mat as StandardMaterial3D).duplicate() as StandardMaterial3D if mat is StandardMaterial3D \
-		else StandardMaterial3D.new()
-	if m.emission_enabled:
-		m.emission_energy_multiplier = GLOW
-	m.use_z_clip_scale = true
-	# Both faces: a hand's breadth from the eye no face may vanish edge-on or from
-	# inside a cuff (note 166; the mesh is closed, this is belt and braces).
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	m.z_clip_scale = float(player.get("sword_draw_depth"))
-	return m
+## The body's arms, once the body is there.
+func _bind() -> bool:
+	_body = player.get("_avatar") as Node3D
+	if _body == null or _body.get("_skel") == null:
+		return false
+	_arms.append(_make_arm(RIGHT))
+	_arms.append(_make_arm(LEFT))
+	return true
 
 
 func _make_arm(side: int) -> Arm:
 	var a := Arm.new()
 	a.side = side
-	a.root = ARMS.instantiate()
-	add_child(a.root)
-	a.skel = a.root.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
-	for g in a.root.find_children("*", "MeshInstance3D", true, false):
-		var mi := g as MeshInstance3D
-		mi.material_override = _material
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		# Riding at the eye: never culled for being off to one side of a chunk.
-		mi.extra_cull_margin = 2.0
+	a.skel = _body.get("_skel") as Skeleton3D
+	var root := _body.get("_knight") as Node3D
 	var pre := "Right" if side == RIGHT else "Left"
-	a.upper = a.skel.find_bone(pre + "Arm")
-	a.fore = a.skel.find_bone(pre + "ForeArm")
-	a.hand = a.skel.find_bone(pre + "Hand")
 	var sk := a.skel
-	a.shoulder_parent = _rest_global(sk, sk.get_bone_parent(a.upper))
+	a.upper = sk.find_bone(pre + "Arm")
+	a.fore = sk.find_bone(pre + "ForeArm")
+	a.hand = sk.find_bone(pre + "Hand")
+	a.parent = sk.get_bone_parent(a.upper)
 	a.rest_upper = _rest_global(sk, a.upper)
 	a.rest_fore = _rest_global(sk, a.fore)
 	a.rest_hand = _rest_global(sk, a.hand)
 	a.len_upper = a.rest_upper.origin.distance_to(a.rest_fore.origin)
 	a.len_fore = a.rest_fore.origin.distance_to(a.rest_hand.origin)
 	# glTF scene space -> skeleton space.
-	var s2k := _rel_transform(sk, a.root)
-	var k2s := s2k.affine_inverse()
+	var k2s := _rel_transform(sk, root).affine_inverse()
 	a.k2s = k2s.basis
 	var mirror := 1.0 if side == LEFT else -1.0
 	a.grip = k2s * Vector3(GRIP.x * mirror, GRIP.y, GRIP.z)
@@ -224,10 +178,6 @@ func _make_arm(side: int) -> Arm:
 	var up := (k2s.basis * Vector3.UP).normalized()
 	var fwd := (k2s.basis * Vector3.BACK).normalized()
 	a.fist_rest = Basis(out, up, fwd)
-	# The other arm of this copy folded away to nothing at its shoulder.
-	var other := sk.find_bone(("Left" if side == RIGHT else "Right") + "Arm")
-	sk.set_bone_pose_scale(other, Vector3.ONE * 0.0001)
-	a.root.visible = false
 	return a
 
 
@@ -250,103 +200,274 @@ func _rel_transform(node: Node3D, root: Node3D) -> Transform3D:
 func _process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
-	_pose(_arms[RIGHT], _right_target())
+	if _arms.is_empty() and not _bind():
+		return
+	if not _body.visible or player.get("_dead") == true:
+		return
+	_pose_right(_held())
 	_update_guard(delta)
 
 
-## What the right hand holds this frame: [kind, grip point, haft direction]
-## (global), or [] for nothing in view.
-func _right_target() -> Array:
-	var held: StringName = player.call("held_item")
+## What the right hand holds this frame, or {} for nothing: `kind`; `node`, what
+## it hangs from (moved with the hand when it must be); `frame`, its GRIP frame
+## (global: the origin where the fist closes on it, Z along the haft toward its
+## business end, X the way the knuckles go -- a sword's edge -- when `edged`);
+## and the fingers close round it by its kind (`_grip_curl`).
+func _held() -> Dictionary:
 	var sword := player.get("sword_model") as Node3D
 	if sword != null and sword.is_visible_in_tree():
 		var base: Vector3 = player.get("_blade_base")
 		var pommel: Vector3 = player.get("_blade_pommel")
 		var tip: Vector3 = player.get("_blade_tip")
 		var t := sword.global_transform
+		var z := (t.basis * (tip - base)).normalized()
+		var pivot := player.get("sword_pivot") as Node3D
+		var edge: Vector3 = pivot.global_basis * (player.get("_blade_frame") as Basis).x
 		# On the hilt, nearer the guard than the pommel.
-		return [&"sword", t * base.lerp(pommel, 0.42), (t.basis * (tip - base)).normalized()]
+		return {"kind": &"sword", "node": pivot, "edged": true,
+			"frame": _frame_from(t * base.lerp(pommel, 0.42), z, edge)}
 	for kind: StringName in [&"spear", &"axe"]:
 		var w := player.get(kind) as Node3D
 		var m := w.get("_model") as Node3D if w != null else null
 		if m != null and m.is_visible_in_tree():
 			var t := m.global_transform
-			# Up the haft from where the models put the hand (the spear's butt
-			# bands, the axe's leather), which is under the bottom of the view:
-			# the fist shows, reaching forward along it.
 			if kind == &"spear":
-				return [kind, t * Vector3(0.0, 0.0, -SPEAR_UP), -t.basis.z.normalized()]
-			return [kind, t * Vector3(0.0, AXE_UP, 0.0), t.basis.y.normalized()]
+				return {"kind": kind, "node": w, "edged": false,
+					"frame": _frame_from(t * Vector3(0.0, 0.0, -SPEAR_UP), -t.basis.z, t.basis.x)}
+			return {"kind": kind, "node": w, "edged": false,
+				"frame": _frame_from(t * Vector3(0.0, AXE_UP, 0.0), t.basis.y, t.basis.x)}
 	var potion := player.get("_held_potion") as Node3D
 	var flask := potion.get("_model") as Node3D if potion != null else null
 	if flask != null and flask.is_visible_in_tree():
 		var t := flask.global_transform
-		return [&"potion", t * Vector3(0.0, 0.07, 0.0), t.basis.y.normalized()]
+		return {"kind": &"potion", "node": potion, "edged": false,
+			"frame": _frame_from(t * Vector3(0.0, 0.07, 0.0), t.basis.y, t.basis.x)}
 	# A live rat hung by the tail: the fist pinches its tip (rat_control.gd).
 	var rats := player.get("rats") as Node3D
 	var rat := rats.get("_live") as Node3D if rats != null else null
 	if rat != null and rat.is_visible_in_tree():
-		return [&"rat", rat.call("tail_tip"), Vector3.UP]
-	return []
+		return {"kind": &"rat", "node": null, "edged": false,
+			"frame": _frame_from(rat.call("tail_tip"), Vector3.UP, Vector3.RIGHT)}
+	return {}
 
 
-## The arm's skeleton solved so the fist sits on `target`'s grip.
-func _pose(a: Arm, target: Array) -> void:
-	if target.is_empty():
-		a.root.visible = false
+## A right-handed frame: Z along `along`, X as near `across` as that allows.
+static func _frame_from(at: Vector3, along: Vector3, across: Vector3) -> Transform3D:
+	var z := along.normalized()
+	var x := across - z * across.dot(z)
+	if x.length_squared() < 1e-8:
+		x = z.cross(Vector3.UP if absf(z.y) < 0.9 else Vector3.RIGHT)
+	x = x.normalized()
+	return Transform3D(Basis(x, z.cross(x), z), at)
+
+
+## The right hand on what it holds (note 169). Outside an attack clip what is
+## held LEADS: it is posed by its own moves, and the hand is put exactly in its
+## grip, position and turn (the knuckles along a sword's edge), the arm reaching
+## it by IK; out of reach, the weapon comes back with the hand rather than the
+## two parting. Through a clip the arm is the capture's own, bone for bone
+## (blended in and out with the move's weight), and the weapon is in THAT hand's
+## grip (`_clip_frame`) -- the IK's own forearm twist against the capture's
+## pinched the gauntlet. Either way the fist is exactly on the grip, and then the
+## fingers close round it. Nothing held: the body's own arm and a loose hand.
+func _pose_right(held: Dictionary) -> void:
+	var a := _arms[RIGHT]
+	if held.is_empty():
+		_curl(a, CURL_LOOSE, 0.0)
 		return
-	var h2s := _place(a, SCALE_FOR.get(target[0], 1.0))
-	var to_skel := a.skel.global_transform.affine_inverse()
-	var p: Vector3 = to_skel * (target[1] as Vector3)
-	var g: Vector3 = (to_skel.basis * (target[2] as Vector3)).normalized()
-	var mirror := -1.0 if a.side == RIGHT else 1.0
-	# In an attack clip the shoulder goes where the capture's did (note 167):
-	# the torso's twist carries it, as it carries the fist.
-	var shift: Vector3 = player.call("motion_shoulder_shift") if a.side == RIGHT else Vector3.ZERO
-	var shoulder := _shoulder(a, h2s, shift)
-	# The fist: its haft along g, the forearm coming at it from the shoulder.
-	var h := (p - shoulder) - g * (p - shoulder).dot(g)
-	if h.length_squared() < 1e-8:
-		h = a.fist_rest.x
-	h = h.normalized()
-	var back := (g.cross(h) if a.side == LEFT else h.cross(g)).normalized()
+	var sk := a.skel
+	var to_world := sk.global_transform
+	var to_skel := to_world.affine_inverse()
+	var shoulder := _shoulder(a)
+	var node := held["node"] as Node3D
+	var frame: Transform3D = held["frame"]
+	# The fist's frame on the grip: the haft through it (g), the knuckles out
+	# along the edge (h, the side nearer where the arm comes from), the back of
+	# the hand from the two. A haft with no edge: the forearm comes at it from
+	# the shoulder, squared to it.
+	var p := to_skel * frame.origin
+	var g := (to_skel.basis * frame.basis.z).normalized()
+	var reach := (p - shoulder) - g * (p - shoulder).dot(g)
+	if reach.length_squared() < 1e-8:
+		reach = a.fist_rest.x
+	var h := reach.normalized()
+	if held["edged"]:
+		var e := (to_skel.basis * frame.basis.x).normalized()
+		e = (e - g * e.dot(g)).normalized()
+		h = e if e.dot(h) >= 0.0 else -e
+	var back := h.cross(g).normalized()
 	var turn := Basis(h, back, g) * a.fist_rest.inverse()
 	var wrist := p - turn * (a.grip - a.rest_hand.origin)
-	var pole := h2s.basis * Vector3(POLE.x * -mirror, POLE.y, POLE.z)
-	_solve(a, shoulder, wrist, turn, back, pole)
+	var q := _solve(a, shoulder, wrist, turn, back, _h2s(a).basis * POLE)
+	var w: float = _body.get("motion_w") if held["kind"] in [&"sword", &"spear"] else 0.0
+	var bones := [a.upper, a.fore, a.hand]
+	for k in 3:
+		var rot: Quaternion = q[k]
+		if w > 0.0:
+			var clip = _body.call("clip_arm", bones[k])
+			if clip != null:
+				rot = rot.slerp(clip as Quaternion, w)
+		sk.set_bone_pose_rotation(bones[k], rot)
+	if node != null:
+		var now: Transform3D = held["frame"]
+		var held_at: Transform3D
+		if w > 0.0:
+			# In the hand as the clip (and the blend) left it.
+			held_at = _clip_frame(a, held["kind"])
+			if held["edged"] and held_at.basis.x.dot(now.basis.x) < 0.0:
+				held_at.basis = Basis(-held_at.basis.x, -held_at.basis.y, held_at.basis.z)
+		else:
+			# Where it was posed, carried back with the wrist if the arm fell short.
+			held_at = frame
+			held_at.origin += to_world.basis * ((q[3] as Vector3) - wrist)
+		node.global_transform = held_at * now.affine_inverse() * node.global_transform
+	_curl(a, _grip_curl(a, held["kind"]), 0.0)
 
 
-## Shows `a`, drawn at `k` of the knight's size about the eye (the head's
-## origin) and turned to face the view's -Z. Returns head space -> skeleton space.
-func _place(a: Arm, k: float) -> Transform3D:
-	a.root.visible = true
-	a.k = k
-	var b := Basis(Vector3.UP, PI).scaled(Vector3.ONE * BODY_SCALE * k)
-	a.root.transform = Transform3D(b, -(b * EYE))
+## Where the capture's fist holds the weapon (global grip frame): through the
+## fist as the clip has posed the hand -- its grip point, the haft along the
+## fist's own grip line, the knuckles along a sword's edge -- read off the body's
+## arm before the IK. The hand is then exactly the capture's, with no twist put
+## into the wrist to point the blade anywhere else (that pinched the gauntlet
+## mid-cut).
+func _clip_frame(a: Arm, _kind: StringName) -> Transform3D:
+	var sk := a.skel
+	var to_world := sk.global_transform
+	var hand := sk.get_bone_global_pose(a.hand)
+	var at := to_world * (hand * (a.rest_hand.affine_inverse() * a.grip))
+	var turn := hand.basis.orthonormalized() * a.rest_hand.basis.inverse()
+	var fist := turn * a.fist_rest
+	return _frame_from(at, to_world.basis * fist.z, to_world.basis * fist.x)
+
+
+# --- The fingers (note 169) ---------------------------------------------------------
+
+## The fingers close round what is held until they touch it (`_grip_curl`):
+## its handle a cylinder of HANDLE_R about the grip, along the haft, and each
+## finger HALF_FINGER thick about its bones' line. A thing with no handle (a
+## rat's tail) is pinched; an empty hand hangs loose; the guard is a fist.
+const HANDLE_R := {&"sword": 0.016, &"spear": 0.017, &"axe": 0.018, &"potion": 0.034, &"rat": 0.004}
+const HALF_FINGER := 0.009
+## How far each finger joint may close at most (radians: knuckle, middle, last).
+const CLOSE_MAX := [1.5, 1.7, 1.4]
+## The thumb's two joints, laid along the haft (it lies on the grip, a sword's
+## the way a swordsman's does).
+const THUMB_ON := [0.15, 0.2]
+const CURL_FIST := [1.2, 1.4, 1.1, 0.4, 0.5]
+const CURL_LOOSE := [0.2, 0.3, 0.2, 0.05, 0.05]
+const FINGERS := ["HandFinger1", "HandFinger2", "HandFinger3", "HandThumb1", "HandThumb2"]
+var _grip_cache := {}
+
+
+## The finger joints' closing for `kind`, found once per hand: each joint in turn,
+## knuckle first, closed as far as it goes (to CLOSE_MAX) before the finger beyond
+## it would come within the handle (its radius and the finger's half-thickness of
+## the haft's line). In the hand's own rest frame, where the handle is fixed.
+func _grip_curl(a: Arm, kind: StringName) -> Array:
+	var key := "%d|%s" % [a.side, kind]
+	if _grip_cache.has(key):
+		return _grip_cache[key]
+	var sk := a.skel
+	var pre := "Right" if a.side == RIGHT else "Left"
+	var mirror := -1.0 if a.side == RIGHT else 1.0
+	var unit := (a.k2s * Vector3.RIGHT).length()
+	var reach: float = (float(HANDLE_R.get(kind, 0.016)) + HALF_FINGER) * unit
+	var on := a.grip
+	var along := a.fist_rest.z.normalized()
+	var axis := (a.k2s * Vector3(0.0, 0.0, 1.0)).normalized()
+	var pts: Array[Vector3] = []
+	for k in 3:
+		pts.append(sk.get_bone_global_rest(sk.find_bone(pre + String(FINGERS[k]))).origin)
+	pts.append(pts[2] + (pts[2] - pts[1]).normalized() * 0.02 * unit)
+	var out: Array = []
+	for k in 3:
+		var lo := 0.0
+		var hi: float = CLOSE_MAX[k]
+		if _clear(_turned(pts, k, hi * -mirror, axis), k, on, along, reach):
+			lo = hi
+		else:
+			for it in 20:
+				var mid := (lo + hi) * 0.5
+				if _clear(_turned(pts, k, mid * -mirror, axis), k, on, along, reach):
+					lo = mid
+				else:
+					hi = mid
+		pts = _turned(pts, k, lo * -mirror, axis)
+		out.append(lo)
+	out.append_array(THUMB_ON)
+	_grip_cache[key] = out
+	return out
+
+
+## `pts` with everything past joint `k` turned about it by `angle` round `axis`.
+static func _turned(pts: Array[Vector3], k: int, angle: float, axis: Vector3) -> Array[Vector3]:
+	var out := pts.duplicate()
+	var r := Basis(axis, angle)
+	for i in range(k + 1, pts.size()):
+		out[i] = pts[k] + r * (pts[i] - pts[k])
+	return out
+
+
+## Whether the finger from joint `k` out keeps `reach` from the haft's line.
+static func _clear(pts: Array[Vector3], k: int, on: Vector3, along: Vector3, reach: float) -> bool:
+	for i in range(k, pts.size() - 1):
+		for s in 5:
+			var p: Vector3 = pts[i].lerp(pts[i + 1], (s + 1) / 5.0)
+			var d := p - on
+			if (d - along * d.dot(along)).length() < reach:
+				return false
+	return true
+
+
+## Closes `a`'s fingers by `curl` (finger joints from the knuckle, then the
+## thumb's two). The four fingers bend down toward the palm about the hand's
+## front-to-back line (knight Z); the thumb in about the arm's own line (knight
+## X). Each joint is a turn from its rest relative to its parent, so the chain
+## wraps.
+func _curl(a: Arm, curl: Array, _unused: float) -> void:
+	var sk := a.skel
+	var pre := "Right" if a.side == RIGHT else "Left"
+	var mirror := -1.0 if a.side == RIGHT else 1.0
+	for k in FINGERS.size():
+		var i := sk.find_bone(pre + String(FINGERS[k]))
+		if i < 0:
+			continue
+		var axis: Vector3
+		var angle: float = curl[k]
+		if k < 3:
+			axis = a.k2s * Vector3(0.0, 0.0, 1.0)
+			angle *= -mirror
+		else:
+			axis = a.k2s * Vector3(1.0, 0.0, 0.0)
+			angle *= mirror
+		var rg := sk.get_bone_global_rest(i).basis.orthonormalized()
+		var e := Basis(axis.normalized(), angle)
+		var local := sk.get_bone_rest(i).basis.orthonormalized() * (rg.inverse() * e * rg)
+		sk.set_bone_pose_rotation(i, local.get_rotation_quaternion())
+
+
+## Head space -> skeleton space.
+func _h2s(a: Arm) -> Transform3D:
 	return a.skel.global_transform.affine_inverse() * (get_parent() as Node3D).global_transform
 
 
-## The shoulder joint, skeleton space. The rig's sits high, at the top of the
-## pauldron; a real one is lower, and there the upper arm stays out of the
-## bottom of the view. `extra` moves it on (head space, metres).
-func _shoulder(a: Arm, h2s: Transform3D, extra := Vector3.ZERO) -> Vector3:
-	var mirror := -1.0 if a.side == RIGHT else 1.0
-	return a.rest_upper.origin + h2s.basis \
-		* (Vector3(SHOULDER_DROP.x * -mirror, SHOULDER_DROP.y, SHOULDER_DROP.z) * a.k + extra)
+## The shoulder joint as the body has it now (skeleton space).
+func _shoulder(a: Arm) -> Vector3:
+	return a.skel.get_bone_global_pose(a.parent) * a.skel.get_bone_rest(a.upper).origin
 
 
 ## The bones from `shoulder` to `wrist` (skeleton space), the fist turned by
-## `turn` from its rest, its back toward `back`, the elbow toward `pole`.
+## `turn` from its rest, its back toward `back`, the elbow toward `pole`: their
+## local turns [upper, fore, hand], and the wrist reached. Out of reach, the
+## wrist stops short.
 func _solve(a: Arm, shoulder: Vector3, wrist: Vector3, turn: Basis, back: Vector3,
-		pole: Vector3) -> void:
+		pole: Vector3) -> Array:
 	var hand_basis := turn * a.rest_hand.basis
-	# Two bones from the shoulder to the wrist; out of reach, the shoulder
-	# comes forward to it.
 	var reach := (a.len_upper + a.len_fore) * 0.995
 	var to_wrist := wrist - shoulder
 	var d := to_wrist.length()
 	if d > reach:
-		shoulder = wrist - to_wrist / d * reach
+		wrist = shoulder + to_wrist / d * reach
 		d = reach
 	d = maxf(d, absf(a.len_upper - a.len_fore) + 0.001)
 	var dir := (wrist - shoulder).normalized()
@@ -365,21 +486,20 @@ func _solve(a: Arm, shoulder: Vector3, wrist: Vector3, turn: Basis, back: Vector
 	var fore_dir := (wrist - elbow).normalized()
 	var fore_turn := _frame(fore_dir, back) * _frame(fore_rest_dir, a.fist_rest.y).inverse()
 	var fore_basis := fore_turn * a.rest_fore.basis
-	var sk := a.skel
-	sk.set_bone_pose_position(a.upper, a.shoulder_parent.affine_inverse() * shoulder)
-	sk.set_bone_pose_rotation(a.upper,
-		(a.shoulder_parent.basis.inverse() * upper_basis).get_rotation_quaternion())
-	sk.set_bone_pose_rotation(a.fore, (upper_basis.inverse() * fore_basis).get_rotation_quaternion())
-	sk.set_bone_pose_rotation(a.hand, (fore_basis.inverse() * hand_basis).get_rotation_quaternion())
+	var parent := a.skel.get_bone_global_pose(a.parent).basis.orthonormalized()
+	return [(parent.inverse() * upper_basis).get_rotation_quaternion(),
+		(upper_basis.inverse() * fore_basis).get_rotation_quaternion(),
+		(fore_basis.inverse() * hand_basis).get_rotation_quaternion(), wrist]
 
 
 # --- The left arm: the guard (note 157) ----------------------------------------
 
 ## Physical, not keyed: the elbow, the wrist and the way the vambrace faces
 ## each run on a damped spring toward the pose of the moment, so the arm comes
-## up with the elbow leading and a little overshoot, settles, breathes, lags a
-## turn of the head, and takes a blow as a shove into the springs (the fist
-## driven back at the face, the plate shuddering) instead of a canned clip.
+## up with the elbow leading, settles, breathes, lags a turn of the head, and
+## takes a blow as a shove into the springs (the fist driven back at the face,
+## the plate shuddering) instead of a canned clip. Down and still, the body's own
+## walk has the arm again (`_guard_w`).
 func _update_guard(delta: float) -> void:
 	var a := _arms[LEFT]
 	var raised: bool = player.call("is_blocking")
@@ -392,20 +512,16 @@ func _update_guard(delta: float) -> void:
 	var wrist_goal := GUARD_WRIST if up else DOWN_WRIST
 	var back_goal := GUARD_BACK if up else DOWN_BACK
 	if _parry_t >= 0.0 and _parry_t < PARRY_BEAT:
-		# The beat: the forearm swept out round the elbow, the plate turned
-		# out, batting the blow wide; then back to the guard (or down).
 		elbow_goal = PARRY_ELBOW
 		wrist_goal = PARRY_WRIST
 		back_goal = PARRY_BACK
 	if up:
-		# Held up: it only breathes, a couple of millimetres; locked, no tremble.
 		_held_t += delta
 		var breath := sin(_held_t * 1.9)
 		wrist_goal += Vector3(0.0, BREATH * breath, 0.6 * BREATH * breath)
 		elbow_goal += Vector3(0.0, 0.8 * BREATH * breath, 0.0)
 	else:
 		_held_t = 0.0
-	# A turn of the head: the arm, having weight, is left behind a little.
 	var yaw: float = player.global_rotation.y
 	var pitch: float = player.get("_look_pitch")
 	var turn := Vector2(clampf(wrapf(yaw - _last_yaw, -PI, PI), -0.2, 0.2),
@@ -416,10 +532,8 @@ func _update_guard(delta: float) -> void:
 		var lag := Vector3(turn.x, -turn.y, 0.0) * LOOK_LAG
 		_wrist += lag
 		_elbow += lag * 0.6
-	# Up quick and springy, the elbow ahead of the fist; down heavier.
 	var w_up := PARRY_SPRING if _parry_t >= 0.0 and _parry_t < PARRY_BEAT else WRIST_SPRING
 	var s := 1.0 if up else DROP_SPRING
-	# Small steps: the springs are stiff, and a long frame must not blow them up.
 	var steps := clampi(ceili(delta / 0.004), 1, 12)
 	var dt := delta / float(steps)
 	for i in steps:
@@ -433,28 +547,34 @@ func _update_guard(delta: float) -> void:
 		_recoil += _recoil_v * dt
 	_shudder *= exp(-SHUDDER_FADE * delta)
 	_shudder_t += delta
-	# Down and still: out of the view, nothing to draw.
-	if not up and _wrist.distance_to(DOWN_WRIST) < 0.04 and _wrist_v.length() < 0.2 \
-			and _recoil.length() < 0.01:
-		a.root.visible = false
+	# Down and still: handed back to the body's own walk.
+	var settled := not up and _wrist.distance_to(DOWN_WRIST) < 0.04 and _wrist_v.length() < 0.2 \
+		and _recoil.length() < 0.01
+	_guard_w = move_toward(_guard_w, 0.0 if settled else 1.0, delta / GUARD_RELEASE)
+	var loose: Array = []
+	for k in CURL_FIST.size():
+		loose.append(lerpf(CURL_LOOSE[k], CURL_FIST[k], _guard_w))
+	_curl(a, loose, 0.0)
+	if _guard_w <= 0.0:
 		return
 	var wrist := _wrist + _recoil + Vector3(sin(_shudder_t * 73.0), sin(_shudder_t * 61.0 + 1.0),
 		sin(_shudder_t * 89.0 + 2.0)) * SHUDDER * _shudder
-	var h2s := _place(a, 1.0)
-	# How far up the arm is, for the shoulder coming forward behind it.
-	var raised_by := clampf(1.0 - _wrist.distance_to(GUARD_WRIST) / DOWN_WRIST.distance_to(GUARD_WRIST),
-		0.0, 1.0)
-	var shoulder := _shoulder(a, h2s, GUARD_SHOULDER * raised_by)
-	var w := h2s * wrist
+	var h2s := _h2s(a)
+	var shoulder := _shoulder(a)
+	var wr := h2s * wrist
 	var e := h2s * (_elbow + _recoil * 0.6)
 	# The fist straight on from the forearm, its back (the gauntlet's plate)
 	# toward `_back`; the haft line through it falls out of the two.
-	var h := (w - e).normalized()
+	var h := (wr - e).normalized()
 	var back := h2s.basis * _back
 	back = (back - h * back.dot(h)).normalized()
 	var g := h.cross(back).normalized()
 	var turn_basis := Basis(h, back, g) * a.fist_rest.inverse()
-	_solve(a, shoulder, w, turn_basis, back, e - shoulder)
+	var q := _solve(a, shoulder, wr, turn_basis, back, e - shoulder)
+	var sk := a.skel
+	for k in 3:
+		var bone: int = [a.upper, a.fore, a.hand][k]
+		sk.set_bone_pose_rotation(bone, sk.get_bone_pose_rotation(bone).slerp(q[k], _guard_w))
 
 
 ## The spring's velocity after `dt`: stiffness `omega` (rad/s), damping ratio `zeta`.

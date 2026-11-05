@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 167), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 169), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -597,6 +597,8 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 165 | 2026-11-04 | Walk and sprint both +0.75 m/s (walk 2.5 -> 3.25, sprint 4.25 -> 5.0), the 1.75 m/s gap and the blend kept; the Remnant still 1.35 x the sprint | [docs/notes/165-walk-and-sprint-faster.md](docs/notes/165-walk-and-sprint-faster.md) |
 | 166 | 2026-11-04 | The player is the user's dark fantasy knight (Tripo, no rig: skinned onto the same Meshy skeleton, weights per welded place so seams cannot open, the arms nudged 3.5 cm back); a PBR finish baked in Cycles from the albedo alone (normal 4096, AO + roughness + metal ORM 2048; gold seams polished metal, plate worn steel, no glow); the first-person arms welded and capped, 0 open edges, drawn double-sided; GRIP (0.935, 1.314, -0.0736) | [docs/notes/166-dark-knight.md](docs/notes/166-dark-knight.md) |
 | 167 | 2026-11-05 | Every attack and the parry are Higgsfield motion clips (Meshy action library; motion only, on the game's own knight) played by the body and the first-person view alike (`player_motion.gd`: baked FK, time-warped through monotone-cubic knots for dynamic speed, blended in/out; `tools/strip_anim_clip.py`, `models/anims/`): swipes alternate forehand/backhand (Left_Slash) and bite at 0.225 s (was 0.156), the heavy (Charged_Slash) at 0.78 s (was 0.59), the ult is Sword_Judgment (crouch, leap, airborne cut throws the wave, landing, flourish), a parry recoil; cuts auto-aimed through the crosshair (`_aim_fix`); spear LMB jab-jab-lunge (16, +1.1 m) combo, spear Q a delayed low sweep (22) that knocks down (`knock_down_from` on the decrepit and the proels); proel blows x1.3 (TEMPO 2.24) | [docs/notes/167-higgsfield-attack-clips-spear-combo-sweep-faster-proels.md](docs/notes/167-higgsfield-attack-clips-spear-combo-sweep-faster-proels.md) |
+| 168 | 2026-11-05 | One knight seen from its own eyes: the body drawn for its own camera with head and pauldrons cut away, no first-person arms model or co-op props, weapons at real depth in the knight's hand (sword 1.25 m, hit reach 2.15 blade lengths), the camera rides the clip's head (Settings: Head sway), the clips slowed to 1.3-1.7x, the first-person clip mapping removed | [docs/notes/168-one-knight-seen-from-its-own-eyes.md](docs/notes/168-one-knight-seen-from-its-own-eyes.md) |
+| 169 | 2026-11-05 | The knight's hands get finger and thumb bones (tools/build_player_knight.py: a three-joint finger chain and a two-joint thumb each, the gauntlet's fingers and thumb skinned only to them); the weapon leads the grip: outside clips the hand is IK'd exactly onto the weapon's grip (knuckles along the edge; out of reach the weapon comes back with the wrist), through clips the arm is the capture's and the weapon in that fist; fingers close by contact round each handle (`_grip_curl`, `HANDLE_R`) | [docs/notes/169-fingers-and-a-weapon-led-grip.md](docs/notes/169-fingers-and-a-weapon-led-grip.md) |
 
 ## Notes by source file
 
@@ -623,8 +625,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80, 164
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166, 167
-- `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163, 166, 167
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166, 167, 168, 169
+- `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163, 166, 167, 168, 169
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
 - `scripts/crier.gd`: 43, 48, 60, 77, 79, 124, 125, 126
@@ -640,9 +642,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82, 117
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
-- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155, 159
+- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155, 159, 168
 - `scripts/hand_torch.gd`: 24, 29 (deleted in 157)
-- `scripts/held_potion.gd`: 6.19, 130
+- `scripts/held_potion.gd`: 6.19, 130, 168
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/holding_cell.gd`: 153, 154
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
@@ -666,8 +668,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167
-- `scripts/player_motion.gd`, `models/anims/*.glb`: 167
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168
+- `scripts/player_motion.gd`, `models/anims/*.glb`: 167, 168
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151, 167
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151
@@ -685,7 +687,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
-- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159, 164
+- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159, 164, 168
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92, 130, 131, 147
@@ -695,7 +697,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/skeleton_sword.gd`: 24, 93, 135
 - `scripts/skeleton_shield.gd`: 93
 - `scripts/sky_setup.gd`: 6.18
-- `scripts/spear.gd`: 14, 78, 79, 143, 144, 157, 163, 167
+- `scripts/spear.gd`: 14, 78, 79, 143, 144, 157, 163, 167, 168
 - `scripts/surgery.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 111, 114, 118, 119, 120, 128
 - `scripts/surgery_beam_claw.gd`: 101 (deleted in 102)
 - `scripts/surgery_power.gd`: 102, 109, 121
@@ -742,8 +744,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18
-- `tools/build_player_knight.py`: 155, 156, 159, 166
-- `tools/build_player_knight_arms.py`: 156, 159, 166
+- `tools/build_player_knight.py`: 155, 156, 159, 166, 169
+- `tools/build_player_knight_arms.py`: 156, 159, 166 (removed, note 168)
 - `tools/build_potion.py`: 6.19
 - `tools/build_rat.py`: 78
 - `tools/build_rock_pillar.py`: 6.18

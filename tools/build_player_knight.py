@@ -24,7 +24,13 @@ proportions (span / height 1.18; this knight 1.17). So:
     per PLACE, smoothed over the welded edges, and every copy of a place gets
     the same weights -- otherwise the copies drift apart under the bones and
     the seams open into holes;
-  - the knight's mesh is then dropped.
+  - the knight's mesh is then dropped;
+  - FINGERS (note 169): the borrowed rig has none, so each hand gets them here --
+    a three-joint chain for the four fingers (one plate of gauntlet: they move
+    as one) from the knuckle line out, and a two-joint thumb along the front of
+    the palm -- and the gauntlet's finger and thumb vertices are skinned to them
+    (`FINGER_JOINTS`, `THUMB_JOINTS`). first_person_arms.gd curls them round
+    whatever the hand holds.
 
 The look -- Tripo gave only colour (metallic 0, roughness 0.9, flat). Baked here
 in Cycles, in the T-pose:
@@ -40,8 +46,7 @@ Double-sided: the tabard is one sheet of cloth.
 
 Run (Blender 5.2):
   blender -b --factory-startup -P tools/build_player_knight.py
-then `godot --headless --import --path .`, then tools/build_player_knight_arms.py
-(it reads this output). Never hand-edit the output.
+then `godot --headless --import --path .`. Never hand-edit the output.
 """
 import os
 import sys
@@ -67,6 +72,24 @@ ARM_FADE = (0.22, 0.40)
 SMOOTH_PASSES = 3
 MAX_INFLUENCES = 4
 WELD = 1e-5
+# The hand (Blender space, the T-pose: arms along X, +Y the back, the palm down),
+# from slices of the gauntlet (note 169): it runs from the wrist at |x| 0.76 to
+# the fingertips at 0.995; the fingers are everything past the knuckle line
+# (|x| > KNUCKLE), 18 cm across front to back, their middle at FINGER_Z; the
+# thumb hangs forward of the palm and below it (y < THUMB_Y, z < THUMB_Z) between
+# |x| 0.84 and 0.93.
+KNUCKLE = 0.935
+FINGER_Z = 1.345
+FINGER_Y = 0.075
+# The finger chain's joints along |x| (knuckle, middle, last, tip) and the blend
+# either side of each joint (m).
+FINGER_JOINTS = (0.935, 0.957, 0.976, 0.996)
+FINGER_BLEND = 0.005
+# The thumb's joints (|x|, y, z): its root, its knuckle, its tip.
+THUMB_JOINTS = ((0.858, -0.004, 1.306), (0.888, -0.024, 1.292), (0.918, -0.040, 1.281))
+THUMB_Y = 0.003
+THUMB_Z = 1.33
+THUMB_X = (0.84, 0.93)
 # The bump: metres of relief over the height's 0..1.
 BUMP_DISTANCE = 0.0018
 BAKE_SAMPLES = 64
@@ -203,6 +226,98 @@ mesh.matrix_parent_inverse = arm.matrix_world.inverted()
 mod = mesh.modifiers.new("Armature", "ARMATURE")
 mod.object = arm
 bpy.data.objects.remove(donor)
+
+
+# --- fingers (note 169) -------------------------------------------------------------
+def lin(u: float, a: float, b: float) -> float:
+    return min(max((u - a) / (b - a), 0.0), 1.0)
+
+
+def finger_weights(u: float) -> list:
+    """[hand, finger 1, 2, 3] at `u` metres past the knuckle line."""
+    j = [x - FINGER_JOINTS[0] for x in FINGER_JOINTS]
+    b = FINGER_BLEND
+    s1 = lin(u, j[0] - b, j[0] + b)
+    s2 = lin(u, j[1] - b, j[1] + b)
+    s3 = lin(u, j[2] - b, j[2] + b)
+    return [1.0 - s1, s1 * (1.0 - s2), s2 * (1.0 - s3), s3]
+
+
+def thumb_weights(p: Vector, side: float) -> list:
+    """[hand, thumb 1, thumb 2] along the thumb from its root."""
+    a = Vector((side * THUMB_JOINTS[0][0], THUMB_JOINTS[0][1], THUMB_JOINTS[0][2]))
+    k = Vector((side * THUMB_JOINTS[1][0], THUMB_JOINTS[1][1], THUMB_JOINTS[1][2]))
+    t = Vector((side * THUMB_JOINTS[2][0], THUMB_JOINTS[2][1], THUMB_JOINTS[2][2]))
+    run = (p - a).dot((t - a).normalized()) / (t - a).length
+    mid = (k - a).length / (t - a).length
+    s1 = lin(run, -0.1, 0.1)
+    s2 = lin(run, mid - 0.1, mid + 0.1)
+    return [1.0 - s1, s1 * (1.0 - s2), s2]
+
+
+bpy.context.view_layer.objects.active = arm
+bpy.ops.object.mode_set(mode="EDIT")
+to_arm = arm.matrix_world.inverted()
+new_bones = {}
+for side, pre in ((1.0, "Left"), (-1.0, "Right")):
+    hand = arm.data.edit_bones[pre + "Hand"]
+    parent = hand
+    for k in range(3):
+        b = arm.data.edit_bones.new(pre + "HandFinger%d" % (k + 1))
+        b.head = to_arm @ Vector((side * FINGER_JOINTS[k], FINGER_Y, FINGER_Z))
+        b.tail = to_arm @ Vector((side * FINGER_JOINTS[k + 1], FINGER_Y, FINGER_Z))
+        b.parent = parent
+        b.use_connect = k > 0
+        parent = b
+    parent = hand
+    for k in range(2):
+        b = arm.data.edit_bones.new(pre + "HandThumb%d" % (k + 1))
+        h = THUMB_JOINTS[k]
+        t = THUMB_JOINTS[k + 1]
+        b.head = to_arm @ Vector((side * h[0], h[1], h[2]))
+        b.tail = to_arm @ Vector((side * t[0], t[1], t[2]))
+        b.parent = parent
+        b.use_connect = k > 0
+        parent = b
+bpy.ops.object.mode_set(mode="OBJECT")
+vg = {g.name: g for g in mesh.vertex_groups}
+for pre in ("Left", "Right"):
+    for n in ["HandFinger1", "HandFinger2", "HandFinger3", "HandThumb1", "HandThumb2"]:
+        vg[pre + n] = mesh.vertex_groups.new(name=pre + n)
+hand_idx = {vg["LeftHand"].index: "Left", vg["RightHand"].index: "Right"}
+n_finger = 0
+n_thumb = 0
+for v in mesh.data.vertices:
+    if not v.groups:
+        continue
+    best = max(v.groups, key=lambda e: e.weight)
+    pre = hand_idx.get(best.group)
+    if pre is None:
+        continue
+    p = v.co
+    side = 1.0 if pre == "Left" else -1.0
+    x = abs(p.x)
+    names_w = None
+    if x > KNUCKLE - FINGER_BLEND:
+        w = finger_weights(x - KNUCKLE)
+        names_w = [(pre + "Hand", w[0]), (pre + "HandFinger1", w[1]),
+            (pre + "HandFinger2", w[2]), (pre + "HandFinger3", w[3])]
+        n_finger += 1
+    elif THUMB_X[0] < x < THUMB_X[1] and p.y < THUMB_Y and p.z < THUMB_Z:
+        w = thumb_weights(p, side)
+        names_w = [(pre + "Hand", w[0]), (pre + "HandThumb1", w[1]), (pre + "HandThumb2", w[2])]
+        n_thumb += 1
+    if names_w is None:
+        continue
+    # The finger is the hand's and its own bones' alone: any share of the
+    # forearm (or anything else) the borrowed weights left out here held the
+    # fingers half straight however far they were curled.
+    for gi in [ge.group for ge in v.groups]:
+        mesh.vertex_groups[gi].remove([v.index])
+    for n, w in names_w:
+        if w > 1e-4:
+            vg[n].add([v.index], w, "REPLACE")
+print("fingers: %d finger vertices and %d thumb vertices skinned to the new bones" % (n_finger, n_thumb))
 
 # --- material: bakes ----------------------------------------------------------------
 mat = mesh.data.materials[0]

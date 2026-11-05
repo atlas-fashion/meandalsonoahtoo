@@ -587,6 +587,18 @@ func set_field_of_view(value: float) -> void:
 	save_settings()
 
 
+## How much of the knight's head turning the view takes through an animation
+## (note 168), 0..1: the camera always rides the head's position (a leap, a
+## lunge, a crouch); this much of its turn is added to where the player looks.
+## Like the field of view: in no preset, saved under [controls].
+var head_sway := 0.25
+
+
+func set_head_sway(value: float) -> void:
+	head_sway = clampf(value, 0.0, 1.0)
+	save_settings()
+
+
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("graphics", "preset", preset)
@@ -594,6 +606,7 @@ func save_settings() -> void:
 		cfg.set_value("graphics", key, get(key))
 	cfg.set_value("controls", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("controls", "field_of_view", field_of_view)
+	cfg.set_value("controls", "head_sway", head_sway)
 	cfg.save(SAVE_PATH)
 
 
@@ -618,3 +631,4 @@ func load_settings() -> void:
 	mouse_sensitivity = clampf(float(cfg.get_value("controls", "mouse_sensitivity", 1.0)),
 		SENSITIVITY_MIN, SENSITIVITY_MAX)
 	field_of_view = clampf(float(cfg.get_value("controls", "field_of_view", 75.0)), FOV_MIN, FOV_MAX)
+	head_sway = clampf(float(cfg.get_value("controls", "head_sway", 0.25)), 0.0, 1.0)

@@ -38,23 +38,24 @@ extends Node3D
 ## thrown one is an ordinary copy.
 
 const STAB_DAMAGE := 10.0
-## Jabs four a second: out by STAB_OUT (where it bites), home by STAB_BACK. A
+## Jabs a little under four a second: out by STAB_OUT (where it bites), home by
+## STAB_BACK. A
 ## click that comes too soon is not dropped but held (`_stab_queued`) and fired
 ## the moment the next is due, so spam-clicking gives a steady rhythm.
-const STAB_EVERY := 0.25
-const STAB_OUT := 0.07
-const STAB_BACK := 0.24
+const STAB_EVERY := 0.28
+const STAB_OUT := 0.09
+const STAB_BACK := 0.28
 ## The third of the combo: after the second jab by LUNGE_AFTER (a hair longer
 ## than STAB_EVERY), biting at LUNGE_OUT for LUNGE_DAMAGE, the player carried
 ## LUNGE_STEP metres forward through it; the next jab LUNGE_REST after it. A
 ## combo left COMBO_FORGET past its next beat starts over.
-const LUNGE_AFTER := 0.33
-const LUNGE_OUT := 0.2
+const LUNGE_AFTER := 0.36
+const LUNGE_OUT := 0.26
 const LUNGE_DAMAGE := 16.0
 const LUNGE_REACH := 3.2
 const LUNGE_STEP := 1.1
 const LUNGE_STEP_TIME := 0.14
-const LUNGE_REST := 0.58
+const LUNGE_REST := 0.62
 const COMBO_FORGET := 0.4
 const COMBO := [&"jab_a", &"jab_b", &"lunge"]
 ## Eye to the furthest a stab reaches, and how wide it is.
@@ -65,7 +66,7 @@ const STAB_WIDTH := 0.45
 ## the scout's 0.6), everything within the low arc in front (SWEEP_REACH out,
 ## SWEEP_WIDTH across, up to SWEEP_HIGH), knocked down for SWEEP_DOWN seconds and
 ## thrown SWEEP_PUSH.
-const SWEEP_STRIKE := 0.55
+const SWEEP_STRIKE := 0.6
 const SWEEP_DAMAGE := 22.0
 const SWEEP_REACH := 3.0
 const SWEEP_WIDTH := 3.6
@@ -431,72 +432,14 @@ func _pose_transform() -> Transform3D:
 	return _rest()
 
 
-## How far the first-person spear follows the capture's fist (note 167): the
-## jabs' short punches drive it this much further, the lunge's whole-body thrust
-## this much less; the sweep at its own size.
-const JAB_DRIVE := 1.9
-const LUNGE_DRIVE := 0.7
-## How far up the haft from the model's origin the fist holds it
-## (first_person_arms.gd SPEAR_UP).
-const GRIP_UP := 0.28
-
-
-## The clip `kind` at `t` in first person, played relative to the spear's rest
-## (PlayerMotion.fp_delta: the capture's fist since its stance). The jabs and the
-## lunge are driven down the crosshair, aimed at it all the way; the sweep turns
-## the spear with the fist, about the grip.
+## A clip move's spear (notes 167, 168): where the hand is asked to be -- the
+## pose it began from, eased to rest. The clip itself is the knight's arm
+## (coop_avatar.gd), and first_person_arms.gd blends to it by the move's weight
+## and puts the spear in its fist, along the forearm; so this only matters at the
+## move's two ends, where it blends.
 func _motion_transform(kind: StringName, t: float) -> Transform3D:
-	var d := PlayerMotion.fp_delta(kind, t)
-	var w := PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
-	var rest := _rest()
-	var pose: Transform3D
-	if kind == &"sweep":
-		pose = _sweep_pose(t)
-	else:
-		var drive := LUNGE_DRIVE if kind == &"lunge" else JAB_DRIVE
-		var off := (d[1] as Vector3) * drive * w
-		# Down the crosshair: the punch's drift across the body halved.
-		off.x *= 0.5
-		pose = _aimed(REST_AT + off, AIM_FAR, 0.1 * w * stab_side)
-	var w_in := PlayerMotion.weight_in(kind, t)
-	return pose if w_in >= 1.0 else _from.interpolate_with(pose, w_in)
-
-
-## The sweep seen from inside the head (note 167). The capture behind it is a
-## whole-body spin -- its fist rises nearly a metre and the forearm turns end
-## over end -- so here it is posed on the clip's own timeline, with the body's
-## directions: wound up high on the left by SWEEP_WOUND, creeping to
-## SWEEP_STRIKE, swept low across from left to right by SWEEP_THROUGH, followed
-## through and home. Yaw (+ left) and pitch of where the spear points, and the
-## hand (head space), at the wind-up's top and the sweep's end.
-const SWEEP_WOUND := 0.40
-const SWEEP_THROUGH := 0.64
-const SWEEP_UP := Vector3(1.0, 0.55, 0.0)
-const SWEEP_DOWN_AIM := Vector3(-1.1, -0.4, 0.0)
-const SWEEP_HAND_UP := Vector3(0.04, -0.08, -0.55)
-const SWEEP_HAND_DOWN := Vector3(0.4, -0.52, -0.5)
-
-
-func _sweep_pose(t: float) -> Transform3D:
-	# 0..0.5 the wind-up, 0.5..1 the sweep: a hang at the top, then fast.
-	var s := PlayerMotion._warp([[0.0, 0.0], [SWEEP_WOUND, 0.46], [SWEEP_STRIKE, 0.5],
-		[SWEEP_THROUGH, 0.92], [0.78, 1.0]], t)
-	var aim: Vector3
-	var hand: Vector3
-	var rest_aim := Vector3(-0.06, 0.0, 0.0)
-	if s < 0.5:
-		var k := s / 0.5
-		aim = rest_aim.lerp(SWEEP_UP, k)
-		hand = REST_AT.lerp(SWEEP_HAND_UP, k)
-	else:
-		var k := (s - 0.5) / 0.5
-		aim = SWEEP_UP.lerp(SWEEP_DOWN_AIM, k)
-		# Out and low through the middle of it.
-		hand = SWEEP_HAND_UP.lerp(SWEEP_HAND_DOWN, k) + Vector3(0.0, -0.1, -0.1) * sin(PI * k)
-	var dir := Vector3(-sin(aim.x) * cos(aim.y), sin(aim.y), -cos(aim.x) * cos(aim.y))
-	var pose := _aimed(hand, hand + dir * 6.0, 0.4 * clampf(s * 2.0, 0.0, 1.0))
-	var home := PlayerMotion.weight_out(&"sweep", t)
-	return pose if home >= 1.0 else _rest().interpolate_with(pose, home)
+	var k := clampf(t / maxf(float(PlayerMotion.move(kind)["in"]) * 2.0, 0.001), 0.0, 1.0)
+	return _from.interpolate_with(_rest(), k * k * (3.0 - 2.0 * k))
 
 
 # --- The stab and the sweep -------------------------------------------------------
