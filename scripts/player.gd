@@ -2396,10 +2396,11 @@ func _start_attack() -> void:
 	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
 			or _dashing or is_drinking() or is_flinching():
 		return
-	# A new stroke may cut into the last one's recovery, so a combo flows. Clicked
-	# for sooner than that it is not dropped but held, and begun the moment it may
-	# (`_take_queued_attack`, note 151).
-	if _attacking and _pose_time < _bite_end():
+	# A cut waits for the cut before it to play out whole (note 174): its clip is
+	# its cooldown. Clicked for sooner it is not dropped but held, and begun the
+	# tick the last one ends (`_take_queued_attack`, note 151), so a combo still
+	# flows, each stroke followed through.
+	if _attacking and _pose_time < _stroke_end():
 		_attack_queued = true
 		return
 	_attack_queued = false
@@ -2432,16 +2433,27 @@ func _strike_cut() -> void:
 		velocity.z += facing.z * attack_lunge
 
 
-## The held click, begun the tick the stroke stops biting -- if the sword is
-## still in hand and free, and they have not gone for the guard; otherwise
+## The held click, begun the tick the stroke ends (`_stroke_end`) -- if the sword
+## is still in hand and free, and they have not gone for the guard; otherwise
 ## forgotten. Clicks held like this come exactly a stroke apart, as the axe's and
 ## the spear's do. Whatever ended the stroke early forgets it too.
 func _take_queued_attack() -> void:
 	if not _attacking or held_item() != &"sword" or not _spear_free() or in_cutscene or ui_open \
 			or remote_view or wheel_open or _action_held(&"block"):
 		_attack_queued = false
-	elif _pose_time >= _bite_end():
+	elif _pose_time >= _stroke_end():
 		_start_attack()
+
+
+## When a cut (LMB) may begin over the stroke in progress, pose seconds (note
+## 174). Over a cut, only once its whole clip has played -- the forehand's 0.75,
+## the backhand's 0.66 (PlayerMotion `end`, x `attack_time_scale` real) -- so the
+## cooldown is the animation and no stroke is cut off in its follow-through. Over
+## the heavy swipe or the wave slash, once they have followed through, as before.
+func _stroke_end() -> float:
+	if _pose_kind in [&"slash", &"chop"]:
+		return PlayerMotion.length(_pose_kind)
+	return _bite_end()
 
 
 ## When the stroke in progress stops biting -- the earliest a new one may begin.
@@ -2962,7 +2974,8 @@ const REST_ROT := Vector3(-1.113895, 0.0, -0.244346)
 ## bites, pose seconds. The forehand bites from 0.18 (0.225 s real; it was 0.156
 ## in note 164) to 0.29; the backhand, which starts where the forehand ends, from
 ## 0.15 to 0.26. SWING_WIND / SWING_HOLD are the forehand's, for whatever asks
-## of "a cut" in general (the HUD's tile, the trail's crosshair point).
+## of "a cut" in general (the trail's crosshair point). The next cut waits for a
+## cut's whole clip, not its bite (`_stroke_end`, note 174).
 const SLASH_BITE := Vector2(0.25, 0.40)
 const CHOP_BITE := Vector2(0.15, 0.31)
 const SWING_WIND := 0.25
@@ -4064,12 +4077,12 @@ func attack_cooldowns() -> Array:
 	var now := _now()
 	var recover := maxf(maxf(_slam_recover_until, _flinch_until) - now, 0.0)
 	if held == &"sword":
-		# A cut waits for the stroke in progress to stop biting (a committed one
+		# A cut waits for a cut in progress to end (note 174; a committed stroke
 		# until it has followed through); the heavy swipe waits only for a
 		# committed stroke; the wave (F) for the slam's clock (note 162).
 		var cut := 0.0
 		if _attacking and _pose_time >= 0.0:
-			cut = maxf(_bite_end() - _pose_time, 0.0) * attack_time_scale
+			cut = maxf(_stroke_end() - _pose_time, 0.0) * attack_time_scale
 		var heavy := 0.0
 		if _committed():
 			heavy = (_bite_end() - _pose_time) * attack_time_scale
@@ -4077,7 +4090,7 @@ func attack_cooldowns() -> Array:
 		return [
 			[ult, maxf(_slam_ready_at - now, recover), slam_cooldown, "F"],
 			[&"heavy", maxf(heavy, recover), HEAVY_HOLD * attack_time_scale, "Q"],
-			[&"slash", maxf(cut, recover), SWING_HOLD * attack_time_scale, "LMB"],
+			[&"slash", maxf(cut, recover), PlayerMotion.length(&"slash") * attack_time_scale, "LMB"],
 		]
 	var list: Array = []
 	if held == &"spear" and spear != null and spear.has_method("attack_cooldowns"):
