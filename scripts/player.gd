@@ -3159,7 +3159,7 @@ func _update_third_person(delta: float) -> void:
 		_body_yaw = 0.0
 		if _avatar != null:
 			_avatar.rotation.y = 0.0
-		camera.transform = Transform3D.IDENTITY
+		camera.transform = Transform3D(Basis.IDENTITY, _eye_offset(delta))
 		return
 	# The way it walks, or the aim while its hands are busy.
 	var want := _body_yaw
@@ -3187,6 +3187,38 @@ func _update_third_person(delta: float) -> void:
 		var to := (hit["position"] as Vector3) - pivot
 		at = pivot + to.normalized() * maxf(to.length() - THIRD_WALL, 0.0)
 	camera.global_transform = Transform3D(look, at)
+
+
+## --- The eyes (note 173) ---------------------------------------------------------
+##
+## The camera is the knight's eyes, at the front of the helmet, not the middle of
+## it. The head (`head`, what everything held is posed in) stays where it was,
+## over the neck; the camera sits EYE_FORWARD ahead of it along the way the head
+## faces, so looking straight down shows the front of the breastplate, the belt
+## and the legs, never down the neck into the body or back over the shoulders.
+## Looking down, the neck bends and carries the eyes further out over the chest
+## and a little lower (EYE_LEAN, EYE_DROP, by the sine of how far down); looking
+## up, the other way. Eased out (`_eye_w`) when the body is not there to look out
+## of: dead, hidden, through a rat's eyes.
+const EYE_FORWARD := 0.11
+const EYE_LEAN := 0.14
+const EYE_DROP := 0.05
+var _eye_w := 1.0
+
+
+## The camera's place in the head's own frame (the head may be pitched, rolled
+## and turned): forward of it along the head's heading, levelled.
+func _eye_offset(delta: float) -> Vector3:
+	var want := 0.0 if _dead or remote_view or is_hidden() else 1.0
+	_eye_w = move_toward(_eye_w, want, delta / 0.3)
+	if _eye_w <= 0.0:
+		return Vector3.ZERO
+	var down := clampf(-sin(_look_pitch), -1.0, 1.0)
+	var fwd := head.basis * Vector3.FORWARD
+	var flat := Vector3(fwd.x, 0.0, fwd.z)
+	flat = flat.normalized() if flat.length_squared() > 1e-6 else Vector3.FORWARD
+	var at := flat * (EYE_FORWARD + EYE_LEAN * down) + Vector3.DOWN * EYE_DROP * maxf(down, 0.0)
+	return head.basis.inverse() * (at * _eye_w)
 
 
 ## Anything the hands are doing that should go where the player aims.

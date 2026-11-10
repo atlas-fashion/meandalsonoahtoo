@@ -8,9 +8,9 @@ extends Node3D
 ##
 ## Seen three ways, the same body each time:
 ## - FROM ITS OWN EYES: the camera is in its head. The player's own camera draws
-##   it with the head and neck cut away (`_make_view_meshes`: every triangle a
-##   head bone carries), so the arms, the hands, the chest and the legs below are
-##   there when they look down, and nothing of the helmet is in front of the eye.
+##   it with the helmet and pauldrons folded away into the collar (`sync_view`,
+##   note 173), so the arms, the hands, the chest and the legs below are there,
+##   closed, when they look down, and nothing of the helmet is in front of the eye.
 ##   Its arms hold whatever is in hand (first_person_arms.gd solves them onto it).
 ## - BY THE OTHER PLAYER in co-op (note 79): the whole knight, on its own layer
 ##   (split_screen.gd AVATAR), and a name over its head.
@@ -35,19 +35,22 @@ extends Node3D
 ## bone's local pose, so the rig's own bone axes never matter.
 
 const KNIGHT := preload("res://models/player_knight.glb")
-## The bones whose triangles the player's own camera does not draw: the helmet
-## and the neck, which would sit over the eye, and the pauldrons (they ride the
-## shoulder bones, note 156), which sit at its height either side and filled the
-## bottom of the view through every cut, and the left upper arm, which hung
-## under the eye as a dark blob at the corner of the view (note 171; its forearm
-## and fist, the guard, are drawn). Seen from outside and in the shadow, as ever.
-const HEAD_BONES := ["Head", "neck", "head_end", "headfront", "LeftShoulder", "RightShoulder", "LeftArm"]
+## The bones folded to nothing for the player's own camera (`sync_view`): the
+## helmet, which would sit over the eye. Seen from outside and in the shadow,
+## the whole knight as ever.
+const VIEW_FOLD := ["Head", "LeftShoulder", "RightShoulder"]
+## Within this distance of the camera the eye's knight is not drawn, fading in
+## (dithered) by the second (m).
+const EYE_CLEAR_NEAR := 0.10
+const EYE_CLEAR_FAR := 0.16
 ## How much of the look's pitch the chest bends by under an attack clip: a cut
 ## aimed up or down goes there. And a lean into every attack on top (radians):
 ## the captures cut at shoulder height, which from the eyes is the arm across
 ## the face and the blade over an enemy's head.
 const LOOK_BEND := 0.6
 const ATTACK_LEAN := 0.22
+## How much of a downward look the chest bends by, outside an attack (note 173).
+const LOOK_DOWN_BEND := 0.3
 const CLOTH := [Color(0.42, 0.12, 0.08), Color(0.13, 0.22, 0.38)]
 const NAMES := ["PLAYER 1", "PLAYER 2"]
 ## The knight is 1.70 m to the top of the helmet (the armor built to it); at 1.05 its visor sits
@@ -189,31 +192,56 @@ func _apply_graphics() -> void:
 		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-## The knight without its head (`HEAD_BONES`), sharing the skeleton and skin:
-## each surface's triangles kept unless a corner is carried mostly by a head
-## bone. Cut once and shared by every player.
-static var _headless := {}
+## The knight for its own eyes (note 173): the same mesh and skin on a skeleton
+## of its own (`_view_skel`), which copies the body's pose every frame once the
+## arms are solved (`sync_view`, called by first_person_arms.gd) and then folds
+## the head away to nothing at the top of the neck (`VIEW_FOLD`). The armour round
+## the neck closes over where the helmet was, so the body under the eye is shut:
+## looking down there is a gorget, a breastplate and pauldrons, no hole into the
+## body. (Notes 168-171 cut the head's triangles out of the mesh instead, which
+## left the neck and shoulders open to look into.) Anything still at the eye is
+## dithered away by distance from the camera (`EYE_CLEAR_NEAR` / `_FAR`).
+var _view_skel: Skeleton3D
+var _fold: Array[int] = []
+const FOLD := 0.01
 
 
 func _make_view_meshes() -> void:
+	_view_skel = Skeleton3D.new()
+	_view_skel.name = "ViewSkeleton"
+	for i in _skel.get_bone_count():
+		_view_skel.add_bone(_skel.get_bone_name(i))
+	for i in _skel.get_bone_count():
+		_view_skel.set_bone_parent(i, _skel.get_bone_parent(i))
+		_view_skel.set_bone_rest(i, _skel.get_bone_rest(i))
+	_skel.get_parent().add_child(_view_skel)
+	_view_skel.transform = _skel.transform
+	for bn in VIEW_FOLD:
+		var i := _skel.find_bone(bn)
+		if i >= 0:
+			_fold.append(i)
 	for g in _meshes:
 		var mi := g as MeshInstance3D
 		if mi == null or mi.mesh == null or mi.skin == null:
 			continue
-		var key := mi.mesh.get_rid().get_id()
-		var cut: ArrayMesh = _headless.get(key)
-		if cut == null:
-			cut = _cut_head(mi)
-			_headless[key] = cut
 		var view := MeshInstance3D.new()
 		view.name = String(mi.name) + "View"
-		view.mesh = cut
+		view.mesh = mi.mesh
 		view.skin = mi.skin
 		mi.get_parent().add_child(view)
 		view.transform = mi.transform
-		view.skeleton = view.get_path_to(_skel)
+		view.skeleton = view.get_path_to(_view_skel)
 		for s in mi.mesh.get_surface_count():
 			var m := mi.get_surface_override_material(s)
+			if m == null:
+				m = mi.mesh.surface_get_material(s)
+			var bm := m as BaseMaterial3D
+			if bm != null:
+				bm = bm.duplicate() as BaseMaterial3D
+				bm.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+				bm.distance_fade_min_distance = EYE_CLEAR_NEAR
+				bm.distance_fade_max_distance = EYE_CLEAR_FAR
+				m = bm
 			if m != null:
 				view.set_surface_override_material(s, m)
 		# A hand's breadth from the eye: never culled for being off to one side.
@@ -221,41 +249,23 @@ func _make_view_meshes() -> void:
 		_view_meshes.append(view)
 
 
-func _cut_head(mi: MeshInstance3D) -> ArrayMesh:
-	var head := {}
-	for b in mi.skin.get_bind_count():
-		var bn := mi.skin.get_bind_name(b)
-		if bn == &"":
-			bn = _skel.get_bone_name(mi.skin.get_bind_bone(b))
-		if String(bn) in HEAD_BONES:
-			head[b] = true
-	var out := ArrayMesh.new()
-	for s in mi.mesh.get_surface_count():
-		var arrays: Array = mi.mesh.surface_get_arrays(s)
-		var bones = arrays[Mesh.ARRAY_BONES]
-		var weights = arrays[Mesh.ARRAY_WEIGHTS]
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var per := 4 if bones.size() <= verts.size() * 4 else 8
-		var in_head := PackedByteArray()
-		in_head.resize(verts.size())
-		for v in verts.size():
-			var weight := 0.0
-			for k in per:
-				if head.has(int(bones[v * per + k])):
-					weight += float(weights[v * per + k])
-			in_head[v] = 1 if weight > 0.5 else 0
-		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-		var kept := PackedInt32Array()
-		for t in range(0, idx.size(), 3):
-			if in_head[idx[t]] == 0 and in_head[idx[t + 1]] == 0 and in_head[idx[t + 2]] == 0:
-				kept.append(idx[t])
-				kept.append(idx[t + 1])
-				kept.append(idx[t + 2])
-		arrays[Mesh.ARRAY_INDEX] = kept
-		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {},
-			Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if per == 8 else 0)
-		out.surface_set_material(s, mi.mesh.surface_get_material(s))
-	return out
+## The body's pose onto the eye's skeleton, the head folded away. Called once
+## everything has posed the body this frame (first_person_arms.gd, last).
+func sync_view() -> void:
+	if _view_skel == null or _view_meshes.is_empty() or not _view_meshes[0].visible:
+		return
+	for i in _skel.get_bone_count():
+		_view_skel.set_bone_pose_position(i, _skel.get_bone_pose_position(i))
+		_view_skel.set_bone_pose_rotation(i, _skel.get_bone_pose_rotation(i))
+		_view_skel.set_bone_pose_scale(i, _skel.get_bone_pose_scale(i))
+	# Each folded bone shrunk to nearly nothing about its joint; its children
+	# put back exactly where they were (their offset and scale undone), so a
+	# folded shoulder takes its pauldron away and leaves the arm whole.
+	for i in _fold:
+		_view_skel.set_bone_pose_scale(i, Vector3.ONE * FOLD)
+		for ch in _view_skel.get_bone_children(i):
+			_view_skel.set_bone_pose_position(ch, _skel.get_bone_pose_position(ch) / FOLD)
+			_view_skel.set_bone_pose_scale(ch, _skel.get_bone_pose_scale(ch) / FOLD)
 
 
 func _read_rig() -> void:
@@ -378,9 +388,12 @@ func _process(delta: float) -> void:
 
 	# The trunk leans into the stride and with the look; the head follows the look.
 	var pitch := clampf(float(player.get("_look_pitch")), -1.2, 1.2)
+	# Looking down it is mostly the neck that bends (note 173): the chest folding
+	# as far down as the look put the shoulders and back under the eye.
+	var bend_pitch := pitch if pitch > 0.0 else pitch * LOOK_DOWN_BEND
 	var hips := _turn("Hips", Basis(Vector3.UP, 0.12 * s * sw))
-	var chest := hips * _turn("Spine01", Basis(Vector3.RIGHT, 0.12 * s - pitch * 0.15)) \
-		* _turn("Spine", Basis(Vector3.RIGHT, -pitch * 0.15))
+	var chest := hips * _turn("Spine01", Basis(Vector3.RIGHT, 0.12 * s - bend_pitch * 0.15)) \
+		* _turn("Spine", Basis(Vector3.RIGHT, -bend_pitch * 0.15))
 	_turn("Head", Basis(Vector3.RIGHT, -pitch * 0.55))
 
 	# Each limb aimed under the turn its parents already have (hips, chest).
@@ -388,7 +401,7 @@ func _process(delta: float) -> void:
 	_aim("RightLeg", _goal["rshin"], _aim("RightUpLeg", _goal["rthigh"], hips))
 	_aim("LeftForeArm", _goal["lfore"], _aim("LeftArm", _goal["lupper"], chest))
 	_aim("RightForeArm", _goal["rfore"], _aim("RightArm", _goal["rupper"], chest))
-	_apply_motion(dead, pitch)
+	_apply_motion(dead, pitch, bend_pitch)
 
 
 ## The attack or parry clip over the walking pose (note 167): each bone turned
@@ -396,7 +409,7 @@ func _process(delta: float) -> void:
 ## so neither rig's bone axes matter), blended by the move's own in/out. The
 ## legs and the hips' travel give way to the stride while walking, or the feet
 ## would skate; the parry plays on the upper body over the guard.
-func _apply_motion(dead: bool, pitch: float) -> void:
+func _apply_motion(dead: bool, pitch: float, bend_pitch: float) -> void:
 	motion_w = 0.0
 	_clip_local.clear()
 	if dead:
@@ -432,12 +445,15 @@ func _apply_motion(dead: bool, pitch: float) -> void:
 	if motion_w <= 0.0:
 		return
 	# The chest bent with the look under any clip, and leaning into an attack: a
-	# cut goes where they look.
+	# cut goes where they look. In the stance alone, looking down bends it only
+	# LOOK_DOWN_BEND as far (note 173): the guard stays before the chest and the
+	# eye looks down past the breastplate, not onto the shoulders.
+	var look := lerpf(bend_pitch, pitch, w)
 	for bn in ["Spine01", "Spine"]:
 		var i: int = _b[bn]
 		var par := _parent[i]
 		var axis := (_skel.get_bone_global_pose(par).basis.orthonormalized().inverse() * (_k2s * Vector3.RIGHT)).normalized()
-		var bend := Quaternion(axis, (-pitch * LOOK_BEND * motion_w + ATTACK_LEAN * w) * 0.5)
+		var bend := Quaternion(axis, (-look * LOOK_BEND * motion_w + ATTACK_LEAN * w) * 0.5)
 		_skel.set_bone_pose_rotation(i, bend * _skel.get_bone_pose_rotation(i))
 
 

@@ -43,24 +43,33 @@ const AXE_UP := 0.12
 const RIGHT := 0
 const LEFT := 1
 
-## The left arm's poses (head space, metres; the eye at the origin, -Z ahead):
-## where the elbow and the wrist go, and which way the back of the gauntlet --
-## the vambrace's outer plate -- faces. Down: below the view.
-const DOWN_ELBOW := Vector3(-0.30, -0.60, 0.04)
-const DOWN_WRIST := Vector3(-0.20, -0.82, -0.10)
+## The left arm's poses, built from the body's own shoulder (note 173): the
+## upper arm's way out of the shoulder and the forearm's way out of the elbow
+## (head space, -Z ahead, +X right), each laid at the bone's real length, so the
+## elbow and fist are always where the arm can put them and the arm never leaves
+## the shoulder. (Notes 157-158 gave fixed points in front of the eye, made for a
+## separate arms model with its own braced shoulder. On the real body, with the
+## stance's chest well forward, the elbow could not stay behind them: the IK
+## threw it out ahead of the fist and the forearm came back at the face.) And
+## which way the back of the gauntlet -- the vambrace's outer plate -- faces.
+## Down: wherever the body's own walk and stance have the arm this frame
+## (read before the guard touches it), so the drop hands back without a jump.
 const DOWN_BACK := Vector3(-0.4, -0.2, -1.0)
-## The guard (note 158): the forearm laid flat across the lower half of the
-## view, square to it -- elbow and fist at one height and one depth, the elbow a
-## hand's breadth left of centre, driven forward as into a door. The plate to
-## the front, tipped up.
-const GUARD_ELBOW := Vector3(-0.22, -0.14, -0.263)
-const GUARD_WRIST := Vector3(0.094, -0.14, -0.248)
+## The guard (note 158's look): the upper arm driven forward from the shoulder
+## and a little out, the forearm laid flat across the lower half of the view,
+## square to it -- elbow a hand's breadth left of centre, the fist just right of
+## it, as into a door. The plate to the front, tipped up.
+const GUARD_UPPER := Vector3(-0.28, 0.12, -1.0)
+const GUARD_FORE := Vector3(1.0, 0.04, 0.06)
 const GUARD_BACK := Vector3(0.0, 0.35, -1.0)
+## How far the guard's frame turns up and down with the look, 0..1: at 1 it is
+## pinned in the view; less, and looking down the arm stays nearer the chest.
+const GUARD_PITCH := 0.6
 ## The parry's beat: the forearm swung up and out round the elbow, standing
 ## upright to the left of the view, the plate turned out -- the blow batted wide.
 ## Held for `PARRY_BEAT`, then `PARRY_HOLD` more before the arm may go down.
-const PARRY_ELBOW := Vector3(-0.30, -0.30, -0.20)
-const PARRY_WRIST := Vector3(-0.26, 0.0, -0.30)
+const PARRY_UPPER := Vector3(-0.75, -0.15, -0.65)
+const PARRY_FORE := Vector3(0.12, 1.0, -0.25)
 const PARRY_BACK := Vector3(-1.0, 0.1, -0.5)
 const PARRY_BEAT := 0.16
 const PARRY_HOLD := 0.18
@@ -92,9 +101,9 @@ var player: Node3D
 var _body: Node3D
 var _arms: Array[Arm] = []
 ## The left arm's springs (head space) and its clocks.
-var _elbow := DOWN_ELBOW
+var _elbow := Vector3(-0.30, -0.60, 0.04)
 var _elbow_v := Vector3.ZERO
-var _wrist := DOWN_WRIST
+var _wrist := Vector3(-0.20, -0.82, -0.10)
 var _wrist_v := Vector3.ZERO
 var _back := DOWN_BACK
 var _back_v := Vector3.ZERO
@@ -206,6 +215,9 @@ func _process(delta: float) -> void:
 		return
 	_pose_right(_held())
 	_update_guard(delta)
+	# Last to pose the body: the eye's own copy of it follows now (note 173).
+	if _body.has_method("sync_view"):
+		_body.call("sync_view")
 
 
 ## What the right hand holds this frame, or {} for nothing: `kind`; `node`, what
@@ -518,13 +530,33 @@ func _update_guard(delta: float) -> void:
 		if _parry_t > PARRY_BEAT + PARRY_HOLD:
 			_parry_t = -1.0
 	var up := raised or _parry_t >= 0.0
-	var elbow_goal := GUARD_ELBOW if up else DOWN_ELBOW
-	var wrist_goal := GUARD_WRIST if up else DOWN_WRIST
-	var back_goal := GUARD_BACK if up else DOWN_BACK
-	if _parry_t >= 0.0 and _parry_t < PARRY_BEAT:
-		elbow_goal = PARRY_ELBOW
-		wrist_goal = PARRY_WRIST
-		back_goal = PARRY_BACK
+	# Head space, from the body as its walk and stance have it this frame: the
+	# shoulder, and the arm's own elbow and wrist (the pose to drop back to).
+	var h2s := _h2s(a)
+	var s2h := h2s.affine_inverse()
+	var sk := a.skel
+	var shoulder_h := s2h * _shoulder(a)
+	var down_elbow := s2h * sk.get_bone_global_pose(a.fore).origin
+	var down_wrist := s2h * sk.get_bone_global_pose(a.hand).origin
+	var elbow_goal := down_elbow
+	var wrist_goal := down_wrist
+	var back_goal := DOWN_BACK
+	if up:
+		var pitch_now: float = player.get("_look_pitch")
+		var level := Basis(Vector3.RIGHT, -(1.0 - GUARD_PITCH) * pitch_now)
+		var upper := GUARD_UPPER
+		var fore := GUARD_FORE
+		back_goal = GUARD_BACK
+		if _parry_t >= 0.0 and _parry_t < PARRY_BEAT:
+			upper = PARRY_UPPER
+			fore = PARRY_FORE
+			back_goal = PARRY_BACK
+		# The bones' lengths in head space (the skeleton's own units are the
+		# glTF armature's, a hundredth of a metre's scale away).
+		var len_upper := shoulder_h.distance_to(down_elbow)
+		var len_fore := down_elbow.distance_to(down_wrist)
+		elbow_goal = shoulder_h + level * upper.normalized() * len_upper
+		wrist_goal = elbow_goal + level * fore.normalized() * len_fore * 0.98
 	if up:
 		_held_t += delta
 		var breath := sin(_held_t * 1.9)
@@ -558,7 +590,7 @@ func _update_guard(delta: float) -> void:
 	_shudder *= exp(-SHUDDER_FADE * delta)
 	_shudder_t += delta
 	# Down and still: handed back to the body's own walk.
-	var settled := not up and _wrist.distance_to(DOWN_WRIST) < 0.04 and _wrist_v.length() < 0.2 \
+	var settled := not up and _wrist.distance_to(down_wrist) < 0.04 and _wrist_v.length() < 0.2 \
 		and _recoil.length() < 0.01
 	_guard_w = move_toward(_guard_w, 0.0 if settled else 1.0, delta / GUARD_RELEASE)
 	var loose: Array = []
@@ -569,7 +601,6 @@ func _update_guard(delta: float) -> void:
 		return
 	var wrist := _wrist + _recoil + Vector3(sin(_shudder_t * 73.0), sin(_shudder_t * 61.0 + 1.0),
 		sin(_shudder_t * 89.0 + 2.0)) * SHUDDER * _shudder
-	var h2s := _h2s(a)
 	var shoulder := _shoulder(a)
 	var wr := h2s * wrist
 	var e := h2s * (_elbow + _recoil * 0.6)
@@ -581,7 +612,6 @@ func _update_guard(delta: float) -> void:
 	var g := h.cross(back).normalized()
 	var turn_basis := Basis(h, back, g) * a.fist_rest.inverse()
 	var q := _solve(a, shoulder, wr, turn_basis, back, e - shoulder)
-	var sk := a.skel
 	for k in 3:
 		var bone: int = [a.upper, a.fore, a.hand][k]
 		sk.set_bone_pose_rotation(bone, sk.get_bone_pose_rotation(bone).slerp(q[k], _guard_w))
