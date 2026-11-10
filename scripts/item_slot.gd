@@ -141,8 +141,14 @@ func setup(inv: Inventory, i: int, is_interactive: bool) -> void:
 	index = i
 	interactive = is_interactive
 	mouse_filter = Control.MOUSE_FILTER_STOP if interactive else Control.MOUSE_FILTER_IGNORE
-	# On a wheel: its direction's number (up 1, right 2, down 3, left 4).
-	_key.text = str(i % 4 + 1) if i < Inventory.HOTBAR else ""
+	# On a wheel: its direction's number (quick items up 1, right 2, down 3,
+	# left 4; weapons left 1, right 2).
+	if i < Inventory.WEAPONS:
+		_key.text = str(i + 1)
+	elif i < Inventory.HOTBAR:
+		_key.text = str(i - Inventory.QUICK_FIRST + 1)
+	else:
+		_key.text = ""
 	refresh()
 
 

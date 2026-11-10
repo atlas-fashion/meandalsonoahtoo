@@ -54,12 +54,17 @@ static var _material: ShaderMaterial
 
 
 ## Puts a wave at `from` heading along `dir` (flattened), under `parent`.
-static func launch(parent: Node, owner_player: CharacterBody3D, from: Vector3, dir: Vector3, tilt: float) -> Node3D:
+static func launch(parent: Node, owner_player: CharacterBody3D, from: Vector3, dir: Vector3, tilt: float,
+		hit := -1.0) -> Node3D:
 	var w := Node3D.new()
 	w.set_script(load("res://scripts/sword_wave.gd"))
 	w.name = "SwordWave"
 	w.set("player", owner_player)
 	w.set("roll", tilt)
+	# Before `_start`: it hits whatever is already inside it at once (note 172:
+	# set after, a foe within reach took the default 80).
+	if hit >= 0.0:
+		w.set("damage", hit)
 	parent.add_child(w)
 	w.call("_start", from, dir)
 	return w

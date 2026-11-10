@@ -9,7 +9,7 @@ extends CanvasLayer
 ##   SWITCHES   enemies take an interest (aggro) / the player takes damage /
 ##              the level's own enemies (its normal population, maze `_populate`)
 ##              / hitboxes / noclip (player.gd `_fly`, note 152)
-##   WEAPONS    sword, spear, axe and armor level, 1..UPGRADE_MAX (player.gd)
+##   WEAPONS    sword, spear and armor level, 1..UPGRADE_MAX (player.gd)
 ##   TELEPORT   every place the level built (sandbox_world.gd `destinations`)
 ##
 ## Like the workbench screen (workbench.gd): not a pause -- the world runs on
@@ -222,7 +222,7 @@ func _build_switches() -> Control:
 	col.add_child(SP.dim_label("Fly where you look: WASD, Space up, Ctrl down,\nShift faster (pad: A up, B down, stick all the way)"))
 	col.add_child(SP.spacer(10))
 	col.add_child(SP.section_label("WEAPON LEVELS"))
-	for entry in [[&"sword", "Sword"], [&"spear", "Spear"], [&"axe", "Axe"], [&"armor", "Armor"]]:
+	for entry in [[&"sword", "Sword"], [&"spear", "Spear"], [&"armor", "Armor"]]:
 		var id: StringName = entry[0]
 		var row := HBoxContainer.new()
 		var l := Label.new()

@@ -3,14 +3,16 @@ extends Control
 ## The two wheels (2026-10-10), which replace the hotbar: held up by a key, aimed
 ## with the mouse or the right stick, chosen on release.
 ##
-##   weapons  "weapon_wheel" (C / right stick click): the four weapon-wheel slots
-##            (inventory 0-3). Released on one, it is taken in hand.
-##   quick    "quick_wheel" (X): the four quick-item slots (inventory 4-7).
+##   weapons  "weapon_wheel" (C / right stick click): the two weapon-wheel slots
+##            (inventory 0-1), left and right. Released on one, it is taken in
+##            hand; tapped and let go without aiming, the other is (note 172).
+##   quick    "quick_wheel" (X): the four quick-item slots (inventory 2-5).
 ##            Released on one, it is used (a potion drunk). On a controller a
 ##            d-pad direction holds it up on that slot until it is let go, which
 ##            uses it; another direction moves the choice; B cancels.
 ##
-## Directions are fixed: up 1, right 2, down 3, left 4. The mouse's travel while
+## Directions are fixed: quick items up 1, right 2, down 3, left 4; weapons
+## left 1, right 2. The mouse's travel while
 ## the wheel is up is gathered into `_aim` (and swallowed, so the view does not
 ## turn); the right stick sets it outright. Nothing is chosen until it has moved
 ## DEAD_ZONE from the middle, so letting go at once does nothing.
@@ -29,6 +31,8 @@ const GOLD := Color(0.95, 0.78, 0.42)
 const INK := Color(0.93, 0.88, 0.78)
 ## Up, right, down, left.
 const DIRS := [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)]
+## The weapon wheel's two (note 172): left, right.
+const WEAPON_DIRS := [Vector2(-1, 0), Vector2(1, 0)]
 
 var player: Node
 var kind := &"weapons"
@@ -40,6 +44,8 @@ var _choice := -1
 ## Held up by a d-pad direction (its "quick_N" action), not the wheel key.
 var _held := &""
 var _font: Font
+## The directions this wheel offers, one per slot.
+var _dirs: Array = DIRS
 
 
 func setup(p: Node, which: StringName) -> void:
@@ -47,6 +53,7 @@ func setup(p: Node, which: StringName) -> void:
 	kind = which
 	_action = &"weapon_wheel" if which == &"weapons" else &"quick_wheel"
 	_first = 0 if which == &"weapons" else Inventory.QUICK_FIRST
+	_dirs = WEAPON_DIRS if which == &"weapons" else DIRS
 	name = "WeaponWheel" if which == &"weapons" else "QuickWheel"
 	# Offsets too: anchors alone left it zero-sized, drawn round the top-left corner.
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -147,9 +154,17 @@ func _close(apply: bool) -> void:
 	_held = &""
 	visible = false
 	player.set("wheel_open", false)
-	if not apply or _choice < 0:
+	if not apply:
 		return
 	var inv: Inventory = player.get("inventory")
+	if _choice < 0:
+		# Two weapons (note 172): C tapped and let go without aiming swaps to
+		# the other one, if there is one.
+		if kind == &"weapons":
+			var other := 1 - int(player.get("selected_slot"))
+			if other >= 0 and other < Inventory.WEAPONS and not inv.is_empty(other):
+				player.call("select_slot", other)
+		return
 	var slot := _first + _choice
 	if kind == &"weapons":
 		# An empty slot is no choice: the weapon in hand stays.
@@ -168,7 +183,8 @@ func _process(_delta: float) -> void:
 		return
 	# The key let go without the release reaching us (focus lost): the same.
 	if not Coop.held(player, _held if _held != &"" else _action):
-		_close(true)
+		# (Not the weapon swap, which only a real tap makes.)
+		_close(_choice >= 0)
 		return
 	var stick := Coop.vector(player, &"look_left", &"look_right", &"look_up", &"look_down")
 	if stick.length() > 0.5:
@@ -183,8 +199,8 @@ func _update_choice() -> void:
 		return
 	var best := -1
 	var best_dot := -2.0
-	for i in DIRS.size():
-		var d: float = (DIRS[i] as Vector2).dot(_aim.normalized())
+	for i in _dirs.size():
+		var d: float = (_dirs[i] as Vector2).dot(_aim.normalized())
 		if d > best_dot:
 			best_dot = d
 			best = i
@@ -204,14 +220,14 @@ func _draw() -> void:
 		draw_line(c, tip, Color(GOLD, 0.6), 3.0, true)
 		draw_circle(tip, 5.0, GOLD)
 	draw_circle(c, 6.0, Color(INK, 0.6))
-	for i in DIRS.size():
+	for i in _dirs.size():
 		var slot := _first + i
 		var id: StringName = inv.id_at(slot)
 		# A quick slot run dry: its item greyed out with a 0.
 		var kept: StringName = inv.assigned_at(slot) if id == &"" else &""
 		var chosen := i == _choice
 		var side := CELL * (1.12 if chosen else 1.0)
-		var at: Vector2 = c + (DIRS[i] as Vector2) * RADIUS
+		var at: Vector2 = c + (_dirs[i] as Vector2) * RADIUS
 		var rect := Rect2(at - Vector2(side, side) * 0.5, Vector2(side, side))
 		var box := StyleBoxFlat.new()
 		box.set_corner_radius_all(16)

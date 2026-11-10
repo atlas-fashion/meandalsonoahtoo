@@ -3,8 +3,8 @@ extends Node
 ## The intro's lessons (note 131): searching the ruins of Vardia, the player is
 ## taught every control, one at a time, each watched for in the player's own
 ## state (no fake buttons): looking, walking, jumping, using things, the pack and
-## the map, the sword's three attacks, the weapon wheel, the spear's and the
-## axe's, the dash, blocking and parrying the sentinel, putting it down, and
+## the map, the sword's three attacks, the weapon wheel, the spear's (no axe
+## for now, note 172), the dash, blocking and parrying the sentinel, putting it down, and
 ## drinking from the quick wheel. Then the altar, and `finished`.
 ##
 ## A card at the top of each player's view says what to do and with which key
@@ -31,15 +31,11 @@ var LESSONS: Array[Dictionary] = [
 	{"id": &"cut", "title": "Strike a training post  ·  3 times", "kb": "[k]LEFT CLICK[/k] swings your sword.", "pad": "[k]RB[/k] swings your sword."},
 	{"id": &"heavy", "title": "Heavy swipe", "kb": "[k]Q[/k]: the blade drawn back a moment, then one wide, heavy cut.", "pad": "[k]RT[/k]: the blade drawn back a moment, then one wide, heavy cut."},
 	{"id": &"wave", "title": "Wave slash", "kb": "[k]F[/k]: a long wind-up, then a cut that sends a gold wave down the hall. Once every 20 seconds.", "pad": "[k]LT[/k]: a long wind-up, then a cut that sends a gold wave down the hall. Once every 20 seconds."},
-	{"id": &"to_spear", "title": "Take up the spear", "kb": "Hold [k]C[/k], point at the spear, let go.", "pad": "Hold [k]R3[/k], point at the spear with the stick, let go."},
+	{"id": &"to_spear", "title": "Take up the spear", "kb": "Tap [k]C[/k] to swap weapons, or hold it, point at the spear, let go.", "pad": "Tap [k]R3[/k] to swap weapons, or hold it, point at the spear with the stick, let go."},
 	{"id": &"stab", "title": "Stab a post  ·  3 times", "kb": "[k]LEFT CLICK[/k] stabs.", "pad": "[k]RB[/k] stabs."},
 	{"id": &"dash", "title": "Spear sweep", "kb": "[k]Q[/k]: wound up, then swept low through the legs. It knocks them down.", "pad": "[k]RT[/k]: wound up, then swept low through the legs. It knocks them down."},
 	{"id": &"throw", "title": "Throw the spear", "kb": "[k]F[/k] hurls it. It bursts where it strikes and comes back.", "pad": "[k]LT[/k] hurls it. It bursts where it strikes and comes back."},
-	{"id": &"to_axe", "title": "Take up the axe", "kb": "Hold [k]C[/k], point at the axe, let go.", "pad": "Hold [k]R3[/k], point at the axe, let go."},
-	{"id": &"chop", "title": "Chop a post", "kb": "[k]LEFT CLICK[/k]: slow, and very heavy.", "pad": "[k]RB[/k]: slow, and very heavy."},
-	{"id": &"axe_throw", "title": "Throw the axe", "kb": "[k]Q[/k] throws it end over end. It comes back.", "pad": "[k]RT[/k] throws it end over end. It comes back."},
-	{"id": &"berserk", "title": "Berserk", "kb": "[k]F[/k]: a roar, then seconds of speed and fury that heal you.", "pad": "[k]LT[/k]: a roar, then seconds of speed and fury that heal you."},
-	{"id": &"to_sword", "title": "Back to the sword", "kb": "Hold [k]C[/k], point at the sword, let go.", "pad": "Hold [k]R3[/k], point at the sword, let go."},
+	{"id": &"to_sword", "title": "Back to the sword", "kb": "Tap [k]C[/k] to swap back, or hold it, point at the sword, let go.", "pad": "Tap [k]R3[/k] to swap back, or hold it, point at the sword, let go."},
 	{"id": &"dodge", "title": "Dash  ·  2 times", "kb": "Tap [k]LEFT CTRL[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands.", "pad": "Press [k]B[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands."},
 	{"id": &"block", "title": "Block  ·  2 blows", "kb": "Hold [k]RIGHT CLICK[/k] to raise your guard as its glaive comes down.", "pad": "Hold [k]LB[/k] to raise your guard as its glaive comes down."},
 	{"id": &"parry", "title": "Parry", "kb": "Tap [k]RIGHT CLICK[/k] the moment its glaive flashes. A parry throws it back.", "pad": "Tap [k]LB[/k] the moment its glaive flashes. A parry throws it back."},
@@ -301,20 +297,9 @@ func _done_now(p: Node, t: Dictionary, _delta: float) -> bool:
 		&"throw":
 			var spear = p.get("spear")
 			return spear != null and bool(spear.call("is_away"))
-		&"to_axe":
-			var spear = p.get("spear")
-			return p.call("held_item") == &"axe" and (spear == null or not bool(spear.call("is_away")))
-		&"chop":
-			return _hits_since(t, &"axe") >= 1
-		&"axe_throw":
-			var axe = p.get("axe")
-			return axe != null and bool(axe.call("is_away"))
-		&"berserk":
-			var axe = p.get("axe")
-			return axe != null and (bool(axe.call("is_berserk")) or bool(axe.call("is_roaring")))
 		&"to_sword":
-			var axe = p.get("axe")
-			return p.call("held_item") == &"sword" and (axe == null or not bool(axe.call("is_away")))
+			var spear = p.get("spear")
+			return p.call("held_item") == &"sword" and (spear == null or not bool(spear.call("is_away")))
 		&"dodge":
 			return int(p.get("dash_count")) - int(t["dashes0"]) >= 2
 		&"block":

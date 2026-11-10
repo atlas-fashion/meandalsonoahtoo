@@ -235,6 +235,8 @@ func reset() -> void:
 	_pose_t = 0.0
 	_combo = 0
 	_move = &""
+	lead = 0.0
+	_lead_hold = 0.0
 	_released = false
 	_stab_queued = false
 	# A respawn starts the throw fresh, as it does the sword's slam.
@@ -330,6 +332,7 @@ func _process(delta: float) -> void:
 	# parent hides a top_level child too.
 	_model.visible = _raise > 0.01 and _pose != Pose.AWAY
 	_pose_t += delta / time_scale()
+	_update_lead(delta)
 	var pose: Transform3D = scene if scene != null else _pose_transform()
 	# The guard (`player._start_block`), eased by the player's own level.
 	var g: float = player.guard_amount()
@@ -413,8 +416,8 @@ func _pose_transform() -> Transform3D:
 			if _move == &"" or t >= PlayerMotion.length(_move):
 				_pose = Pose.REST
 				_move = &""
-				return _rest()
-			return _motion_transform(_move, t)
+				return _rest().interpolate_with(_ready_pose(), lead)
+			return _thrust_pose(_move, t)
 		Pose.SWEEP:
 			if t >= PlayerMotion.length(&"sweep"):
 				_pose = Pose.REST
@@ -435,7 +438,95 @@ func _pose_transform() -> Transform3D:
 			if k >= 1.0:
 				_pose = Pose.REST
 			return _from.interpolate_with(_rest(), k * k * (3.0 - 2.0 * k))
-	return _rest()
+	# Just out of a thrust, the point still levelled ahead as the stance takes
+	# the spear back (`lead`).
+	return _rest().interpolate_with(_ready_pose(), lead)
+
+
+## The jabs and the lunge, point first down the aim (note 172; the user: "the
+## spear should hit with the sharp edge of his spear when attacking all 3 times.
+## Right now the player is attacking with the blunt end for the first 2"). The
+## jabs' capture is a boxer's two punches, and a spear laid along a punching
+## fist's grip line drives its BUTT at the target. So through the stab the spear
+## LEADS (`lead`, first_person_arms.gd): it is posed here, levelled at the
+## crosshair from low on the right, and the arm is put on it by IK, the body's
+## clip under it. A jab snaps out past the arm's reach (the haft runs on
+## through the fist, first_person_arms.gd), holds a beat and
+## draws back to READY; the lunge draws right back by the shoulder, a beat, and
+## drives through, the step carrying it. Head space, hand and aim point.
+const READY_AT := Vector3(0.24, -0.34, -0.16)
+const READY_AIM := Vector3(0.04, -0.14, -6.0)
+const JAB_AT: Array[Vector3] = [Vector3(0.14, -0.26, -0.78), Vector3(0.10, -0.23, -0.78)]
+const JAB_AIM: Array[Vector3] = [Vector3(-0.02, -0.08, -6.0), Vector3(-0.10, 0.02, -6.0)]
+## How long a jab holds at full reach before it draws back.
+const JAB_HOLD := 0.035
+const LUNGE_BACK_AT := Vector3(0.30, -0.30, 0.02)
+const LUNGE_BACK_AIM := Vector3(0.12, -0.04, -6.0)
+const LUNGE_AT := Vector3(0.09, -0.22, -0.95)
+const LUNGE_AIM := Vector3(-0.03, -0.04, -6.0)
+## Seconds for the spear to take over from the stance, and to hand back to it
+## once the thrusts stop (it stays levelled through a combo's gaps).
+const LEAD_IN := 0.06
+const LEAD_OUT := 0.2
+const LEAD_LINGER := 0.12
+
+## 0..1: how much the spear's own pose leads the hand (first_person_arms.gd).
+var lead := 0.0
+var _lead_hold := 0.0
+
+
+func _ready_pose() -> Transform3D:
+	return _aimed(READY_AT, READY_AIM, 0.0)
+
+
+func _thrust_pose(kind: StringName, t: float) -> Transform3D:
+	var ready := _ready_pose()
+	if kind == &"lunge":
+		var back := _aimed(LUNGE_BACK_AT, LUNGE_BACK_AIM, 0.0)
+		var out := _aimed(LUNGE_AT, LUNGE_AIM, 0.0)
+		var drive := LUNGE_OUT - 0.07
+		if t < drive - 0.05:
+			return ready.interpolate_with(back, _ease(t / (drive - 0.05)))
+		if t < drive:
+			# The beat drawn back, creeping a little further.
+			var creep := Transform3D(back.basis, back.origin + Vector3(0.01, 0.0, 0.02) * ((t - drive + 0.05) / 0.05))
+			return creep
+		var creep_end := Transform3D(back.basis, back.origin + Vector3(0.01, 0.0, 0.02))
+		if t < LUNGE_OUT:
+			var k := (t - drive) / (LUNGE_OUT - drive)
+			# Gathering speed all the way in: the point is fastest as it bites.
+			return creep_end.interpolate_with(out, k * k * (2.0 - k))
+		var home := LUNGE_OUT + 0.12
+		if t < home:
+			return out
+		var end := PlayerMotion.length(&"lunge")
+		return out.interpolate_with(ready, _ease((t - home) / maxf(end - home, 0.01)))
+	var i := 0 if kind == &"jab_a" else 1
+	var jab := _aimed(JAB_AT[i], JAB_AIM[i], 0.0)
+	if t < STAB_OUT:
+		var k := t / STAB_OUT
+		# Snapped out, slowing only as the arm straightens.
+		return ready.interpolate_with(jab, 1.0 - (1.0 - k) * (1.0 - k) * (1.0 - k))
+	if t < STAB_OUT + JAB_HOLD:
+		return jab
+	var r := (t - STAB_OUT - JAB_HOLD) / maxf(STAB_BACK - STAB_OUT - JAB_HOLD, 0.01)
+	return jab.interpolate_with(ready, _ease(r))
+
+
+static func _ease(k: float) -> float:
+	k = clampf(k, 0.0, 1.0)
+	return k * k * (3.0 - 2.0 * k)
+
+
+## The spear's `lead` (`_process`): up while it thrusts, and for LEAD_LINGER
+## after, so a combo's gaps never hand it back to the stance.
+func _update_lead(delta: float) -> void:
+	if _pose == Pose.STAB:
+		_lead_hold = LEAD_LINGER
+	else:
+		_lead_hold = maxf(_lead_hold - delta, 0.0)
+	var want := 1.0 if _lead_hold > 0.0 and _flying == null else 0.0
+	lead = move_toward(lead, want, delta / (LEAD_IN if want > lead else LEAD_OUT))
 
 
 ## A clip move's spear (notes 167, 168): where the hand is asked to be -- the
@@ -464,13 +555,13 @@ func _lunge_step() -> void:
 func _stab_strike(lunge := false) -> void:
 	var cam: Camera3D = player.camera
 	var eye := cam.global_position
-	var fwd := -cam.global_basis.z
+	var fwd: Vector3 = player.aim_forward()
 	var reach := LUNGE_REACH if lunge else STAB_REACH
 	var box := BoxShape3D.new()
 	box.size = Vector3(STAB_WIDTH, STAB_WIDTH, reach)
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = box
-	q.transform = Transform3D(cam.global_basis, eye + fwd * reach * 0.5)
+	q.transform = Transform3D(Basis.looking_at(fwd, Vector3.UP if absf(fwd.y) < 0.98 else Vector3.BACK), eye + fwd * reach * 0.5)
 	q.collision_mask = player.hitbox.collision_mask
 	q.exclude = [player.get_rid()]
 	var struck := false
@@ -542,7 +633,7 @@ func _release() -> void:
 	_throw_ready_at = _now() + THROW_COOLDOWN
 	_pose = Pose.AWAY
 	var cam: Camera3D = player.camera
-	var fwd := -cam.global_basis.z
+	var fwd: Vector3 = player.aim_forward()
 	_flying = Node3D.new()
 	_flying.name = "ThrownSpear"
 	_flying.top_level = true

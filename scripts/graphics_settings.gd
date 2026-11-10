@@ -590,6 +590,10 @@ func set_field_of_view(value: float) -> void:
 ## How much of the knight's head turning the view takes through an animation
 ## (note 168), 0..1: the camera always rides the head's position (a leap, a
 ## lunge, a crouch); this much of its turn is added to where the player looks.
+## Since note 172 the view takes 0.8 of this share of a cut's turn and nod
+## (player.gd `ATTACK_CAMERA`; the offset is 0.8 of the head's whatever this
+## says), the body turned to match; a spin (the sweep, the ult) is followed all
+## the way whatever it is set to.
 ## Like the field of view: in no preset, saved under [controls].
 var head_sway := 0.25
 

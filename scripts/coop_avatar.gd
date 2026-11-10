@@ -447,11 +447,21 @@ func _apply_clip(kind: StringName, t: float, w: float, upper_only: bool) -> void
 	var walk := clampf(_stride * 1.6, 0.0, 1.0)
 	var not_left: bool = PlayerMotion.move(kind).get("right_only", false)
 	var pose := PlayerMotion.body_pose(kind, t)
+	# Made for the eyes (note 172): the whole knight turned back about the
+	# vertical by what the view does not follow of the clip's turn, so its head
+	# faces where the camera looks -- a forehand no longer wheels it 95 degrees
+	# away under the view, and a spin turns it and the view together. (The
+	# stance and the upper-body parry keep the capture's own facing.)
+	var counter := Quaternion.IDENTITY
+	if kind != &"stance" and not upper_only and player.has_method("view_follow"):
+		var c := PlayerMotion.body_counter(kind, t, float(player.call("view_follow", kind)))
+		counter = Quaternion(Vector3.UP, c)
+		pose["_hips"] = counter * (pose["_hips"] as Vector3)
 	var glob := {}
 	for i in _order:
 		var bn := _skel.get_bone_name(i)
 		var rg := _rest_global[i]
-		var turn := Basis(pose.get(bn, Quaternion.IDENTITY) as Quaternion)
+		var turn := Basis(counter * (pose.get(bn, Quaternion.IDENTITY) as Quaternion))
 		glob[i] = (_k2s * turn * _k2s.inverse()) * rg
 		var par := _parent[i]
 		var want: Basis = glob[i] if par < 0 else (glob[par] as Basis).inverse() * (glob[i] as Basis)

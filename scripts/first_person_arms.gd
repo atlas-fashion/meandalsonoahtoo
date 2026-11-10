@@ -300,6 +300,10 @@ func _pose_right(held: Dictionary) -> void:
 	var wrist := p - turn * (a.grip - a.rest_hand.origin)
 	var q := _solve(a, shoulder, wrist, turn, back, _h2s(a).basis * POLE)
 	var w: float = _body.get("motion_w") if held["kind"] in [&"sword", &"spear", &"axe"] else 0.0
+	# The spear's thrusts lead the hand (note 172, spear.gd `lead`): the arm is
+	# put on the spear, point first down the aim, not the spear in a boxer's fist.
+	if held["kind"] == &"spear" and node != null:
+		w *= 1.0 - float(node.get("lead"))
 	var bones := [a.upper, a.fore, a.hand]
 	for k in 3:
 		var rot: Quaternion = q[k]
@@ -319,7 +323,13 @@ func _pose_right(held: Dictionary) -> void:
 		else:
 			# Where it was posed, carried back with the wrist if the arm fell short.
 			held_at = frame
-			held_at.origin += to_world.basis * ((q[3] as Vector3) - wrist)
+			var short: Vector3 = to_world.basis * ((q[3] as Vector3) - wrist)
+			# A spear slides through the fist (note 172): out of reach, the haft runs
+			# on through the hand rather than the thrust coming back with the wrist.
+			if held["kind"] == &"spear":
+				var along := frame.basis.z.normalized()
+				short -= along * short.dot(along)
+			held_at.origin += short
 		node.global_transform = held_at * now.affine_inverse() * node.global_transform
 	_curl(a, _grip_curl(a, held["kind"]), 0.0)
 

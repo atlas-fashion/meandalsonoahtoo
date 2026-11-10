@@ -43,7 +43,9 @@ const CLIPS := {
 ## the pose before (pose s); `out` and `end`, the blend home to rest; `ref`, the
 ## clip second of its stance (where the camera's ride is measured from);
 ## `right_only`, the left arm left to the walk or the guard (the sword's: the
-## captures carried a shield on it).
+## captures carried a shield on it); `spin`, a whole turn of the body that the
+## view turns with all the way (note 172); `turn`, a scale on how much of the
+## body's turn the view keeps otherwise (player.gd `view_follow`).
 const MOVES := {
 	# The hold whenever the hands are free (note 171): Sword_Parry's high guard,
 	# the weapon raised across the body, breathing on a loop -- in view from the
@@ -69,24 +71,25 @@ const MOVES := {
 	# The ult (Sword Judgment), near the capture's own pace: a crouch, a leap with
 	# the blade wheeled up and round, the airborne cut that throws the wave, a deep
 	# landing held, rising through a flourish to a last sweep, and settled.
-	&"wave": {"right_only": true, "clip": &"sword_ult", "in": 0.12, "out": 2.9, "end": 3.3, "ref": 0.0,
+	&"wave": {"right_only": true, "spin": true, "clip": &"sword_ult", "in": 0.12, "out": 2.9, "end": 3.3, "ref": 0.0,
 		"knots": [[0.0, 0.20], [0.27, 0.47], [0.55, 0.85], [0.65, 0.93], [0.78, 1.07], [0.92, 1.22],
 			[1.15, 1.45], [1.75, 2.15], [2.35, 2.85], [2.85, 3.45], [3.3, 3.90]]},
 	# The parry: a snap back off the blow and a recovery, on the upper body over
 	# the guard.
 	&"parry": {"right_only": true, "clip": &"sword_parry", "in": 0.05, "out": 0.55, "end": 0.75, "ref": 0.2,
 		"knots": [[0.0, 0.22], [0.12, 0.42], [0.28, 0.6], [0.75, 1.28]]},
-	# The spear's two short jabs (the capture's two right-hand jabs).
-	&"jab_a": {"clip": &"spear_jabs", "in": 0.04, "out": 0.14, "end": 0.28, "ref": 0.28,
+	# The spear's two short jabs (the capture's two right-hand jabs; the arm is
+	# the spear's own, driven point first down the aim, note 172).
+	&"jab_a": {"turn": 0.4, "clip": &"spear_jabs", "in": 0.04, "out": 0.14, "end": 0.28, "ref": 0.28,
 		"knots": [[0.0, 0.32], [0.05, 0.46], [0.09, 0.64], [0.18, 0.85], [0.28, 1.02]]},
-	&"jab_b": {"clip": &"spear_jabs", "in": 0.04, "out": 0.14, "end": 0.28, "ref": 1.22,
+	&"jab_b": {"turn": 0.4, "clip": &"spear_jabs", "in": 0.04, "out": 0.14, "end": 0.28, "ref": 1.22,
 		"knots": [[0.0, 1.26], [0.05, 1.42], [0.09, 1.62], [0.18, 1.84], [0.28, 2.05]]},
 	# The third: drawn back, a beat, and driven through with a step in.
-	&"lunge": {"clip": &"spear_lunge", "in": 0.05, "out": 0.42, "end": 0.6, "ref": 0.0,
+	&"lunge": {"right_only": true, "clip": &"spear_lunge", "in": 0.05, "out": 0.42, "end": 0.6, "ref": 0.0,
 		"knots": [[0.0, 0.10], [0.16, 0.50], [0.22, 0.60], [0.30, 0.84], [0.42, 0.98], [0.6, 1.05]]},
 	# Q: the delayed sweep -- wound up high on the left and swept low through the
 	# legs from left to right.
-	&"sweep": {"clip": &"spear_sweep", "in": 0.08, "out": 0.86, "end": 1.2, "ref": 0.0,
+	&"sweep": {"spin": true, "clip": &"spear_sweep", "in": 0.08, "out": 0.86, "end": 1.2, "ref": 0.0,
 		"knots": [[0.0, 0.08], [0.45, 0.70], [0.55, 0.78], [0.70, 1.12], [0.86, 1.30], [1.2, 1.85]]},
 }
 
@@ -131,6 +134,9 @@ static func clip(name: StringName) -> Clip:
 static func warm() -> void:
 	for name in CLIPS:
 		clip(name)
+	for kind in MOVES:
+		if not MOVES[kind].get("loop", false):
+			_ride(kind)
 
 
 static func move(kind: StringName) -> Dictionary:
@@ -214,6 +220,159 @@ static func head_turn(kind: StringName, t: float) -> Quaternion:
 	var ref := _frame(c, float(MOVES[kind]["ref"]))
 	var now := (arr[f[0]] as Quaternion).slerp(arr[f[1]], f[2])
 	return now * (arr[ref[0]] as Quaternion).inverse()
+
+
+# --- The camera, made for the eyes (note 172) ------------------------------------------
+#
+# The captures were made to be watched from outside: a forehand turns the whole
+# knight 95 degrees, the heavy 155, the sweep and the ult right round. From the
+# eyes, with the view held to the aim, the body wheeled away under the camera
+# and the blade swung out of sight behind it. So every move's head is split into
+# its TURN about the vertical (`yaw`, unwound, so a spin reads -360 and not a
+# jump at 180) and what is left (`nod`: pitch and roll), each sampled over the
+# move's own clock and smoothed with a centred Gaussian (no lag) -- the capture
+# is 30 fps, linearly joined, and its every frame was a kink in the view.
+#
+# The view turns with the body: all the way through a spin (`spin` moves), a
+# share of it otherwise (player.gd `view_follow`); the BODY is turned back by
+# the rest (`body_counter`, coop_avatar.gd), so the knight always faces where
+# its eyes look and the weapon stays in front of them.
+
+## Samples a second of each move's ride, and its smoothing (seconds, one sigma).
+const RIDE_HZ := 120.0
+const RIDE_SMOOTH := 0.03
+
+## kind -> {"yaw": raw unwound turn, "yaw_s": smoothed, "nod": Vector2s (pitch,
+## roll) smoothed, "off": head offsets smoothed (knight space, world metres)}.
+static var _rides := {}
+
+
+static func _ride(kind: StringName) -> Dictionary:
+	if _rides.has(kind):
+		return _rides[kind]
+	var n := int(ceil(length(kind) * RIDE_HZ)) + 1
+	var yaw := PackedFloat32Array()
+	var nods: Array[Vector2] = []
+	var offs: Array[Vector3] = []
+	var last := 0.0
+	var stance := _head_abs(&"stance", 0.0).inverse()
+	for i in n:
+		var t := i / RIDE_HZ
+		var q := head_turn(kind, t)
+		# The turn is measured from the STANCE's head, not the move's first frame:
+		# the body blends in from the stance, and a move that starts already
+		# turned (the sweep, 35 degrees) would otherwise leave the view that far
+		# behind the head. Unwound against the last sample.
+		var a := _twist(_head_abs(kind, t) * stance)
+		a = last + wrapf(a - last, -PI, PI) if i > 0 else wrapf(a, -PI, PI)
+		last = a
+		yaw.append(a)
+		var swing := Quaternion(Vector3.UP, -_twist(q)) * q
+		var e := Basis(swing).get_euler(EULER_ORDER_YXZ)
+		nods.append(Vector2(e.x, e.z))
+		offs.append(head_offset(kind, t))
+	var r := {"yaw": yaw, "yaw_s": _gauss_f(yaw), "nod": _gauss(nods), "off": _gauss(offs)}
+	_rides[kind] = r
+	return r
+
+
+## The twist of `q` about the vertical (radians).
+static func _twist(q: Quaternion) -> float:
+	var tw := Quaternion(0.0, q.y, 0.0, q.w)
+	if tw.length_squared() < 1e-10:
+		return 0.0
+	tw = tw.normalized()
+	return 2.0 * atan2(tw.y, tw.w)
+
+
+## The head's turn from rest (knight space) through `kind` at `t`.
+static func _head_abs(kind: StringName, t: float) -> Quaternion:
+	var c := clip(MOVES[kind]["clip"])
+	if not c.turn.has("Head"):
+		return Quaternion.IDENTITY
+	var arr: Array = c.turn["Head"]
+	var f := _frame(c, clip_time(kind, t))
+	return (arr[f[0]] as Quaternion).slerp(arr[f[1]], f[2])
+
+
+static func _kernel() -> PackedFloat32Array:
+	var s := RIDE_SMOOTH * RIDE_HZ
+	var half := int(ceil(s * 3.0))
+	var k := PackedFloat32Array()
+	var sum := 0.0
+	for j in range(-half, half + 1):
+		var v := exp(-0.5 * j * j / (s * s))
+		k.append(v)
+		sum += v
+	for j in k.size():
+		k[j] /= sum
+	return k
+
+
+## Centred Gaussian over samples, the ends held (so a move still starts and ends
+## exactly where the capture does).
+static func _gauss_f(a: PackedFloat32Array) -> PackedFloat32Array:
+	var k := _kernel()
+	var half := k.size() / 2
+	var out := PackedFloat32Array()
+	out.resize(a.size())
+	for i in a.size():
+		var v := 0.0
+		for j in k.size():
+			v += a[clampi(i + j - half, 0, a.size() - 1)] * k[j]
+		out[i] = v
+	return out
+
+
+static func _gauss(a: Array) -> Array:
+	var k := _kernel()
+	var half := k.size() / 2
+	var out := []
+	for i in a.size():
+		var v = a[0] * 0.0
+		for j in k.size():
+			v += a[clampi(i + j - half, 0, a.size() - 1)] * k[j]
+		out.append(v)
+	return out
+
+
+static func _sample(arr, t: float):
+	var x := clampf(t * RIDE_HZ, 0.0, float(arr.size() - 1))
+	var a := int(floor(x))
+	var b := mini(a + 1, arr.size() - 1)
+	var f := x - a
+	return arr[a] + (arr[b] - arr[a]) * f
+
+
+## The head's turn about the vertical since the stance (radians, unwound).
+static func ride_yaw(kind: StringName, t: float, smooth := true) -> float:
+	return float(_sample(_ride(kind)["yaw_s" if smooth else "yaw"], t))
+
+
+## The head's nod since the stance, its turn taken out: Vector2(pitch, roll).
+static func ride_nod(kind: StringName, t: float) -> Vector2:
+	return _sample(_ride(kind)["nod"], t)
+
+
+## Where the head has gone since the stance (knight space, world metres),
+## smoothed.
+static func ride_offset(kind: StringName, t: float) -> Vector3:
+	return _sample(_ride(kind)["off"], t)
+
+
+## The turn the view takes at `t` (radians), `follow` of the head's -- weighted
+## by the move, and eased out to the nearest whole turn, so a spin that ends
+## past where it began goes on round rather than unwinding back.
+static func view_yaw(kind: StringName, t: float, follow: float) -> float:
+	var y := ride_yaw(kind, t) * follow
+	var base := roundf(y / TAU) * TAU
+	return base + (y - base) * weight(kind, t)
+
+
+## The turn the body is given on top of the clip so its head faces where the
+## view does (unweighted: coop_avatar.gd lays the clip on by its weight).
+static func body_counter(kind: StringName, t: float, follow: float) -> float:
+	return ride_yaw(kind, t) * follow - ride_yaw(kind, t, false)
 
 
 # --- Baking -------------------------------------------------------------------------

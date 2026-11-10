@@ -5,13 +5,14 @@ extends RefCounted
 ## hotbar is gone). Every slot is either empty ({}) or {"id": StringName,
 ## "count": int}.
 ##
-##   0 - 3    the WEAPON wheel (C / right stick click): up, right, down, left.
+##   0 - 1    the WEAPON wheel (C / right stick click): left, right (two
+##            slots since note 172; a tap of C swaps between them).
 ##            Weapons, and utility items with "wheel": "weapon" (the robot
 ##            rat). The one in hand is `player.selected_slot`.
-##   4 - 7    the QUICK ITEM wheel (R, or the d-pad): up, right, down, left.
+##   2 - 5    the QUICK ITEM wheel (R, or the d-pad): up, right, down, left.
 ##            Consumables, and utility items with "wheel": "quick" (the live
 ##            rat). See `wheel_of`.
-##   8 - 37   the bag: anything.
+##   6 - 35   the bag: anything.
 ##
 ## HOTBAR keeps its old name for "the slots before the bag" (both wheels).
 ##
@@ -23,7 +24,7 @@ extends RefCounted
 
 signal changed
 
-const WEAPONS := 4
+const WEAPONS := 2
 const QUICK := 4
 ## The first quick-item slot.
 const QUICK_FIRST := WEAPONS

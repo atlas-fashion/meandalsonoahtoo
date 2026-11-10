@@ -738,7 +738,7 @@ func _build() -> void:
 	_footer_map.visible = false
 	page.add_child(_footer_map)
 
-	# The weapon wheel is 0-3, the quick-item wheel 4-7 and the bag 8-37.
+	# The weapon wheel is 0-1, the quick-item wheel 2-5 and the bag 6-35.
 	_slots.resize(Inventory.SIZE)
 	for i in Inventory.SIZE:
 		var slot := ItemSlot.new()
@@ -1116,8 +1116,8 @@ func _build_character() -> Control:
 	wheels.add_theme_constant_override("separation", 10)
 	wheels.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.add_child(wheels)
-	wheels.add_child(_wheel_diamond("Weapons", "C", 0))
-	wheels.add_child(_wheel_diamond("Quick Items", "X", Inventory.QUICK_FIRST))
+	wheels.add_child(_wheel_diamond("Weapons", "C", 0, Inventory.WEAPONS))
+	wheels.add_child(_wheel_diamond("Quick Items", "X", Inventory.QUICK_FIRST, Inventory.QUICK))
 
 	var fill := Control.new()
 	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1148,10 +1148,10 @@ func _build_character() -> Control:
 	return framed[0]
 
 
-## A wheel's four slots (inventory `first` .. `first` + 3) laid out as the wheel
-## lays them out: up, right, down, left round an empty middle, with the wheel's
-## name and key above.
-func _wheel_diamond(title: String, key: String, first: int) -> Control:
+## A wheel's slots (inventory `first` .. `first` + `count` - 1) laid out as the
+## wheel lays them out: four up, right, down, left round an empty middle, two
+## (the weapons, note 172) left and right of it; the wheel's name and key above.
+func _wheel_diamond(title: String, key: String, first: int, count: int) -> Control:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 4)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1167,7 +1167,7 @@ func _wheel_diamond(title: String, key: String, first: int) -> Control:
 	grid.add_theme_constant_override("v_separation", 3)
 	box.add_child(grid)
 	# Grid cells 1, 5, 7, 3 are up, right, down, left.
-	var at := {1: 0, 5: 1, 7: 2, 3: 3}
+	var at := {1: 0, 5: 1, 7: 2, 3: 3} if count == 4 else {3: 0, 5: 1}
 	for cell in 9:
 		if at.has(cell):
 			grid.add_child(_slots[first + int(at[cell])])

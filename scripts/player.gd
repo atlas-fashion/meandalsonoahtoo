@@ -1501,13 +1501,18 @@ func _update_head(delta: float) -> void:
 		shake_roll = _bob_noise.get_noise_2d(t, 91.0) * deg_to_rad(7.0) * quake
 	# The wave slash's effort: a lean, a nod and a crouch (its FOV is in
 	# `_update_dash_view`).
-	var effort := _wave_effort()
-	var ride := _head_ride()
 	if _stab_strain > 0.0:
 		_stab_strain = maxf(_stab_strain - delta * 1.1 / attack_time_scale, 0.0)
 	var stab := _stab_effort()
 	_stab_fov = stab.w
-	effort += stab
+	# Everything an attack does to the view (note 172): the knight's head through
+	# the clip, the leans and crouches of the wave, the heavy and the stab, and
+	# the swing's punch -- ATTACK_CAMERA of what it was, and run through one
+	# spring (`_update_attack_view`), so nothing in it ever arrives in a frame.
+	var attack_e := (_wave_effort() + stab) * ATTACK_CAMERA
+	var swing_k := _swing_kick * _swing_kick * ATTACK_CAMERA
+	_update_attack_view(delta, attack_e, swing_k)
+	var effort := Vector4.ZERO
 	var tremble := _remnant_tremble()
 	shake_offset += Vector3(tremble.x, tremble.y, 0.0)
 	shake_roll += tremble.z
@@ -1519,29 +1524,26 @@ func _update_head(delta: float) -> void:
 	effort.z += wake.x + 1.35 * crushed
 	# The dash: the body drops into it and comes back up over the whole dash.
 	var dash_body := dash_motion()
-	head.position = _head_rest + (ride[0] as Vector3) + _bob_offset + shake_offset + _scene_lean \
+	head.position = _head_rest + _view_off + _bob_offset + shake_offset + _scene_lean \
 		- Vector3(0, landing_bob_height * land + jump_bob_height * push + slam_crouch_depth * crouch + effort.z
-			+ dash_dip * dash_body, spear_effort_push * _stab_k)
+			+ dash_dip * dash_body, 0.0)
 	# Look is added untouched, never smoothed -- lagging the crosshair behind
-	# the mouse would feel like input lag, not like weight.
-	# The swing punch joins the same composition as everything else, for the
-	# reason in the comment above this function.
-	var swing := _swing_kick * _swing_kick
-	head.rotation.x = _look_pitch + _bob_pitch + deg_to_rad(attack_view_kick) * swing \
+	# the mouse would feel like input lag, not like weight. The attack's nod and
+	# punch (`_view_rot`, sprung) ride on top of it.
+	head.rotation.x = _look_pitch + _bob_pitch + _view_rot.x \
 		- deg_to_rad(landing_view_kick) * land + deg_to_rad(jump_view_kick) * lift \
 		- deg_to_rad(7.0) * crouch + shake_pitch + _cine_aim.y * _cine_a + deg_to_rad(effort.y) \
 		- deg_to_rad(dash_pitch_degrees) * dash_body * _dash_fwd
 	head.rotation.z = _bob_roll + deg_to_rad(dash_roll_degrees) \
-		* (_dash_view * _dash_view) * _dash_lateral \
-		+ deg_to_rad(attack_view_roll) * swing * _swing_roll + shake_roll \
+		* (_dash_view * _dash_view) * _dash_lateral + _view_rot.z + shake_roll \
 		+ deg_to_rad(haft_roll) * _cine_roll * _cine_z + deg_to_rad(_scene_roll) + deg_to_rad(effort.x)
 	# The haft strike's turn onto its target. Only ever here, on the head: the
 	# body's yaw is the player's aim and is never touched.
 	head.rotation.y = _cine_aim.x * _cine_a
-	# The knight's head turning through an attack, as much as the player asked
-	# for (Settings: Head sway).
-	if ride[1] != Basis.IDENTITY:
-		head.basis = (ride[1] as Basis) * head.basis
+	# The view turning with the knight's body through an attack (note 172): all
+	# the way round a spin, a share of a cut's turn.
+	if absf(_view_rot.y) > 1e-5:
+		head.basis = Basis(Vector3.UP, _view_rot.y) * head.basis
 
 
 ## Puts the sword away when something else is in hand (or the hands are busy,
@@ -1684,7 +1686,7 @@ func held_item() -> StringName:
 	return inventory.id_at(selected_slot)
 
 
-## Takes the weapon in weapon-wheel slot `slot` (0-3) in hand.
+## Takes the weapon in weapon-wheel slot `slot` (0-1) in hand.
 func select_slot(slot: int) -> void:
 	slot = clampi(slot, 0, Inventory.WEAPONS - 1)
 	if slot == selected_slot:
@@ -1710,7 +1712,6 @@ func save_state() -> Dictionary:
 		"weapon_levels": weapon_levels.duplicate(),
 		"armor_level": armor_level,
 		"selected": selected_slot,
-		"axe_given": true,
 	}
 
 
@@ -1733,9 +1734,9 @@ func restore_state(data: Dictionary) -> void:
 		# is put back where it now belongs.
 		inventory.migrate(slots)
 		currency_changed.emit(currency, 0)
-	# Saves from before the axe (2026-10-20) are handed one, once.
-	if not slots.is_empty() and not bool(data.get("axe_given", false)) and inventory.find(&"axe") < 0:
-		inventory.add(&"axe", 1)
+	# The axe is put away for now (note 172): a save that carries one loses it.
+	if inventory.find(&"axe") >= 0:
+		inventory.remove(&"axe", inventory.count(&"axe"))
 	var want := int(data.get("selected", 0)) if same_layout else maxi(inventory.find(&"sword"), 0)
 	selected_slot = -1
 	select_slot(want)
@@ -2553,7 +2554,7 @@ var _wave_fired := false
 func _fire_wave() -> void:
 	_wave_fired = true
 	_slam_ready_at = _now() + slam_cooldown
-	var ahead := -camera.global_basis.z
+	var ahead := aim_forward()
 	ahead.y = 0.0
 	if ahead.length_squared() < 1e-4:
 		ahead = -global_basis.z
@@ -2565,8 +2566,8 @@ func _fire_wave() -> void:
 	var wall := get_world_3d().direct_space_state.intersect_ray(ray)
 	if not wall.is_empty():
 		from = (wall["position"] as Vector3) - ahead * 0.3
-	var wave := SwordWave.launch(get_parent(), self, from, ahead, WAVE_TILT)
-	wave.set("damage", wave_damage * weapon_damage_scale(&"sword"))
+	var wave := SwordWave.launch(get_parent(), self, from, ahead, WAVE_TILT,
+		wave_damage * weapon_damage_scale(&"sword"))
 	wave.set("speed", wave_speed)
 	wave.set("reach", wave_reach)
 	wave.set("push", wave_push)
@@ -3217,7 +3218,7 @@ func stance_wanted() -> bool:
 
 
 ## The clip move the body is in, [kind, pose seconds], or [] (coop_avatar.gd poses
-## the knight from it; the camera rides its head, `_head_ride`). The sword's
+## the knight from it; the camera rides its head, `_ride_at`). The sword's
 ## own, or the spear's (spear.gd `motion`).
 func body_motion() -> Array:
 	if PlayerMotion.has_move(_pose_kind) and _pose_time >= 0.0:
@@ -3236,29 +3237,121 @@ func _motion_pose(kind: StringName, t: float) -> Transform3D:
 	return _blend(_pose_from, _rest_pose(), k * k * (3.0 - 2.0 * k))
 
 
-## The camera in the knight's head (note 168): where the head has gone since the
-## move's stance -- a leap, a lunge, a crouch -- and `Graphics.head_sway` of how
-## it has turned, both by the move's weight. Head space: [offset, turn].
-func _head_ride() -> Array:
+## The camera through attacks (note 172; the user: "reduce the camera movement
+## on the attacks a little bit ... I want all the camera 'head' movement to be
+## very smooth and extremely lifelike"; "if the player spins around, the camera
+## should too very seamlessly"). ATTACK_CAMERA of what it was (the head's nod
+## and offset, the leans, the swing's punch); RIDE_ROLL of the head's roll on
+## top of that, since a head keeps the horizon nearly level; RIDE_SPRING how
+## fast the view settles after anything that would have jumped (a move cut into
+## another, a punch starting). Smooth motion is followed with no lag at all
+## (its speed is fed forward), so the view never trails the body.
+const ATTACK_CAMERA := 0.8
+const RIDE_ROLL := 0.5
+const RIDE_SPRING := 26.0
+## The attack's part of the view, sprung: (pitch, yaw, roll) radians and the
+## offset (player space), with their speeds.
+var _view_rot := Vector3.ZERO
+var _view_rot_v := Vector3.ZERO
+var _view_off := Vector3.ZERO
+var _view_off_v := Vector3.ZERO
+
+
+## Where the player aims: the camera's forward with the attack's turn of the
+## view taken out (note 172). Mid-spin the view is wheeled round with the body;
+## what an attack throws or drives (the wave, the heavy's lurch, the spear's
+## stab and throw) still goes down the crosshair's own line.
+func aim_forward() -> Vector3:
+	return Basis(Vector3.UP, -_view_rot.y) * (-camera.global_basis.z)
+
+
+## How much of the knight's turn through `kind` the view turns with: all of a
+## spin (the sweep, the ult), and Head sway's share of anything else -- scaled
+## by the move's own `turn` (the jabs are a boxer's punches, the whole body
+## wheeling into each; the view keeps to a little of it). The body is turned
+## back by the rest (coop_avatar.gd), so it always faces where its eyes look.
+func view_follow(kind: StringName) -> float:
+	var m := PlayerMotion.move(kind)
+	if m.get("spin", false):
+		return 1.0
+	return clampf(Graphics.head_sway * ATTACK_CAMERA * float(m.get("turn", 1.0)), 0.0, 1.0)
+
+
+## The clip move the head is riding, [kind, pose seconds, pose seconds per real
+## second], or [].
+func _ride_move() -> Array:
+	if _dead or in_cutscene:
+		return []
 	var m := body_motion()
-	var kind := &""
-	var t := 0.0
 	if not m.is_empty():
-		kind = m[0]
-		t = m[1]
-	elif _parry_t >= 0.0:
-		kind = &"parry"
-		t = _parry_t
-	if kind == &"" or _dead or in_cutscene:
-		return [Vector3.ZERO, Basis.IDENTITY]
+		return [m[0], m[1], 1.0 / attack_time_scale]
+	if _parry_t >= 0.0:
+		return [&"parry", _parry_t, 1.0]
+	return []
+
+
+## The knight's head through `kind` at `t`, as the view takes it:
+## [offset (player space), Vector3(pitch, yaw, roll)].
+func _ride_at(kind: StringName, t: float) -> Array:
+	var follow := view_follow(kind)
 	var w := PlayerMotion.weight(kind, t)
-	# Knight space (+Z forward, +X its left) -> the player's (-Z forward, +X right).
-	var k2p := Basis(Vector3.UP, PI)
-	var off := k2p * PlayerMotion.head_offset(kind, t) * w
-	var turn := Basis(Quaternion.IDENTITY.slerp(PlayerMotion.head_turn(kind, t), w * Graphics.head_sway))
-	# The look's own pitch is under the player's hand, so the head's offset is
-	# the body's, unpitched; the turn rides on top of where they look.
-	return [off, k2p * turn * k2p.inverse()]
+	var nod := PlayerMotion.ride_nod(kind, t) * (w * Graphics.head_sway * ATTACK_CAMERA)
+	var yaw := PlayerMotion.view_yaw(kind, t, follow)
+	# The head's offset turned as the body is turned back (coop_avatar.gd); the
+	# parry is the upper body's alone, which the counter-turn never reaches.
+	var counter := 0.0 if kind == &"parry" else PlayerMotion.body_counter(kind, t, follow)
+	var off := Basis(Vector3.UP, counter) * PlayerMotion.ride_offset(kind, t) * (w * ATTACK_CAMERA)
+	# Knight space (+Z forward, +X its left) -> the player's (-Z forward, +X
+	# right): a turn about the vertical is the same turn, a nod or a roll flips.
+	return [Vector3(-off.x, off.y, -off.z), Vector3(-nod.x, yaw, -nod.y * RIDE_ROLL)]
+
+
+## Each frame: where the attack puts the view, and the spring that carries it
+## there. `effort` (roll deg, pitch deg, drop m, -) and `swing` (the punch, 0..)
+## are already scaled.
+func _update_attack_view(delta: float, effort: Vector4, swing: float) -> void:
+	if delta <= 0.0:
+		return
+	var rot := Vector3(deg_to_rad(effort.y + attack_view_kick * swing), 0.0,
+		deg_to_rad(effort.x + attack_view_roll * swing * _swing_roll))
+	var off := Vector3(0.0, -effort.z, -spear_effort_push * _stab_k * ATTACK_CAMERA)
+	var rot_v := Vector3.ZERO
+	var off_v := Vector3.ZERO
+	var m := _ride_move()
+	if not m.is_empty():
+		var now := _ride_at(m[0], m[1])
+		# Its speed, from the move's own clock: smooth motion is followed exactly.
+		var eps := 1.0 / PlayerMotion.RIDE_HZ
+		var before := _ride_at(m[0], maxf(float(m[1]) - eps, 0.0))
+		var rate: float = float(m[2]) / eps if float(m[1]) >= eps else 0.0
+		off += now[0]
+		rot += now[1]
+		off_v = ((now[0] as Vector3) - (before[0] as Vector3)) * rate
+		rot_v = ((now[1] as Vector3) - (before[1] as Vector3)) * rate
+	# A whole turn is no turn: a spin that ends round where it began hands back
+	# without unwinding.
+	_view_rot.y += roundf((rot.y - _view_rot.y) / TAU) * TAU
+	var r := _track(_view_rot, _view_rot_v, rot, rot_v, delta)
+	_view_rot = r[0]
+	_view_rot_v = r[1]
+	var o := _track(_view_off, _view_off_v, off, off_v, delta)
+	_view_off = o[0]
+	_view_off_v = o[1]
+
+
+## A critically damped spring onto a goal moving at `goal_v`, solved exactly
+## over the step (stable at any frame rate): it follows smooth motion with no
+## lag and closes any gap in about 2 / RIDE_SPRING seconds, never overshooting.
+static func _track(x: Vector3, v: Vector3, goal: Vector3, goal_v: Vector3, dt: float) -> Array:
+	var w := RIDE_SPRING
+	var k := exp(-w * dt)
+	# The goal is where it is now; its speed carried it here over the step.
+	var e0 := x - (goal - goal_v * dt)
+	var d0 := v - goal_v
+	var c := d0 + e0 * w
+	var e := (e0 + c * dt) * k
+	var d := (d0 - c * (w * dt)) * k
+	return [goal + e, goal_v + d]
 
 
 ## Where the fist closes on the sword, in the pivot's frame: 0.42 of the way from
@@ -3352,7 +3445,7 @@ func _heavy_effort() -> Vector4:
 ## view punched in and shaken.
 func _heavy_lunge() -> void:
 	_heavy_lunged = true
-	var ahead := -camera.global_basis.z
+	var ahead := aim_forward()
 	ahead.y = 0.0
 	if ahead.length_squared() < 1e-4:
 		ahead = -global_basis.z
@@ -4659,7 +4752,7 @@ const UPGRADE_DAMAGE := 0.08
 const ARMOR_STEP := 0.04
 const UPGRADE_MAX := 10
 ## The weapons the workbench can work on.
-const UPGRADABLE: Array[StringName] = [&"sword", &"spear", &"axe"]
+const UPGRADABLE: Array[StringName] = [&"sword", &"spear"]
 
 var weapon_levels := {}
 var armor_level := 1
@@ -5244,8 +5337,8 @@ func _respawn() -> void:
 	_begin_wake(true)
 
 
-## A new game: the sword (weapon wheel, up), the starting consumables (quick
-## wheel, up), the spear (weapon wheel, right), the axe (weapon wheel, down). Not run on respawn any more --
+## A new game: the sword (weapon wheel, left), the starting consumables (quick
+## wheel, up), the spear (weapon wheel, right); no axe for now (note 172). Not run on respawn any more --
 ## the player rises with what they died with (2026-10-11).
 func _reset_inventory(first_time := false) -> void:
 	if first_time:
@@ -5266,10 +5359,9 @@ func _reset_inventory(first_time := false) -> void:
 		inventory.add(id, want)
 	if inventory.find(&"sword") < 0:
 		inventory.add(&"sword", 1)
-	# The spear: the weapon wheel's second slot (right); the axe the third (down).
+	# The spear: the weapon wheel's second slot (right). Two slots, no axe (note 172).
 	if first_time:
 		inventory.add(&"spear", 1)
-		inventory.add(&"axe", 1)
 	inventory_changed.emit()
 
 
