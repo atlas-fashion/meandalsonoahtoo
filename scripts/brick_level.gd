@@ -197,7 +197,10 @@ static func standalone(piece: String) -> Mesh:
 ## only, never on a wall that already carries something (a torch, a bone cage, a
 ## hiding cart) or in a cell with a door, the spawn, a hiding cart or a room.
 ## Placed after the hiding carts and before the navmesh bake; the support and
-## the crate are solid, the planks are walked over.
+## the crate are solid, the planks are walked over. The crate is not the kit's
+## any more but a breakable one (note 176): its place goes out in the Built's
+## "clutter_crates" meta for ruin_dressing.gd to build, and every wall used here
+## in "clutter_walls", so the ruins' dressing keeps off it.
 const SUPPORT_EVERY := 7
 const PLANKS_EVERY := 6
 const CRATE_EVERY := 9
@@ -223,6 +226,8 @@ static func place_clutter(parent: Node3D, out, blocked: Dictionary, view_range: 
 	parent.add_child(body)
 	var rng := RandomNumberGenerator.new()
 	var cages: Dictionary = out.get_meta("cage_walls", {})
+	var walls_used := {}
+	var crates: Array = []
 	for key in out.cells:
 		var cell = out.cells[key]
 		if cell.kind != "straight" or cell.room >= 0 or cell.court or blocked.has(key):
@@ -252,18 +257,25 @@ static func place_clutter(parent: Node3D, out, blocked: Dictionary, view_range: 
 			for s: float in [-1.0, 1.0]:
 				_box(body, Vector3(0.3, 2.4, 0.3), at + into * 0.25 + along * s * 1.15 + Vector3(0.0, 1.2, 0.0))
 			spots.append({"cell": key, "at": at + into * 0.35, "half": Vector2(1.4, 0.45)})
+			walls_used[key] = [side]
 		elif roll % PLANKS_EVERY == 1:
 			var at := centre + d * PROP_OUT + along * rng.randf_range(-1.2, 1.2)
 			add.call("wood_planks", Transform3D(Basis(Vector3.UP, rng.randf() * TAU), at))
+			walls_used[key] = [side]
 		elif roll % CRATE_EVERY == 2:
+			# A crate that breaks (note 176): handed to ruin_dressing.gd, which
+			# builds it (breakable_crate.gd) -- no kit crate, no collision box here.
 			var at := centre + d * (WALL_FACE - 0.6) + along * rng.randf_range(-1.6, 1.6)
-			add.call("wood_crate", Transform3D(Basis(Vector3.UP, rng.randf_range(-0.4, 0.4)) * _yaw_facing(into), at))
-			_box(body, Vector3(0.9, 0.95, 0.85), at + Vector3(0.0, 0.48, 0.0))
+			crates.append(Transform3D(Basis(Vector3.UP, rng.randf_range(-0.4, 0.4)) * _yaw_facing(into), at))
 			spots.append({"cell": key, "at": at, "half": Vector2(0.5, 0.5)})
+			walls_used[key] = [side]
 	var holder := Node3D.new()
 	holder.name = "Clutter"
 	parent.add_child(holder)
 	_emit(holder, out, meshes(1.0), placed, view_range)
+	# What stands where, for the ruins' dressing (ruin_dressing.gd).
+	out.set_meta("clutter_walls", walls_used)
+	out.set_meta("clutter_crates", crates)
 	return spots
 
 

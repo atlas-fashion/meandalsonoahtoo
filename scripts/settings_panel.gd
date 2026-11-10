@@ -50,6 +50,8 @@ const SPEC := [
 		"hint": "Wet patches on the floor that catch the torchlight, and water dripping from the vault."},
 	{"key": "body_shadow", "label": "Your shadow", "type": "check",
 		"hint": "Your knight casts a shadow by the torches and the moon. One body in each nearby shadow."},
+	{"key": "ruin_shadows", "label": "Prop shadows", "type": "check",
+		"hint": "The dungeon's props -- maidens, racks, caskets, cages, the dead, banners -- cast shadows by the torches."},
 	{"key": "texture_detail", "label": "Texture detail", "type": "option",
 		"choices": [["Untextured", 0], ["No triplanar", 1], ["Full", 2]],
 		"hint": "Triplanar mapping samples each texture three times per pixel."},

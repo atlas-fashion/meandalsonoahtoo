@@ -219,6 +219,17 @@ func _run() -> void:
 			if room["kind"] == "surgery":
 				stations["surgery"] = (level.room_world(room) as Vector3) \
 					+ Vector3(level.court_half_span(room) * 0.5, 1.2, 0)
+		# The ruins' heaviest districts (note 176): the overgrowth (roots on
+		# every wall, living tips) and a crystal seam (the most small lights),
+		# from the spot ruin_dressing.gd keeps to look at each from.
+		var maze := get_parent().get_node_or_null("Maze")
+		var ruins = maze.get("_ruins") if maze != null else null
+		if ruins != null and is_instance_valid(ruins):
+			for look in ["overgrown", "crystal", "ossuary"]:
+				for s in ruins.samples:
+					if String(s["theme"]).begins_with(look):
+						stations["ruins " + look] = _floor_under(level.to_world(s["cell"]))
+						break
 
 	print("=== BENCHMARK [%s] ===" % _tag)
 	print("window %s   3D render target %s   scale %.2f   msaa %d" % [

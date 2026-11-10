@@ -912,6 +912,7 @@ func _build_module_level() -> void:
 	_place_holding_cells(holder, detail)
 	_place_hiding_spots(holder)
 	_place_clutter(holder)
+	_place_ruins(holder)
 	_place_damp(holder)
 	if not _morgue_room.is_empty():
 		_morgue = load("res://scripts/morgue.gd").build(holder, _module_level, _morgue_room)
@@ -1981,6 +1982,13 @@ func _place_clutter(holder: Node3D) -> void:
 	for c in _holding_cells:
 		blocked[c.get("cell")] = true
 	var solid: Array = level_script.BrickLevel.place_clutter(holder, _module_level, blocked, module_view_range)
+	_mark_solid(solid)
+	print("[clutter] %d solid pieces of broken wood" % solid.size())
+
+
+## What stands on the floor ([{at, half}]) is marked WALL in the grid, so nothing
+## spawns inside it.
+func _mark_solid(solid: Array) -> void:
 	for s in solid:
 		var at: Vector3 = s["at"]
 		var half: Vector2 = s["half"]
@@ -1993,7 +2001,58 @@ func _place_clutter(holder: Node3D) -> void:
 				var off := tile_to_world(t) - at
 				if absf(off.x) < maxf(half.x, half.y) and absf(off.z) < maxf(half.x, half.y):
 					grid[t.y][t.x] = WALL
-	print("[clutter] %d solid pieces of broken wood" % solid.size())
+
+
+## --- The ruins' districts (note 176) ---------------------------------------------------
+##
+## The corridors cut into districts, each dressed as itself -- the overgrowth, the
+## storehouse, the ossuary, the torture quarter, the hall of banners, the crystal
+## seam, the gaol (scripts/ruin_dressing.gd) -- with the gold-veined roots and
+## their living tips (ruin_roots.gd, living_root.gd) and breakable crates
+## (breakable_crate.gd). Brick kit only; after the clutter, before the bake.
+@export var ruins_enabled := true
+var _ruins: Node3D = null
+
+
+func _place_ruins(holder: Node3D) -> void:
+	var level_script = load("res://scripts/module_level.gd")
+	if _module_level == null or not level_script.brick or not ruins_enabled:
+		return
+	# `-- --no-ruins`: the corridors as they were, for an A/B.
+	if "--no-ruins" in OS.get_cmdline_user_args():
+		return
+	var blocked := {}
+	for door in _module_level.doors:
+		blocked[door["cell"]] = true
+		blocked[door["other"]] = true
+	var spawn_cell: Vector2i = _module_level.spawn_door.get("cell", Vector2i(-999, -999))
+	for dz in range(-1, 2):
+		for dx in range(-1, 2):
+			blocked[spawn_cell + Vector2i(dx, dz)] = true
+	for spot in _hiding_spots:
+		var p: Vector3 = (spot as Node3D).global_position
+		blocked[Vector2i(roundi((p.x - _module_level.origin.x) / _module_level.cell_size),
+			roundi((p.z - _module_level.origin.z) / _module_level.cell_size))] = true
+	for key in _module_level.manholes:
+		blocked[key] = true
+	for c in _holding_cells:
+		var p: Vector3 = (c as Node3D).global_position
+		blocked[Vector2i(roundi((p.x - _module_level.origin.x) / _module_level.cell_size),
+			roundi((p.z - _module_level.origin.z) / _module_level.cell_size))] = true
+	for g in _module_level.gates:
+		blocked[g["pos"]] = true
+	var anchors := {}
+	var script = load("res://scripts/ruin_dressing.gd")
+	if not _morgue_room.is_empty():
+		anchors[script.Look.OSSUARY] = _morgue_room["centre"]
+	if not _surgery_room.is_empty():
+		anchors[script.Look.QUESTION] = _surgery_room["centre"]
+	_ruins = script.new()
+	_ruins.name = "Ruins"
+	holder.add_child(_ruins)
+	var solid: Array = _ruins.build(_module_level, blocked, _active_seed, anchors)
+	_ruins.clutter_crates(_module_level.get_meta("clutter_crates", []))
+	_mark_solid(solid)
 
 
 ## Wet patches and drips (scripts/damp.gd). No drip in a door's cells (it would

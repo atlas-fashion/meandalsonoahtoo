@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 175), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 176), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -605,6 +605,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 173 | 2026-11-09 | The eyes at the front of the helmet (`EYE_FORWARD` 0.11, leaning out over the chest looking down); the eye's knight on its own skeleton with the head and pauldrons folded away (`sync_view`), no cut holes, the left upper arm drawn; the chest bends a third as far looking down; the guard built as directions out of the real shoulder (`GUARD_UPPER`, `GUARD_FORE`), dropping back to the walk's own arm | [docs/notes/173-eyes-forward-closed-body-guard-from-the-shoulder.md](docs/notes/173-eyes-forward-closed-body-guard-from-the-shoulder.md) |
 | 174 | 2026-11-09 | A sword cut's cooldown is its whole clip: the next LMB stroke waits for the forehand's 0.75 / the backhand's 0.66 pose s (0.94 / 0.83 s real), not the bite's end (`_stroke_end`); an early click is held and begins the tick the cut ends; the HUD tile counts the clip; Q and F still override a cut | [docs/notes/174-sword-cut-cooldown-is-its-clip.md](docs/notes/174-sword-cut-cooldown-is-its-clip.md) |
 | 175 | 2026-11-10 | A queued swipe goes straight on from the last: the next takes over at the stroke's `chain` (forehand 0.50, backhand 0.40 pose s, where its blend home began) and cross-fades in over it (`_from_kind`, `motion_weight`, `body_motion_from`, `_ride_blend`), body, blade and view, never back to the guard between; Q / F over a cut cross-fade too (were a one-frame snap); a held combo 0.625 / 0.50 s a stroke | [docs/notes/175-swipes-chain-without-going-home.md](docs/notes/175-swipes-chain-without-going-home.md) |
+| 176 | 2026-11-10 | The maze in districts (`ruin_dressing.gd`): 13 grown evenly, seven looks (overgrown, storehouse, ossuary, torture quarter, banners, crystal seam, gaol) each twice with a variant, never two touching alike, densest at the heart; roots grown onto the kit's measured surfaces with faint gold veins (`ruin_roots.gd`, `root_bark.gdshader`); living tips that lash for 12 and die to any blow, glow out, wilt (`living_root.gd`); breakable crates bursting into their own planks with dust, a tall hit volume (`breakable_crate.gd`); the surgery's Higgsfield props, the seated dead, candles, banners; `Graphics.ruin_shadows` (Ultra only); 0.4-1.0 ms | [docs/notes/176-ruin-districts-living-roots-breakable-crates.md](docs/notes/176-ruin-districts-living-roots-breakable-crates.md) |
 
 ## Notes by source file
 
@@ -626,7 +627,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
-- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159
+- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159, 176
 - `scripts/chest.gd`: 18, 79
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80, 164
@@ -648,7 +649,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/explore_map.gd`: 6.18, 50, 60, 79, 82, 117
 - `scripts/gate.gd`: 6.18
 - `scripts/goo.gd`: 58, 79
-- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155, 159, 168, 172
+- `scripts/graphics_settings.gd`: 79, 80, 112, 121, 155, 159, 168, 172, 176
 - `scripts/hand_torch.gd`: 24, 29 (deleted in 157)
 - `scripts/held_potion.gd`: 6.19, 130, 168
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
@@ -664,7 +665,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/jail_cell.gd`: 12, 153, 154
 - `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176
+- `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`: 176
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154
@@ -693,7 +695,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
 - `scripts/scout.gd`: 127, 128, 129, 134
 - `scripts/scout_body.gd`: 127, 128, 129, 134
-- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159, 164, 168
+- `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159, 164, 168, 176
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82
 - `scripts/sewer_lizard.gd`: 58, 60, 92, 130, 131, 147
@@ -743,7 +745,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39, 121
 - `tools/anim_proel_builder.py`, `tools/build_proel_builder.py`: 149, 150, 151
 - `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 167
-- `tools/benchmark.gd`: 6.11, 33, 112, 155, 159
+- `tools/benchmark.gd`: 6.11, 33, 112, 155, 159, 176
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66
