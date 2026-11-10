@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 174), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 175), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -604,6 +604,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 172 | 2026-11-09 | Made for the eyes: the knight turned back by what the view does not follow of each clip's turn, the view following a spin (sweep, ult) all the way (`view_follow`, `body_counter`, rides baked and smoothed from the stance's head); the attack camera 0.8 and on one critically damped spring with the ride's speed fed forward; `aim_forward`; two weapon slots (left, right, a tap of C swaps), no axe; the spear's jabs and lunge point first down the aim (`lead`, the haft sliding through the fist); the wave's damage set before it starts | [docs/notes/172-first-person-attacks-two-weapons-spear-point.md](docs/notes/172-first-person-attacks-two-weapons-spear-point.md) |
 | 173 | 2026-11-09 | The eyes at the front of the helmet (`EYE_FORWARD` 0.11, leaning out over the chest looking down); the eye's knight on its own skeleton with the head and pauldrons folded away (`sync_view`), no cut holes, the left upper arm drawn; the chest bends a third as far looking down; the guard built as directions out of the real shoulder (`GUARD_UPPER`, `GUARD_FORE`), dropping back to the walk's own arm | [docs/notes/173-eyes-forward-closed-body-guard-from-the-shoulder.md](docs/notes/173-eyes-forward-closed-body-guard-from-the-shoulder.md) |
 | 174 | 2026-11-09 | A sword cut's cooldown is its whole clip: the next LMB stroke waits for the forehand's 0.75 / the backhand's 0.66 pose s (0.94 / 0.83 s real), not the bite's end (`_stroke_end`); an early click is held and begins the tick the cut ends; the HUD tile counts the clip; Q and F still override a cut | [docs/notes/174-sword-cut-cooldown-is-its-clip.md](docs/notes/174-sword-cut-cooldown-is-its-clip.md) |
+| 175 | 2026-11-10 | A queued swipe goes straight on from the last: the next takes over at the stroke's `chain` (forehand 0.50, backhand 0.40 pose s, where its blend home began) and cross-fades in over it (`_from_kind`, `motion_weight`, `body_motion_from`, `_ride_blend`), body, blade and view, never back to the guard between; Q / F over a cut cross-fade too (were a one-frame snap); a held combo 0.625 / 0.50 s a stroke | [docs/notes/175-swipes-chain-without-going-home.md](docs/notes/175-swipes-chain-without-going-home.md) |
 
 ## Notes by source file
 
@@ -630,7 +631,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80, 164
 - `scripts/corner_slip.gd`: 92
-- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166, 167, 168, 169, 170, 171, 172, 173
+- `scripts/coop_avatar.gd`: 79, 143, 155, 156, 157, 159, 160, 162, 163, 166, 167, 168, 169, 170, 171, 172, 173, 175
 - `scripts/first_person_arms.gd`: 156, 157, 158, 159, 163, 166, 167, 168, 169, 171, 172, 173
 - `scripts/collector.gd`: 120, 122, 125
 - `scripts/convoy.gd`: 23, 28, 79, 93, 120
@@ -673,8 +674,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168, 170, 171, 172, 173, 174
-- `scripts/player_motion.gd`, `models/anims/*.glb`: 167, 168, 171, 172
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168, 170, 171, 172, 173, 174, 175
+- `scripts/player_motion.gd`, `models/anims/*.glb`: 167, 168, 171, 172, 175
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151, 167
 - `scripts/proel_builder.gd`, `scripts/proel_builder_hammers.gd`: 149, 150, 151

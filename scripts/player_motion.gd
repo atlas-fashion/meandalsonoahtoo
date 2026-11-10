@@ -42,6 +42,10 @@ const CLIPS := {
 ## Each move: its clip; `knots` [pose s, clip s] (the warp); `in` the blend from
 ## the pose before (pose s); `out` and `end`, the blend home to rest; `ref`, the
 ## clip second of its stance (where the camera's ride is measured from);
+## `chain`, where the stroke itself is over and a queued stroke takes over, going
+## straight on from that pose instead of home first (note 175; player.gd
+## `_stroke_end`); `chain_in`, how long a move takes to cross-fade in over the
+## one it took over from (default: its `in`, at least CHAIN_IN);
 ## `right_only`, the left arm left to the walk or the guard (the sword's: the
 ## captures carried a shield on it); `spin`, a whole turn of the body that the
 ## view turns with all the way (note 172); `turn`, a scale on how much of the
@@ -55,14 +59,18 @@ const MOVES := {
 		"ref": 0.0, "knots": [[0.0, 0.0], [1.0, 1.0]]},
 	# The forehand: drawn back and up behind the right shoulder, a hang at the
 	# top, cut from right to left, ending high on the left -- exactly where the
-	# backhand starts.
-	&"slash": {"right_only": true, "clip": &"sword_swipes", "in": 0.08, "out": 0.48, "end": 0.75, "ref": 0.0,
+	# backhand starts: at its `chain`, 0.50, it is on the backhand's first frame
+	# (clip 1.08). Chained from the backhand's follow-through it sweeps up into its
+	# gather over `chain_in`.
+	&"slash": {"right_only": true, "clip": &"sword_swipes", "in": 0.08, "out": 0.50, "end": 0.75, "ref": 0.0,
+		"chain": 0.50, "chain_in": 0.14,
 		"knots": [[0.0, 0.03], [0.12, 0.38], [0.21, 0.565], [0.24, 0.62], [0.40, 0.95], [0.50, 1.08], [0.75, 1.12]]},
 	# The backhand: from the forehand's end, gathered a beat, cut back from left to
 	# right, and blended home from its follow-through. (The capture's own recovery
 	# after it turned the whole body sideways, which from the eyes was an arm
 	# parked under the camera.)
 	&"chop": {"right_only": true, "clip": &"sword_swipes", "in": 0.08, "out": 0.4, "end": 0.66, "ref": 0.0,
+		"chain": 0.40, "chain_in": 0.08,
 		"knots": [[0.0, 1.08], [0.11, 1.165], [0.14, 1.20], [0.31, 1.53], [0.42, 1.64], [0.66, 1.70]]},
 	# The heavy: a long slow gathering sweep over to the left, held and creeping
 	# at the end of it, then the explosive backhand back across.
@@ -150,6 +158,27 @@ static func has_move(kind: StringName) -> bool:
 ## The move's length (pose s).
 static func length(kind: StringName) -> float:
 	return float(MOVES[kind]["end"]) if MOVES.has(kind) else 0.0
+
+
+## The shortest cross-fade from one move into the next (pose s, note 175).
+const CHAIN_IN := 0.1
+
+
+## Where the stroke is over and the next may take over from it (pose s, note
+## 175): its `chain`, or its whole length.
+static func chain_point(kind: StringName) -> float:
+	return float(MOVES[kind].get("chain", MOVES[kind]["end"])) if MOVES.has(kind) else 0.0
+
+
+## How long `kind` takes to cross-fade in over the move it took over from.
+static func chain_in(kind: StringName) -> float:
+	var m: Dictionary = MOVES[kind]
+	return float(m.get("chain_in", maxf(float(m["in"]), CHAIN_IN)))
+
+
+## 0..1 of the way through that cross-fade at `t`, eased.
+static func chain_fade(kind: StringName, t: float) -> float:
+	return _smooth(clampf(t / maxf(chain_in(kind), 0.001), 0.0, 1.0))
 
 
 ## Clip second for pose second `t` of `kind` -- the warp.
@@ -363,10 +392,11 @@ static func ride_offset(kind: StringName, t: float) -> Vector3:
 ## The turn the view takes at `t` (radians), `follow` of the head's -- weighted
 ## by the move, and eased out to the nearest whole turn, so a spin that ends
 ## past where it began goes on round rather than unwinding back.
-static func view_yaw(kind: StringName, t: float, follow: float) -> float:
+## `w` overrides the move's own weight (a move cross-fading in, note 175).
+static func view_yaw(kind: StringName, t: float, follow: float, w := -1.0) -> float:
 	var y := ride_yaw(kind, t) * follow
 	var base := roundf(y / TAU) * TAU
-	return base + (y - base) * weight(kind, t)
+	return base + (y - base) * (weight(kind, t) if w < 0.0 else w)
 
 
 ## The turn the body is given on top of the clip so its head faces where the

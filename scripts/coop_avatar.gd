@@ -436,12 +436,25 @@ func _apply_motion(dead: bool, pitch: float, bend_pitch: float) -> void:
 		kind = &"parry"
 		t = parry_t
 		upper_only = true
+	# A stroke that took over from another before it had gone home (note 175):
+	# that one first, carried on where it was, the new one cross-fading in over it.
+	var from: Array = []
+	if not m.is_empty() and player.has_method("body_motion_from"):
+		from = player.call("body_motion_from")
 	var w := 0.0
 	if kind != &"" and PlayerMotion.has_move(kind):
-		w = PlayerMotion.weight_in(kind, t) * PlayerMotion.weight_out(kind, t)
+		w = float(player.call("motion_weight", kind, t)) if player.has_method("motion_weight") \
+			else PlayerMotion.weight(kind, t)
+	if not from.is_empty():
+		var fw: float = from[2]
+		_apply_clip(from[0], from[1], fw, false)
+		motion_w = 1.0 - (1.0 - motion_w) * (1.0 - fw)
 	if w > 0.0:
 		_apply_clip(kind, t, w, upper_only)
 		motion_w = 1.0 - (1.0 - motion_w) * (1.0 - w)
+	if not from.is_empty():
+		# The lean into the attack carried through the hand-over too.
+		w = 1.0 - (1.0 - float(from[2])) * (1.0 - w)
 	if motion_w <= 0.0:
 		return
 	# The chest bent with the look under any clip, and leaning into an attack: a

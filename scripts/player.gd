@@ -1055,6 +1055,14 @@ var _next_attack := 0
 ## A cut clicked for while the last still bites: held, as the axe's and the spear's
 ## are, and begun the moment the blade stops biting (`_take_queued_attack`, note 151).
 var _attack_queued := false
+## The move a clip move took over from while it still showed (note 175): its
+## kind, its pose second (running on under the new one) and the weight it had.
+## The new move cross-fades in over it (`motion_weight`, `body_motion_from`), so
+## the body, the blade and the view go straight from one stroke into the next
+## instead of home to the guard first. Cleared when the fade is done.
+var _from_kind := &""
+var _from_t := 0.0
+var _from_w := 0.0
 ## True only during the active frames of a swing.
 var _hit_window_open := false
 ## Bodies already hit by the current swing, so one swing deals damage once.
@@ -2445,15 +2453,34 @@ func _take_queued_attack() -> void:
 		_start_attack()
 
 
-## When a cut (LMB) may begin over the stroke in progress, pose seconds (note
-## 174). Over a cut, only once its whole clip has played -- the forehand's 0.75,
-## the backhand's 0.66 (PlayerMotion `end`, x `attack_time_scale` real) -- so the
-## cooldown is the animation and no stroke is cut off in its follow-through. Over
-## the heavy swipe or the wave slash, once they have followed through, as before.
+## When a cut (LMB) may begin over the stroke in progress, pose seconds (notes
+## 174, 175). Over a cut, once the stroke itself has played out, cut and
+## follow-through -- the forehand's 0.50, the backhand's 0.42 (PlayerMotion
+## `chain`, x `attack_time_scale` real) -- and the next takes over from that pose
+## (`_begin_pose`) instead of the blade going home to the guard first; unchained,
+## it still goes home over the rest of the clip. Over the heavy swipe or the wave
+## slash, once they have followed through, as before.
 func _stroke_end() -> float:
 	if _pose_kind in [&"slash", &"chop"]:
-		return PlayerMotion.length(_pose_kind)
+		return PlayerMotion.chain_point(_pose_kind)
 	return _bite_end()
+
+
+## How much of clip move `kind` is laid on at `t` (coop_avatar.gd, the view):
+## its own in and out -- or, over a move it took over from (note 175), its
+## cross-fade in over that one, then its own out.
+func motion_weight(kind: StringName, t: float) -> float:
+	if _from_kind != &"" and kind == _pose_kind:
+		return PlayerMotion.chain_fade(kind, t) * PlayerMotion.weight_out(kind, t)
+	return PlayerMotion.weight(kind, t)
+
+
+## The move the one in progress is cross-fading in over, [kind, pose seconds,
+## weight], or [] (note 175; coop_avatar.gd lays it under the new one).
+func body_motion_from() -> Array:
+	if _from_kind == &"" or not PlayerMotion.has_move(_pose_kind) or _pose_time < 0.0:
+		return []
+	return [_from_kind, _from_t, _from_w]
 
 
 ## When the stroke in progress stops biting -- the earliest a new one may begin.
@@ -3034,6 +3061,18 @@ func _begin_pose(kind: StringName) -> void:
 		_stab_depth = false
 		_set_sword_depth(sword_draw_depth)
 	anim.pause()
+	# A clip move begun over one still showing takes over from it where it is
+	# (note 175): a stroke chained onto the last at its `chain`, the heavy or the
+	# wave over a cut, a cut over their recovery -- no snap to the guard and back.
+	var from_w := 0.0
+	if PlayerMotion.has_move(kind) and PlayerMotion.has_move(_pose_kind) and _pose_time >= 0.0:
+		from_w = motion_weight(_pose_kind, _pose_time)
+	if from_w > 0.01:
+		_from_kind = _pose_kind
+		_from_t = _pose_time
+		_from_w = from_w
+	else:
+		_from_kind = &""
 	_pose_kind = kind
 	_pose_time = 0.0
 	_pose_from = sword_pivot.transform
@@ -3045,6 +3084,7 @@ func _end_pose() -> void:
 		_set_sword_depth(sword_draw_depth)
 	_pose_time = -1.0
 	_pose_kind = &""
+	_from_kind = &""
 	_attacking = false
 	_hit_window_open = false
 	_trail_on = false
@@ -3061,6 +3101,10 @@ func _update_pose(delta: float) -> void:
 		return
 	var step := delta / attack_time_scale if _pose_kind in ATTACK_POSES else delta
 	_pose_time += step
+	if _from_kind != &"":
+		_from_t = minf(_from_t + step, PlayerMotion.length(_from_kind))
+		if not PlayerMotion.has_move(_pose_kind) or _pose_time >= PlayerMotion.chain_in(_pose_kind):
+			_from_kind = &""
 	if _attack_queued:
 		_take_queued_attack()
 	var length := PlayerMotion.length(_pose_kind) if PlayerMotion.has_move(_pose_kind) else 0.0
@@ -3337,11 +3381,10 @@ func _ride_move() -> Array:
 
 ## The knight's head through `kind` at `t`, as the view takes it:
 ## [offset (player space), Vector3(pitch, yaw, roll)].
-func _ride_at(kind: StringName, t: float) -> Array:
+func _ride_at(kind: StringName, t: float, w: float) -> Array:
 	var follow := view_follow(kind)
-	var w := PlayerMotion.weight(kind, t)
 	var nod := PlayerMotion.ride_nod(kind, t) * (w * Graphics.head_sway * ATTACK_CAMERA)
-	var yaw := PlayerMotion.view_yaw(kind, t, follow)
+	var yaw := PlayerMotion.view_yaw(kind, t, follow, w)
 	# The head's offset turned as the body is turned back (coop_avatar.gd); the
 	# parry is the upper body's alone, which the counter-turn never reaches.
 	var counter := 0.0 if kind == &"parry" else PlayerMotion.body_counter(kind, t, follow)
@@ -3349,6 +3392,20 @@ func _ride_at(kind: StringName, t: float) -> Array:
 	# Knight space (+Z forward, +X its left) -> the player's (-Z forward, +X
 	# right): a turn about the vertical is the same turn, a nod or a roll flips.
 	return [Vector3(-off.x, off.y, -off.z), Vector3(-nod.x, yaw, -nod.y * RIDE_ROLL)]
+
+
+## The view's ride through move `m` (`_ride_move`), `back` pose seconds ago:
+## the move's own, or -- cross-fading in over the move it took over from (note
+## 175) -- that one's ride carried on into this one's, as the body is.
+func _ride_blend(m: Array, back: float) -> Array:
+	var kind: StringName = m[0]
+	var t := maxf(float(m[1]) - back, 0.0)
+	if _from_kind == &"" or kind != _pose_kind:
+		return _ride_at(kind, t, PlayerMotion.weight(kind, t))
+	var now := _ride_at(kind, t, PlayerMotion.weight_out(kind, t))
+	var from := _ride_at(_from_kind, maxf(_from_t - back, 0.0), _from_w)
+	var k := PlayerMotion.chain_fade(kind, t)
+	return [(from[0] as Vector3).lerp(now[0], k), (from[1] as Vector3).lerp(now[1], k)]
 
 
 ## Each frame: where the attack puts the view, and the spring that carries it
@@ -3364,10 +3421,10 @@ func _update_attack_view(delta: float, effort: Vector4, swing: float) -> void:
 	var off_v := Vector3.ZERO
 	var m := _ride_move()
 	if not m.is_empty():
-		var now := _ride_at(m[0], m[1])
+		var now := _ride_blend(m, 0.0)
 		# Its speed, from the move's own clock: smooth motion is followed exactly.
 		var eps := 1.0 / PlayerMotion.RIDE_HZ
-		var before := _ride_at(m[0], maxf(float(m[1]) - eps, 0.0))
+		var before := _ride_blend(m, eps)
 		var rate: float = float(m[2]) / eps if float(m[1]) >= eps else 0.0
 		off += now[0]
 		rot += now[1]
@@ -4090,7 +4147,7 @@ func attack_cooldowns() -> Array:
 		return [
 			[ult, maxf(_slam_ready_at - now, recover), slam_cooldown, "F"],
 			[&"heavy", maxf(heavy, recover), HEAVY_HOLD * attack_time_scale, "Q"],
-			[&"slash", maxf(cut, recover), PlayerMotion.length(&"slash") * attack_time_scale, "LMB"],
+			[&"slash", maxf(cut, recover), PlayerMotion.chain_point(&"slash") * attack_time_scale, "LMB"],
 		]
 	var list: Array = []
 	if held == &"spear" and spear != null and spear.has_method("attack_cooldowns"):
@@ -4135,6 +4192,7 @@ func _start_slam() -> void:
 	# A swing in progress gives way to the dive; the clip takes the pivot back.
 	_pose_time = -1.0
 	_pose_kind = &""
+	_from_kind = &""
 	_trail_on = false
 	_attacking = false
 	_hit_window_open = false
