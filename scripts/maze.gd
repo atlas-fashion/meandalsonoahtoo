@@ -5640,10 +5640,10 @@ func _sewer_spot(clear: float, others: Array, apart: float):
 ## node, not `_spawned`, so the room census (`_report_room_intruders`) does not
 ## count them as guards.
 const RAT_SCRIPT := preload("res://scripts/rat.gd")
-@export var rats_in_corridors := 24
+@export var rats_in_corridors := 60
 @export var rats_in_sewer := 8
 @export var rat_clear := 10.0
-@export var rat_apart := 6.0
+@export var rat_apart := 4.0
 var _rats_node: Node3D
 var _rat_rng := RandomNumberGenerator.new()
 

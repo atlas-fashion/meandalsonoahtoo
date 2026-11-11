@@ -44,6 +44,8 @@ const FLAME_SHADER := preload("res://shaders/torch_flame.gdshader")
 const BANNER_SHADER := preload("res://shaders/ruin_banner.gdshader")
 const SKELETON := preload("res://models/ossuary_skeleton_rigged.glb")
 const SKULL := preload("res://models/skull_worn_ready.glb")
+const CRACK := preload("res://textures/surgery_fx_crack.png")
+const Vermin := preload("res://scripts/vermin.gd")
 
 enum Look { OVERGROWN, STOREHOUSE, OSSUARY, QUESTION, BANNERS, CRYSTAL, GAOL }
 const THEME_NAMES := ["overgrown", "storehouse", "ossuary", "question", "banners", "crystal", "gaol"]
@@ -99,6 +101,8 @@ var counts := {}
 var samples: Array = []
 ## Every living root, for tests.
 var living: Array = []
+## The beetles (vermin.gd).
+var _vermin = null
 
 
 ## Builds everything into this node. `blocked`: cells nothing goes in (doors,
@@ -123,8 +127,13 @@ func build(built, blocked: Dictionary, seed_: int, anchors := {}) -> Array:
 		Vector2(-3.35, 3.35), Vector2(0.0, 5.65))
 	var t_relief := Time.get_ticks_msec() - t0
 	_districts(anchors)
+	_vermin = Vermin.new()
+	_vermin.name = "Vermin"
+	add_child(_vermin)
+	_vermin.setup(_relief_wall, _seed ^ 0xbee71e)
 	for key in _district:
 		_dress(key)
+	counts["beetle nests"] = _vermin.nest_count()
 	_apply_graphics()
 	var gfx := get_node_or_null("/root/Graphics")
 	if gfx != null and gfx.has_signal("changed"):
@@ -456,11 +465,11 @@ func _dress(key: Vector2i) -> void:
 			_gaol(key, cell, walls, core)
 	# Roots everywhere now and then, and the odd crate.
 	var root_walls := _root_walls(key)
-	if theme != Look.OVERGROWN and not root_walls.is_empty() and _rng.randf() < 0.13:
+	if theme != Look.OVERGROWN and not root_walls.is_empty() and _rng.randf() < 0.34:
 		var strands: Array = []
 		var live: Array = []
 		var side: int = root_walls[0]
-		_wall_roots(key, side, _rng.randi_range(2, 4), 1 if _rng.randf() < 0.3 else 0, strands, live)
+		_wall_roots(key, side, _rng.randi_range(4, 8), 1 if _rng.randf() < 0.45 else 0, strands, live)
 		_root_mesh(key, strands, live)
 	if theme != Look.STOREHOUSE and not walls.is_empty() and _rng.randf() < 0.05:
 		_crates(key, walls[_rng.randi_range(0, walls.size() - 1)], 1)
@@ -490,12 +499,43 @@ func _wall_roots(key: Vector2i, side: int, count: int, tips: int, strands: Array
 		if out.cells[key].kind != "straight" and absf(st.pts[0].x) > 1.5:
 			continue
 		mine.append(st.transformed(xf))
+	# Roots that have burst out through the masonry itself, mid-wall: thick
+	# where they come out of the stone, the brick shattered round them.
+	var span := 2.2 if out.cells[key].kind == "straight" else 1.2
+	for b in Roots.burst_strands(_rng, _relief_wall, maxi(count / 4, 1) if count >= 4 else 0, span, band):
+		var st: Roots.Strand = b
+		mine.append(st.transformed(xf))
+		_crack(xf, st.pts[0], st.radii[0])
 	strands.append_array(mine)
 	for e in ends:
 		var p: Vector3 = e[0]
 		if out.cells[key].kind != "straight" and absf(p.x) > 1.4:
 			continue
 		live.append([xf * p, xf.basis.z, float(e[2])])
+	# Beetles in the roots (vermin.gd).
+	if count >= 4 and _vermin != null:
+		_vermin.add_nest(xf, _rng.randi_range(5, 12), -span, span)
+
+
+## Shattered brick where a root broke out of the wall at `at` (the wall's own
+## frame): the crack picture projected into the face.
+func _crack(xf: Transform3D, at: Vector3, r: float) -> void:
+	var d := Decal.new()
+	d.name = "RootCrack"
+	d.texture_albedo = CRACK
+	var s := clampf(r * 7.0, 0.5, 1.2)
+	d.size = Vector3(s, 0.6, s)
+	d.cull_mask = 1
+	d.upper_fade = 0.2
+	d.lower_fade = 0.2
+	d.distance_fade_enabled = true
+	d.distance_fade_begin = 30.0
+	d.distance_fade_length = 6.0
+	add_child(d)
+	# A decal projects down its -Y: turned so that is into the wall (-Z).
+	d.transform = Transform3D(xf.basis * Basis(Vector3.RIGHT, PI * 0.5) * Basis(Vector3.UP, _rng.randf() * TAU),
+		xf * Vector3(at.x, at.y, 0.1))
+	_count("root cracks")
 
 
 ## The cell's roots as one mesh, its living tips beside it.
@@ -530,14 +570,14 @@ func _overgrown(key: Vector2i, cell, walls: Array[int], core: float) -> void:
 	var live: Array = []
 	# Variant 0: the walls buried in roots. Variant 1: fewer on the walls, a
 	# curtain of them hanging from the vaults, and more of them alive.
-	var alive := 0.55 if _variant == 0 else 0.75
+	var alive := 0.85 if _variant == 0 else 0.95
 	var tips_left := 1 if _rng.randf() < alive * core else 0
-	if cell.kind == "straight" and _rng.randf() < (alive - 0.3) * core:
+	if cell.kind == "straight" and _rng.randf() < (alive - 0.35) * core:
 		tips_left += 1
 	for side in _root_walls(key):
 		var t := 1 if tips_left > 0 else 0
 		tips_left -= t
-		var n := _rng.randf_range(6.0, 11.0) if _variant == 0 else _rng.randf_range(3.0, 6.0)
+		var n := _rng.randf_range(11.0, 17.0) if _variant == 0 else _rng.randf_range(6.0, 10.0)
 		_wall_roots(key, side, roundi(n * core), t, strands, live)
 	# Round the junction pillars.
 	if cell.kind != "straight":
@@ -559,7 +599,7 @@ func _overgrown(key: Vector2i, cell, walls: Array[int], core: float) -> void:
 		for s in Roots.arch_strands(_rng, relief, _rng.randi_range(1, 3), arch["sign"]):
 			strands.append((s as Roots.Strand).transformed(arch["xf"]))
 	# Hanging from the vault.
-	var hang := _rng.randf_range(4.0, 11.0) if _variant == 0 else _rng.randf_range(10.0, 20.0)
+	var hang := _rng.randf_range(7.0, 14.0) if _variant == 0 else _rng.randf_range(14.0, 24.0)
 	_hanging_roots(key, cell, roundi(hang * core), strands)
 	_root_mesh(key, strands, live)
 	_rubble(key, walls, core)
@@ -782,6 +822,13 @@ func clutter_crates(list: Array) -> void:
 func _ossuary(key: Vector2i, cell, walls: Array[int], core: float) -> void:
 	var lit := false
 	for side in walls:
+		# Whole walls turned to burial walls: the morgue's catacomb facade
+		# (the kit's `wall_loculi`), the dead wrapped in their niches.
+		if cell.kind == "straight" and _rng.randf() < 0.45 * core and _reserve(key, side, 0.0, 2.0):
+			_loculi(key, side)
+			if _rng.randf() < 0.7:
+				lit = _candles(_against(key, side, _rng.randf_range(-1.4, 1.4), 0.45), _rng.randi_range(3, 6), not lit) or lit
+			continue
 		if _rng.randf() > 0.75 * core:
 			continue
 		# Variant 0 the dead sat among their candles; variant 1 the coffins
@@ -826,10 +873,40 @@ func _ossuary(key: Vector2i, cell, walls: Array[int], core: float) -> void:
 			_rng.randf_range(-1.0, 1.0))), _rng.randi_range(2, 4))
 
 
+## A catacomb burial wall standing on wall (`key`, `side`), its back on the
+## brick, its front 0.86 m out (as the morgue stands them, morgue.gd `_loculi`).
+const LOCULI_DEPTH := 0.86
+const LOCULI_LEN := 3.9
+const LOCULI_HEIGHT := 2.82
+
+
+func _loculi(key: Vector2i, side: int) -> void:
+	var mesh: Mesh = BrickLevel.standalone("wall_loculi")
+	if mesh == null:
+		return
+	var w := _wall_xf(key, side)
+	var into := -w.basis.z
+	var b := Basis.looking_at(into, Vector3.UP)
+	var mi := MeshInstance3D.new()
+	mi.name = "BurialWall"
+	mi.mesh = mesh
+	mi.visibility_range_end = 60.0
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	# The kit piece's origin is on its front face.
+	mi.transform = Transform3D(b, w.origin - into * LOCULI_DEPTH)
+	_casters.append(mi)
+	_solid_box(Transform3D(w.basis, w.origin + w.basis.z * (LOCULI_DEPTH * 0.5)),
+		Vector3(LOCULI_LEN - 0.15, LOCULI_HEIGHT, LOCULI_DEPTH))
+	_count("burial walls")
+
+
 ## The dead sat against a wall (`xf` at the wall's foot, facing out): the rigged
 ## skeleton posed slumped once per pose and baked to a still mesh, then shared.
 func _seated_dead(xf: Transform3D) -> void:
 	var mesh := _seated_mesh(_rng.randi_range(0, 2))
+	if _vermin != null and _rng.randf() < 0.6:
+		_vermin.add_nest(xf, _rng.randi_range(3, 7), -0.7, 0.7)
 	if mesh == null:
 		return
 	var mi := MeshInstance3D.new()

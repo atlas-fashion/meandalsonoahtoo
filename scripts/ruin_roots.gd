@@ -48,6 +48,8 @@ class Strand:
 	var up := Vector3.UP
 	## Its section off that surface against across it (1 round, under 1 pressed flat).
 	var flat := 1.0
+	## 1 for a root hanging free: it sways (root_bark.gdshader, vertex colour b).
+	var sway := 0.0
 
 	func transformed(xf: Transform3D) -> Strand:
 		var s := Strand.new()
@@ -58,6 +60,7 @@ class Strand:
 		s.seed = seed
 		s.up = xf.basis * up
 		s.flat = flat
+		s.sway = sway
 		return s
 
 
@@ -359,6 +362,36 @@ static func wall_strands(rng: RandomNumberGenerator, relief: Relief, count: int,
 	return out
 
 
+## Roots that have broken out through the face of the wall (the wall's frame):
+## each starts mid-wall, thick, its first stretch sunk back into the stone so it
+## comes out of it, and crawls on down. `span`: how far along the wall they may
+## start; `band`: the middle kept clear (a torch's pilaster).
+static func burst_strands(rng: RandomNumberGenerator, relief: Relief, count: int, span: float,
+		band := 0.0) -> Array:
+	var out: Array = []
+	for i in count:
+		var x := rng.randf_range(-span, span)
+		if absf(x) < band + 0.2:
+			x = signf(x + 0.001) * (band + 0.2)
+		var r0 := rng.randf_range(0.09, 0.16)
+		var s := _crawl(rng, relief, Vector2(x, rng.randf_range(0.9, 2.7)), r0, rng.randf_range(1.5, 3.4),
+			rng.randf_range(-0.7, 0.7), -1.0, 0.004, 0.08, band)
+		if s == null or s.pts.size() < 4:
+			continue
+		# Out of the stone: the first points pushed back in, so the cut end is
+		# inside the wall and the root swells out of it.
+		var p0 := s.pts[0]
+		p0.z -= s.radii[0] * 1.6
+		s.pts[0] = p0
+		var p1 := s.pts[1]
+		p1.z -= s.radii[1] * 0.8
+		s.pts[1] = p1
+		s.radii[0] = s.radii[0] * 1.35
+		s.gold = rng.randf_range(0.8, 1.4)
+		out.append(s)
+	return out
+
+
 ## One strand crawling down a planar relief from `start` (u, v): mostly down,
 ## wandering sideways by `drift`, until `length` metres, the floor (where it
 ## turns and runs along the wall's foot for a while), the relief's edge, or
@@ -547,6 +580,7 @@ static func hanging_strand(rng: RandomNumberGenerator, from: Vector3, length: fl
 	s.tint = rng.randf_range(0.7, 1.15)
 	s.gold = rng.randf_range(0.3, 1.0)
 	s.up = Vector3(1.0, 0.0, 0.0)
+	s.sway = 1.0
 	var lean := Vector3(rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(-1.0, 1.0)) * 0.12
 	var step := 0.08
 	var n := maxi(int(length / step), 3)
@@ -618,7 +652,7 @@ static func build_mesh(strands: Array) -> ArrayMesh:
 			var along := l / total
 			var p := s.pts[i]
 			var trig: PackedFloat32Array = _ring(sides)
-			var colour := Color(s.tint, s.gold, 0.0, 1.0)
+			var colour := Color(s.tint, s.gold, s.sway, 1.0)
 			var uv2 := Vector2(along, s.seed)
 			for j in sides + 1:
 				var co := trig[j * 2]

@@ -15,7 +15,7 @@ uniform vec3 bark_dark : source_color = vec3(0.045, 0.036, 0.03);
 uniform vec3 bark_light : source_color = vec3(0.3, 0.245, 0.19);
 uniform vec3 bark_moss : source_color = vec3(0.07, 0.075, 0.045);
 uniform vec3 vein_colour : source_color = vec3(1.0, 0.66, 0.22);
-uniform float vein_energy = 1.4;
+uniform float vein_energy = 1.05;
 uniform float vein_width = 0.11;
 // How much of a strand's length carries gold at all (higher: fewer streaks).
 uniform float vein_patch = 0.5;
