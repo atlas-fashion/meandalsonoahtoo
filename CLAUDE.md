@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 177), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 178), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -611,7 +611,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 174 | 2026-11-09 | A sword cut's cooldown is its whole clip: the next LMB stroke waits for the forehand's 0.75 / the backhand's 0.66 pose s (0.94 / 0.83 s real), not the bite's end (`_stroke_end`); an early click is held and begins the tick the cut ends; the HUD tile counts the clip; Q and F still override a cut | [docs/notes/174-sword-cut-cooldown-is-its-clip.md](docs/notes/174-sword-cut-cooldown-is-its-clip.md) |
 | 175 | 2026-11-10 | A queued swipe goes straight on from the last: the next takes over at the stroke's `chain` (forehand 0.50, backhand 0.40 pose s, where its blend home began) and cross-fades in over it (`_from_kind`, `motion_weight`, `body_motion_from`, `_ride_blend`), body, blade and view, never back to the guard between; Q / F over a cut cross-fade too (were a one-frame snap); a held combo 0.625 / 0.50 s a stroke | [docs/notes/175-swipes-chain-without-going-home.md](docs/notes/175-swipes-chain-without-going-home.md) |
 | 176 | 2026-11-10 | The maze in districts (`ruin_dressing.gd`): 13 grown evenly, seven looks (overgrown, storehouse, ossuary, torture quarter, banners, crystal seam, gaol) each twice with a variant, never two touching alike, densest at the heart; roots grown onto the kit's measured surfaces with faint gold veins (`ruin_roots.gd`, `root_bark.gdshader`); living tips that lash for 12 and die to any blow, glow out, wilt (`living_root.gd`); breakable crates bursting into their own planks with dust, a tall hit volume (`breakable_crate.gd`); the surgery's Higgsfield props, the seated dead, candles, banners; `Graphics.ruin_shadows` (Ultra only); 0.4-1.0 ms | [docs/notes/176-ruin-districts-living-roots-breakable-crates.md](docs/notes/176-ruin-districts-living-roots-breakable-crates.md) |
-| 177 | 2026-11-11 | Roots burst out of the masonry mid-wall (`burst_strands`, a shattered-brick decal), twice as many roots and living tips, hanging roots sway; beetles crawling walls and floors in nests, scattering (`vermin.gd`); 60 rats; the morgue's burial walls in the ossuary | [docs/notes/177-roots-out-of-the-masonry-beetles-burial-walls.md](docs/notes/177-roots-out-of-the-masonry-beetles-burial-walls.md) |
+| 178 | 2026-11-11 | Roots burst out of the masonry mid-wall (`burst_strands`, a shattered-brick decal), twice as many roots and living tips, hanging roots sway; beetles crawling walls and floors in nests, scattering (`vermin.gd`); 60 rats; the morgue's burial walls in the ossuary | [docs/notes/178-roots-out-of-the-masonry-beetles-burial-walls.md](docs/notes/178-roots-out-of-the-masonry-beetles-burial-walls.md) |
 | 177 | 2026-11-11 | The holding cells and the starting cell remodelled after the user's photo, in Blender with baked PBR (`tools/build_cell_kit.py` -> `models/cell_kit.glb`, one atlas: albedo and normal 4096, ORM 2048): square rusted bars with a big bronze gear lock, a caged iron lantern on its chain from the vault (the cell's one light, the torch scene inside it), a heavy chain to a ring and a pair of manacles, a solid stone bench with frayed burlap, a stone shelf with a bowl and a cup, a drain, straw; no door at the back; 80.0 -> 79.8 fps (interleaved, noise) | [docs/notes/177-holding-cells-remodelled.md](docs/notes/177-holding-cells-remodelled.md) |
 
 ## Notes by source file
@@ -672,8 +672,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/jail_cell.gd`: 12, 153, 154, 177
 - `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 177
-- `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 177
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178
+- `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154
