@@ -1618,13 +1618,17 @@ func _plain_dead_ends() -> Array[Dictionary]:
 ## main route (`_main_route`) at `holding_cell_route_gap`, then the rest of the
 ## maze at `holding_cell_gap`.
 
-@export var holding_cell_count := 24
+## Since note 179 the beacons stand in the beacon rooms (wheel_room.gd), which
+## take the first places; the holding cells are fewer and hold no beacon.
+@export var holding_cell_count := 8
+@export var beacon_room_count := 10
 @export var holding_cell_gap := 30.0
 ## Along the main route a cell may stand this near the next.
 @export var holding_cell_route_gap := 16.0
 ## A dead end at most this many cells' walk from the main route counts as on it.
 @export var holding_cell_route_reach := 6
 const HOLDING_CELL := preload("res://scripts/holding_cell.gd")
+const BEACON_ROOM := preload("res://scripts/wheel_room.gd")
 var _holding_cells: Array[Node3D] = []
 ## The player's starting cell, also in `_holding_cells` (its first).
 var _start_cell: Node3D
@@ -1701,11 +1705,14 @@ func _place_holding_cells(holder: Node3D, detail: float) -> void:
 				taken.append(_module_level.to_world(best["cell"]))
 				marked += 1
 	var on_route := 0
+	# The beacon rooms (note 179) take the first places -- the marks and the
+	# route -- the holding cells what is left.
+	var want := holding_cell_count + beacon_room_count
 	for round_i in 2:
 		var pass_spots: Array = near_route if round_i == 0 else spots
 		var gap := holding_cell_route_gap if round_i == 0 else holding_cell_gap
 		for s: Dictionary in pass_spots:
-			if chosen.size() >= holding_cell_count:
+			if chosen.size() >= want:
 				break
 			if chosen.has(s):
 				continue
@@ -1716,12 +1723,20 @@ func _place_holding_cells(holder: Node3D, detail: float) -> void:
 			chosen.append(s)
 			if round_i == 0:
 				on_route += 1
+	var rooms := 0
 	for s in chosen:
 		var at: Vector3 = _module_level.to_world(s["cell"])
-		var c: Node3D = HOLDING_CELL.place(parent, _module_level, s["cell"], s["out"],
-			_cell_roster(rng), self, module_torch_energy if rng.randf() < detail else 0.0, false, int(s["pilaster"]))
+		var c: Node3D
+		if rooms < beacon_room_count:
+			# Every room is lit: it is where the player rises.
+			c = BEACON_ROOM.place_room(parent, _module_level, s["cell"], s["out"], self,
+				module_torch_energy, int(s["pilaster"]), rooms == 0)
+			rooms += 1
+			_add_beacon(c)
+		else:
+			c = HOLDING_CELL.place(parent, _module_level, s["cell"], s["out"],
+				_cell_roster(rng), self, module_torch_energy if rng.randf() < detail else 0.0, false, int(s["pilaster"]))
 		_holding_cells.append(c)
-		_add_beacon(c)
 		# Nothing spawns, wanders or patrols behind the bars.
 		var mid := world_to_tile(at)
 		for dz in range(-2, 3):
@@ -1729,8 +1744,8 @@ func _place_holding_cells(holder: Node3D, detail: float) -> void:
 				var t := mid + Vector2i(dx, dz)
 				if t.x >= 0 and t.y >= 0 and t.x < tiles and t.y < tiles:
 					grid[t.y][t.x] = WALL
-	print("[cells] %d holding cells and the start (%d at the beacon marks, %d more on the route), of %d free dead ends, %d of them by the route"
-		% [chosen.size(), marked, on_route, spots.size(), near_route.size()])
+	print("[cells] %d beacon rooms and %d holding cells and the start (%d at the beacon marks, %d more on the route), of %d free dead ends, %d of them by the route"
+		% [rooms, chosen.size() - rooms, marked, on_route, spots.size(), near_route.size()])
 
 
 ## A beacon at the back of `cell`, red until claimed.
@@ -1739,8 +1754,10 @@ func _add_beacon(cell: Node3D) -> void:
 	anchor.set_script(load("res://scripts/respawn_anchor.gd"))
 	anchor.name = "Anchor%d" % _anchors.size()
 	cell.add_child(anchor)
-	# The cell's +Z is its way out, as the beacon's.
-	anchor.position = Vector3(0.0, 0.0, -HOLDING_CELL.BEACON_BACK)
+	# The cell's +Z is its way out, as the beacon's. A beacon room's back wall
+	# has its winch: its beacon stands in the middle (note 179).
+	anchor.position = cell.call("beacon_spot") if cell.has_method("beacon_spot") \
+		else Vector3(0.0, 0.0, -HOLDING_CELL.BEACON_BACK)
 	anchor.connect(&"attuned", _on_anchor_attuned)
 	cell.set("beacon", anchor)
 	_anchors.append(anchor)

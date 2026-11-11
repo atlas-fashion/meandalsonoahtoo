@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 178), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 179), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -613,6 +613,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 176 | 2026-11-10 | The maze in districts (`ruin_dressing.gd`): 13 grown evenly, seven looks (overgrown, storehouse, ossuary, torture quarter, banners, crystal seam, gaol) each twice with a variant, never two touching alike, densest at the heart; roots grown onto the kit's measured surfaces with faint gold veins (`ruin_roots.gd`, `root_bark.gdshader`); living tips that lash for 12 and die to any blow, glow out, wilt (`living_root.gd`); breakable crates bursting into their own planks with dust, a tall hit volume (`breakable_crate.gd`); the surgery's Higgsfield props, the seated dead, candles, banners; `Graphics.ruin_shadows` (Ultra only); 0.4-1.0 ms | [docs/notes/176-ruin-districts-living-roots-breakable-crates.md](docs/notes/176-ruin-districts-living-roots-breakable-crates.md) |
 | 178 | 2026-11-11 | Roots burst out of the masonry mid-wall (`burst_strands`, a shattered-brick decal), twice as many roots and living tips, hanging roots sway; beetles crawling walls and floors in nests, scattering (`vermin.gd`); 60 rats; the morgue's burial walls in the ossuary | [docs/notes/178-roots-out-of-the-masonry-beetles-burial-walls.md](docs/notes/178-roots-out-of-the-masonry-beetles-burial-walls.md) |
 | 177 | 2026-11-11 | The holding cells and the starting cell remodelled after the user's photo, in Blender with baked PBR (`tools/build_cell_kit.py` -> `models/cell_kit.glb`, one atlas: albedo and normal 4096, ORM 2048): square rusted bars with a big bronze gear lock, a caged iron lantern on its chain from the vault (the cell's one light, the torch scene inside it), a heavy chain to a ring and a pair of manacles, a solid stone bench with frayed burlap, a stone shelf with a bowl and a cup, a drain, straw; no door at the back; 80.0 -> 79.8 fps (interleaved, noise) | [docs/notes/177-holding-cells-remodelled.md](docs/notes/177-holding-cells-remodelled.md) |
+| 179 | 2026-11-11 | Beacon rooms (`wheel_room.gd`): 10 dead ends dressed as the cell photo with its bronze gear door as a winch on the back wall; walk in and the raised gate crashes down, hold E on the wheel 3.2 s to wind it up (let go and it sinks, a hit breaks the grip); the beacons stand there (and in the start cell), none in the holding cells, which are 8 (was 24) | [docs/notes/179-beacon-rooms-wheel-lock.md](docs/notes/179-beacon-rooms-wheel-lock.md) |
 
 ## Notes by source file
 
@@ -660,7 +661,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hand_torch.gd`: 24, 29 (deleted in 157)
 - `scripts/held_potion.gd`: 6.19, 130, 168
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
-- `scripts/holding_cell.gd`: 153, 154, 177
+- `scripts/holding_cell.gd`: 153, 154, 177, 179
+- `scripts/wheel_room.gd`: 179
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
 - `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167, 172
@@ -672,7 +674,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/jail_cell.gd`: 12, 153, 154, 177
 - `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179
 - `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
@@ -694,7 +696,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/rat_control.gd`: 77, 78, 79, 143, 161
 - `scripts/rat_look.gd`: 78
 - `scripts/rat_model.gd`: 77
-- `scripts/respawn_anchor.gd`: 8b, 32, 79, 154
+- `scripts/respawn_anchor.gd`: 8b, 32, 79, 154, 179
 - `scripts/robot_rat.gd`: 77
 - `scripts/save_system.gd`: 19, 60, 79, 131
 - `scripts/sandbox.gd`: 60, 68, 152
