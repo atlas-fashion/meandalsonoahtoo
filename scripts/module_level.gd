@@ -394,6 +394,12 @@ const DEFAULTS := {
 	## The chest rooms' cells opened at the back onto the corridor behind them
 	## (`_make_back_exits`, note 122): the containment blocks' back doors.
 	"back_exits": false,
+	## The beacon halls (note 180, hall_room.gd): the last `halls` chest rooms
+	## carved -- asked for on top of the others, so the rooms placed before them
+	## keep their places -- become kind "hall", enclosed vaulted halls. Never
+	## fewer than `hall_keep` rooms are left as chest rooms.
+	"halls": 0,
+	"hall_keep": 0,
 }
 
 
@@ -436,6 +442,9 @@ static func build(parent: Node3D, seed_value: int, size: Vector2i, cell_size: fl
 
 	# Planned before the skylights, which must not open onto its underside.
 	out.boss_hall = plan_boss_hall(out)
+	# Before the morgue and the surgery pick theirs, so they pick from the
+	# rooms they always had.
+	_make_beacon_halls(out, int(opt["halls"]), int(opt["hall_keep"]), brick)
 	if bool(opt["morgue"]):
 		_make_morgue_hall(out, brick)
 	if bool(opt["surgery"]):
@@ -482,6 +491,20 @@ static func _make_morgue_hall(out: Built, enclose: bool) -> void:
 		return
 	best["kind"] = "morgue"
 	_enclose_hall(out, best, enclose)
+
+
+## The beacon halls (note 180): the last `count` chest rooms carved become kind
+## "hall", each an enclosed vaulted hall (hall_room.gd dresses it as the user's
+## photo, shuts its archways and stands its beacon). `_choose_rooms` places
+## rooms in turn, so the extra ones asked for come last and the rest keep the
+## places they had.
+static func _make_beacon_halls(out: Built, count: int, keep: int, enclose: bool) -> void:
+	var rooms := out.chest_rooms()
+	var n := mini(count, rooms.size() - keep)
+	for i in maxi(n, 0):
+		var room: Dictionary = rooms[rooms.size() - 1 - i]
+		room["kind"] = "hall"
+		_enclose_hall(out, room, enclose)
 
 
 ## The surgery (2026-10-21; note 97): of the chest rooms left once the morgue

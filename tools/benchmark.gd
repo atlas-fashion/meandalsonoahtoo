@@ -230,6 +230,11 @@ func _run() -> void:
 					if String(s["theme"]).begins_with(look):
 						stations["ruins " + look] = _floor_under(level.to_world(s["cell"]))
 						break
+		# The photo's beacon hall (note 180), from off its middle (the beacon),
+		# placed from its floor: it is roofed.
+		var halls: Array = maze.get("_halls") if maze != null else []
+		if not halls.is_empty() and is_instance_valid(halls[0]):
+			stations["beacon hall"] = (halls[0] as Node3D).to_global(Vector3(3.0, 1.2, 4.0))
 
 	print("=== BENCHMARK [%s] ===" % _tag)
 	print("window %s   3D render target %s   scale %.2f   msaa %d" % [

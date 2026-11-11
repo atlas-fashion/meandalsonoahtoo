@@ -15,6 +15,8 @@ instance uniform vec3 cloth : source_color = vec3(0.3, 0.04, 0.035);
 instance uniform float device = 0.0;
 instance uniform float tear_seed = 0.0;
 instance uniform float length_m = 2.2;
+// 1: a plain rag (the beacon halls' gallery cloths, note 180): no border, no device.
+instance uniform float plain = 0.0;
 uniform vec3 gold : source_color = vec3(0.62, 0.45, 0.16);
 uniform float sway = 0.035;
 
@@ -106,6 +108,7 @@ void fragment() {
 	dp.y = -dp.y;
 	float dev = charge(dp, device);
 	float thread = max(max(band, top_band), dev) * (0.55 + 0.45 * smoothstep(0.35, 0.65, grime));
+	thread *= 1.0 - plain;
 
 	vec3 col = cloth * (0.75 + 0.5 * weave) * (1.0 - soot) * mix(0.75, 1.1, grime);
 	col = mix(col, gold * (0.7 + 0.3 * weave), thread * 0.85);

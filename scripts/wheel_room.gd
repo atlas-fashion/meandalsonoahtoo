@@ -112,31 +112,33 @@ static func _metal(albedo: Color, rough: float, metal: float) -> StandardMateria
 	return m
 
 
-func _part(mesh: Mesh, mat: Material, at: Vector3, rot := Vector3.ZERO, parent: Node3D = null) -> MeshInstance3D:
+static func _part(mesh: Mesh, mat: Material, at: Vector3, rot: Vector3, parent: Node3D) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = mat
 	mi.position = at
 	mi.rotation = rot
-	(parent if parent != null else _wheel).add_child(mi)
+	parent.add_child(mi)
 	return mi
 
 
 ## A riveted bronze door in the back wall between two brass piston columns, and
-## on it the great gear wheel behind six radial straps, a handle on its rim.
-func _build_wheel() -> void:
+## on it the great gear wheel, a handle on its rim. [winch, the turning wheel];
+## `at` the wheel's middle, its y the height off the floor. Shared with the
+## beacon halls (hall_room.gd).
+static func make_winch(parent: Node3D, at: Vector3) -> Array:
 	if _bronze == null:
 		_bronze = _metal(Color(0.62, 0.4, 0.19), 0.34, 0.85)
 		_brass = _metal(Color(0.55, 0.42, 0.18), 0.3, 0.9)
 		_iron = _metal(Color(0.2, 0.18, 0.16), 0.5, 0.7)
-	_wheel = Node3D.new()
-	_wheel.name = "Winch"
-	_wheel.position = WHEEL_AT
-	add_child(_wheel)
+	var winch := Node3D.new()
+	winch.name = "Winch"
+	winch.position = at
+	parent.add_child(winch)
 	# The door behind it, set into the back wall.
 	var door := BoxMesh.new()
 	door.size = Vector3(1.75, 2.6, 0.1)
-	_part(door, _bronze, Vector3(0.0, -WHEEL_AT.y + 1.3, -0.08))
+	_part(door, _bronze, Vector3(0.0, -at.y + 1.3, -0.08), Vector3.ZERO, winch)
 	var rivet := SphereMesh.new()
 	rivet.radius = 0.022
 	rivet.height = 0.03
@@ -144,7 +146,7 @@ func _build_wheel() -> void:
 	rivet.rings = 3
 	for i in 9:
 		for x: float in [-0.8, 0.8]:
-			_part(rivet, _brass, Vector3(x, -WHEEL_AT.y + 0.15 + float(i) * 0.29, -0.025))
+			_part(rivet, _brass, Vector3(x, -at.y + 0.15 + float(i) * 0.29, -0.025), Vector3.ZERO, winch)
 	# The piston columns either side.
 	var col := CylinderMesh.new()
 	col.top_radius = 0.07
@@ -159,46 +161,53 @@ func _build_wheel() -> void:
 	cap.radial_segments = 12
 	cap.rings = 1
 	for x: float in [-1.02, 1.02]:
-		_part(col, _brass, Vector3(x, -WHEEL_AT.y + 1.1, 0.04))
-		_part(cap, _bronze, Vector3(x, -WHEEL_AT.y + 0.06, 0.04))
-		_part(cap, _bronze, Vector3(x, -WHEEL_AT.y + 2.2, 0.04))
+		_part(col, _brass, Vector3(x, -at.y + 1.1, 0.04), Vector3.ZERO, winch)
+		_part(cap, _bronze, Vector3(x, -at.y + 0.06, 0.04), Vector3.ZERO, winch)
+		_part(cap, _bronze, Vector3(x, -at.y + 2.2, 0.04), Vector3.ZERO, winch)
 	# The wheel, which turns.
-	_wheel_spin = Node3D.new()
-	_wheel_spin.name = "Wheel"
-	_wheel_spin.position = Vector3(0.0, 0.0, 0.1)
-	_wheel.add_child(_wheel_spin)
+	var spin := Node3D.new()
+	spin.name = "Wheel"
+	spin.position = Vector3(0.0, 0.0, 0.1)
+	winch.add_child(spin)
 	var rim := TorusMesh.new()
 	rim.inner_radius = WHEEL_R - 0.07
 	rim.outer_radius = WHEEL_R
 	rim.rings = 32
 	rim.ring_segments = 8
-	_part(rim, _bronze, Vector3.ZERO, Vector3(PI * 0.5, 0.0, 0.0), _wheel_spin)
+	_part(rim, _bronze, Vector3.ZERO, Vector3(PI * 0.5, 0.0, 0.0), spin)
 	var tooth := BoxMesh.new()
 	tooth.size = Vector3(0.07, 0.09, 0.06)
 	for i in 20:
 		var a := TAU * float(i) / 20.0
-		var t := _part(tooth, _bronze, Vector3(cos(a), sin(a), 0.0) * (WHEEL_R + 0.03), Vector3(0.0, 0.0, a), _wheel_spin)
+		var t := _part(tooth, _bronze, Vector3(cos(a), sin(a), 0.0) * (WHEEL_R + 0.03), Vector3(0.0, 0.0, a), spin)
 		t.rotation.z = a + PI * 0.5
 	var spoke := BoxMesh.new()
 	spoke.size = Vector3(0.05, WHEEL_R * 2.0 - 0.1, 0.04)
 	for i in 3:
-		_part(spoke, _iron, Vector3.ZERO, Vector3(0.0, 0.0, PI * float(i) / 3.0), _wheel_spin)
+		_part(spoke, _iron, Vector3.ZERO, Vector3(0.0, 0.0, PI * float(i) / 3.0), spin)
 	var hub := CylinderMesh.new()
 	hub.top_radius = 0.12
 	hub.bottom_radius = 0.14
 	hub.height = 0.12
 	hub.radial_segments = 14
 	hub.rings = 1
-	_part(hub, _brass, Vector3(0.0, 0.0, 0.03), Vector3(PI * 0.5, 0.0, 0.0), _wheel_spin)
+	_part(hub, _brass, Vector3(0.0, 0.0, 0.03), Vector3(PI * 0.5, 0.0, 0.0), spin)
 	var handle := CylinderMesh.new()
 	handle.top_radius = 0.03
 	handle.bottom_radius = 0.03
 	handle.height = 0.24
 	handle.radial_segments = 8
 	handle.rings = 1
-	_part(handle, _iron, Vector3(WHEEL_R - 0.05, 0.0, 0.14), Vector3(PI * 0.5, 0.0, 0.0), _wheel_spin)
-	for mi in _wheel.find_children("*", "MeshInstance3D", true, false):
+	_part(handle, _iron, Vector3(WHEEL_R - 0.05, 0.0, 0.14), Vector3(PI * 0.5, 0.0, 0.0), spin)
+	for mi in winch.find_children("*", "MeshInstance3D", true, false):
 		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	return [winch, spin]
+
+
+func _build_wheel() -> void:
+	var w := make_winch(self, WHEEL_AT)
+	_wheel = w[0]
+	_wheel_spin = w[1]
 
 
 # --- No prisoners, no swinging ----------------------------------------------------------

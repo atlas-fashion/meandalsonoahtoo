@@ -255,15 +255,27 @@ func _kit_dress(rng: RandomNumberGenerator) -> void:
 ## the torch scene without its mount (torch.gd keeps its flicker, its place in the
 ## nearest-N ranking and its shadow), its flame shrunk to a candle's.
 func _hang_lantern(_built, energy: float) -> void:
+	_lantern = make_lantern(self, Vector3(0.0, LANTERN_HOOK_Y, LANTERN_Z), energy)
+	_hang_chain.call_deferred()
+
+
+## The caged lantern with its torch light, its hook at `at` (the beacon halls
+## hang them too, hall_room.gd). `energy` 0: unlit, no light at all.
+static func make_lantern(parent: Node3D, at: Vector3, energy: float) -> Node3D:
 	var lantern := Node3D.new()
 	lantern.name = "Lantern"
-	lantern.position = Vector3(0.0, LANTERN_HOOK_Y, LANTERN_Z)
-	add_child(lantern)
+	lantern.position = at
+	parent.add_child(lantern)
 	# No shadows from the cage: the light is inside it.
-	_piece("lantern", lantern, Vector3.ZERO, false)
-	var glass := _piece("lantern_glass", lantern, Vector3.ZERO, false)
-	glass.material_override = _glass_material()
-	_lantern = lantern
+	for piece in ["lantern", "lantern_glass"]:
+		var mi := MeshInstance3D.new()
+		mi.mesh = kit_mesh(piece)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if piece == "lantern_glass":
+			mi.material_override = _glass_material()
+		lantern.add_child(mi)
+	if energy <= 0.0:
+		return lantern
 	var level = load("res://scripts/module_level.gd")
 	var torch := (load(level.TORCH_SCENE) as PackedScene).instantiate() as Node3D
 	torch.set("kit_mount", false)
@@ -294,7 +306,7 @@ func _hang_lantern(_built, energy: float) -> void:
 	light.shadow_caster_mask &= ~moon_only
 	light.light_cull_mask &= ~moon_only
 	light.light_color = level.TORCH_COLOUR
-	_hang_chain.call_deferred()
+	return lantern
 
 
 ## Chain from the lantern's hook up into the vault, as long as the vault is high

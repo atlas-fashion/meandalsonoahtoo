@@ -407,6 +407,9 @@ func _root_walls(key: Vector2i) -> Array[int]:
 
 ## How far along a wall things may stand: clear of the junction pillars.
 func _wall_span(key: Vector2i) -> float:
+	# A beacon hall's wall runs on between its pilasters (1.9 m each side).
+	if out.cells[key].hall:
+		return 1.7
 	return 2.3 if out.cells[key].kind == "straight" else 1.25
 
 
@@ -1330,26 +1333,12 @@ func _banner(key: Vector2i, side: int, x: float) -> void:
 	var width := _rng.randf_range(0.85, 1.15)
 	var length := _rng.randf_range(1.8, 2.5)
 	var top := 2.95
-	var mesh := _banner_mesh(snappedf(width, 0.05), snappedf(length, 0.1))
-	if _banner_mat == null:
-		_banner_mat = ShaderMaterial.new()
-		_banner_mat.shader = BANNER_SHADER
-	var mi := MeshInstance3D.new()
-	mi.name = "Banner"
-	mi.mesh = mesh
-	mi.material_override = _banner_mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.visibility_range_end = 55.0
-	add_child(mi)
-	mi.transform = Transform3D(w.basis, w * Vector3(x, top, 0.14))
 	# Variant 0 the crimson and black of one house, variant 1 the blue and
 	# green of another.
 	var cloths := [Color(0.3, 0.035, 0.03), Color(0.24, 0.03, 0.035), Color(0.07, 0.06, 0.05)] if _variant == 0 \
 		else [Color(0.04, 0.07, 0.17), Color(0.035, 0.1, 0.07), Color(0.05, 0.06, 0.12)]
-	mi.set_instance_shader_parameter("cloth", cloths[_rng.randi_range(0, cloths.size() - 1)])
-	mi.set_instance_shader_parameter("device", float(_rng.randi_range(0, 2)))
-	mi.set_instance_shader_parameter("tear_seed", _rng.randf())
-	mi.set_instance_shader_parameter("length_m", length)
+	hang_cloth(Transform3D(w.basis, w * Vector3(x, top, 0.14)), width, length,
+		cloths[_rng.randi_range(0, cloths.size() - 1)])
 	# The rod and its two brackets, one mesh.
 	var rod := MeshInstance3D.new()
 	rod.name = "BannerRod"
@@ -1359,6 +1348,28 @@ func _banner(key: Vector2i, side: int, x: float) -> void:
 	add_child(rod)
 	rod.transform = Transform3D(w.basis, w * Vector3(x, top + 0.02, 0.0))
 	_count("banners")
+
+
+## A cloth hanging from `xf` (its top edge's middle, +Z its face): a banner, or
+## with `plain` a rag with no border or device (the beacon halls' galleries).
+func hang_cloth(xf: Transform3D, width: float, length: float, colour: Color, plain := false) -> MeshInstance3D:
+	if _banner_mat == null:
+		_banner_mat = ShaderMaterial.new()
+		_banner_mat.shader = BANNER_SHADER
+	var mi := MeshInstance3D.new()
+	mi.name = "Rag" if plain else "Banner"
+	mi.mesh = _banner_mesh(snappedf(width, 0.05), snappedf(length, 0.1))
+	mi.material_override = _banner_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.visibility_range_end = 55.0
+	add_child(mi)
+	mi.transform = xf
+	mi.set_instance_shader_parameter("cloth", colour)
+	mi.set_instance_shader_parameter("device", float(_rng.randi_range(0, 2)))
+	mi.set_instance_shader_parameter("tear_seed", _rng.randf())
+	mi.set_instance_shader_parameter("length_m", length)
+	mi.set_instance_shader_parameter("plain", 1.0 if plain else 0.0)
+	return mi
 
 
 static var _rods := {}
@@ -1591,6 +1602,50 @@ func _rubble(key: Vector2i, walls: Array[int], core: float) -> void:
 
 
 var _stone_mat: StandardMaterial3D = null
+
+
+# --- The beacon halls (note 180) ----------------------------------------------------
+##
+## hall_room.gd dresses its hall with these pieces, so the halls are the same
+## stone, roots, wood and iron as the districts round them. It brackets its
+## work in `hall_begin` / `hall_end`.
+
+## Seeds the props' dice from the hall and takes the crimson house's colours.
+## Returns where the hall's solid pieces start in the list.
+func hall_begin(seed_: int) -> int:
+	_rng.seed = seed_ ^ 0x4a11
+	_variant = 0
+	return _solid.size()
+
+
+## The hall's solid pieces ([{at, half}]), its new props' shadows set.
+func hall_end(from: int) -> Array:
+	_apply_graphics()
+	return _solid.slice(from)
+
+
+## A root lying along the floor, from `from` (world) the way `dir` points, `length`
+## long, half sunk in the flags and wandering side to side.
+func floor_strand(from: Vector3, dir: Vector3, length: float, r0: float) -> Roots.Strand:
+	var s := Roots.Strand.new()
+	s.seed = _rng.randf()
+	s.tint = _rng.randf_range(0.75, 1.1)
+	s.gold = _rng.randf_range(0.5, 1.0)
+	s.up = Vector3.UP
+	s.flat = 0.6
+	var side := Vector3(-dir.z, 0.0, dir.x)
+	var wob := _rng.randf() * 20.0
+	var amp := _rng.randf_range(0.25, 0.7)
+	var n := maxi(int(length / 0.12), 4)
+	for i in n + 1:
+		var t := float(i) / float(n)
+		var r := r0 * (1.0 - 0.8 * t) + 0.006
+		var p := from + dir * (length * t) + side * (sin(wob + t * 5.3) * amp * t + sin(wob * 2.1 + t * 13.0) * 0.06)
+		# Up off the wall's foot, then down into the floor.
+		p.y = r * 0.45 + maxf(0.0, 0.35 - t * length) * 0.6
+		s.pts.append(p)
+		s.radii.append(r)
+	return s
 
 
 # --- Settings ----------------------------------------------------------------------

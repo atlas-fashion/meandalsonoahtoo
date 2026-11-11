@@ -1,5 +1,8 @@
 ## 179. Beacon rooms: shut in until you wind the wheel; the beacons there, fewer holding cells (2026-11-11)
 
+**Superseded by note 180**: the photo meant was a great hall; the beacons and the
+wheel lock moved to the beacon halls (`hall_room.gd`) and `beacon_room_count` is 0.
+
 The user: "There should be many rooms like this, one identical to the photo, and
 the rest similar, throughout the dungeon. The player should be locked into these
 rooms until the player can hold down e to interact with a wheel that lifts the

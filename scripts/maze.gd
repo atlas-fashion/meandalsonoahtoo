@@ -541,6 +541,12 @@ var _full_graph = null
 ## the containment blocks, one per skeleton type. (5 before; the count feeds
 ## the generator, so every seed's layout changed with it.)
 @export var module_chest_rooms := 6
+## The beacon halls (note 180, hall_room.gd): this many more rooms carved, each
+## an enclosed hall dressed as the user's photo, its archways barred when the
+## player walks in until the wheel winds them up, its beacon in the middle.
+## Asked for on top of the chest rooms, so those keep their places; the corridors
+## round the new ones changed with them.
+@export var module_hall_rooms := 6
 ## Scales how many wall torches are hung. Omni light count is a per-pixel cost
 ## on this hardware, which is why it is a knob and not a constant.
 ## 1.1 since 2026-10-10, second pass ("way too dark... more torches, but way
@@ -848,7 +854,9 @@ func _build_module_level() -> void:
 			# becomes the morgue (`_pick_morgue`).
 			# The surgery takes one of the chest rooms (note 97): it adds none, so
 			# the layout is the one the seed gave before the surgery existed.
-			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0),
+			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0) + module_hall_rooms,
+			"halls": module_hall_rooms,
+			"hall_keep": module_chest_rooms + (1 if morgue_enabled else 0),
 			"room_gap": module_room_gap,
 			"room_entrances": module_room_entrances,
 			"morgue": morgue_enabled,
@@ -913,6 +921,7 @@ func _build_module_level() -> void:
 	_place_hiding_spots(holder)
 	_place_clutter(holder)
 	_place_ruins(holder)
+	_place_halls(holder)
 	_place_damp(holder)
 	if not _morgue_room.is_empty():
 		_morgue = load("res://scripts/morgue.gd").build(holder, _module_level, _morgue_room)
@@ -1621,7 +1630,9 @@ func _plain_dead_ends() -> Array[Dictionary]:
 ## Since note 179 the beacons stand in the beacon rooms (wheel_room.gd), which
 ## take the first places; the holding cells are fewer and hold no beacon.
 @export var holding_cell_count := 8
-@export var beacon_room_count := 10
+## The dead-end beacon rooms of note 179 (wheel_room.gd); 0 since note 180, the
+## beacons and the wheel lock having gone to the halls (`module_hall_rooms`).
+@export var beacon_room_count := 0
 @export var holding_cell_gap := 30.0
 ## Along the main route a cell may stand this near the next.
 @export var holding_cell_route_gap := 16.0
@@ -2070,6 +2081,67 @@ func _place_ruins(holder: Node3D) -> void:
 	var solid: Array = _ruins.build(_module_level, blocked, _active_seed, anchors)
 	_ruins.clutter_crates(_module_level.get_meta("clutter_crates", []))
 	_mark_solid(solid)
+
+
+## --- The beacon halls (note 180) -----------------------------------------------------
+##
+## The user, of their photo of a great root-choked hall: "There should be many
+## rooms like this, one identical to the photo, and the rest similar, throughout
+## the dungeon. The player should be locked into these rooms until the player can
+## hold down e to interact with a wheel that lifts the dungeon doors. The beacons
+## should be in here." `module_hall_rooms` rooms (module_level `_make_beacon_halls`)
+## are built by hall_room.gd, the first as the photo; each holds a beacon.
+const HALL_ROOM := preload("res://scripts/hall_room.gd")
+var _halls: Array[Node3D] = []
+var _hall_rooms: Array[Dictionary] = []
+
+
+func _place_halls(holder: Node3D) -> void:
+	_halls.clear()
+	_hall_rooms.clear()
+	if _module_level == null or not load("res://scripts/module_level.gd").brick:
+		return
+	for room in _module_level.rooms:
+		if room["kind"] == "hall":
+			_hall_rooms.append(room)
+	# The photo's own hall: the one nearest the start, so it is the first found.
+	var start: Vector3 = _module_level.spawn
+	_hall_rooms.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return (_module_level.room_world(a) as Vector3).distance_to(start) \
+			< (_module_level.room_world(b) as Vector3).distance_to(start))
+	var parent := Node3D.new()
+	parent.name = "BeaconHalls"
+	holder.add_child(parent)
+	for i in _hall_rooms.size():
+		var hall := HALL_ROOM.build(parent, _module_level, _hall_rooms[i], self, _ruins,
+			module_torch_energy, i == 0)
+		_halls.append(hall)
+		_add_beacon(hall)
+		_mark_solid(hall.get("solid"))
+	print("[halls] %d beacon halls" % _halls.size())
+
+
+## Something to be shut in with: one encounter in each hall nobody is standing
+## in, rolled as the corridors' are (criers and scouts until types are let out),
+## off to one side of the beacon. They wander on from there.
+func _spawn_hall_guards() -> void:
+	for i in _hall_rooms.size():
+		var hall: Node3D = _halls[i]
+		if not is_instance_valid(hall) or Coop.all().any(func(p) -> bool:
+				return is_instance_valid(p) and hall.call("_inside", p)):
+			continue
+		var at: Vector3 = hall.to_global(Vector3(module_cell * (1.0 if _rng.randf() < 0.5 else -1.0), 0.0, 0.0))
+		_roll_encounter(world_to_tile(at), 3)
+
+
+## True for tiles in any beacon hall's block.
+func is_in_hall(tile: Vector2i) -> bool:
+	for room in _hall_rooms:
+		var mid := world_to_tile(_module_level.room_world(room))
+		var half := int(floor((float(room["half"]) + 0.5) * module_cell / tile_size))
+		if absi(tile.x - mid.x) <= half and absi(tile.y - mid.y) <= half:
+			return true
+	return false
 
 
 ## Wet patches and drips (scripts/damp.gd). No drip in a door's cells (it would
@@ -4360,6 +4432,8 @@ func _seal_cells() -> void:
 			door.make_solid()
 	for c in _holding_cells:
 		c.call("arm")
+	for h in _halls:
+		h.call("arm")
 
 
 ## Throws open the next batch of cells and turns loose whatever is inside.
@@ -4751,6 +4825,7 @@ func _populate() -> void:
 	_stock_jail_cells()
 	_stock_holding_cells()
 	_spawn_enemies()
+	_spawn_hall_guards()
 	# The types already let out of containment roam loose too, and the collector
 	# goes after them (note 120).
 	_collectors.clear()
@@ -5444,7 +5519,8 @@ func _spawn_candidates(in_sight_too := false) -> Array[Vector2i]:
 			# room. They hold their champion -- the boss, the mimic -- and the
 			# corridors hold everything else. (The tile maze's treasure rooms
 			# were small and deliberately guarded, so it keeps its old rule.)
-			if modules and (is_in_treasure_room(tile) or is_in_morgue(tile) or is_in_surgery(tile)):
+			if modules and (is_in_treasure_room(tile) or is_in_morgue(tile) or is_in_surgery(tile)
+					or is_in_hall(tile)):
 				continue
 			# Nor beside one: a pack is scattered up to 1.3 m (a tile) round its
 			# tile, and from a doorway that put members inside the room, where the
@@ -5481,7 +5557,8 @@ func _touches_room(tile: Vector2i) -> bool:
 	for dx in range(-1, 2):
 		for dy in range(-1, 2):
 			var t := tile + Vector2i(dx, dy)
-			if is_in_treasure_room(t) or is_in_morgue(t) or is_in_surgery(t) or is_in_boss_room(t):
+			if is_in_treasure_room(t) or is_in_morgue(t) or is_in_surgery(t) or is_in_boss_room(t) \
+					or is_in_hall(t):
 				return true
 	return false
 
