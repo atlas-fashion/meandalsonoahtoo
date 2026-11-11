@@ -259,8 +259,8 @@ func _hang_lantern(_built, energy: float) -> void:
 	_hang_chain.call_deferred()
 
 
-## The caged lantern with its torch light, its hook at `at` (the beacon halls
-## hang them too, hall_room.gd). `energy` 0: unlit, no light at all.
+## The caged lantern with its torch light, its hook at `at` (the scoutposts
+## hang them too, scoutpost.gd). `energy` 0: unlit, no light at all.
 static func make_lantern(parent: Node3D, at: Vector3, energy: float) -> Node3D:
 	var lantern := Node3D.new()
 	lantern.name = "Lantern"

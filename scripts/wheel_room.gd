@@ -125,7 +125,7 @@ static func _part(mesh: Mesh, mat: Material, at: Vector3, rot: Vector3, parent: 
 ## A riveted bronze door in the back wall between two brass piston columns, and
 ## on it the great gear wheel, a handle on its rim. [winch, the turning wheel];
 ## `at` the wheel's middle, its y the height off the floor. Shared with the
-## beacon halls (hall_room.gd).
+## scoutposts (scoutpost.gd).
 static func make_winch(parent: Node3D, at: Vector3) -> Array:
 	if _bronze == null:
 		_bronze = _metal(Color(0.62, 0.4, 0.19), 0.34, 0.85)

@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 180), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 181), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -285,6 +285,11 @@ straw) is a build artifact from `tools/build_cell_kit.py`, which models and bake
 nothing in Blender. Rebuild, never hand-edit; `scripts/holding_cell.gd` reads its pieces by
 name. See note 177 and `tools/README.md`.
 
+`models/scoutpost_kit.glb` (the scoutposts' balcony: deck bays, posts, railing, stair) is
+a build artifact from `tools/build_scoutpost_kit.py`, which models and bakes it in Blender
+(reusing build_cell_kit.py's helpers). Rebuild, never hand-edit; `scripts/scoutpost.gd`
+reads its pieces by name and its measures (`BAY`, `FRONT`, `STAIR_RUN`) must match. See note 181.
+
 `models/kit/module_*.glb` are build artifacts from `tools/build_modules.py`,
 cut from the raw `models/kit/mod_*.glb` Tripo returned. Never hand-edit them;
 rebuild and re-run `tools/verify_modules.py`.
@@ -331,7 +336,7 @@ and scouts (a lone scout is `scout_share` of the encounters, note 127).
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
   (`zone_gate.gd`), respawn beacons (`respawn_anchor.gd`, inside the holding cells on the brick kit, note 154), holding cells (`holding_cell.gd`, jail cells in dead ends with 2 or 3 caged proels of different types and a beacon, opened with E, the starting cell one too; notes 153, 154), hiding spots
-  (`hiding_spot.gd`), the beacon halls (`hall_room.gd`, note 180: 6 enclosed halls dressed as the user's photo, shut when you walk in until you wind the wheel, the beacons in them), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd` + `surgeon_boss.gd`, notes 94-105; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
+  (`hiding_spot.gd`), the scoutposts (`scoutpost.gd`, notes 180, 181: 6 enclosed halls dressed as the user's photo, shut when you walk in until you wind the wheel, the beacons, 3 scouts, loot and a balcony up a stair in each), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd` + `surgeon_boss.gd`, notes 94-105; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
 
@@ -614,7 +619,8 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 178 | 2026-11-11 | Roots burst out of the masonry mid-wall (`burst_strands`, a shattered-brick decal), twice as many roots and living tips, hanging roots sway; beetles crawling walls and floors in nests, scattering (`vermin.gd`); 60 rats; the morgue's burial walls in the ossuary | [docs/notes/178-roots-out-of-the-masonry-beetles-burial-walls.md](docs/notes/178-roots-out-of-the-masonry-beetles-burial-walls.md) |
 | 177 | 2026-11-11 | The holding cells and the starting cell remodelled after the user's photo, in Blender with baked PBR (`tools/build_cell_kit.py` -> `models/cell_kit.glb`, one atlas: albedo and normal 4096, ORM 2048): square rusted bars with a big bronze gear lock, a caged iron lantern on its chain from the vault (the cell's one light, the torch scene inside it), a heavy chain to a ring and a pair of manacles, a solid stone bench with frayed burlap, a stone shelf with a bowl and a cup, a drain, straw; no door at the back; 80.0 -> 79.8 fps (interleaved, noise) | [docs/notes/177-holding-cells-remodelled.md](docs/notes/177-holding-cells-remodelled.md) |
 | 179 | 2026-11-11 | Beacon rooms (`wheel_room.gd`): 10 dead ends dressed as the cell photo with its bronze gear door as a winch on the back wall; walk in and the raised gate crashes down, hold E on the wheel 3.2 s to wind it up (let go and it sinks, a hit breaks the grip); the beacons stand there (and in the start cell), none in the holding cells, which are 8 (was 24) | [docs/notes/179-beacon-rooms-wheel-lock.md](docs/notes/179-beacon-rooms-wheel-lock.md) |
-| 180 | 2026-11-11 | Beacon halls (`hall_room.gd`): 6 more rooms carved as enclosed vaulted halls dressed as the user's photo (slim piers, a root wall, roots across the floor, timber galleries, caged lanterns, banners, hooks, a fire basket, a cart, grates); every barred way in drops when you walk in, hold E on the bronze winch to wind them up; the beacons there; the dead-end beacon rooms of 179 retired; every layout changed | [docs/notes/180-beacon-halls.md](docs/notes/180-beacon-halls.md) |
+| 180 | 2026-11-11 | Beacon halls (`hall_room.gd`, now `scoutpost.gd`): 6 more rooms carved as enclosed vaulted halls dressed as the user's photo (slim piers, a root wall, roots across the floor, timber galleries, caged lanterns, banners, hooks, a fire basket, a cart, grates); every barred way in drops when you walk in, hold E on the bronze winch to wind them up; the beacons there; the dead-end beacon rooms of 179 retired; every layout changed | [docs/notes/180-beacon-halls.md](docs/notes/180-beacon-halls.md) |
+| 181 | 2026-11-11 | Scoutposts (the halls renamed, `scoutpost.gd`): 3 scouts in each keeping to it (no patrol), loot lying about (a health potion and coins up on the balcony, small potions, coins, a gold crystal, saved once taken), a walkable balcony up a stair modelled and baked in Blender (`tools/build_scoutpost_kit.py` -> `models/scoutpost_kit.glb`) | [docs/notes/181-scoutposts.md](docs/notes/181-scoutposts.md) |
 
 ## Notes by source file
 
@@ -662,9 +668,9 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hand_torch.gd`: 24, 29 (deleted in 157)
 - `scripts/held_potion.gd`: 6.19, 130, 168
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
-- `scripts/holding_cell.gd`: 153, 154, 177, 179, 180
-- `scripts/wheel_room.gd`: 179, 180
-- `scripts/hall_room.gd`: 180
+- `scripts/holding_cell.gd`: 153, 154, 177, 179, 180, 181
+- `scripts/wheel_room.gd`: 179, 180, 181
+- `scripts/scoutpost.gd` (was `hall_room.gd`): 180, 181
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
 - `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167, 172
@@ -676,11 +682,11 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/jail_cell.gd`: 12, 153, 154, 177
 - `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179, 180
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179, 180, 181
 - `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178, 180
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154, 180
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154, 180, 181
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
@@ -756,7 +762,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `shaders/water_drip.gdshader`: 39, 121
 - `tools/anim_proel_builder.py`, `tools/build_proel_builder.py`: 149, 150, 151
 - `tools/anim_sword_skeleton.py`, `tools/build_sword_skeleton.py`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 167
-- `tools/benchmark.gd`: 6.11, 33, 112, 155, 159, 176, 180
+- `tools/benchmark.gd`: 6.11, 33, 112, 155, 159, 176, 180, 181
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66
@@ -774,7 +780,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_surgeon.py`: 99
 - `tools/build_vines.py`: 6.18
 - `tools/build_weapons.py`, `scenes/player.tscn`: 163
-- `tools/build_cell_kit.py`, `models/cell_kit.glb`: 177
+- `tools/build_cell_kit.py`, `models/cell_kit.glb`: 177, 181
+- `tools/build_scoutpost_kit.py`, `models/scoutpost_kit.glb`: 181
 - `tools/build_wood_texture.py`: 6.19
 - `tools/grade_texture.py`: 6.05
 - `tools/preview_module_level.gd`: 6.11, 6.14

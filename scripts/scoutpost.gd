@@ -1,31 +1,35 @@
 extends Node3D
 
-## A beacon hall (note 180): one of `maze.gd` `module_hall_rooms` rooms of the maze
-## (module_level `_make_beacon_halls`), enclosed and vaulted like the morgue and
-## dressed after the user's photo of a great root-choked hall:
-## - brick piers where the vaults meet and pilasters along the walls (the
-##   morgue's, `_build_piers`), torches on the pilasters and caged lanterns
-##   hanging on their chains over the nave;
+## A scoutpost (notes 180, 181; the user named them): one of maze.gd
+## `module_scoutpost_rooms` rooms of the maze (module_level `_make_scoutposts`),
+## enclosed and vaulted like the morgue and dressed after the user's photo of a
+## great root-choked hall:
+## - brick piers where the vaults meet (slim inside) and pilasters along the
+##   walls, torches on the pilasters and caged lanterns hanging over the nave;
 ## - one wall buried in roots (gold-veined, some tips alive), roots crawling out
 ##   from its foot across the floor, roots over the archways, fewer on the rest;
-## - timber galleries along the closed walls, posts and knee braces, a railing
-##   with rags and banners hung over it, a ladder, crates and barrels up on them
-##   and under them, a table with a lantern and candles and a stool;
+## - timber balconies along the closed walls up a stair, posts and knee braces,
+##   a railing with rags and banners hung over it -- the user's "little balcony
+##   in them, with stairs", modelled and baked in Blender
+##   (tools/build_scoutpost_kit.py, models/scoutpost_kit.glb) -- crates and
+##   barrels under them, a table with a lantern and candles and a stool;
 ## - red banners, chains with big hooks from the vaults, a fire basket, a cart, a
-##   pile of crates and barrels, floor grates, fallen blocks, candles, the dead.
-## The first hall (`identical`, the one nearest the start) is laid out as the
-## photo, seen from its way in: the roots and a gallery on the left wall,
-## another gallery along the back, the fire basket front right, the cart behind
-## it, the crates and barrels front left, the grates down the nave. The others
-## are the same pieces dealt out again.
+##   pile of crates and barrels, floor grates, fallen blocks, candles, the dead;
+## - loot lying about (`_scatter_loot`), several scouts (maze.gd
+##   `_spawn_scoutpost_scouts`).
+## The first (`identical`, the one nearest the start) is laid out as the photo,
+## seen from its way in: the roots and a balcony on the left wall, another along
+## the back, the fire basket front right, the cart behind it, the crates and
+## barrels front left, the grates down the nave. The others are the same pieces
+## dealt out again.
 ##
 ## Its archways are the dungeon doors: the cell kit's barred gate in each, hung
 ## raised. Walk in and every gate crashes down; hold E on the bronze winch's
 ## gear wheel (wheel_room.gd's, `make_winch`) and they wind up together; let go
 ## and they sink back, a hit breaks the grip. Wound up they stay up until
-## everyone has left; with nobody alive inside a shut hall opens itself again.
-## The hall's beacon (maze.gd `_add_beacon`) stands in the middle, so rising there
-## shuts you in too. Nothing about it is saved.
+## everyone has left; with nobody alive inside a shut one opens itself again.
+## Its beacon (maze.gd `_add_beacon`) stands in the middle, so rising there
+## shuts you in too. Only the loot taken is saved.
 ##
 ## Frame: origin the middle of the block on the floor, +Z towards its first way in.
 
@@ -66,6 +70,17 @@ const DECK_Y := 2.15
 const DECK_DEPTH := 1.75
 const DECK_HALF := 10.4
 const RAIL_Y := 1.0
+## The kit's measures (tools/build_scoutpost_kit.py): a deck bay's length, the
+## post line out from the wall, the stair's run and width, and how far out of
+## the wall it stands (clear of the pilasters).
+const BAY := 3.0
+const FRONT := 1.65
+const STAIR_RUN := 3.4
+const STAIR_W := 1.1
+const STAIR_Z := 0.3
+## A stair's foot keeps this far along from the hall's middle where a way in is
+## in the corner beyond it.
+const STAIR_CLEAR := 10.3
 const DRAWN_TO := 60.0
 const LAYERS := 256 | 512
 
@@ -101,13 +116,22 @@ var _holder: Node3D
 var _holder_health := 0.0
 var _lanterns: Array[Node3D] = []
 var counts := {}
+## Corner cells the stairs stand in: no props there.
+var _stair_cells := {}
+## For tests: per stair {foot, top, far} (hall frame).
+var _stairs: Array = []
+var _loot_spots: Array[Vector3] = []
+var _table_spot := Vector3.INF
+## The loot lying here (item_drop.gd) and which of it has been taken, by index.
+var loot: Array = []
+var loot_taken: Array = []
 
 
 static func build(parent: Node3D, level, room_: Dictionary, owner_maze: Node, ruin_dressing: Node,
 		torch_energy: float, first: bool) -> Node3D:
 	var hall := Node3D.new()
-	hall.set_script(load("res://scripts/hall_room.gd"))
-	hall.name = "BeaconHall%d_%d" % [room_["centre"].x, room_["centre"].y]
+	hall.set_script(load("res://scripts/scoutpost.gd"))
+	hall.name = "Scoutpost%d_%d" % [room_["centre"].x, room_["centre"].y]
 	hall.set("built", level)
 	hall.set("room", room_)
 	hall.set("maze", owner_maze)
@@ -204,8 +228,9 @@ func _build(torch_energy: float) -> void:
 			_gallery(w)
 	_dress()
 	_commit_wood()
+	_scatter_loot()
 	_draw_to(self)
-	print("[halls] hall at %v%s: %d ways in, %d galleries, winch %s; %s" % [room["centre"],
+	print("[scoutposts] scoutpost at %v%s: %d ways in, %d balconies, winch %s; %s" % [room["centre"],
 		" (the photo's)" if identical else "", _gates.size(), galleries,
 		"on the %s wall" % ["left", "right", "back", "front"][winch_wall] if winch_wall >= 0 else "NONE",
 		", ".join(counts.keys().map(func(k): return "%s %d" % [k, counts[k]]))])
@@ -615,107 +640,133 @@ func _commit_wood() -> void:
 		ruins._casters.append(mi)
 
 
-## A timber gallery along wall `w`: posts at the front with knee braces, a
-## plank deck on joists, a railing, a ladder at one end; crates, barrels and
-## rags up on it.
+## The balcony's pieces (note 181): models/scoutpost_kit.glb, modelled and baked
+## in Blender by tools/build_scoutpost_kit.py, read once by name.
+const KIT := "res://models/scoutpost_kit.glb"
+static var _kit_meshes := {}
+
+
+static func kit_mesh(piece: String) -> Mesh:
+	if _kit_meshes.is_empty():
+		var scene := load(KIT) as PackedScene
+		if scene != null:
+			var root := scene.instantiate()
+			for found in root.find_children("*", "MeshInstance3D", true, false):
+				_kit_meshes[String(found.name)] = (found as MeshInstance3D).mesh
+			root.free()
+	return _kit_meshes.get(piece)
+
+
+func _kit(piece: String, xf: Transform3D) -> MeshInstance3D:
+	var mesh := kit_mesh(piece)
+	if mesh == null:
+		return null
+	var mi := MeshInstance3D.new()
+	mi.name = piece.capitalize().replace(" ", "")
+	mi.mesh = mesh
+	mi.transform = xf
+	add_child(mi)
+	if ruins != null:
+		ruins._casters.append(mi)
+	return mi
+
+
+## The photo's balcony along wall `w` (note 181): deck bays end to end on posts
+## with knee braces, a railing along the front and across the far end, and a
+## stair up to it against the wall beyond the near end -- all solid, so it is
+## walked. Rags and banners over the rail; loot up on it (`_scatter_loot`).
 func _gallery(w: Dictionary) -> void:
 	var d: Vector3 = w["d"]
 	var a: Vector3 = w["a"]
-	# The gallery's own frame: x along the wall, z out of it into the hall.
+	# The balcony's own frame: x along the wall, z out of it into the hall.
 	var g := Transform3D(Basis(a, Vector3.UP, -d), d * _wall)
-	# Short of a corner whose other wall has a way in: its posts would stand in
-	# the path of anyone coming through it.
-	var lo := -DECK_HALF
-	var hi := DECK_HALF
 	var cells: Array = w["cells"]
-	if built.cells[cells[0]["key"]].open & _side(-a):
-		lo = -DECK_HALF + 3.0
-	if built.cells[cells[cells.size() - 1]["key"]].open & _side(a):
-		hi = DECK_HALF - 3.0
-	var half := (hi - lo) * 0.5
-	g = g * Transform3D(Basis(), Vector3((hi + lo) * 0.5, 0.0, 0.0))
-	var front := DECK_DEPTH - 0.1
-	var posts := 7
-	for i in posts:
-		var x := lerpf(-half, half, float(i) / float(posts - 1))
-		var top := DECK_Y + RAIL_Y + 0.08
-		_timber(g * Transform3D(Basis(), Vector3(x, top * 0.5, front)), Vector3(0.22, top, 0.22))
-		_solid_box(g * Transform3D(Basis(), Vector3(x, 1.0, front)), Vector3(0.26, 2.0, 0.26))
-		# Knee braces up to the front beam, both ways but at the ends.
-		for s: float in [-1.0, 1.0]:
-			if (i == 0 and s < 0.0) or (i == posts - 1 and s > 0.0):
-				continue
-			_strut(g * Vector3(x + s * 0.1, DECK_Y - 1.0, front), g * Vector3(x + s * 0.85, DECK_Y - 0.2, front), 0.13)
-	# The front beam, the ledger on the wall and the joists between.
-	var beam_y := DECK_Y - 0.07 - 0.12
-	_timber(g * Transform3D(Basis(), Vector3(0.0, beam_y, front)), Vector3(half * 2.0 + 0.3, 0.24, 0.24))
-	_timber(g * Transform3D(Basis(), Vector3(0.0, beam_y, PILASTER_PROUD + 0.08)), Vector3(half * 2.0, 0.2, 0.16))
-	var joists := int(half * 2.0 / 1.15)
-	for i in joists + 1:
-		var x := lerpf(-half, half, float(i) / float(joists))
-		_timber(g * Transform3D(Basis(), Vector3(x, beam_y + 0.02, (front + PILASTER_PROUD) * 0.5)),
-			Vector3(0.12, 0.17, front - PILASTER_PROUD))
-	# The deck, its planks a hair apart.
-	var planks := 6
-	var plank_w := (DECK_DEPTH - 0.05) / float(planks)
-	for i in planks:
-		var z := 0.05 + plank_w * (float(i) + 0.5)
-		_timber(g * Transform3D(Basis(Vector3.RIGHT, _rng.randf_range(-0.01, 0.01)), Vector3(_rng.randf_range(-0.05, 0.05),
-			DECK_Y - 0.035, z)), Vector3(half * 2.0 + _rng.randf_range(-0.2, 0.2), 0.06, plank_w - 0.025))
-	_solid_box(g * Transform3D(Basis(), Vector3(0.0, DECK_Y - 0.06, DECK_DEPTH * 0.5)), Vector3(half * 2.0, 0.12, DECK_DEPTH))
-	# The railing: top and middle rails, balusters between the posts.
-	for y: float in [RAIL_Y, RAIL_Y * 0.5]:
-		_timber(g * Transform3D(Basis(), Vector3(0.0, DECK_Y + y, front)), Vector3(half * 2.0, 0.1 if y == RAIL_Y else 0.07, 0.1))
-	var span := half * 2.0 / float(posts - 1)
-	for i in posts - 1:
-		var x0 := -half + span * float(i)
-		for j in 3:
-			var x := x0 + span * (float(j) + 1.0) / 4.0
-			_timber(g * Transform3D(Basis(), Vector3(x, DECK_Y + RAIL_Y * 0.5, front)), Vector3(0.06, RAIL_Y, 0.06))
-	# A ladder up at one end.
-	var lx := (half - 1.6) * (1.0 if _rng.randf() < 0.5 else -1.0)
-	var foot_z := front + 1.05
-	var top_z := front + 0.05
-	var top_y := DECK_Y + 0.55
-	for s: float in [-0.24, 0.24]:
-		_strut(g * Vector3(lx + s, 0.0, foot_z), g * Vector3(lx + s, top_y, top_z), 0.075)
-	var rungs := int(top_y / 0.3)
-	for i in range(1, rungs):
-		var t := float(i) / float(rungs)
-		_timber(g * Transform3D(Basis(), Vector3(lx, top_y * t, lerpf(foot_z, top_z, t))), Vector3(0.48, 0.045, 0.045))
-	_solid_box(g * Transform3D(Basis(Vector3.RIGHT, -atan2(foot_z - top_z, top_y)), Vector3(lx, top_y * 0.5, (foot_z + top_z) * 0.5)),
-		Vector3(0.62, top_y + 0.3, 0.14))
-	_count("galleries")
+	var open_lo: bool = (built.cells[cells[0]["key"]].open & _side(-a)) != 0
+	var open_hi: bool = (built.cells[cells[cells.size() - 1]["key"]].open & _side(a)) != 0
+	# A corner whose other wall has a way in: the deck stops short of it, its
+	# posts out of the path of anyone coming through.
+	var lo := -DECK_HALF + (3.0 if open_lo else 0.0)
+	var hi := DECK_HALF - (3.0 if open_hi else 0.0)
+	# The stair against the wall past one end: one with no way in by it if
+	# there is one; else the deck shortens so the stair's foot stays clear.
+	var up := 1.0
+	if open_hi and not open_lo:
+		up = -1.0
+	elif not open_hi and not open_lo and _rng.randf() < 0.5:
+		up = -1.0
+	if (up > 0.0 and open_hi) or (up < 0.0 and open_lo):
+		if up > 0.0:
+			hi = minf(hi, STAIR_CLEAR - STAIR_RUN)
+		else:
+			lo = maxf(lo, -STAIR_CLEAR + STAIR_RUN)
+	var n := maxi(roundi((hi - lo) / BAY), 1)
+	var sx := (hi - lo) / (float(n) * BAY)
+	var stretch := Basis.from_scale(Vector3(sx, 1.0, 1.0))
+	for i in n:
+		var x := lo + (float(i) + 0.5) * BAY * sx
+		_kit("deck_bay", g * Transform3D(stretch, Vector3(x, DECK_Y, 0.0)))
+		_kit("rail_bay", g * Transform3D(stretch, Vector3(x, DECK_Y, FRONT)))
+	for i in n + 1:
+		var x := lo + float(i) * BAY * sx
+		var piece := "post"
+		var b := Basis()
+		if i == 0:
+			piece = "post_end"
+		elif i == n:
+			piece = "post_end"
+			b = Basis.from_scale(Vector3(-1.0, 1.0, 1.0))
+		_kit(piece, g * Transform3D(b, Vector3(x, 0.0, FRONT)))
+		_solid_box(g * Transform3D(Basis(), Vector3(x, 1.0, FRONT)), Vector3(0.26, 2.0, 0.26))
+	# The deck, solid; the railing along the front and across the far end.
+	var mid := (hi + lo) * 0.5
+	var span_len := hi - lo
+	_solid_box(g * Transform3D(Basis(), Vector3(mid, DECK_Y - 0.06, DECK_DEPTH * 0.5)), Vector3(span_len, 0.12, DECK_DEPTH))
+	_solid_box(g * Transform3D(Basis(), Vector3(mid, DECK_Y + 0.55, FRONT)), Vector3(span_len, 1.1, 0.12))
+	var far := lo if up > 0.0 else hi
+	var near := hi if up > 0.0 else lo
+	_kit("rail_bay", g * Transform3D(Basis(Vector3.UP, PI * 0.5) * Basis.from_scale(Vector3(FRONT / BAY, 1.0, 1.0)),
+		Vector3(far, DECK_Y, FRONT * 0.5)))
+	_solid_box(g * Transform3D(Basis(), Vector3(far, DECK_Y + 0.55, FRONT * 0.5)), Vector3(0.12, 1.1, FRONT))
+	# The stair, rising to the near end, and its ramp: a wedge under the treads.
+	var foot := near + up * STAIR_RUN
+	# No props where it stands (`_dress`, `_blocks`).
+	for c in cells:
+		var along: float = c["along"]
+		if along + 3.0 > minf(foot, near) and along - 3.0 < maxf(foot, near):
+			_stair_cells[c["key"]] = true
+	_kit("stair", g * Transform3D(Basis.from_scale(Vector3(up, 1.0, 1.0)), Vector3(foot, 0.0, STAIR_Z)))
+	var wedge := ConvexPolygonShape3D.new()
+	var z0 := STAIR_Z
+	var z1 := STAIR_Z + STAIR_W
+	wedge.points = PackedVector3Array([
+		Vector3(foot, 0.0, z0), Vector3(foot, 0.0, z1), Vector3(near, 0.0, z0), Vector3(near, 0.0, z1),
+		Vector3(near, DECK_Y, z0), Vector3(near, DECK_Y, z1)])
+	var ramp := CollisionShape3D.new()
+	ramp.name = "Stair"
+	ramp.shape = wedge
+	ramp.transform = g
+	_body.add_child(ramp)
+	_stairs.append({"foot": g * Vector3(foot - up * 0.6, 0.0, (z0 + z1) * 0.5),
+		"top": g * Vector3(near - up * 1.2, DECK_Y, 0.9), "far": g * Vector3(far + up * 1.0, DECK_Y, 0.9)})
+	_count("balconies")
+	# Spots up on the deck for the loot, clear of the stair's head.
+	for i in 3:
+		var x := lerpf(near - up * 2.0, far + up * 1.0, (float(i) + 0.5) / 3.0)
+		_loot_spots.append(g * Vector3(x, DECK_Y + 0.25, 0.7))
 	if ruins == null:
 		return
-	# Up on the deck: crates and barrels, rags and banners over the rail.
-	var deck := 0
-	for i in range(-3, 4):
-		if _rng.randf() > 0.55:
-			continue
-		var x := float(i) * (half - 0.9) / 3.0 + _rng.randf_range(-0.5, 0.5)
-		if absf(x - lx) < 1.0:
-			continue
-		var roll := _rng.randf()
-		var at := g * Vector3(x, DECK_Y, _rng.randf_range(0.6, 0.95))
-		var turn := Basis(Vector3.UP, atan2(-d.x, -d.z) + _rng.randf_range(-0.3, 0.3))
-		if roll < 0.6:
-			var kind := _rng.randi_range(0, Crate.SIZES.size() - 1)
-			var c := Crate.make(kind, Transform3D(turn, to_global(at)), hash(at))
-			ruins.add_child(c)
-			if _rng.randf() < 0.4 and kind != 3:
-				var top := Crate.make(3, Transform3D(turn * Basis(Vector3.UP, 0.4),
-					to_global(at) + Vector3(0.0, (Crate.SIZES[kind] as Vector3).y + 0.026, 0.0)), hash(at) + 1)
-				top.set("resting_on", c)
-				ruins.add_child(top)
-		else:
-			ruins._piece("barrels", Transform3D(global_basis * turn, to_global(at)), 0.5)
-		deck += 1
-	for i in range(-3, 3):
+	# A crate against the wall at the far end.
+	var c := Crate.make(_rng.randi_range(0, Crate.SIZES.size() - 1),
+		global_transform * g * Transform3D(Basis(Vector3.UP, _rng.randf_range(-0.2, 0.2)), Vector3(far + up * 0.6, DECK_Y, 0.55)),
+		hash(room["centre"]) + _stairs.size())
+	ruins.add_child(c)
+	# Rags and banners over the rail.
+	var span := span_len / float(n)
+	for i in n:
 		if _rng.randf() > 0.6:
 			continue
-		var x := (float(i) + 0.5) * span + _rng.randf_range(-0.6, 0.6)
-		var xf := global_transform * g * Transform3D(Basis(), Vector3(x, DECK_Y + RAIL_Y + 0.05, front + 0.07))
+		var x := lo + (float(i) + 0.5) * span + _rng.randf_range(-0.6, 0.6)
+		var xf := global_transform * g * Transform3D(Basis(), Vector3(x, DECK_Y + RAIL_Y + 0.05, FRONT + 0.07))
 		if _rng.randf() < 0.3:
 			ruins.hang_cloth(xf, _rng.randf_range(0.8, 1.0), _rng.randf_range(1.6, 2.1),
 				[Color(0.3, 0.035, 0.03), Color(0.24, 0.03, 0.035)][_rng.randi_range(0, 1)])
@@ -723,7 +774,6 @@ func _gallery(w: Dictionary) -> void:
 			ruins.hang_cloth(xf, _rng.randf_range(0.5, 0.9), _rng.randf_range(0.8, 1.5),
 				Color(0.3, 0.27, 0.21) * _rng.randf_range(0.8, 1.15), true)
 		_count("rags")
-	_count("deck props", deck)
 
 
 ## A plank table and a stool against wall (`key`, `side`) at `x`, a lantern and
@@ -747,6 +797,7 @@ func _table(key: Vector2i, side: int, x: float) -> void:
 	lantern.name = "TableLantern"
 	ruins._candles(global_transform * w * Transform3D(Basis(), mid + Vector3(0.2, top, 0.05)), _rng.randi_range(3, 5), true)
 	_count("tables")
+	_table_spot = w * (mid + Vector3(0.35, top + 0.15, -0.1))
 
 
 # --- Dressing ------------------------------------------------------------------------------
@@ -781,7 +832,7 @@ func _dress() -> void:
 				ruins._hanging_roots(key, built.cells[key], _rng.randi_range(5, 10), strands)
 			elif not is_winch and _rng.randf() < 0.55:
 				ruins._wall_roots(key, side, _rng.randi_range(4, 9), 1 if _rng.randf() < 0.35 else 0, strands, live)
-			if is_winch:
+			if is_winch or _stair_cells.has(key):
 				continue
 			if w["gallery"]:
 				# Under the deck: a table in the photo's place, stores elsewhere.
@@ -913,7 +964,7 @@ func _blocks() -> void:
 		# Never in a way in or before the winch.
 		var k: int = clampi(roundi(off / _cell), -2, 2) + ((w["cells"].size() - 1) >> 1)
 		var c: Dictionary = w["cells"][k]
-		if c["entrance"] or int(w["winch"]) == k:
+		if c["entrance"] or int(w["winch"]) == k or _stair_cells.has(c["key"]):
 			continue
 		var base := d * (_wall - PILASTER_PROUD - 0.6) + a * off
 		for i in _rng.randi_range(2, 4):
@@ -934,6 +985,73 @@ func _blocks() -> void:
 	mi.material_override = Morgue._mat(&"core")
 	add_child(mi)
 	_count("fallen blocks", n)
+
+
+## Loot lying about (note 181, the user: "The player should be able to find
+## health potions here scattered around, along with other loot"): a health
+## potion and a pile of coins up on the balconies, small potions, coins and a
+## gold crystal along the walls, now and then a robot rat; on the photo's table a
+## small potion. Laid down as the containment rooms' coins are (item_drop.gd,
+## "lying"); what is taken stays taken in the save (maze.gd "scoutpost_loot").
+const LOOT := [[&"health_potion", 1], [&"coins", 0], [&"small_health_potion", 1],
+	[&"small_health_potion", 1], [&"coins", 0], [&"coins", 0], [&"gold_crystal", 1]]
+
+
+func _scatter_loot() -> void:
+	var ground: Array[Vector3] = []
+	for w in _walls:
+		var d: Vector3 = w["d"]
+		var a: Vector3 = w["a"]
+		for i in w["cells"].size():
+			var c: Dictionary = w["cells"][i]
+			if c["corner"] or c["entrance"] or int(w["winch"]) == i or _stair_cells.has(c["key"]):
+				continue
+			ground.append(d * (_ring - 1.0) + a * (float(c["along"]) + _rng.randf_range(-1.0, 1.0)) + Vector3(0.0, 0.25, 0.0))
+	_shuffle(ground)
+	var high := _loot_spots.duplicate()
+	_shuffle(high)
+	var items: Array = LOOT.duplicate()
+	if _rng.randf() < 0.25:
+		items.append([&"robot_rat", 1])
+	var drops = load("res://scripts/item_drop.gd")
+	for i in items.size():
+		var at := Vector3.INF
+		# The first two -- the potion and a pile of coins -- up on a balcony.
+		if i < 2 and not high.is_empty():
+			at = high.pop_back()
+		elif i == 2 and _table_spot != Vector3.INF:
+			at = _table_spot
+		elif not ground.is_empty():
+			at = ground.pop_back()
+		if at == Vector3.INF:
+			continue
+		var drop := Node3D.new()
+		drop.set_script(drops)
+		drop.set("id", items[i][0])
+		drop.set("count", _rng.randi_range(4, 12) if int(items[i][1]) == 0 else int(items[i][1]))
+		drop.set_meta("lying", true)
+		drop.name = "Loot%d" % i
+		add_child(drop)
+		drop.position = at
+		drop.tree_exiting.connect(_on_loot_gone.bind(i, drop))
+		loot.append(drop)
+		_count("loot")
+
+
+## Picked up (it is freed when it reaches the player), not the level going away.
+func _on_loot_gone(i: int, drop: Node) -> void:
+	if drop.is_queued_for_deletion() and not loot_taken.has(i):
+		loot_taken.append(i)
+
+
+## From a save: what was taken is gone again.
+func take_loot(taken: Array) -> void:
+	for t in taken:
+		var i := int(t)
+		if i < loot.size() and is_instance_valid(loot[i]):
+			loot[i].queue_free()
+		if not loot_taken.has(i):
+			loot_taken.append(i)
 
 
 ## Everything here stops drawing past the fog, as the morgue's does.

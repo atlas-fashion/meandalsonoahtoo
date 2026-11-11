@@ -769,3 +769,22 @@ apex 4.74; the origin on the hinge, the left leaf running +X), and
 `scripts/holding_cell.gd` reads the pieces by name. The three extracted maps
 are VRAM compressed in their committed `.import` files (the normal one as a
 normal map); a fresh import leaves them lossless, so check `"vram_texture": true`.
+
+---
+
+# The scoutposts' balcony kit (2026-11-11, Blender, note 181)
+
+```
+blender -b --factory-startup -P tools/build_scoutpost_kit.py                   # model, bake, export
+blender -b --factory-startup -P tools/build_scoutpost_kit.py -- --preview <dir> # also save the maps as PNG
+godot --headless --import --path .
+```
+
+No source: `deck_bay`, `post`, `post_end`, `rail_bay` and `stair` are built in
+Python with build_cell_kit.py's helpers (imported; its `main()` only runs as a
+script) and its iron and stone materials, plus two wood materials whose grain
+follows each timber's axis (a vertex attribute "axis"). One atlas: albedo and
+normal 4096, ORM 2048. `DECK_Y`, `BAY`, `FRONT`, `RUN`, `STAIR_W` must match
+`scripts/scoutpost.gd`, which reads the pieces by name. As with the cell kit, set
+the three maps' `.import` to VRAM compressed (the normal as a normal map) after a
+fresh import.

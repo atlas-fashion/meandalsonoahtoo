@@ -1,5 +1,9 @@
 ## 180. Beacon halls: the photo's root-choked hall, shut in until you wind the wheel (2026-11-11)
 
+**Renamed in note 181**: the halls are the user's Scoutposts, `hall_room.gd` is
+`scoutpost.gd`, `module_hall_rooms` is `module_scoutpost_rooms`; the box-built gallery
+and its ladder were replaced by the Blender balcony and stair.
+
 The user, with a photo of a great hall (massive roots down the left wall, timber
 galleries, stone arches and pillars, barred arched doorways, caged lanterns on
 chains, red banners, chains with big hooks, crates, barrels, a cart, a fire

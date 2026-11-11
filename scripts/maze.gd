@@ -541,12 +541,12 @@ var _full_graph = null
 ## the containment blocks, one per skeleton type. (5 before; the count feeds
 ## the generator, so every seed's layout changed with it.)
 @export var module_chest_rooms := 6
-## The beacon halls (note 180, hall_room.gd): this many more rooms carved, each
+## The scoutposts (notes 180, 181, scoutpost.gd): this many more rooms carved, each
 ## an enclosed hall dressed as the user's photo, its archways barred when the
 ## player walks in until the wheel winds them up, its beacon in the middle.
 ## Asked for on top of the chest rooms, so those keep their places; the corridors
 ## round the new ones changed with them.
-@export var module_hall_rooms := 6
+@export var module_scoutpost_rooms := 6
 ## Scales how many wall torches are hung. Omni light count is a per-pixel cost
 ## on this hardware, which is why it is a knob and not a constant.
 ## 1.1 since 2026-10-10, second pass ("way too dark... more torches, but way
@@ -854,9 +854,9 @@ func _build_module_level() -> void:
 			# becomes the morgue (`_pick_morgue`).
 			# The surgery takes one of the chest rooms (note 97): it adds none, so
 			# the layout is the one the seed gave before the surgery existed.
-			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0) + module_hall_rooms,
-			"halls": module_hall_rooms,
-			"hall_keep": module_chest_rooms + (1 if morgue_enabled else 0),
+			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0) + module_scoutpost_rooms,
+			"scoutposts": module_scoutpost_rooms,
+			"scoutpost_keep": module_chest_rooms + (1 if morgue_enabled else 0),
 			"room_gap": module_room_gap,
 			"room_entrances": module_room_entrances,
 			"morgue": morgue_enabled,
@@ -921,7 +921,7 @@ func _build_module_level() -> void:
 	_place_hiding_spots(holder)
 	_place_clutter(holder)
 	_place_ruins(holder)
-	_place_halls(holder)
+	_place_scoutposts(holder)
 	_place_damp(holder)
 	if not _morgue_room.is_empty():
 		_morgue = load("res://scripts/morgue.gd").build(holder, _module_level, _morgue_room)
@@ -1318,6 +1318,11 @@ func save_state() -> Dictionary:
 		if is_instance_valid(_holding_cells[i]) and _holding_cells[i].get("is_open") == true:
 			opened.append(i)
 	data["cells_open"] = opened
+	# Note 181: the scoutposts' loot taken, per scoutpost.
+	var loot_taken: Array = []
+	for post in _scoutposts:
+		loot_taken.append((post.get("loot_taken") as Array).duplicate() if is_instance_valid(post) else [])
+	data["scoutpost_loot"] = loot_taken
 	var map = _explore_map_node()
 	if map != null:
 		data["map"] = map.snapshot()
@@ -1389,6 +1394,9 @@ func restore_world(data: Dictionary) -> void:
 	# and the beacons claimed are gold. A save from before has neither, and its
 	# anchor numbers name other places: the player starts from the start.
 	var beacons_saved := data.has("beacons")
+	var loot_taken: Array = data.get("scoutpost_loot", [])
+	for i in mini(loot_taken.size(), _scoutposts.size()):
+		_scoutposts[i].call("take_loot", loot_taken[i])
 	for i in data.get("cells_open", []):
 		if int(i) < _holding_cells.size():
 			_holding_cells[int(i)].call("swing_open", true)
@@ -1631,7 +1639,7 @@ func _plain_dead_ends() -> Array[Dictionary]:
 ## take the first places; the holding cells are fewer and hold no beacon.
 @export var holding_cell_count := 8
 ## The dead-end beacon rooms of note 179 (wheel_room.gd); 0 since note 180, the
-## beacons and the wheel lock having gone to the halls (`module_hall_rooms`).
+## beacons and the wheel lock having gone to the scoutposts (`module_scoutpost_rooms`).
 @export var beacon_room_count := 0
 @export var holding_cell_gap := 30.0
 ## Along the main route a cell may stand this near the next.
@@ -2083,60 +2091,73 @@ func _place_ruins(holder: Node3D) -> void:
 	_mark_solid(solid)
 
 
-## --- The beacon halls (note 180) -----------------------------------------------------
+## --- The scoutposts (notes 180, 181) -----------------------------------------------------
 ##
 ## The user, of their photo of a great root-choked hall: "There should be many
 ## rooms like this, one identical to the photo, and the rest similar, throughout
 ## the dungeon. The player should be locked into these rooms until the player can
 ## hold down e to interact with a wheel that lifts the dungeon doors. The beacons
-## should be in here." `module_hall_rooms` rooms (module_level `_make_beacon_halls`)
-## are built by hall_room.gd, the first as the photo; each holds a beacon.
-const HALL_ROOM := preload("res://scripts/hall_room.gd")
-var _halls: Array[Node3D] = []
-var _hall_rooms: Array[Dictionary] = []
+## should be in here." `module_scoutpost_rooms` rooms (module_level `_make_scoutposts`)
+## are built by scoutpost.gd, the first as the photo; each holds a beacon. The
+## user named them Scoutposts (note 181): several scouts in each, loot lying about,
+## a balcony up a stair.
+const SCOUTPOST := preload("res://scripts/scoutpost.gd")
+var _scoutposts: Array[Node3D] = []
+var _scoutpost_rooms: Array[Dictionary] = []
 
 
-func _place_halls(holder: Node3D) -> void:
-	_halls.clear()
-	_hall_rooms.clear()
+func _place_scoutposts(holder: Node3D) -> void:
+	_scoutposts.clear()
+	_scoutpost_rooms.clear()
 	if _module_level == null or not load("res://scripts/module_level.gd").brick:
 		return
 	for room in _module_level.rooms:
-		if room["kind"] == "hall":
-			_hall_rooms.append(room)
+		if room["kind"] == "scoutpost":
+			_scoutpost_rooms.append(room)
 	# The photo's own hall: the one nearest the start, so it is the first found.
 	var start: Vector3 = _module_level.spawn
-	_hall_rooms.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+	_scoutpost_rooms.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return (_module_level.room_world(a) as Vector3).distance_to(start) \
 			< (_module_level.room_world(b) as Vector3).distance_to(start))
 	var parent := Node3D.new()
-	parent.name = "BeaconHalls"
+	parent.name = "Scoutposts"
 	holder.add_child(parent)
-	for i in _hall_rooms.size():
-		var hall := HALL_ROOM.build(parent, _module_level, _hall_rooms[i], self, _ruins,
+	for i in _scoutpost_rooms.size():
+		var hall := SCOUTPOST.build(parent, _module_level, _scoutpost_rooms[i], self, _ruins,
 			module_torch_energy, i == 0)
-		_halls.append(hall)
+		_scoutposts.append(hall)
 		_add_beacon(hall)
 		_mark_solid(hall.get("solid"))
-	print("[halls] %d beacon halls" % _halls.size())
+	print("[scoutposts] %d scoutposts" % _scoutposts.size())
 
 
-## Something to be shut in with: one encounter in each hall nobody is standing
-## in, rolled as the corridors' are (criers and scouts until types are let out),
-## off to one side of the beacon. They wander on from there.
-func _spawn_hall_guards() -> void:
-	for i in _hall_rooms.size():
-		var hall: Node3D = _halls[i]
+## Something to be shut in with: `scoutpost_scouts` scouts in each scoutpost
+## nobody is standing in (note 181).
+@export var scoutpost_scouts := 3
+@export var scoutpost_wander := 9.0
+func _spawn_scoutpost_scouts() -> void:
+	for i in _scoutpost_rooms.size():
+		var hall: Node3D = _scoutposts[i]
 		if not is_instance_valid(hall) or Coop.all().any(func(p) -> bool:
 				return is_instance_valid(p) and hall.call("_inside", p)):
 			continue
-		var at: Vector3 = hall.to_global(Vector3(module_cell * (1.0 if _rng.randf() < 0.5 else -1.0), 0.0, 0.0))
-		_roll_encounter(world_to_tile(at), 3)
+		# Note 181: "There should be a number of scouts in these." Each on its own
+		# about a cell round the beacon, keeping to the hall (no patrol: it walks
+		# its patch, `wander_radius` round where it stood up).
+		var spots: Array = [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]
+		for k in range(spots.size() - 1, 0, -1):
+			var j := _scout_rng.randi_range(0, k)
+			var tmp = spots[k]
+			spots[k] = spots[j]
+			spots[j] = tmp
+		for k in scoutpost_scouts:
+			var at: Vector3 = hall.to_global((spots[k % spots.size()] as Vector3) * module_cell * 0.8)
+			_spawn_post_scout(at)
 
 
 ## True for tiles in any beacon hall's block.
-func is_in_hall(tile: Vector2i) -> bool:
-	for room in _hall_rooms:
+func is_in_scoutpost(tile: Vector2i) -> bool:
+	for room in _scoutpost_rooms:
 		var mid := world_to_tile(_module_level.room_world(room))
 		var half := int(floor((float(room["half"]) + 0.5) * module_cell / tile_size))
 		if absi(tile.x - mid.x) <= half and absi(tile.y - mid.y) <= half:
@@ -4432,7 +4453,7 @@ func _seal_cells() -> void:
 			door.make_solid()
 	for c in _holding_cells:
 		c.call("arm")
-	for h in _halls:
+	for h in _scoutposts:
 		h.call("arm")
 
 
@@ -4825,7 +4846,7 @@ func _populate() -> void:
 	_stock_jail_cells()
 	_stock_holding_cells()
 	_spawn_enemies()
-	_spawn_hall_guards()
+	_spawn_scoutpost_scouts()
 	# The types already let out of containment roam loose too, and the collector
 	# goes after them (note 120).
 	_collectors.clear()
@@ -5520,7 +5541,7 @@ func _spawn_candidates(in_sight_too := false) -> Array[Vector2i]:
 			# corridors hold everything else. (The tile maze's treasure rooms
 			# were small and deliberately guarded, so it keeps its old rule.)
 			if modules and (is_in_treasure_room(tile) or is_in_morgue(tile) or is_in_surgery(tile)
-					or is_in_hall(tile)):
+					or is_in_scoutpost(tile)):
 				continue
 			# Nor beside one: a pack is scattered up to 1.3 m (a tile) round its
 			# tile, and from a doorway that put members inside the room, where the
@@ -5558,7 +5579,7 @@ func _touches_room(tile: Vector2i) -> bool:
 		for dy in range(-1, 2):
 			var t := tile + Vector2i(dx, dy)
 			if is_in_treasure_room(t) or is_in_morgue(t) or is_in_surgery(t) or is_in_boss_room(t) \
-					or is_in_hall(t):
+					or is_in_scoutpost(t):
 				return true
 	return false
 
@@ -6077,3 +6098,19 @@ func _resume_abduction() -> void:
 	var control = _surgery.get("control")
 	if control != null and bool(control.get("claw_kept")):
 		take_to_the_boss(2.5)
+
+
+## A scout of a scoutpost (note 181): as `_spawn_scout`, at `at`, with no patrol,
+## walking its patch of the hall (`scoutpost_wander` round where it stood up).
+func _spawn_post_scout(at: Vector3) -> Node3D:
+	if enemy_scene == null:
+		return null
+	var s: Node3D = enemy_scene.instantiate()
+	s.set_script(SCOUT_SCRIPT)
+	s.position = to_local(at) + Vector3(_scout_rng.randf_range(-0.8, 0.8), 0.3, _scout_rng.randf_range(-0.8, 0.8))
+	s.rotation.y = _scout_rng.randf() * TAU
+	add_child(s)
+	s.set("aggro_range", scout_aggro_range)
+	s.set("wander_radius", scoutpost_wander)
+	_spawned.append(s)
+	return s

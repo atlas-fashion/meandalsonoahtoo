@@ -1169,4 +1169,5 @@ def main():
     log("wrote", OUT, os.path.getsize(OUT))
 
 
-main()
+if __name__ == "__main__":
+    main()

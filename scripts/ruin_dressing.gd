@@ -1351,7 +1351,7 @@ func _banner(key: Vector2i, side: int, x: float) -> void:
 
 
 ## A cloth hanging from `xf` (its top edge's middle, +Z its face): a banner, or
-## with `plain` a rag with no border or device (the beacon halls' galleries).
+## with `plain` a rag with no border or device (the scoutposts' balconies).
 func hang_cloth(xf: Transform3D, width: float, length: float, colour: Color, plain := false) -> MeshInstance3D:
 	if _banner_mat == null:
 		_banner_mat = ShaderMaterial.new()
@@ -1604,9 +1604,9 @@ func _rubble(key: Vector2i, walls: Array[int], core: float) -> void:
 var _stone_mat: StandardMaterial3D = null
 
 
-# --- The beacon halls (note 180) ----------------------------------------------------
+# --- The scoutposts (notes 180, 181) ----------------------------------------------------
 ##
-## hall_room.gd dresses its hall with these pieces, so the halls are the same
+## scoutpost.gd dresses its hall with these pieces, so the scoutposts are the same
 ## stone, roots, wood and iron as the districts round them. It brackets its
 ## work in `hall_begin` / `hall_end`.
 
