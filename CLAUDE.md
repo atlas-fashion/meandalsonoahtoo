@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 176), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 177), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -279,6 +279,11 @@ second after the first. See note 149 and `tools/README.md`.
 `tools/build_player_knight_arms.py`, which reads `models/player_knight.glb`: run it
 after `build_player_knight.py`. Rebuild, never hand-edit; its printed grip point is
 `first_person_arms.gd` `GRIP`. See note 156.
+
+`models/cell_kit.glb` (the holding cells' gate, lantern, chains, bench, shelf, drain and
+straw) is a build artifact from `tools/build_cell_kit.py`, which models and bakes it from
+nothing in Blender. Rebuild, never hand-edit; `scripts/holding_cell.gd` reads its pieces by
+name. See note 177 and `tools/README.md`.
 
 `models/kit/module_*.glb` are build artifacts from `tools/build_modules.py`,
 cut from the raw `models/kit/mod_*.glb` Tripo returned. Never hand-edit them;
@@ -606,6 +611,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 174 | 2026-11-09 | A sword cut's cooldown is its whole clip: the next LMB stroke waits for the forehand's 0.75 / the backhand's 0.66 pose s (0.94 / 0.83 s real), not the bite's end (`_stroke_end`); an early click is held and begins the tick the cut ends; the HUD tile counts the clip; Q and F still override a cut | [docs/notes/174-sword-cut-cooldown-is-its-clip.md](docs/notes/174-sword-cut-cooldown-is-its-clip.md) |
 | 175 | 2026-11-10 | A queued swipe goes straight on from the last: the next takes over at the stroke's `chain` (forehand 0.50, backhand 0.40 pose s, where its blend home began) and cross-fades in over it (`_from_kind`, `motion_weight`, `body_motion_from`, `_ride_blend`), body, blade and view, never back to the guard between; Q / F over a cut cross-fade too (were a one-frame snap); a held combo 0.625 / 0.50 s a stroke | [docs/notes/175-swipes-chain-without-going-home.md](docs/notes/175-swipes-chain-without-going-home.md) |
 | 176 | 2026-11-10 | The maze in districts (`ruin_dressing.gd`): 13 grown evenly, seven looks (overgrown, storehouse, ossuary, torture quarter, banners, crystal seam, gaol) each twice with a variant, never two touching alike, densest at the heart; roots grown onto the kit's measured surfaces with faint gold veins (`ruin_roots.gd`, `root_bark.gdshader`); living tips that lash for 12 and die to any blow, glow out, wilt (`living_root.gd`); breakable crates bursting into their own planks with dust, a tall hit volume (`breakable_crate.gd`); the surgery's Higgsfield props, the seated dead, candles, banners; `Graphics.ruin_shadows` (Ultra only); 0.4-1.0 ms | [docs/notes/176-ruin-districts-living-roots-breakable-crates.md](docs/notes/176-ruin-districts-living-roots-breakable-crates.md) |
+| 177 | 2026-11-11 | The holding cells and the starting cell remodelled after the user's photo, in Blender with baked PBR (`tools/build_cell_kit.py` -> `models/cell_kit.glb`, one atlas: albedo and normal 4096, ORM 2048): square rusted bars with a big bronze gear lock, a caged iron lantern on its chain from the vault (the cell's one light, the torch scene inside it), a heavy chain to a ring and a pair of manacles, a solid stone bench with frayed burlap, a stone shelf with a bowl and a cup, a drain, straw; no door at the back; 80.0 -> 79.8 fps (interleaved, noise) | [docs/notes/177-holding-cells-remodelled.md](docs/notes/177-holding-cells-remodelled.md) |
 
 ## Notes by source file
 
@@ -653,7 +659,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hand_torch.gd`: 24, 29 (deleted in 157)
 - `scripts/held_potion.gd`: 6.19, 130, 168
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
-- `scripts/holding_cell.gd`: 153, 154
+- `scripts/holding_cell.gd`: 153, 154, 177
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
 - `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167, 172
@@ -662,7 +668,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
 - `scripts/item_icon.gd`: 6.19, 77, 84, 111, 130
 - `scripts/item_slot.gd`: 6.19, 30, 172
-- `scripts/jail_cell.gd`: 12, 153, 154
+- `scripts/jail_cell.gd`: 12, 153, 154, 177
 - `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
 - `scripts/manhole.gd`: 50, 51, 79, 121
 - `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176
@@ -763,6 +769,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_surgeon.py`: 99
 - `tools/build_vines.py`: 6.18
 - `tools/build_weapons.py`, `scenes/player.tscn`: 163
+- `tools/build_cell_kit.py`, `models/cell_kit.glb`: 177
 - `tools/build_wood_texture.py`: 6.19
 - `tools/grade_texture.py`: 6.05
 - `tools/preview_module_level.gd`: 6.11, 6.14

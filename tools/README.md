@@ -742,3 +742,30 @@ fingers half straight). It prints how many vertices each took.
 (`_grip_curl`). There is no separate first-person arms model any more (note
 168): the knight's own arms are seen from its eyes. (`build_player_knight_arms.py`
 and `models/player_knight_arms.glb`, note 156, are gone.)
+
+---
+
+# The holding cells' kit (2026-11-05, Blender, note 177)
+
+```
+blender -b --factory-startup -P tools/build_cell_kit.py                   # model, bake, export
+blender -b --factory-startup -P tools/build_cell_kit.py -- --preview <dir> # also save the maps as PNG
+godot --headless --import --path .
+```
+
+`tools/build_cell_kit.py` needs no source: every piece is built in Python (in
+Godot's frame, turned into Blender's per piece), about 40 s with OptiX. It writes
+`models/cell_kit.glb`: `gate_l`, `gate_r`, `lantern`, `lantern_glass`,
+`lantern_chain`, `wall_chains`, `bench`, `shelf`, `drain`, `straw_tuft`, all on
+one material whose maps are baked into one atlas (albedo and normal 4096, ORM
+2048). The materials are procedural Cycles trees; colour, roughness and metal
+bake as emission (a metal's diffuse bakes black), the normal from each kind's
+bump, the occlusion with a stand-in wall and floor behind each piece. `UV_SHARE`
+gives each piece its share of the atlas against even texel density (the long
+bars took 70% of it at 1.0).
+
+The gate leaves must keep fitting the brick arch (3.28 wide, springing 3.3,
+apex 4.74; the origin on the hinge, the left leaf running +X), and
+`scripts/holding_cell.gd` reads the pieces by name. The three extracted maps
+are VRAM compressed in their committed `.import` files (the normal one as a
+normal map); a fresh import leaves them lossless, so check `"vram_texture": true`.
