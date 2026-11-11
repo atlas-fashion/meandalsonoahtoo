@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 181), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 182), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -336,7 +336,7 @@ and scouts (a lone scout is `scout_share` of the encounters, note 127).
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
   (`zone_gate.gd`), respawn beacons (`respawn_anchor.gd`, inside the holding cells on the brick kit, note 154), holding cells (`holding_cell.gd`, jail cells in dead ends with 2 or 3 caged proels of different types and a beacon, opened with E, the starting cell one too; notes 153, 154), hiding spots
-  (`hiding_spot.gd`), the scoutposts (`scoutpost.gd`, notes 180, 181: 6 enclosed halls dressed as the user's photo, shut when you walk in until you wind the wheel, the beacons, 3 scouts, loot and a balcony up a stair in each), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd` + `surgeon_boss.gd`, notes 94-105; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
+  (`hiding_spot.gd`), the scoutposts (`scoutpost.gd`, notes 180-182: 8 enclosed halls dressed as the user's photo -- the first room the player finds is one -- shut when you walk in until its 3 scouts are dead and you wind the wheel, the beacons, loot, a chest and a balcony up a stair in each), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd` + `surgeon_boss.gd`, notes 94-105; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
 
@@ -621,6 +621,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 179 | 2026-11-11 | Beacon rooms (`wheel_room.gd`): 10 dead ends dressed as the cell photo with its bronze gear door as a winch on the back wall; walk in and the raised gate crashes down, hold E on the wheel 3.2 s to wind it up (let go and it sinks, a hit breaks the grip); the beacons stand there (and in the start cell), none in the holding cells, which are 8 (was 24) | [docs/notes/179-beacon-rooms-wheel-lock.md](docs/notes/179-beacon-rooms-wheel-lock.md) |
 | 180 | 2026-11-11 | Beacon halls (`hall_room.gd`, now `scoutpost.gd`): 6 more rooms carved as enclosed vaulted halls dressed as the user's photo (slim piers, a root wall, roots across the floor, timber galleries, caged lanterns, banners, hooks, a fire basket, a cart, grates); every barred way in drops when you walk in, hold E on the bronze winch to wind them up; the beacons there; the dead-end beacon rooms of 179 retired; every layout changed | [docs/notes/180-beacon-halls.md](docs/notes/180-beacon-halls.md) |
 | 181 | 2026-11-11 | Scoutposts (the halls renamed, `scoutpost.gd`): 3 scouts in each keeping to it (no patrol), loot lying about (a health potion and coins up on the balcony, small potions, coins, a gold crystal, saved once taken), a walkable balcony up a stair modelled and baked in Blender (`tools/build_scoutpost_kit.py` -> `models/scoutpost_kit.glb`) | [docs/notes/181-scoutposts.md](docs/notes/181-scoutposts.md) |
+| 182 | 2026-11-11 | The maze remade: rooms ranked by the walk from the cell (`module_level._assign_room_roles`, `room_walks`), the first a scoutpost, the second the proel swordsmen's prison, 8 scoutposts to 5 prisons; the start beacon gold (`_claim_start_beacon`); scoutposts shut until their scouts are dead, a Tripo chest (`loot_chest.gd`); criers and scouts only until a prison opens, the halls filling with each (`population_share`, `_fill_halls`), enforcer-led groups; corridor props out (`ruin_props`), breakable barrels, fainter dust | [docs/notes/182-the-maze-remade-scoutposts-first.md](docs/notes/182-the-maze-remade-scoutposts-first.md) |
 
 ## Notes by source file
 
@@ -643,7 +644,8 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
 - `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159, 176
-- `scripts/chest.gd`: 18, 79
+- `scripts/chest.gd`: 18, 79, 182
+- `scripts/loot_chest.gd`: 182
 - `scripts/consumable_type.gd`: 130
 - `scripts/coop.gd`: 79, 80, 164
 - `scripts/corner_slip.gd`: 92
@@ -670,7 +672,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/holding_cell.gd`: 153, 154, 177, 179, 180, 181
 - `scripts/wheel_room.gd`: 179, 180, 181
-- `scripts/scoutpost.gd` (was `hall_room.gd`): 180, 181
+- `scripts/scoutpost.gd` (was `hall_room.gd`): 180, 181, 182
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
 - `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167, 172
@@ -682,11 +684,11 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/jail_cell.gd`: 12, 153, 154, 177
 - `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
 - `scripts/manhole.gd`: 50, 51, 79, 121
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179, 180, 181
-- `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178, 180
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179, 180, 181, 182
+- `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178, 180, 182
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154, 180, 181
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154, 180, 181, 182
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80

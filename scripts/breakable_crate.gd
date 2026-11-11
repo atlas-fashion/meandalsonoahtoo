@@ -20,6 +20,11 @@ extends StaticBody3D
 ## at is tested on 2, and a crate stacked above another would hide the one
 ## under it.
 ## Not saved: a level built afresh has its crates whole again.
+##
+## A BARREL too (note 182, the user: the barrels should break like the crates):
+## `barrel`, built the same way from the same planks -- sixteen staves bellied
+## out at the middle, two iron hoops, a head of boards -- and broken the same way,
+## the staves two to a piece, the hoops and the head flying off whole.
 
 const PLANKS := preload("res://textures/surgery_planks.png")
 const FX_DUST := preload("res://textures/surgery_fx_dust.png")
@@ -51,6 +56,10 @@ const COIN_CHANCE := 0.22
 const POTION_CHANCE := 0.06
 
 const SIZES := [Vector3(0.86, 0.8, 0.86), Vector3(0.7, 0.62, 0.7), Vector3(1.12, 0.66, 0.74), Vector3(0.58, 0.52, 0.58)]
+## A barrel's box (its belly's width, its height), and its staves and hoops.
+const BARREL_SIZES := [Vector3(0.66, 0.92, 0.66), Vector3(0.56, 0.78, 0.56)]
+const STAVES := 16
+const IRON := Color(0.24, 0.22, 0.21)
 const TINTS := [Color(1.0, 1.0, 1.0), Color(0.86, 0.8, 0.72), Color(0.7, 0.66, 0.62)]
 
 static var _cache := {}
@@ -60,6 +69,7 @@ static var _all: Array = []
 
 var size := Vector3(0.86, 0.8, 0.86)
 var tint := 0
+var barrel := false
 ## The crate this one is stacked on; it drops when that one breaks.
 var resting_on: Node3D = null
 var _stacked: Array = []
@@ -79,12 +89,24 @@ static func make(kind: int, xf: Transform3D, seed_: int) -> StaticBody3D:
 	return c
 
 
+## A barrel of BARREL_SIZES[`kind`] standing at `xf` (note 182).
+static func make_barrel(kind: int, xf: Transform3D, seed_: int) -> StaticBody3D:
+	var c: StaticBody3D = load("res://scripts/breakable_crate.gd").new()
+	c.name = "Barrel"
+	c.barrel = true
+	c.size = BARREL_SIZES[clampi(kind, 0, BARREL_SIZES.size() - 1)]
+	c.tint = posmod(seed_, TINTS.size())
+	c.transform = xf
+	c.set_meta("seed", seed_)
+	return c
+
+
 func _ready() -> void:
 	collision_layer = LAYERS
 	collision_mask = 0
 	add_to_group("breakable")
 	_rng.seed = int(get_meta("seed", 7))
-	var built := _built(size)
+	var built := _built(size, barrel)
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "Mesh"
 	_mesh.mesh = built["whole"]
@@ -92,8 +114,16 @@ func _ready() -> void:
 	_mesh.visibility_range_end = 55.0
 	_mesh.visibility_range_end_margin = 5.0
 	add_child(_mesh)
-	var shape := BoxShape3D.new()
-	shape.size = size
+	var shape: Shape3D
+	if barrel:
+		var cyl := CylinderShape3D.new()
+		cyl.radius = size.x * 0.5
+		cyl.height = size.y
+		shape = cyl
+	else:
+		var box := BoxShape3D.new()
+		box.size = size
+		shape = box
 	var cs := CollisionShape3D.new()
 	cs.name = "CollisionShape3D"
 	cs.shape = shape
@@ -130,6 +160,8 @@ static func _material(i: int) -> StandardMaterial3D:
 			var m := StandardMaterial3D.new()
 			m.albedo_texture = PLANKS
 			m.albedo_color = t
+			# A barrel's hoops are its boards' vertex colour turned to iron.
+			m.vertex_color_use_as_albedo = true
 			m.roughness = 0.9
 			m.specular_mode = BaseMaterial3D.SPECULAR_SCHLICK_GGX
 			m.metallic_specular = 0.25
@@ -141,18 +173,18 @@ static func _material(i: int) -> StandardMaterial3D:
 # --- Building ----------------------------------------------------------------------
 
 ## {"whole": ArrayMesh, "chunks": [[ArrayMesh, Vector3 centre, Vector3 extent]]}
-static func _built(s: Vector3) -> Dictionary:
-	var key := str(s)
+static func _built(s: Vector3, is_barrel := false) -> Dictionary:
+	var key := str(s) + ("b" if is_barrel else "")
 	if _cache.has(key):
 		return _cache[key]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)
-	var boxes := _layout(s, rng)
+	var boxes := _barrel_layout(s, rng) if is_barrel else _layout(s, rng)
 	var whole := SurfaceTool.new()
 	whole.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var groups := {}
 	for b in boxes:
-		_box(whole, b["xf"], b["size"], b["col"], b["v0"])
+		_box(whole, b["xf"], b["size"], b["col"], b["v0"], b.get("colour", Color.WHITE))
 		var g: int = b["group"]
 		if not groups.has(g):
 			groups[g] = []
@@ -175,7 +207,7 @@ static func _built(s: Vector3) -> Dictionary:
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 		for b in groups[g]:
 			var xf: Transform3D = b["xf"]
-			_box(st, Transform3D(xf.basis, xf.origin - mid), b["size"], b["col"], b["v0"])
+			_box(st, Transform3D(xf.basis, xf.origin - mid), b["size"], b["col"], b["v0"], b.get("colour", Color.WHITE))
 		chunks.append([st.commit(), mid, (hi - lo).max(Vector3.ONE * 0.03)])
 	var out := {"whole": whole.commit(), "chunks": chunks}
 	_cache[key] = out
@@ -245,9 +277,64 @@ static func _layout(s: Vector3, rng: RandomNumberGenerator) -> Array:
 	return boxes
 
 
+## A barrel `s` big (its belly's width, its height), its foot's middle at the
+## origin: STAVES staves, each two boards (foot to belly, belly to head) leaning
+## out to the belly; a hoop of iron near each end; a head of boards let in at the
+## top. Staves two to a chunk (groups 0-7), the hoops 8 and 9, the head 10, 11.
+static func _barrel_layout(s: Vector3, rng: RandomNumberGenerator) -> Array:
+	var boxes: Array = []
+	var thick := 0.024
+	var belly := s.x * 0.5
+	var end_r := belly * 0.82
+	var h := s.y
+	var half := h * 0.5
+	var lean := atan2(belly - end_r, half)
+	var seg := sqrt(half * half + (belly - end_r) * (belly - end_r))
+	var width := TAU * belly / float(STAVES) * 0.97
+	var radius := (belly + end_r) * 0.5 - thick * 0.5
+	for k in STAVES:
+		var a := TAU * float(k) / float(STAVES)
+		var out := Vector3(sin(a), 0.0, cos(a))
+		var along := Vector3(cos(a), 0.0, -sin(a))
+		var frame := Basis(along, Vector3.UP, out)
+		var col := rng.randi_range(0, 6)
+		var v0 := rng.randf()
+		for upper in [0, 1]:
+			var tilt := Basis(Vector3.RIGHT, -lean if upper == 1 else lean)
+			var y := half * (1.5 if upper == 1 else 0.5)
+			boxes.append({"xf": Transform3D(frame * tilt, out * radius + Vector3(0.0, y, 0.0)),
+				"size": Vector3(width, seg + 0.004, thick), "col": col, "v0": v0 + 0.5 * upper,
+				"group": k >> 1})
+	# The hoops: iron bands round the staves a hand in from each end.
+	for hi in [0, 1]:
+		var y := h * (0.13 if hi == 0 else 0.87)
+		var t := absf(y - half) / half
+		var r := lerpf(belly, end_r, t) + 0.006
+		var tilt := Basis(Vector3.RIGHT, lean if hi == 0 else -lean)
+		for k in STAVES:
+			var a := TAU * (float(k) + 0.5) / float(STAVES)
+			var out := Vector3(sin(a), 0.0, cos(a))
+			var along := Vector3(cos(a), 0.0, -sin(a))
+			boxes.append({"xf": Transform3D(Basis(along, Vector3.UP, out) * tilt, out * r + Vector3(0.0, y, 0.0)),
+				"size": Vector3(TAU * r / float(STAVES) * 1.04, 0.045, 0.012), "col": 0, "v0": 0.0,
+				"group": 8 + hi, "colour": IRON})
+	# The head: boards across X let in under the rim.
+	var head_r := end_r - thick
+	var boards := 4
+	var bw := head_r * 2.0 / float(boards)
+	for k in boards:
+		var off := -head_r + bw * (float(k) + 0.5)
+		var chord := 2.0 * sqrt(maxf(head_r * head_r - off * off, 0.0)) + bw * 0.4
+		boxes.append({"xf": Transform3D(Basis(), Vector3(off, h - 0.035, 0.0)),
+			"size": Vector3(bw - 0.006, 0.022, chord), "col": rng.randi_range(0, 6), "v0": rng.randf(),
+			"group": 10 + (0 if k < boards / 2 else 1)})
+	return boxes
+
+
 ## A box `size` big at `xf` (its middle), in `st`: its grain along its longest
-## axis, on plank column `col` of the texture from `v0`.
-static func _box(st: SurfaceTool, xf: Transform3D, size: Vector3, col: int, v0: float) -> void:
+## axis, on plank column `col` of the texture from `v0`, tinted `colour`.
+static func _box(st: SurfaceTool, xf: Transform3D, size: Vector3, col: int, v0: float,
+		colour := Color.WHITE) -> void:
 	var h := size * 0.5
 	var long := 0
 	if size.y >= size.x and size.y >= size.z:
@@ -290,6 +377,7 @@ static func _box(st: SurfaceTool, xf: Transform3D, size: Vector3, col: int, v0: 
 			if (w1 - w0).cross(w2 - w0).dot(wn) > 0.0:
 				order = [0, 2, 1, 0, 3, 2]
 			for k in order:
+				st.set_color(colour)
 				st.set_normal(wn)
 				st.set_uv(uvs[k])
 				st.add_vertex(xf * pts[k])
@@ -324,7 +412,7 @@ func shatter(push := Vector3.ZERO) -> void:
 	var centre := global_transform * Vector3(0.0, size.y * 0.5, 0.0)
 	var flat := Vector3(push.x, 0.0, push.z)
 	flat = flat.normalized() if flat.length_squared() > 0.0001 else Vector3.ZERO
-	for chunk in _built(size)["chunks"]:
+	for chunk in _built(size, barrel)["chunks"]:
 		_throw(parent, chunk, centre, flat)
 	_dust(parent, centre, effects)
 	_splinters(parent, centre, flat, effects)
@@ -400,12 +488,14 @@ static func _lay_down(body, keep) -> void:
 
 ## The puff: the generated dust, billboards rolling out low and rising slowly,
 ## swelling and thinning. Lit, so in the dark it is a shadow of dust, not a glow.
+## Note 182 ("too strong"): a third of the billboards it had, smaller, fainter,
+## shorter-lived and slower to spread (16 at 0.7 alpha, 1.2 m, 2.2 s before).
 func _dust(parent: Node, at: Vector3, effects: bool) -> void:
 	var p := CPUParticles3D.new()
 	p.one_shot = true
 	p.emitting = false
-	p.amount = 16 if effects else 6
-	p.lifetime = 2.2
+	p.amount = 6 if effects else 3
+	p.lifetime = 1.4
 	p.explosiveness = 0.9
 	p.lifetime_randomness = 0.35
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
@@ -413,8 +503,8 @@ func _dust(parent: Node, at: Vector3, effects: bool) -> void:
 	p.direction = Vector3(0.0, 0.35, 0.0)
 	p.spread = 180.0
 	p.flatness = 0.5
-	p.initial_velocity_min = 0.8
-	p.initial_velocity_max = 2.4
+	p.initial_velocity_min = 0.4
+	p.initial_velocity_max = 1.3
 	p.damping_min = 2.0
 	p.damping_max = 3.5
 	p.gravity = Vector3(0.0, 0.25, 0.0)
@@ -427,15 +517,15 @@ func _dust(parent: Node, at: Vector3, effects: bool) -> void:
 	var grow := Curve.new()
 	grow.add_point(Vector2(0.0, 0.4))
 	grow.add_point(Vector2(0.3, 1.0))
-	grow.add_point(Vector2(1.0, 1.7))
+	grow.add_point(Vector2(1.0, 1.3))
 	p.scale_amount_curve = grow
 	var ramp := Gradient.new()
 	ramp.set_color(0, Color(0.62, 0.57, 0.5, 0.0))
-	ramp.add_point(0.08, Color(0.62, 0.57, 0.5, 0.7))
+	ramp.add_point(0.08, Color(0.62, 0.57, 0.5, 0.3))
 	ramp.set_color(ramp.get_point_count() - 1, Color(0.5, 0.46, 0.4, 0.0))
 	p.color_ramp = ramp
 	var quad := QuadMesh.new()
-	quad.size = Vector2(1.2, 1.2)
+	quad.size = Vector2(0.8, 0.8)
 	var m := StandardMaterial3D.new()
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -450,7 +540,7 @@ func _dust(parent: Node, at: Vector3, effects: bool) -> void:
 	parent.add_child(p)
 	p.global_position = at
 	p.restart()
-	get_tree().create_timer(3.0).timeout.connect(p.queue_free)
+	get_tree().create_timer(2.0).timeout.connect(p.queue_free)
 
 
 ## Splinters of the planks, thrown out and tumbling down.

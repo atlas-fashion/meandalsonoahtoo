@@ -394,12 +394,11 @@ const DEFAULTS := {
 	## The chest rooms' cells opened at the back onto the corridor behind them
 	## (`_make_back_exits`, note 122): the containment blocks' back doors.
 	"back_exits": false,
-	## The scoutposts (notes 180, 181, scoutpost.gd): the last `scoutposts` chest rooms
-	## carved -- asked for on top of the others, so the rooms placed before them
-	## keep their places -- become kind "scoutpost", enclosed vaulted halls. Never
-	## fewer than `scoutpost_keep` rooms are left as chest rooms.
+	## The scoutposts (notes 180-182, scoutpost.gd): with any wanted, every chest
+	## room the morgue and the surgery leave is a scoutpost but `prisons` of them,
+	## by the order they are walked to (`_assign_room_roles`).
 	"scoutposts": 0,
-	"scoutpost_keep": 0,
+	"prisons": 5,
 }
 
 
@@ -442,13 +441,14 @@ static func build(parent: Node3D, seed_value: int, size: Vector2i, cell_size: fl
 
 	# Planned before the skylights, which must not open onto its underside.
 	out.boss_hall = plan_boss_hall(out)
-	# Before the morgue and the surgery pick theirs, so they pick from the
-	# rooms they always had.
-	_make_scoutposts(out, int(opt["scoutposts"]), int(opt["scoutpost_keep"]), brick)
+	# The morgue and the surgery take theirs by where they lie; then every other
+	# room is a scoutpost or a prison by the order it is walked to (note 182).
 	if bool(opt["morgue"]):
 		_make_morgue_hall(out, brick)
 	if bool(opt["surgery"]):
 		_make_surgery_hall(out, brick)
+	if int(opt["scoutposts"]) > 0:
+		_assign_room_roles(out, int(opt["prisons"]), brick)
 	if bool(opt["back_exits"]):
 		_make_back_exits(out)
 	if brick:
@@ -493,18 +493,91 @@ static func _make_morgue_hall(out: Built, enclose: bool) -> void:
 	_enclose_hall(out, best, enclose)
 
 
-## The scoutposts (notes 180, 181): the last `count` chest rooms carved become kind
-## "scoutpost", each an enclosed vaulted hall (scoutpost.gd dresses it as the user's
-## photo, shuts its archways and stands its beacon). `_choose_rooms` places
-## rooms in turn, so the extra ones asked for come last and the rest keep the
-## places they had.
-static func _make_scoutposts(out: Built, count: int, keep: int, enclose: bool) -> void:
+## The rooms in the order the player finds them (note 182, the user's remake):
+## of the chest rooms left once the morgue and the surgery have theirs, ranked by
+## the walk from the spawn -- a room reached only through another counts after
+## it -- the FIRST is a scoutpost, the SECOND a prison (a containment block,
+## kind "chest", which maze.gd fills: the nearest holds the first type), and
+## the other `prisons` - 1 prisons are spread evenly through the rest, which are
+## scoutposts, so scoutposts are met more often. A scoutpost is an enclosed
+## vaulted hall (scoutpost.gd dresses it, shuts its archways, stands its
+## beacon). Each room's rank is kept as "walk_rank".
+static func _assign_room_roles(out: Built, prisons: int, enclose: bool) -> void:
 	var rooms := out.chest_rooms()
-	var n := mini(count, rooms.size() - keep)
-	for i in maxi(n, 0):
-		var room: Dictionary = rooms[rooms.size() - 1 - i]
+	if rooms.is_empty():
+		return
+	var steps := room_walks(out)
+	rooms.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(steps.get(a["centre"], INF)) < float(steps.get(b["centre"], INF)))
+	var n := rooms.size()
+	var p := clampi(prisons, 0, n - 1)
+	var is_prison := {}
+	if p > 0 and n >= 2:
+		is_prison[1] = true
+		# The other p - 1 evenly over ranks 2 .. n - 1.
+		var m := n - 2
+		var q := p - 1
+		for j in m:
+			if q > 0 and floori(float(j + 1) * q / m) > floori(float(j) * q / m):
+				is_prison[j + 2] = true
+	for i in n:
+		var room: Dictionary = rooms[i]
+		room["walk_rank"] = i
+		if is_prison.has(i):
+			continue
 		room["kind"] = "scoutpost"
 		_enclose_hall(out, room, enclose)
+
+
+## Cells walked from the spawn to each room (by its centre key). Rooms stand on
+## the corridors' own junctions, so a walk often goes through one: stepping out
+## of a room again costs ROOM_PASS cells more, so a room behind another ranks
+## after it unless it is much nearer. (A bucket queue: every step costs a whole
+## number of cells.)
+const ROOM_PASS := 60
+static func room_walks(out: Built) -> Dictionary:
+	var start := _pick_spawn(out)
+	var from := Vector2i(roundi((start.x - out.origin.x) / out.cell_size),
+		roundi((start.z - out.origin.z) / out.cell_size))
+	var cost := {from: 0}
+	var buckets := {0: [from]}
+	var walks := {}
+	var at_cost := 0
+	var left := 1
+	while left > 0:
+		var bucket: Array = buckets.get(at_cost, [])
+		buckets.erase(at_cost)
+		left -= bucket.size()
+		for at: Vector2i in bucket:
+			if int(cost[at]) != at_cost:
+				continue
+			var here: ModuleMaze.Cell = out.cells.get(at)
+			if here == null:
+				continue
+			if here.room >= 0:
+				var room: Dictionary = out.rooms[here.room]
+				if not walks.has(room["centre"]):
+					walks[room["centre"]] = at_cost
+			for side in ModuleMaze.ORDER:
+				if not (here.open & side):
+					continue
+				var to: Vector2i = at + ModuleMaze.DIRS[side]
+				var there: ModuleMaze.Cell = out.cells.get(to)
+				if there == null:
+					continue
+				var step := 1 + (ROOM_PASS if here.room >= 0 and there.room < 0 else 0)
+				var c := at_cost + step
+				if c < int(cost.get(to, 1 << 30)):
+					cost[to] = c
+					if not buckets.has(c):
+						buckets[c] = []
+					buckets[c].append(to)
+					left += 1
+		at_cost += 1
+	for room in out.rooms:
+		if not walks.has(room["centre"]):
+			walks[room["centre"]] = 1 << 30
+	return walks
 
 
 ## The surgery (2026-10-21; note 97): of the chest rooms left once the morgue

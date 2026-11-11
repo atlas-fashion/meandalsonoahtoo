@@ -67,6 +67,12 @@ const LIGHT_RANGE := 2.3
 const LIGHT_FADE := 22.0
 
 var out
+## Note 182: the user took the corridors' props out until they can be made
+## again in Tripo ("All new props look bad and dont match the artstyle"). Off,
+## a district keeps only its gold-veined roots (the overgrowth all of its own,
+## the rest now and then) and breakable crates and barrels; the scoutposts still
+## dress themselves from the functions here. maze.gd `ruin_props`.
+var props := true
 var _seed := 0
 var _rng := RandomNumberGenerator.new()
 ## cell -> district index; district -> Look.
@@ -451,6 +457,9 @@ func _dress(key: Vector2i) -> void:
 	var core := clampf(0.5 + float(depth) * 0.17, 0.5, 1.0)
 	var walls := _free_walls(key)
 	_shuffle(walls)
+	if not props:
+		_roots_and_stores(key, cell, walls, core, theme)
+		return
 	match theme:
 		Look.OVERGROWN:
 			_overgrown(key, cell, walls, core)
@@ -476,6 +485,68 @@ func _dress(key: Vector2i) -> void:
 		_root_mesh(key, strands, live)
 	if theme != Look.STOREHOUSE and not walls.is_empty() and _rng.randf() < 0.05:
 		_crates(key, walls[_rng.randi_range(0, walls.size() - 1)], 1)
+
+
+## A corridor cell with the props taken out (note 182): the overgrowth's roots, or
+## now and then a wall of them elsewhere; and the breakables -- a crate or two, or
+## a barrel or a few -- by about one cell in nine.
+func _roots_and_stores(key: Vector2i, cell, walls: Array[int], core: float, theme: int) -> void:
+	if theme == Look.OVERGROWN:
+		_overgrown(key, cell, walls, core, false)
+	else:
+		var root_walls := _root_walls(key)
+		if not root_walls.is_empty() and _rng.randf() < 0.34:
+			var strands: Array = []
+			var live: Array = []
+			_wall_roots(key, root_walls[0], _rng.randi_range(4, 8), 1 if _rng.randf() < 0.45 else 0, strands, live)
+			_root_mesh(key, strands, live)
+	if walls.is_empty():
+		return
+	var roll := _rng.randf()
+	var side: int = walls[_rng.randi_range(0, walls.size() - 1)]
+	if roll < 0.06:
+		_crates(key, side, _rng.randi_range(1, 2))
+	elif roll < 0.11:
+		_barrels(key, side, _rng.randi_range(1, 3))
+
+
+## `n` breakable barrels along wall (`key`, `side`), side by side.
+func _barrels(key: Vector2i, side: int, n: int) -> void:
+	var placed := 0
+	var tries := 0
+	while placed < n and tries < n * 3:
+		tries += 1
+		var kind := _rng.randi_range(0, Crate.BARREL_SIZES.size() - 1)
+		var size: Vector3 = Crate.BARREL_SIZES[kind]
+		var x := _spot(key, side, size.x * 0.5 + 0.03, 3)
+		if is_nan(x):
+			continue
+		_barrel_at(_against(key, side, x, size.z * 0.5 + 0.06, _rng.randf() * TAU), kind)
+		placed += 1
+
+
+func _barrel_at(xf: Transform3D, kind: int) -> Node3D:
+	var b := Crate.make_barrel(kind, xf, hash(xf.origin))
+	add_child(b)
+	var s: Vector3 = Crate.BARREL_SIZES[kind]
+	_solid.append({"at": xf.origin, "half": Vector2(s.x, s.z) * 0.5})
+	_count("barrels")
+	return b
+
+
+## A knot of `n` barrels about `xf` (its middle on the floor), none on another.
+func barrel_group(xf: Transform3D, n: int) -> void:
+	var spots: Array[Vector3] = []
+	for i in n:
+		var kind := _rng.randi_range(0, Crate.BARREL_SIZES.size() - 1)
+		var r: float = Crate.BARREL_SIZES[kind].x * 0.5
+		for tries in 8:
+			var off := Vector3(_rng.randf_range(-0.7, 0.7), 0.0, _rng.randf_range(-0.5, 0.5)) if i > 0 else Vector3.ZERO
+			if spots.any(func(p: Vector3) -> bool: return p.distance_to(off) < r * 2.0 + 0.36):
+				continue
+			spots.append(off)
+			_barrel_at(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU), xf * off), kind)
+			break
 
 
 func _shuffle(list: Array) -> void:
@@ -568,7 +639,7 @@ func _root_mesh(key: Vector2i, strands: Array, live: Array) -> void:
 	_count("living roots", alive)
 
 
-func _overgrown(key: Vector2i, cell, walls: Array[int], core: float) -> void:
+func _overgrown(key: Vector2i, cell, walls: Array[int], core: float, rubble := true) -> void:
 	var strands: Array = []
 	var live: Array = []
 	# Variant 0: the walls buried in roots. Variant 1: fewer on the walls, a
@@ -605,7 +676,8 @@ func _overgrown(key: Vector2i, cell, walls: Array[int], core: float) -> void:
 	var hang := _rng.randf_range(7.0, 14.0) if _variant == 0 else _rng.randf_range(14.0, 24.0)
 	_hanging_roots(key, cell, roundi(hang * core), strands)
 	_root_mesh(key, strands, live)
-	_rubble(key, walls, core)
+	if rubble:
+		_rubble(key, walls, core)
 
 
 ## The arch on the boundary of `key` toward `side`, and which of its faces

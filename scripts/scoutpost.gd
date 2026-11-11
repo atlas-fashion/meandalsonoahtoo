@@ -1,7 +1,7 @@
 extends Node3D
 
 ## A scoutpost (notes 180, 181; the user named them): one of maze.gd
-## `module_scoutpost_rooms` rooms of the maze (module_level `_make_scoutposts`),
+## `module_scoutpost_rooms` rooms of the maze (module_level `_assign_room_roles`, note 182),
 ## enclosed and vaulted like the morgue and dressed after the user's photo of a
 ## great root-choked hall:
 ## - brick piers where the vaults meet (slim inside) and pilasters along the
@@ -24,12 +24,14 @@ extends Node3D
 ## dealt out again.
 ##
 ## Its archways are the dungeon doors: the cell kit's barred gate in each, hung
-## raised. Walk in and every gate crashes down; hold E on the bronze winch's
-## gear wheel (wheel_room.gd's, `make_winch`) and they wind up together; let go
-## and they sink back, a hit breaks the grip. Wound up they stay up until
-## everyone has left; with nobody alive inside a shut one opens itself again.
-## Its beacon (maze.gd `_add_beacon`) stands in the middle, so rising there
-## shuts you in too. Only the loot taken is saved.
+## raised. Walk in and every gate crashes down. The wheel will not turn while
+## any of its scouts lives (note 182: "the player has to clear the scoutpost");
+## then hold E on the bronze winch's gear wheel (wheel_room.gd's, `make_winch`)
+## and they wind up together; let go and they sink back, a hit breaks the grip.
+## Wound up they stay up until everyone has left; with nobody alive inside a
+## shut one opens itself again. Once cleared it never shuts again. Its beacon
+## (maze.gd `_add_beacon`) stands in the middle. A chest against a wall
+## (loot_chest.gd, note 182). Saved: the loot taken, the chest opened, cleared.
 ##
 ## Frame: origin the middle of the block on the floor, +Z towards its first way in.
 
@@ -125,6 +127,11 @@ var _table_spot := Vector3.INF
 ## The loot lying here (item_drop.gd) and which of it has been taken, by index.
 var loot: Array = []
 var loot_taken: Array = []
+## Note 182: its scouts (maze.gd `_spawn_scoutpost_scouts`), and whether every one
+## of them has been killed -- then the wheel turns and the gates never drop again.
+var guards: Array = []
+var cleared := false
+var chest: Node3D
 
 
 static func build(parent: Node3D, level, room_: Dictionary, owner_maze: Node, ruin_dressing: Node,
@@ -226,6 +233,7 @@ func _build(torch_energy: float) -> void:
 	for w in _walls:
 		if w["gallery"]:
 			_gallery(w)
+	_place_chest(winch_wall)
 	_dress()
 	_commit_wood()
 	_scatter_loot()
@@ -466,7 +474,30 @@ func _set_lift(v: float) -> void:
 		g.position.y = LIFT * v
 
 
+## A scout of this post (maze.gd): the wheel waits for it to die.
+func add_guard(s: Node3D) -> void:
+	guards.append(s)
+
+
+## The population is being put back (maze.gd `_populate`): its scouts are gone.
+func reset_guards() -> void:
+	guards.clear()
+
+
+## How many of its scouts are still alive.
+func _guards_alive() -> int:
+	var n := 0
+	for g in guards:
+		if is_instance_valid(g) and g.get("_dying") != true and g.get("_dead") != true:
+			n += 1
+	return n
+
+
 func _process(delta: float) -> void:
+	if not cleared and not guards.is_empty() and _guards_alive() == 0:
+		cleared = true
+		guards.clear()
+		print("[scoutposts] %s cleared" % name)
 	var players: Array = []
 	for p in Coop.all():
 		if is_instance_valid(p) and p.get("_dead") != true:
@@ -474,7 +505,8 @@ func _process(delta: float) -> void:
 	var anyone := players.any(func(p) -> bool: return _inside(p))
 	if not _locked:
 		if not anyone:
-			_armed = true
+			# Cleared, it stays open for good.
+			_armed = not cleared
 			_drop_in = -1.0
 		elif _armed and _lift >= 1.0 and _wheel != null:
 			if _drop_in < 0.0:
@@ -505,12 +537,13 @@ func _process(delta: float) -> void:
 			_unlock()
 	_prompt.visible = near and _locked
 	_prompt.player = _player
+	_prompt.text = "Hold E   Turn the wheel" if _guards_alive() == 0 else "Kill the scouts first"
 	_prompt.progress = _lift if _holder != null else -1.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not _locked or _player == null or _prompt == null or not _prompt.visible \
-			or not Interact.pressed(event, _player):
+			or not Interact.pressed(event, _player) or _guards_alive() > 0:
 		return
 	get_viewport().set_input_as_handled()
 	_let_go_wheel()
@@ -597,6 +630,52 @@ func _unlock() -> void:
 	_let_go_wheel()
 	for b in _blockers:
 		b.set_deferred("disabled", true)
+
+
+# --- The chest (note 182) ----------------------------------------------------------------
+
+## How far out from the wall's face the chest stands (its middle, m).
+const CHEST_OFF := 0.95
+
+
+## The chest against a wall: the one across from the winch if it can, else any
+## wall with no balcony (one with, last) -- on its middle cell, else the nearest
+## free one; never a way in, a corner or by the stair. Its spot on the wall is
+## kept from the dressing. Two health potions and some coins.
+func _place_chest(winch_wall: int) -> void:
+	var order: Array = []
+	if winch_wall >= 0:
+		var wd: Vector3 = _walls[winch_wall]["d"]
+		for i in _walls.size():
+			if (_walls[i]["d"] as Vector3).dot(wd) < -0.5:
+				order.append(i)
+	for i in _walls.size():
+		if not order.has(i):
+			order.append(i)
+	for gallery_ok in [false, true]:
+		for i in order:
+			var w: Dictionary = _walls[i]
+			if i == winch_wall or (w["gallery"] and not gallery_ok):
+				continue
+			var cells: Array = w["cells"]
+			var mid := (cells.size() - 1) >> 1
+			var ks: Array = range(cells.size())
+			ks.sort_custom(func(x: int, y: int) -> bool: return absi(x - mid) < absi(y - mid))
+			for k in ks:
+				var c: Dictionary = cells[k]
+				if c["entrance"] or c["corner"] or _stair_cells.has(c["key"]):
+					continue
+				if ruins != null and not ruins._reserve(c["key"], c["side"], 0.0, 1.0):
+					continue
+				var d: Vector3 = w["d"]
+				chest = load("res://scripts/loot_chest.gd").make(2, _rng.randi_range(15, 30))
+				chest.name = "Chest"
+				add_child(chest)
+				chest.transform = Transform3D(Basis.looking_at(d, Vector3.UP),
+					c["local"] + d * (BrickLevel.WALL_FACE - PILASTER_PROUD - CHEST_OFF))
+				solid.append({"at": chest.global_position, "half": Vector2(0.65, 0.65)})
+				_count("chest")
+				return
 
 
 # --- Timber -------------------------------------------------------------------------------
@@ -842,9 +921,7 @@ func _dress() -> void:
 				elif _rng.randf() < 0.55:
 					ruins._crates(key, side, _rng.randi_range(1, 3))
 				elif _rng.randf() < 0.5:
-					var x: float = ruins._spot(key, side, 0.85)
-					if not is_nan(x):
-						ruins._piece("barrels", ruins._against(key, side, x, 0.8, PI * 0.5), 0.72, Vector3(2.0, 1.1, 2.1) * 0.9)
+					ruins._barrels(key, side, _rng.randi_range(2, 3))
 				continue
 			# Open walls: banners, candles at the foot, shackles and the dead.
 			if not c["corner"] and _rng.randf() < 0.7 and ruins._reserve(key, side, 0.0, 0.7):
@@ -911,8 +988,8 @@ func _pile(at: Vector3) -> void:
 		var off := Vector3(_rng.randf_range(-1.3, 1.3), 0.0, _rng.randf_range(-1.0, 1.0))
 		var xf := global_transform * Transform3D(Basis(Vector3.UP, yaw + _rng.randf_range(-0.4, 0.4)), at + off)
 		ruins._crate_at(xf, kind, null)
-	ruins._piece("barrels", global_transform * Transform3D(Basis(Vector3.UP, yaw), at + Vector3(0.0, 0.0, 1.5)), 0.72,
-		Vector3(2.0, 1.1, 2.1) * 0.9)
+	ruins.barrel_group(global_transform * Transform3D(Basis(Vector3.UP, yaw), at + Vector3(0.0, 0.0, 1.5)),
+		_rng.randi_range(2, 4))
 
 
 ## The big-wheeled cart, left standing.

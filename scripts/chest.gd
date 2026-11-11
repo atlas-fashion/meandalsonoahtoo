@@ -70,7 +70,7 @@ func _try_open(player: Node3D) -> void:
 	# Granted quietly: the banner below says it far more clearly than the small
 	# line at the bottom of the screen, and saying both says it twice.
 	var given: int = player.add_consumable(consumable, wanted, false)
-	if given <= 0 and not has_shard:
+	if given <= 0 and not has_shard and coins <= 0:
 		# Inventory full -- leave it shut so it is still here later, and say so.
 		_full()
 		return
@@ -87,6 +87,16 @@ func _try_open(player: Node3D) -> void:
 		var hud := Coop.hud(_player)
 		if hud != null and hud.has_method("announce"):
 			hud.announce(opened_title, "    ".join(lines))
+	elif coins > 0:
+		# A scoutpost's chest (note 182): potions and coins, no shard.
+		player.add_currency(coins)
+		var lines: Array[String] = []
+		if given > 0:
+			lines.append("+%d %s%s" % [given, consumable.item_name.to_lower(), "" if given == 1 else "s"])
+		lines.append("+%d coins" % coins)
+		var hud := Coop.hud(_player)
+		if hud != null and hud.has_method("announce"):
+			hud.announce(opened_title, "    ".join(lines))
 	else:
 		_announce(given)
 	opened_already = true
@@ -97,6 +107,17 @@ func _try_open(player: Node3D) -> void:
 	tween.tween_property(lid_pivot, "rotation:x", deg_to_rad(-105.0), 0.4) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	opened.emit(given)
+
+
+## As a save has it: open and empty (note 182, the scoutposts' chests).
+func open_now() -> void:
+	opened_already = true
+	_near = false
+	if _prompt != null:
+		_prompt.visible = false
+	set_process(false)
+	if lid_pivot != null:
+		lid_pivot.rotation.x = deg_to_rad(-105.0)
 
 
 func _full() -> void:

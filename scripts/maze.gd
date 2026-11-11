@@ -405,7 +405,8 @@ var _patrol_points: Array[Vector3] = []
 @export var pack_size_weights: PackedFloat32Array = [0.66, 0.24, 0.10]
 ## Of the groups of two or three, how many are led by an enforcer (as one of
 ## them); a lone skeleton never is. Every pack had one before note 121.
-@export_range(0.0, 1.0) var pack_enforcer_share := 0.45
+## 0.8 since note 182 (0.45): the skeletons come as little groups led by an enforcer.
+@export_range(0.0, 1.0) var pack_enforcer_share := 0.8
 ## Criers fly solo (2026-10-14; they came in ones and twos).
 @export var flyer_pack_min := 1
 @export var flyer_pack_max := 1
@@ -541,12 +542,13 @@ var _full_graph = null
 ## the containment blocks, one per skeleton type. (5 before; the count feeds
 ## the generator, so every seed's layout changed with it.)
 @export var module_chest_rooms := 6
-## The scoutposts (notes 180, 181, scoutpost.gd): this many more rooms carved, each
+## The scoutposts (notes 180-182, scoutpost.gd): this many more rooms carved, each
 ## an enclosed hall dressed as the user's photo, its archways barred when the
-## player walks in until the wheel winds them up, its beacon in the middle.
-## Asked for on top of the chest rooms, so those keep their places; the corridors
-## round the new ones changed with them.
-@export var module_scoutpost_rooms := 6
+## player walks in until its scouts are dead and the wheel winds them up, its
+## beacon in the middle. Since note 182 the rooms' roles go by the walk from the
+## start (module_level `_assign_room_roles`): the first is a scoutpost, the
+## second a prison, and scoutposts outnumber the prisons (8 to 5; 6 before).
+@export var module_scoutpost_rooms := 8
 ## Scales how many wall torches are hung. Omni light count is a per-pixel cost
 ## on this hardware, which is why it is a knob and not a constant.
 ## 1.1 since 2026-10-10, second pass ("way too dark... more torches, but way
@@ -670,6 +672,8 @@ func _ready() -> void:
 	_seal_cells()
 	if save.has("seed"):
 		restore_world(save)
+	else:
+		_claim_start_beacon()
 	# Every big static mesh the level built shadows at its lowest LOD (note 159);
 	# before anything is spawned.
 	if modules:
@@ -856,7 +860,9 @@ func _build_module_level() -> void:
 			# the layout is the one the seed gave before the surgery existed.
 			"chest_rooms": module_chest_rooms + (1 if morgue_enabled else 0) + module_scoutpost_rooms,
 			"scoutposts": module_scoutpost_rooms,
-			"scoutpost_keep": module_chest_rooms + (1 if morgue_enabled else 0),
+			# Note 182: one prison per contained type; the rest of the rooms the
+			# morgue and the surgery leave are scoutposts.
+			"prisons": CONTAINED.size() if progression else module_chest_rooms - 1,
 			"room_gap": module_room_gap,
 			"room_entrances": module_room_entrances,
 			"morgue": morgue_enabled,
@@ -1112,7 +1118,12 @@ func _build_puzzle_rooms(holder: Node3D) -> void:
 		var order: Array[int] = []
 		for i in rooms.size():
 			order.append(i)
-		order.sort_custom(func(a: int, b: int) -> bool: return walks[a] < walks[b])
+		# By the order the rooms are found (note 182, module_level `walk_rank`), so
+		# the first prison met holds the first type; by the walk without one.
+		order.sort_custom(func(a: int, b: int) -> bool:
+			var ra := float(rooms[a].get("walk_rank", walks[a]))
+			var rb := float(rooms[b].get("walk_rank", walks[b]))
+			return ra < rb if ra != rb else walks[a] < walks[b])
 		for k in mini(CONTAINED.size(), order.size()):
 			holds[order[k]] = CONTAINED[k]
 		if holds.size() < CONTAINED.size():
@@ -1323,6 +1334,20 @@ func save_state() -> Dictionary:
 	for post in _scoutposts:
 		loot_taken.append((post.get("loot_taken") as Array).duplicate() if is_instance_valid(post) else [])
 	data["scoutpost_loot"] = loot_taken
+	# Note 182: the scoutposts cleared of their scouts, and their chests opened.
+	var posts_cleared: Array[int] = []
+	var chests_open: Array[int] = []
+	for i in _scoutposts.size():
+		var post := _scoutposts[i]
+		if not is_instance_valid(post):
+			continue
+		if post.get("cleared") == true:
+			posts_cleared.append(i)
+		var chest = post.get("chest")
+		if chest != null and is_instance_valid(chest) and chest.get("opened_already") == true:
+			chests_open.append(i)
+	data["scoutposts_cleared"] = posts_cleared
+	data["scoutpost_chests"] = chests_open
 	var map = _explore_map_node()
 	if map != null:
 		data["map"] = map.snapshot()
@@ -1397,6 +1422,12 @@ func restore_world(data: Dictionary) -> void:
 	var loot_taken: Array = data.get("scoutpost_loot", [])
 	for i in mini(loot_taken.size(), _scoutposts.size()):
 		_scoutposts[i].call("take_loot", loot_taken[i])
+	for i in data.get("scoutposts_cleared", []):
+		if int(i) < _scoutposts.size():
+			_scoutposts[int(i)].set("cleared", true)
+	for i in data.get("scoutpost_chests", []):
+		if int(i) < _scoutposts.size() and _scoutposts[int(i)].get("chest") != null:
+			_scoutposts[int(i)].get("chest").call("open_now")
 	for i in data.get("cells_open", []):
 		if int(i) < _holding_cells.size():
 			_holding_cells[int(i)].call("swing_open", true)
@@ -1404,6 +1435,10 @@ func restore_world(data: Dictionary) -> void:
 		if int(i) < _anchors.size():
 			_anchors[int(i)].call("set_claimed", true)
 	var a := int(data.get("anchor", -1)) if beacons_saved or not load("res://scripts/module_level.gd").brick else -1
+	# A save from before the beacons: as a new game (note 182).
+	if not beacons_saved:
+		_claim_start_beacon()
+		a = -1
 	if a >= 0 and a < _anchors.size():
 		for other in _anchors:
 			other.set_active(false)
@@ -2047,6 +2082,10 @@ func _mark_solid(solid: Array) -> void:
 ## their living tips (ruin_roots.gd, living_root.gd) and breakable crates
 ## (breakable_crate.gd). Brick kit only; after the clutter, before the bake.
 @export var ruins_enabled := true
+## Note 182: the districts' props (banners, candles, the dead, the torture
+## quarter's pieces, crystals, cages, chains, carts...) out of the corridors until
+## the user has new ones made; the roots and the breakables stay.
+@export var ruin_props := false
 var _ruins: Node3D = null
 
 
@@ -2085,6 +2124,7 @@ func _place_ruins(holder: Node3D) -> void:
 		anchors[script.Look.QUESTION] = _surgery_room["centre"]
 	_ruins = script.new()
 	_ruins.name = "Ruins"
+	_ruins.set("props", ruin_props)
 	holder.add_child(_ruins)
 	var solid: Array = _ruins.build(_module_level, blocked, _active_seed, anchors)
 	_ruins.clutter_crates(_module_level.get_meta("clutter_crates", []))
@@ -2097,7 +2137,7 @@ func _place_ruins(holder: Node3D) -> void:
 ## rooms like this, one identical to the photo, and the rest similar, throughout
 ## the dungeon. The player should be locked into these rooms until the player can
 ## hold down e to interact with a wheel that lifts the dungeon doors. The beacons
-## should be in here." `module_scoutpost_rooms` rooms (module_level `_make_scoutposts`)
+## should be in here." `module_scoutpost_rooms` rooms (module_level `_assign_room_roles`, note 182)
 ## are built by scoutpost.gd, the first as the photo; each holds a beacon. The
 ## user named them Scoutposts (note 181): several scouts in each, loot lying about,
 ## a balcony up a stair.
@@ -2114,11 +2154,10 @@ func _place_scoutposts(holder: Node3D) -> void:
 	for room in _module_level.rooms:
 		if room["kind"] == "scoutpost":
 			_scoutpost_rooms.append(room)
-	# The photo's own hall: the one nearest the start, so it is the first found.
-	var start: Vector3 = _module_level.spawn
+	# In the order they are walked to (note 182, module_level `_assign_room_roles`):
+	# the first is the first room the player finds, and the photo's own hall.
 	_scoutpost_rooms.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return (_module_level.room_world(a) as Vector3).distance_to(start) \
-			< (_module_level.room_world(b) as Vector3).distance_to(start))
+		return int(a.get("walk_rank", 0)) < int(b.get("walk_rank", 0)))
 	var parent := Node3D.new()
 	parent.name = "Scoutposts"
 	holder.add_child(parent)
@@ -2138,7 +2177,12 @@ func _place_scoutposts(holder: Node3D) -> void:
 func _spawn_scoutpost_scouts() -> void:
 	for i in _scoutpost_rooms.size():
 		var hall: Node3D = _scoutposts[i]
-		if not is_instance_valid(hall) or Coop.all().any(func(p) -> bool:
+		if not is_instance_valid(hall):
+			continue
+		# Its old scouts went with the population (`_populate` frees `_spawned`).
+		hall.call("reset_guards")
+		# Note 182: a cleared scoutpost stays empty.
+		if hall.get("cleared") == true or Coop.all().any(func(p) -> bool:
 				return is_instance_valid(p) and hall.call("_inside", p)):
 			continue
 		# Note 181: "There should be a number of scouts in these." Each on its own
@@ -2152,7 +2196,9 @@ func _spawn_scoutpost_scouts() -> void:
 			spots[j] = tmp
 		for k in scoutpost_scouts:
 			var at: Vector3 = hall.to_global((spots[k % spots.size()] as Vector3) * module_cell * 0.8)
-			_spawn_post_scout(at)
+			var s := _spawn_post_scout(at)
+			if s != null:
+				hall.call("add_guard", s)
 
 
 ## True for tiles in any beacon hall's block.
@@ -2249,6 +2295,20 @@ func _on_anchor_attuned(anchor: Node3D) -> void:
 	for player in Coop.all():
 		if player.has_method("set_spawn_point"):
 			player.set_spawn_point(anchor.spawn_point())
+
+
+## Note 182 (the user: "The player should spawn in with his cells beacon already
+## gold"): a new game wakes in its cell with the cell's beacon claimed and chosen,
+## so the player rises there until another is.
+func _claim_start_beacon() -> void:
+	if _start_cell == null or _start_cell.get("beacon") == null:
+		return
+	var first: Node3D = _start_cell.get("beacon")
+	first.call("set_claimed", true)
+	for other in _anchors:
+		if is_instance_valid(other):
+			other.set_active(other == first)
+	_active_anchor = first
 
 
 ## The anchor the player rises at, or null for the start.
@@ -5021,6 +5081,9 @@ func _spawn_enemies() -> void:
 	var want := enemy_count
 	if modules and _module_level != null and enemies_per_corridor_cell > 0.0:
 		want = roundi(float(_corridor_cell_count()) * enemies_per_corridor_cell)
+	# Note 182: the halls fill as the prisons are opened.
+	_corridor_full = want
+	want = roundi(float(want) * population_share())
 	var limit := want * 60
 
 	while placed < want and not spots.is_empty() and attempts < limit:
@@ -5042,9 +5105,8 @@ func _spawn_enemies() -> void:
 		taken.append(tile)
 		placed += _roll_encounter(tile, want - placed)
 
-	# What actually came is what the trickle keeps up -- not `want`, which
-	# counts the skeleton rolls progression skipped (note 120): kept to that, the
-	# trickle filled the gap with criers, 149 at the start growing toward 382.
+	# What actually came is what the trickle keeps up (note 182: every roll now
+	# brings what it rolled, so this is `want` give or take a pack).
 	_corridor_want = _corridor_enemies.size()
 	var scouts := 0
 	for e in _corridor_enemies:
@@ -5052,6 +5114,120 @@ func _spawn_enemies() -> void:
 			scouts += 1
 	print("[scouts] %d of %d corridor enemies, each alone on patrol" % [scouts, _corridor_enemies.size()])
 	_spawn_room_packs(taken)
+	_spawn_first_route()
+
+
+## --- How full the halls are (note 182) ----------------------------------------------
+##
+## The user: "The player should encounter a couple of criers and scouts before
+## his first room discovery ... as the player releases more proels from prison
+## rooms, the player should find the halls more and more populated with enemies."
+## The corridors carry `population_share()` of their full number
+## (`enemies_per_corridor_cell` of every corridor cell): `early_population` with
+## no type let out, rising evenly to all of it with every type out. Nothing out,
+## an encounter is a crier or a scout (`early_scout_share`); after, the old mix,
+## the skeleton groups each led by an enforcer (`pack_enforcer_share`). Opening
+## a prison raises the number at once and fills half the gap straight away, out
+## of sight (`_fill_halls`); the trickle tops up the rest.
+@export_range(0.0, 1.0) var early_population := 0.2
+@export_range(0.0, 1.0) var early_scout_share := 0.3
+## On the walk from the cell to the first scoutpost: these, in this order, spread
+## along it (the first a little way out of the cell).
+const FIRST_ROUTE := [&"crier", &"scout", &"crier", &"scout"]
+var _corridor_full := 0
+
+
+func population_share() -> float:
+	if not progression:
+		return 1.0
+	var out := float(released_hands.size()) / float(CONTAINED.size())
+	return lerpf(early_population, 1.0, clampf(out, 0.0, 1.0))
+
+
+## A type let out: the halls' number goes up, and half the gap comes at once.
+func _fill_halls() -> void:
+	if _corridor_full <= 0 or _patrol_points.is_empty():
+		return
+	var target := roundi(float(_corridor_full) * population_share())
+	var alive := 0
+	for e in _corridor_enemies:
+		if is_instance_valid(e) and e.get("_dying") != true:
+			alive += 1
+	_corridor_want = maxi(_corridor_want, target)
+	var now_want := alive + (target - alive) / 2
+	var tries := 0
+	while alive < now_want and tries < 200:
+		tries += 1
+		var at = _far_point(respawn_clear)
+		if at == null:
+			break
+		var before := _corridor_enemies.size()
+		_roll_encounter(world_to_tile(at), now_want - alive)
+		alive += _corridor_enemies.size() - before
+	print("[population] %d types out: the halls want %d, %d about now" % [released_hands.size(),
+		_corridor_want, alive])
+
+
+## The first walk (note 182): from the cell to the first scoutpost, while it is
+## still held, a crier and a scout and a crier and a scout along the way --
+## keeping to their own stretch of it, not off on patrol. On every population
+## (a death puts them back), not once the scoutpost is cleared.
+func _spawn_first_route() -> void:
+	if _scoutposts.is_empty() or not is_instance_valid(_scoutposts[0]) or _scoutposts[0].get("cleared") == true:
+		return
+	if not progression or not released_hands.is_empty():
+		return
+	var path := _tile_path(world_to_tile(to_local(_module_level.spawn)),
+		world_to_tile(to_local(_scoutposts[0].global_position)))
+	# Short of the scoutpost's own block.
+	while not path.is_empty() and is_in_scoutpost(path[path.size() - 1]):
+		path.remove_at(path.size() - 1)
+	if path.size() < 12:
+		return
+	for i in FIRST_ROUTE.size():
+		var k := clampi(roundi(lerpf(0.3, 0.88, float(i) / float(FIRST_ROUTE.size() - 1)) * path.size()),
+			0, path.size() - 1)
+		var at := to_global(tile_to_world(path[k]))
+		if FIRST_ROUTE[i] == &"scout":
+			var s := _spawn_post_scout(at)
+			if s != null:
+				s.set("wander_radius", 7.0)
+		elif flyer_scene != null:
+			var c: Node3D = flyer_scene.instantiate()
+			c.position = tile_to_world(path[k]) + Vector3(0.0, 1.6, 0.0)
+			add_child(c)
+			c.set("aggro_range", enemy_aggro_range)
+			_give_wander_area(c, path[k], true)
+			_spawned.append(c)
+	print("[population] the first walk: %d m, %s along it" % [roundi(path.size() * tile_size),
+		", ".join(FIRST_ROUTE)])
+
+
+## The shortest walk over open tiles from `from` to `to`, `from` first; [] if none.
+func _tile_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
+	var came := {from: from}
+	var queue: Array[Vector2i] = [from]
+	var head := 0
+	while head < queue.size():
+		var tile: Vector2i = queue[head]
+		head += 1
+		if tile == to:
+			break
+		for step in DIRECTIONS.values():
+			var next: Vector2i = tile + step
+			if came.has(next) or not is_open(next):
+				continue
+			came[next] = tile
+			queue.append(next)
+	var out: Array[Vector2i] = []
+	if not came.has(to):
+		return out
+	var at := to
+	while at != from:
+		out.push_front(at)
+		at = came[at]
+	out.push_front(from)
+	return out
 
 
 ## One corridor encounter at `tile`, of at most `budget` bodies. Returns the
@@ -5069,25 +5245,27 @@ func _roll_encounter(tile: Vector2i, budget: int) -> int:
 
 
 func _encounter(tile: Vector2i, budget: int) -> int:
+	# Note 182: with no type let out, the corridors hold criers and scouts only.
+	var early := progression and released_hands.is_empty()
 	# A lone scout, out looking (note 127).
-	if scout_share > 0.0 and budget >= 1 and _scout_rng.randf() < scout_share:
+	var scouts := early_scout_share if early else scout_share
+	if scouts > 0.0 and budget >= 1 and _scout_rng.randf() < scouts:
 		return _spawn_scout(tile)
 	# One roll decides the whole group, so a pack is all of a kind: a knot
 	# of reds or a lone crier, never a mixed committee.
-	var flying: bool = flyer_scene != null and _rng.randf() < flyer_share
-	var pack := _rng.randi_range(flyer_pack_min, flyer_pack_max) if flying else _roll_pack_size()
+	var flying: bool = flyer_scene != null and (early or _rng.randf() < flyer_share)
+	if early and not flying:
+		return 0
+	# Skeletons come as a little group (note 182: "little groups of enemies led
+	# by an enforcer"): two to four, most of them an enforcer and the skeletons
+	# it walks with.
+	var pack := _rng.randi_range(flyer_pack_min, flyer_pack_max) if flying else _roll_pack_size() + 1
 	pack = mini(pack, budget)
-	# Two or three may be an enforcer and the skeletons it walks with.
 	var escort := not flying and enforcers_with_packs and pack >= 2 \
 		and _rng.randf() < pack_enforcer_share
 	var bones := pack - 1 if escort else pack
-	# Containment (note 120): a skeleton encounter comes only in the share
-	# of the types let out, and only of those. One that does not come is
-	# counted as if it had, so the criers keep the density they always had
-	# -- at the start they are the corridors' only encounters.
+	# Containment (note 120): skeletons only of the types let out.
 	if not flying and progression:
-		if _rng.randf() >= float(released_hands.size()) / float(CONTAINED.size()):
-			return pack
 		return _spawn_pack(tile, false, bones, _pack_hands(bones), escort)
 	return _spawn_pack(tile, flying, bones, [], escort)
 
@@ -5141,16 +5319,20 @@ func _tick_spawns() -> void:
 	_corridor_enemies = alive
 	_note_spawn_eye()
 	if alive.size() < _corridor_want:
-		# A few rolls, so a skeleton roll of a type still contained does not
-		# leave the tick empty.
-		for tries in 4:
+		# One encounter a tick, more when far short (note 182: after a prison is
+		# opened the gap is large), each at its own far point.
+		var rolls := clampi((_corridor_want - alive.size()) / 12, 1, 4)
+		var added := 0
+		for tries in rolls * 3:
+			if added >= rolls or alive.size() + added >= _corridor_want:
+				break
 			var at = _far_point(respawn_clear)
 			if at == null:
 				break
 			var before := _corridor_enemies.size()
-			_roll_encounter(world_to_tile(at), _corridor_want - alive.size())
+			_roll_encounter(world_to_tile(at), _corridor_want - alive.size() - added)
 			if _corridor_enemies.size() > before:
-				break
+				added += 1
 	for h in released_hands:
 		var loose := 0
 		for e in get_tree().get_nodes_in_group(&"loose_subjects"):
@@ -5895,6 +6077,7 @@ func release_hand(hand: StringName, count: int) -> void:
 	_note_spawn_eye()
 	_spawn_loose(hand, loose_per_type)
 	_spawn_collectors()
+	_fill_halls()
 	update_surgery_bolts()
 
 
