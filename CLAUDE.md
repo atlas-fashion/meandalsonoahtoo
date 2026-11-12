@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 182), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 183), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -290,6 +290,14 @@ a build artifact from `tools/build_scoutpost_kit.py`, which models and bakes it 
 (reusing build_cell_kit.py's helpers). Rebuild, never hand-edit; `scripts/scoutpost.gd`
 reads its pieces by name and its measures (`BAY`, `FRONT`, `STAIR_RUN`) must match. See note 181.
 
+`models/dungeon/dungeon_kit.glb` (the level's stone: walls, arches, vaults, pillars,
+floors, the door's arch, the pier face, shoring, rubble, the raised portcullis) is a
+build artifact from `tools/build_dungeon_kit.py`, which lays every piece out of
+separate stones in Blender; its three tiling materials' maps (`models/dungeon/dk_*.jpg`)
+are from `tools/dungeon_kit_textures.py`. Rebuild, never hand-edit; the pieces keep the
+Tripo brick kit's names, frames and measures, and `scripts/brick_level.gd` reads them
+by name. See note 183 and `tools/README.md`.
+
 `models/kit/module_*.glb` are build artifacts from `tools/build_modules.py`,
 cut from the raw `models/kit/mod_*.glb` Tripo returned. Never hand-edit them;
 rebuild and re-run `tools/verify_modules.py`.
@@ -331,12 +339,16 @@ and scouts (a lone scout is `scout_share` of the encounters, note 127).
   `module_maze.gd` (`module_organic_shape = true`). The graph is deliberately
   NOT stored in `_graph` (setting it switches maze.gd to the organic rules).
 - Geometry: `module_level.gd` `build()`; with `ModuleLevel.brick = true` (the
-  default) the stone is the **brick kit**, `brick_level.gd`. `-- --modules`
-  swaps back to the old Tripo tunnel modules for A/B.
+  default) the stone is the **brick kit**, `brick_level.gd` -- since note 183 its
+  walls, arches, vaults, pillars and floors are the Blender-built
+  `models/dungeon/dungeon_kit.glb` (same names and sizes; `-- --tripo-kit` puts
+  the Tripo stone back for an A/B), the Tripo `brick_kit.glb` keeping the pieces
+  the new kit has none for. `-- --modules` swaps back to the old Tripo tunnel
+  modules for A/B.
 - Then: doors (`wood_door.gd`), torches (`torch.gd`), windows (`bone_cage.gd`
   cages), room lights, skylights, `jail_cell.gd`, `boss_hall.gd`, zone gates
   (`zone_gate.gd`), respawn beacons (`respawn_anchor.gd`, inside the holding cells on the brick kit, note 154), holding cells (`holding_cell.gd`, jail cells in dead ends with 2 or 3 caged proels of different types and a beacon, opened with E, the starting cell one too; notes 153, 154), hiding spots
-  (`hiding_spot.gd`), the scoutposts (`scoutpost.gd`, notes 180-182: 8 enclosed halls dressed as the user's photo -- the first room the player finds is one -- shut when you walk in until its 3 scouts are dead and you wind the wheel, the beacons, loot, a chest and a balcony up a stair in each), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd` + `surgeon_boss.gd`, notes 94-105; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
+  (`hiding_spot.gd`), the scoutposts (`scoutpost.gd`, notes 180-183: 8 enclosed halls, 3 x 3 cells each since note 183 with a timber upper floor up a stair, dressed as the user's photo -- the first room the player finds is one -- shut when you walk in until its 3 scouts are dead and you wind the wheel, the beacons, loot, a chest and a balcony up a stair in each), clutter, damp (`damp.gd`), `morgue.gd`, the surgery (`surgery.gd` + `surgical_table.gd` + `surgery_vat.gd` + `surgery_power.gd` + `surgery_control.gd` + `surgery_piece.gd` + `surgeon_boss.gd`, notes 94-105; the chest room nearest the boss; every piece a Higgsfield model; rows of pushable vats, the claw on its gantry, the surgeon's booth, and under the floor -- through a hatch under one vat -- the powering room whose crystal switches it off), chest rooms
   (`dungeon_room.gd`: prison / mine / vacant), the great door
   (`shard_door.gd`), the sewer (`sewer.gd`, `manhole.gd`).
 
@@ -622,6 +634,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 180 | 2026-11-11 | Beacon halls (`hall_room.gd`, now `scoutpost.gd`): 6 more rooms carved as enclosed vaulted halls dressed as the user's photo (slim piers, a root wall, roots across the floor, timber galleries, caged lanterns, banners, hooks, a fire basket, a cart, grates); every barred way in drops when you walk in, hold E on the bronze winch to wind them up; the beacons there; the dead-end beacon rooms of 179 retired; every layout changed | [docs/notes/180-beacon-halls.md](docs/notes/180-beacon-halls.md) |
 | 181 | 2026-11-11 | Scoutposts (the halls renamed, `scoutpost.gd`): 3 scouts in each keeping to it (no patrol), loot lying about (a health potion and coins up on the balcony, small potions, coins, a gold crystal, saved once taken), a walkable balcony up a stair modelled and baked in Blender (`tools/build_scoutpost_kit.py` -> `models/scoutpost_kit.glb`) | [docs/notes/181-scoutposts.md](docs/notes/181-scoutposts.md) |
 | 182 | 2026-11-11 | The maze remade: rooms ranked by the walk from the cell (`module_level._assign_room_roles`, `room_walks`), the first a scoutpost, the second the proel swordsmen's prison, 8 scoutposts to 5 prisons; the start beacon gold (`_claim_start_beacon`); scoutposts shut until their scouts are dead, a Tripo chest (`loot_chest.gd`); criers and scouts only until a prison opens, the halls filling with each (`population_share`, `_fill_halls`), enforcer-led groups; corridor props out (`ruin_props`), breakable barrels, fainter dust | [docs/notes/182-the-maze-remade-scoutposts-first.md](docs/notes/182-the-maze-remade-scoutposts-first.md) |
+| 183 | 2026-11-12 | The architecture remodelled in Blender (`tools/build_dungeon_kit.py` -> `models/dungeon/dungeon_kit.glb`: 32 pieces laid stone by stone on surfaces, three tiling materials made in numpy, vertex-colour dirt; same names and sizes as the Tripo kit, which keeps what the new one has no piece for): three wall coursings and two with stones fallen out, a pointed barrel with ribbed groins and bosses, arches with voussoirs, the door's pointed arch, flagstones, rubble, a broken column, vault shoring, raised portcullises; one variant set to a chunk, variants cast as one; scoutposts shrunk in place to 3 x 3 cells with a timber upper floor (`_shrink_room`, `_loft`); 0 void pixels in 432 views; corridors as fast, rooms 2-3.5 ms less GPU | [docs/notes/183-the-architecture-remodelled-in-blender.md](docs/notes/183-the-architecture-remodelled-in-blender.md) |
 
 ## Notes by source file
 
@@ -643,7 +656,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
-- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159, 176
+- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159, 176, 183
 - `scripts/chest.gd`: 18, 79, 182
 - `scripts/loot_chest.gd`: 182
 - `scripts/consumable_type.gd`: 130
@@ -672,7 +685,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/holding_cell.gd`: 153, 154, 177, 179, 180, 181
 - `scripts/wheel_room.gd`: 179, 180, 181
-- `scripts/scoutpost.gd` (was `hall_room.gd`): 180, 181, 182
+- `scripts/scoutpost.gd` (was `hall_room.gd`): 180, 181, 182, 183
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
 - `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167, 172
@@ -688,7 +701,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178, 180, 182
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
-- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154, 180, 181, 182
+- `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154, 180, 181, 182, 183
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
@@ -768,6 +781,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66
+- `tools/build_dungeon_kit.py`, `tools/dungeon_kit_textures.py`, `tools/dungeon_kit_preview.py`, `models/dungeon/`: 183
 - `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18

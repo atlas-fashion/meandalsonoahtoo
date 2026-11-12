@@ -31,10 +31,39 @@ extends RefCounted
 
 const ModuleMaze := preload("res://scripts/module_maze.gd")
 const KIT := "res://models/brick/brick_kit.glb"
+## The architecture remodelled in Blender (note 183, tools/build_dungeon_kit.py):
+## walls, arches, vaults, pillars, floors, the door's arch, the pier face, the
+## shoring, rubble. Same names, frames and sizes as the Tripo pieces, and where
+## both kits have a piece this one is used; what it has no piece for (carts,
+## the prison's dome and gates, the burial walls, the door's leaf ...) is still
+## the Tripo kit's. Its glb carries no textures: three tiling materials, by name.
+const DUNGEON_KIT := "res://models/dungeon/dungeon_kit.glb"
+const DK_TEX := "res://models/dungeon/dk_%s_%s.jpg"
+## Each material's albedo: every light here is a fire, so the stone leans cool
+## (as STONE_CAST does for the Tripo pieces). "floor" is the stone again, wetter.
+const DK_ALBEDO := {
+	"stone": Color(0.86, 0.93, 1.06),
+	"floor": Color(0.80, 0.88, 1.02),
+	"wood": Color(1.0, 0.96, 0.92),
+	"iron": Color(1.0, 1.0, 1.0),
+}
+const DK_ROUGHNESS := {"stone": 1.0, "floor": 0.78, "wood": 1.0, "iron": 1.0}
+const DK_NORMAL := {"stone": 1.3, "floor": 1.3, "wood": 1.2, "iron": 1.0}
+## Variants brick_level picks between, where the kit has them.
+const WALL_VARIANTS := ["wall", "wall_b", "wall_c"]
+const FLOOR_VARIANTS := ["floor", "floor_b"]
+const FLOOR_BROKEN_EVERY := 7
+const ARCH_VARIANTS := ["arch", "arch_b"]
+const BROKEN_WALLS := ["wall_broken", "wall_broken_b"]
+## Its metallic_specular: damp stone glints, but a mirror of every torch on
+## every wall read as embers in the masonry.
+const DK_SPECULAR := {"stone": 0.38, "floor": 0.5, "wood": 0.4, "iron": 0.5}
+## One plain corridor wall in this many has stones fallen out of it.
+const BROKEN_WALL_EVERY := 7
 
 ## Pieces that do NOT cast shadows: the floor and its bed only ever have light
 ## from above.
-const NO_SHADOW := ["floor", "floor_notch", "bed"]
+const NO_SHADOW := ["floor", "floor_b", "floor_c", "floor_notch", "bed"]
 ## The lid and skirts DO cast, for the moon (2026-10-14): the Tripo vault has a
 ## few real holes in it, which the lid covers, and the moon would shine through
 ## them. No torch can see them (they are outside the corridor), so they are on
@@ -61,7 +90,14 @@ const PILLAR_HALF := 0.45
 const PILLAR_HEIGHT := 3.2
 ## The torch pillar's torch head, in the pillar's own frame (front = +Z), as the
 ## build reported it.
-const TORCH_HEAD := Vector3(0.108, 2.746, 0.538)
+const TORCH_HEAD_TRIPO := Vector3(0.108, 2.746, 0.538)
+## The Blender kit's (tools/build_dungeon_kit.py TORCH_HEAD).
+const TORCH_HEAD_DK := Vector3(0.0, 2.72, 0.63)
+
+
+static func torch_head() -> Vector3:
+	meshes(1.0)
+	return TORCH_HEAD_DK if is_dk("pillar_torch") else TORCH_HEAD_TRIPO
 ## A torch pillar stands against a wall as a pilaster: this far proud of it.
 const PILASTER_PROUD := 0.3
 ## Where the lunette panel over a dead end's end wall starts.
@@ -121,7 +157,68 @@ static func meshes(tint: float) -> Dictionary:
 				mat.roughness = 1.0
 		_meshes[String(mi.name)] = mesh
 	scene.free()
+	_load_dungeon_kit()
 	return _meshes
+
+
+static var _dk_pieces: Dictionary = {}
+static var _dk_mats: Dictionary = {}
+
+
+## True for a piece of the Blender kit: its vertex colours are its shading and
+## stay on wherever it is drawn.
+static func is_dk(piece: String) -> bool:
+	return _dk_pieces.has(piece)
+
+
+static func _load_dungeon_kit() -> void:
+	if "--tripo-kit" in OS.get_cmdline_user_args() or not ResourceLoader.exists(DUNGEON_KIT):
+		return
+	var scene: Node = (load(DUNGEON_KIT) as PackedScene).instantiate()
+	for node in scene.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		var piece := String(mi.name)
+		for s in mi.mesh.get_surface_count():
+			var mat := mi.mesh.surface_get_material(s)
+			var kind := String(mat.resource_name).trim_prefix("dk_") if mat != null else "stone"
+			if not DK_ALBEDO.has(kind):
+				kind = "stone"
+			if kind == "stone" and piece.begins_with("floor"):
+				kind = "floor"
+			mi.mesh.surface_set_material(s, dk_material(kind))
+		_meshes[piece] = mi.mesh
+		_dk_pieces[piece] = true
+	scene.free()
+
+
+## One of the Blender kit's materials: tiling albedo, normal and ORM maps
+## (occlusion, roughness, metal), the mesh's vertex colour as its shade.
+static func dk_material(kind: String) -> StandardMaterial3D:
+	if _dk_mats.has(kind):
+		return _dk_mats[kind]
+	var src := "stone" if kind == "floor" else kind
+	var m := StandardMaterial3D.new()
+	m.resource_name = "dk_" + kind
+	m.albedo_texture = load(DK_TEX % [src, "albedo"])
+	m.albedo_color = DK_ALBEDO[kind]
+	m.normal_enabled = true
+	m.normal_texture = load(DK_TEX % [src, "normal"])
+	m.normal_scale = DK_NORMAL[kind]
+	var orm: Texture2D = load(DK_TEX % [src, "orm"])
+	m.ao_enabled = true
+	m.ao_texture = orm
+	m.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	m.roughness_texture = orm
+	m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+	m.roughness = DK_ROUGHNESS[kind]
+	m.metallic_specular = DK_SPECULAR[kind]
+	if src == "iron":
+		m.metallic = 1.0
+		m.metallic_texture = orm
+		m.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
+	m.vertex_color_use_as_albedo = true
+	_dk_mats[kind] = m
+	return m
 
 
 ## Tripo pieces import metallic with a glossy packed map (CLAUDE.md section 4).
@@ -179,6 +276,10 @@ static func standalone(piece: String) -> Mesh:
 	var source: Mesh = meshes(1.0).get(piece)
 	if source == null:
 		return null
+	if is_dk(piece):
+		# The Blender kit's vertex colours are real: drawn as it is.
+		_standalone[piece] = source
+		return source
 	var copy := source.duplicate() as Mesh
 	for s in copy.get_surface_count():
 		var m := copy.surface_get_material(s) as StandardMaterial3D
@@ -204,6 +305,9 @@ static func standalone(piece: String) -> Mesh:
 const SUPPORT_EVERY := 7
 const PLANKS_EVERY := 6
 const CRATE_EVERY := 9
+## The Blender kit's broken column and heaps of fallen stone (note 183).
+const COLUMN_EVERY := 13
+const RUBBLE_EVERY := 8
 ## The support's back against the wall face; the floor props this far out.
 const PROP_OUT := 1.35
 
@@ -228,9 +332,13 @@ static func place_clutter(parent: Node3D, out, blocked: Dictionary, view_range: 
 	var cages: Dictionary = out.get_meta("cage_walls", {})
 	var walls_used := {}
 	var crates: Array = []
+	var broken: Dictionary = out.get_meta("broken_walls", {})
 	for key in out.cells:
 		var cell = out.cells[key]
 		if cell.kind != "straight" or cell.room >= 0 or cell.court or blocked.has(key):
+			# Its broken walls are still spoken for.
+			if broken.has(key):
+				walls_used[key] = broken[key]
 			continue
 		rng.seed = hash(key) ^ 0x70d
 		var walls: Array[int] = []
@@ -242,12 +350,24 @@ static func place_clutter(parent: Node3D, out, blocked: Dictionary, view_range: 
 			if cages.has(key) and side in cages[key]:
 				continue
 			walls.append(side)
+		var centre: Vector3 = out.to_world(key)
+		# Under a wall with stones fallen out of it, the stones (note 183).
+		for bs: int in broken.get(key, []):
+			walls.erase(bs)
+			walls_used[key] = (walls_used.get(key, []) as Array) + [bs]
+			if not is_dk("rubble_a"):
+				continue
+			var bd := _dir(bs)
+			var b_along := Vector3(-bd.z, 0.0, bd.x)
+			var b_at := centre + bd * WALL_FACE + b_along * rng.randf_range(-1.3, 1.3)
+			add.call("rubble_a" if rng.randf() < 0.6 else "rubble_b", Transform3D(_yaw_facing(-bd), b_at))
+			_box(body, _axis_size(bd, 0.6, 1.2, 0.45), b_at - bd * 0.3 + Vector3(0.0, 0.225, 0.0))
+			spots.append({"cell": key, "at": b_at - bd * 0.3, "half": Vector2(0.65, 0.35)})
 		if walls.is_empty():
 			continue
 		var side: int = walls[rng.randi_range(0, walls.size() - 1)]
 		var d := _dir(side)
 		var into := -d
-		var centre: Vector3 = out.to_world(key)
 		var along := Vector3(-d.z, 0.0, d.x)
 		var roll := rng.randi_range(0, SUPPORT_EVERY * PLANKS_EVERY * CRATE_EVERY - 1)
 		if roll % SUPPORT_EVERY == 0:
@@ -257,18 +377,38 @@ static func place_clutter(parent: Node3D, out, blocked: Dictionary, view_range: 
 			for s: float in [-1.0, 1.0]:
 				_box(body, Vector3(0.3, 2.4, 0.3), at + into * 0.25 + along * s * 1.15 + Vector3(0.0, 1.2, 0.0))
 			spots.append({"cell": key, "at": at + into * 0.35, "half": Vector2(1.4, 0.45)})
-			walls_used[key] = [side]
+			walls_used[key] = (walls_used.get(key, []) as Array) + [side]
 		elif roll % PLANKS_EVERY == 1:
 			var at := centre + d * PROP_OUT + along * rng.randf_range(-1.2, 1.2)
 			add.call("wood_planks", Transform3D(Basis(Vector3.UP, rng.randf() * TAU), at))
-			walls_used[key] = [side]
+			walls_used[key] = (walls_used.get(key, []) as Array) + [side]
 		elif roll % CRATE_EVERY == 2:
 			# A crate that breaks (note 176): handed to ruin_dressing.gd, which
 			# builds it (breakable_crate.gd) -- no kit crate, no collision box here.
 			var at := centre + d * (WALL_FACE - 0.6) + along * rng.randf_range(-1.6, 1.6)
 			crates.append(Transform3D(Basis(Vector3.UP, rng.randf_range(-0.4, 0.4)) * _yaw_facing(into), at))
 			spots.append({"cell": key, "at": at, "half": Vector2(0.5, 0.5)})
-			walls_used[key] = [side]
+			walls_used[key] = (walls_used.get(key, []) as Array) + [side]
+		elif is_dk("column_broken") and roll % COLUMN_EVERY == 3:
+			# A column snapped off, its next drum lying by it (note 183).
+			var at := centre + d * (WALL_FACE - 0.75) + along * rng.randf_range(-1.4, 1.4)
+			var cb := Basis(Vector3.UP, rng.randf() * TAU)
+			add.call("column_broken", Transform3D(cb, at))
+			_box(body, Vector3(0.84, 1.6, 0.84), at + Vector3(0.0, 0.8, 0.0))
+			_box(body, Vector3(0.6, 0.58, 0.6), at + cb * Vector3(0.82, 0.29, 0.35))
+			spots.append({"cell": key, "at": at, "half": Vector2(1.1, 0.8)})
+			walls_used[key] = (walls_used.get(key, []) as Array) + [side]
+		elif is_dk("rubble_b") and roll % RUBBLE_EVERY == 4:
+			# Fallen stone heaped at the wall's foot.
+			var at := centre + d * WALL_FACE + along * rng.randf_range(-1.5, 1.5)
+			var big: bool = is_dk("rubble_c") and rng.randf() < 0.35
+			var heap: String = "rubble_c" if big else ("rubble_b" if rng.randf() < 0.6 else "rubble_a")
+			var reach := 0.8 if big else 0.6
+			add.call(heap, Transform3D(_yaw_facing(into), at))
+			_box(body, _axis_size(d, reach, 1.9 if big else 1.0, 0.45), at + into * reach * 0.5 + Vector3(0.0, 0.225, 0.0))
+			spots.append({"cell": key, "at": at + into * reach * 0.5, "half": Vector2(1.0 if big else 0.55, reach * 0.55)})
+			walls_used[key] = (walls_used.get(key, []) as Array) + [side]
+	_place_overhead(out, blocked, add)
 	var holder := Node3D.new()
 	holder.name = "Clutter"
 	parent.add_child(holder)
@@ -277,6 +417,62 @@ static func place_clutter(parent: Node3D, out, blocked: Dictionary, view_range: 
 	out.set_meta("clutter_walls", walls_used)
 	out.set_meta("clutter_crates", crates)
 	return spots
+
+
+## What hangs over head height in the plain corridors (note 183), so it needs
+## no collision and nothing walks into it: timber shoring up a vault (a tie
+## beam, king post and struts, `tie_beam`, nothing under 2.45 m and that at the
+## walls) and a portcullis hauled up into an arch and left there
+## (`portcullis_up`, nothing under 3.13 m). Straights only, never under a
+## skylight or where a torch's pilaster stands; a portcullis only in an arch
+## between two plain straights with no door.
+const TIE_BEAM_EVERY := 6
+const PORTCULLIS_EVERY := 9
+
+
+static func _place_overhead(out, blocked: Dictionary, add: Callable) -> void:
+	if not (is_dk("tie_beam") and is_dk("portcullis_up")):
+		return
+	var open_roof: Dictionary = out.get_meta("open_roof", {})
+	var rng := RandomNumberGenerator.new()
+	var hung := {}
+	var plain := func(key: Vector2i) -> bool:
+		if not out.cells.has(key):
+			return false
+		var c = out.cells[key]
+		return c.kind == "straight" and c.room < 0 and not c.court and not c.hall \
+			and not open_roof.has(key) and not out.skylights.has(key)
+	for key in out.cells:
+		if not plain.call(key):
+			continue
+		var cell = out.cells[key]
+		rng.seed = hash(key) ^ 0x71eb
+		var centre: Vector3 = out.to_world(key)
+		if not out.torch_cells.has(key) and rng.randi() % TIE_BEAM_EVERY == 0:
+			var basis := Basis(Vector3.UP, -float(cell.turn) * PI * 0.5)
+			add.call("tie_beam", Transform3D(basis, centre + basis * Vector3(0.0, 0.0, rng.randf_range(-1.6, 1.6))))
+		if blocked.has(key):
+			continue
+		for side in ModuleMaze.ORDER:
+			if not (cell.open & side):
+				continue
+			var other: Vector2i = key + ModuleMaze.DIRS[side]
+			if not out.cells.has(other) or blocked.has(other) or rng.randi() % PORTCULLIS_EVERY != 0:
+				continue
+			# Onto another straight, a bend or a crossing: never a dead end (the
+			# cells' gates hang in those arches), a room or a court.
+			var oc = out.cells[other]
+			if oc.room >= 0 or oc.court or oc.hall or not (oc.kind in ["straight", "corner", "tee", "cross"]):
+				continue
+			# One to an arch (two straights share theirs), and not arch after arch.
+			var edge := [key, other] if (key.x < other.x or (key.x == other.x and key.y < other.y)) else [other, key]
+			if hung.has(edge) or hung.has(key) or hung.has(other):
+				continue
+			hung[edge] = true
+			hung[key] = true
+			hung[other] = true
+			var d := _dir(side)
+			add.call("portcullis_up", Transform3D(_yaw_facing(-d), centre + d * (out.cell_size * 0.5)))
 
 
 static func _yaw_facing(into: Vector3) -> Basis:
@@ -355,7 +551,12 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 						var to: Vector3 = manhole["world"] - at
 						add.call("floor_notch", Transform3D(Basis(Vector3.UP, atan2(-to.z, to.x)), at))
 						continue
-					add.call("floor", Transform3D(b, at))
+					# The chunk's own flags; in every other chunk, now and then, the
+					# tile with a flag broken up and settled.
+					var tile := _variant(kit, FLOOR_VARIANTS, rng, chunk_key, 1)
+					if kit.has("floor_c") and posmod(hash(chunk_key), 2) == 0 and rng.randi() % FLOOR_BROKEN_EVERY == 0:
+						tile = "floor_c"
+					add.call(tile, Transform3D(b, at))
 			# Its top just under the slabs' joints, never over the slabs.
 			if manhole.is_empty():
 				add.call("bed", Transform3D(Basis(), centre + Vector3(0.0, -0.16, 0.0)))
@@ -372,6 +573,8 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 			"cross": vault = "vault_cross"
 		if cell.kind == "straight" and out.skylights.has(cell.pos):
 			vault = "vault_sky"
+		elif vault == "vault_straight":
+			vault = _variant(kit, ["vault_straight", "vault_b"], rng, chunk_key, 1)
 		if roofed:
 			add.call(vault, Transform3D(basis, centre))
 		# A dark lid over the vault's back: anything that slips between two
@@ -417,12 +620,26 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 				if cell.hall and out.cells[other].hall:
 					continue
 				var mid := centre + d * half
-				add.call("arch", Transform3D(face_basis, mid))
+				add.call(_variant(kit, ARCH_VARIANTS, rng, chunk_key, 1), Transform3D(face_basis, mid))
 				_arch_collision(body, mid, d)
 				continue
 
-			# A closed side: a wall, its face WALL_FACE in from the centre.
-			var piece := "wall"
+			# A closed side: a wall, its face WALL_FACE in from the centre. One of
+			# the kit's coursings; in the corridors now and then a wall with
+			# stones fallen out of it (place_clutter heaps them at its foot) --
+			# never in a room or on a dead end's walls (cells, beacons and
+			# benches hang there).
+			var piece := _variant(kit, WALL_VARIANTS, rng, chunk_key, 2)
+			if kit.has("wall_broken") and cell.kind == "straight" and cell.room < 0 and not cell.hall \
+					and not out.niches.has(cell.pos) \
+					and not (out.torch_cells.has(key) and int(out.torch_cells[key]) == side) \
+					and rng.randi() % BROKEN_WALL_EVERY == 0:
+				piece = _variant(kit, BROKEN_WALLS, rng)
+				var broken: Dictionary = out.get_meta("broken_walls", {})
+				if not broken.has(cell.pos):
+					broken[cell.pos] = []
+				broken[cell.pos].append(side)
+				out.set_meta("broken_walls", broken)
 			# A bone cage (module_level.place_windows) is the Tripo cage wall:
 			# the skull and its loot sit inside the iron cage, whose gate is cut
 			# free so it swings. Only there -- no empty cages elsewhere.
@@ -471,6 +688,23 @@ static func build(parent: Node3D, out, view_range: float, tint: float) -> Node3D
 
 	_emit(holder, out, kit, placed, view_range)
 	return holder
+
+
+## One of `names` the kit has (the Tripo kit has only the first of each) -- of
+## the `share` of them this 4 x 4 cell chunk uses. Every variant standing in a
+## chunk is one more MultiMesh to draw there, twice (depth, colour): with all
+## of every piece's variants in every chunk the ossuary's long views drew 1,600
+## calls where the Tripo kit drew 1,150 and lost 2 ms of CPU a frame. So a
+## chunk lays one floor, one arch, one barrel and two of the three walls, and
+## the next chunk another set.
+static func _variant(kit: Dictionary, names: Array, rng: RandomNumberGenerator, chunk := Vector2i.ZERO,
+		share := 0) -> String:
+	var n := names.size()
+	var pick: String = names[rng.randi() % n]
+	if share > 0 and share < n:
+		var first := posmod(hash(chunk) ^ hash(names[0]), n)
+		pick = names[(first + rng.randi() % share) % n]
+	return pick if kit.has(pick) else names[0]
 
 
 static func _in_boss_block(out, cell) -> bool:
@@ -586,6 +820,8 @@ static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view
 	var jitter := RandomNumberGenerator.new()
 	var counts := {}
 	var shadow_blocks := 0
+	# piece -> chunk -> transforms, for the shadow blocks.
+	var shadow_lists := {}
 	# `-- --brick-skip=bed,cap` leaves pieces out, for measuring what they cost.
 	var skip: PackedStringArray = []
 	for a in OS.get_cmdline_user_args():
@@ -638,9 +874,22 @@ static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view
 			holder.add_child(mmi)
 			if split:
 				mmi.set_meta("shadow_split", true)
-				shadow_blocks += _emit_shadows(holder, mesh, list, piece, chunk, view_range,
-					SHADOW_BLOCK * out.cell_size)
+				# Variants of one piece throw the same shadow: they cast together,
+				# as the first of them (SHADOW_AS), so a block has one caster for
+				# its walls however many coursings stand in it.
+				var as_piece: String = SHADOW_AS.get(piece, piece)
+				if not kit.has(as_piece):
+					as_piece = piece
+				if not shadow_lists.has(as_piece):
+					shadow_lists[as_piece] = {}
+				if not shadow_lists[as_piece].has(chunk):
+					shadow_lists[as_piece][chunk] = []
+				(shadow_lists[as_piece][chunk] as Array).append_array(list)
 			counts[piece] = int(counts.get(piece, 0)) + list.size()
+	for piece in shadow_lists:
+		for chunk in shadow_lists[piece]:
+			shadow_blocks += _emit_shadows(holder, kit[piece], shadow_lists[piece][chunk], piece, chunk,
+				view_range, SHADOW_BLOCK * out.cell_size)
 	holder.set_meta("counts", counts)
 	print("[brick] ", counts, "  shadow blocks ", shadow_blocks)
 
@@ -666,6 +915,14 @@ static func _emit(holder: Node3D, out, kit: Dictionary, placed: Dictionary, view
 ## themselves.
 const SHADOW_BLOCK := 2
 const SHADOW_LOD_BIAS := 0.001
+## The Blender kit's variants (note 183) cast as the piece they are a variant
+## of: the same slab, arch or barrel to a light. With each variant casting for
+## itself a block held up to five wall casters where it had held one, and the
+## corridors, which are CPU-bound, lost 1.3 ms a frame to drawing them.
+const SHADOW_AS := {
+	"wall_b": "wall", "wall_c": "wall", "wall_broken": "wall", "wall_broken_b": "wall",
+	"arch_b": "arch", "vault_b": "vault_straight",
+}
 
 
 ## The same for everything else the level built (the rooms: the surgery's

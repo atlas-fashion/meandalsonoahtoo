@@ -526,7 +526,75 @@ static func _assign_room_roles(out: Built, prisons: int, enclose: bool) -> void:
 		if is_prison.has(i):
 			continue
 		room["kind"] = "scoutpost"
+		if enclose:
+			_shrink_room(out, room, SCOUTPOST_HALF)
 		_enclose_hall(out, room, enclose)
+
+
+## A scoutpost is smaller than the block the carve cut for it (the user,
+## 2026-11-12: "scoutposts should be smaller than they are now, with an
+## upstairs"; note 183): SCOUTPOST_HALF 1, three cells by three, 18 m square,
+## where the carve's rooms are five by five. Shrunk in place, so the rest of the
+## maze is the maze it was: the room keeps the middle of its block, and of the
+## ring round it only what leads from each old way in to the new hall is kept,
+## as plain corridor -- straight in, or from a corner of the old block along
+## its wall and then in. The rest of the ring is rock again. The room's
+## "entrances" become the new hall's.
+const SCOUTPOST_HALF := 1
+
+
+static func _shrink_room(out: Built, room: Dictionary, new_half: int) -> void:
+	var c: Vector2i = room["centre"]
+	var old: int = room["half"]
+	if old - new_half != 1:
+		return
+	var h := new_half
+	var stubs := {}
+	var ways: Array = []
+	for way in room["entrances"]:
+		var p: Vector2i = way["cell"]
+		var side: int = way["side"]
+		var off := p - c
+		var path: Array[Vector2i] = [p]
+		if absi(off.x) > h and absi(off.y) > h:
+			# A corner of the old block: along the wall, square to the way in.
+			var out_step: Vector2i = ModuleMaze.DIRS[side]
+			path.append(p + (Vector2i(0, -signi(off.y)) if out_step.x != 0 else Vector2i(-signi(off.x), 0)))
+		var last: Vector2i = path[path.size() - 1]
+		var lo := last - c
+		var inward := Vector2i(-signi(lo.x), 0) if absi(lo.x) > h else Vector2i(0, -signi(lo.y))
+		stubs[p] = int(stubs.get(p, 0)) | side
+		for i in range(1, path.size()):
+			stubs[path[i - 1]] = int(stubs.get(path[i - 1], 0)) | _side_of(path[i] - path[i - 1])
+			stubs[path[i]] = int(stubs.get(path[i], 0)) | _side_of(path[i - 1] - path[i])
+		stubs[last] = int(stubs.get(last, 0)) | _side_of(inward)
+		var inner := last + inward
+		var in_side := _side_of(-inward)
+		if not ways.any(func(w: Dictionary) -> bool: return w["cell"] == inner and w["side"] == in_side):
+			ways.append({"cell": inner, "side": in_side})
+	for dx in range(-old, old + 1):
+		for dy in range(-old, old + 1):
+			var p := c + Vector2i(dx, dy)
+			var cell: ModuleMaze.Cell = out.cells[p]
+			if absi(dx) <= h and absi(dy) <= h:
+				cell.open = 0
+				for s in ModuleMaze.ORDER:
+					var n: Vector2i = p + ModuleMaze.DIRS[s]
+					if absi(n.x - c.x) <= h and absi(n.y - c.y) <= h:
+						cell.open |= s
+				cell.court = absi(dx) < h and absi(dy) < h
+			elif stubs.has(p):
+				cell.open = int(stubs[p])
+				cell.room = -1
+				cell.court = false
+				cell.hall = false
+				ModuleMaze._classify(cell)
+			else:
+				out.cells.erase(p)
+	for way in ways:
+		(out.cells[way["cell"]] as ModuleMaze.Cell).open |= int(way["side"])
+	room["half"] = h
+	room["entrances"] = ways
 
 
 ## Cells walked from the spawn to each room (by its centre key). Rooms stand on
@@ -2312,16 +2380,10 @@ static func _pilaster_torch(holder: Node3D, scene: PackedScene, face_point: Vect
 		if source == null:
 			return _hang_torch(holder, scene, face_point - into_wall * 0.12
 				+ Vector3(0.0, 2.35, 0.0), into_wall, energy, TORCH_RANGE)
-		# A plain MeshInstance has no instance colour, and the kit's materials
-		# take their albedo from it: copies with that off, or it renders black.
-		var copy := source.duplicate() as Mesh
-		for s in copy.get_surface_count():
-			var m := copy.surface_get_material(s) as StandardMaterial3D
-			if m != null:
-				m = m.duplicate() as StandardMaterial3D
-				m.vertex_color_use_as_albedo = false
-				copy.surface_set_material(s, m)
-		_pilaster_mesh = copy
+		# A plain MeshInstance has no instance colour, and the Tripo kit's
+		# materials take their albedo from it: copies with that off, or it
+		# renders black (the Blender kit's vertex colours are real and stay).
+		_pilaster_mesh = BrickLevel.standalone("pillar_torch")
 	var basis := Basis(Vector3.UP, atan2(-into_wall.x, -into_wall.z))
 	var centre := face_point + into_wall * (BrickLevel.PILLAR_HALF - BrickLevel.PILASTER_PROUD)
 	var pillar := MeshInstance3D.new()
@@ -2342,7 +2404,7 @@ static func _pilaster_torch(holder: Node3D, scene: PackedScene, face_point: Vect
 	body.position = centre + Vector3(0.0, BrickLevel.PILLAR_HEIGHT * 0.5, 0.0)
 	holder.add_child(body)
 
-	var head := centre + basis * BrickLevel.TORCH_HEAD
+	var head := centre + basis * BrickLevel.torch_head()
 	# The pillar carries its own carved torch: no second one.
 	var torch := _hang_torch(holder, scene, head, into_wall, energy, TORCH_RANGE, false)
 	for part in ["Plate", "Arm", "Ring", "Handle", "Head"]:

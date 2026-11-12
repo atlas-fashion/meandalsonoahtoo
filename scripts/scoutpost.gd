@@ -70,8 +70,12 @@ const LANTERN_SHARE := 3.0
 ## The galleries: deck top, depth out from the wall, half length.
 const DECK_Y := 2.15
 const DECK_DEPTH := 1.75
-const DECK_HALF := 10.4
 const RAIL_Y := 1.0
+## A small post's upper floor (note 183, `_loft`): this deep out from its wall,
+## in this many rows of the kit's deck bays stretched to fit; its front edge
+## stops just short of the two stone piers.
+const LOFT_DEPTH := 4.3
+const LOFT_ROWS := 2
 ## The kit's measures (tools/build_scoutpost_kit.py): a deck bay's length, the
 ## post line out from the wall, the stair's run and width, and how far out of
 ## the wall it stands (clear of the pilasters).
@@ -80,9 +84,6 @@ const FRONT := 1.65
 const STAIR_RUN := 3.4
 const STAIR_W := 1.1
 const STAIR_Z := 0.3
-## A stair's foot keeps this far along from the hall's middle where a way in is
-## in the corner beyond it.
-const STAIR_CLEAR := 10.3
 const DRAWN_TO := 60.0
 const LAYERS := 256 | 512
 
@@ -132,6 +133,26 @@ var loot_taken: Array = []
 var guards: Array = []
 var cleared := false
 var chest: Node3D
+## Note 183: the room's half in cells; a small post (3 x 3 cells) has one upper
+## floor (`_loft`) where the big hall had balconies. The wall it is on (-1:
+## none), and where its chest goes up there (hall frame).
+var _h := 2
+var _small := false
+var _loft_wall := -1
+var _loft_chest := Transform3D()
+var _has_loft := false
+
+
+## How many of a wall's two corners have a way in on the other wall.
+func _open_ends(w: Dictionary) -> int:
+	var cells: Array = w["cells"]
+	var a: Vector3 = w["a"]
+	var n := 0
+	if (built.cells[cells[0]["key"]].open & _side(-a)) != 0:
+		n += 1
+	if (built.cells[cells[cells.size() - 1]["key"]].open & _side(a)) != 0:
+		n += 1
+	return n
 
 
 static func build(parent: Node3D, level, room_: Dictionary, owner_maze: Node, ruin_dressing: Node,
@@ -171,6 +192,8 @@ func _build(torch_energy: float) -> void:
 	_rng.seed = hash(room["centre"]) ^ 0x4a11b
 	_cell = built.cell_size
 	var h: int = room["half"]
+	_h = h
+	_small = h <= 1
 	_ring = float(h) * _cell
 	_wall = _ring + BrickLevel.WALL_FACE
 	_body = StaticBody3D.new()
@@ -214,10 +237,36 @@ func _build(torch_energy: float) -> void:
 					w["winch"] = k
 					winch_wall = i
 	var heavy := 0 if identical else _rng.randi_range(0, 3)
-	_walls[heavy]["heavy"] = true
 	var galleries := 0
 	var want_galleries := 2 if identical else (1 if _rng.randf() < 0.65 else 2)
 	var gallery_order: Array = [0, 2, 1, 3] if identical else order
+	if _small:
+		# Note 183, a small post: ONE upper floor, along a wall with no way in --
+		# the back wall if it can, and one whose corners have no way in beside
+		# them -- and the winch moved off that wall if another has room for it.
+		var loft := -1
+		var loft_ends := 9
+		for i in ([2, 0, 1, 3] if identical else order):
+			var w: Dictionary = _walls[i]
+			if w["closed"] and _open_ends(w) < loft_ends:
+				loft = i
+				loft_ends = _open_ends(w)
+		if loft >= 0:
+			_walls[loft]["gallery"] = true
+			galleries = 1
+			_loft_wall = loft
+			if winch_wall == loft:
+				for i in order:
+					var w: Dictionary = _walls[i]
+					if i != loft and winch_wall == loft and not w["cells"][h]["entrance"]:
+						_walls[loft]["winch"] = -1
+						w["winch"] = h
+						winch_wall = i
+			# The roots on a wall that is not under the upper floor.
+			if heavy == loft:
+				heavy = (loft + 1) % 4
+		want_galleries = 0
+	_walls[heavy]["heavy"] = true
 	for i in gallery_order:
 		var w: Dictionary = _walls[i]
 		if galleries < want_galleries and w["closed"] and i != winch_wall:
@@ -232,7 +281,10 @@ func _build(torch_energy: float) -> void:
 		_build_winch(_walls[winch_wall])
 	for w in _walls:
 		if w["gallery"]:
-			_gallery(w)
+			if _small:
+				_loft(w)
+			else:
+				_gallery(w)
 	_place_chest(winch_wall)
 	_dress()
 	_commit_wood()
@@ -358,11 +410,18 @@ func _hang_torches(h: int, energy: float) -> void:
 	var level = load("res://scripts/module_level.gd")
 	var scene: PackedScene = load(level.TORCH_SCENE)
 	var pilaster_in := _wall - PILASTER_PROUD
-	for w in _walls:
+	for i in _walls.size():
+		var w: Dictionary = _walls[i]
 		var d: Vector3 = w["d"]
 		var a: Vector3 = w["a"]
-		for s: float in [-0.5, 0.5]:
-			var at := d * (pilaster_in - 0.02) + a * (s * _cell) + Vector3(0.0, TORCH_HEIGHT, 0.0)
+		# A small post (note 183): one to a wall, on alternate pilasters; over
+		# the upper floor, high enough to light it.
+		var on: Array = [-0.5, 0.5]
+		if _small:
+			on = [-0.5 if i % 2 == 0 else 0.5]
+		for s: float in on:
+			var y := DECK_Y + 1.55 if (_small and i == _loft_wall) else TORCH_HEIGHT
+			var at := d * (pilaster_in - 0.02) + a * (s * _cell) + Vector3(0.0, y, 0.0)
 			level._hang_torch(self, scene, at, d, energy, 13.0)
 			_count("torches")
 
@@ -371,6 +430,10 @@ func _hang_torches(h: int, energy: float) -> void:
 ## middle, each a torch light (holding_cell.gd `make_lantern`).
 func _hang_lanterns(energy: float) -> void:
 	for p: Vector3 in [Vector3(-_cell, 0, 0), Vector3(_cell, 0, 0), Vector3(0, 0, -_cell), Vector3(0, 0, _cell)]:
+		# A small post: none over the upper floor (it would hang at head height
+		# up there) nor across from it -- the two to either side.
+		if _small and _loft_wall >= 0 and absf(p.dot(_walls[_loft_wall]["d"])) > 1.0:
+			continue
 		var at := p + Vector3(_rng.randf_range(-0.6, 0.6), LANTERN_HOOK_Y + _rng.randf_range(-0.25, 0.2),
 			_rng.randf_range(-0.6, 0.6))
 		_lanterns.append(HoldingCell.make_lantern(self, at, energy * LANTERN_SHARE))
@@ -643,6 +706,14 @@ const CHEST_OFF := 0.95
 ## free one; never a way in, a corner or by the stair. Its spot on the wall is
 ## kept from the dressing. Two health potions and some coins.
 func _place_chest(winch_wall: int) -> void:
+	if _has_loft:
+		# A small post's chest is upstairs (note 183), against the wall.
+		chest = load("res://scripts/loot_chest.gd").make(2, _rng.randi_range(15, 30))
+		chest.name = "Chest"
+		add_child(chest)
+		chest.transform = _loft_chest
+		_count("chest")
+		return
 	var order: Array = []
 	if winch_wall >= 0:
 		var wd: Vector3 = _walls[winch_wall]["d"]
@@ -764,8 +835,10 @@ func _gallery(w: Dictionary) -> void:
 	var open_hi: bool = (built.cells[cells[cells.size() - 1]["key"]].open & _side(a)) != 0
 	# A corner whose other wall has a way in: the deck stops short of it, its
 	# posts out of the path of anyone coming through.
-	var lo := -DECK_HALF + (3.0 if open_lo else 0.0)
-	var hi := DECK_HALF - (3.0 if open_hi else 0.0)
+	var deck_half := _wall - 3.5
+	var stair_clear := _wall - 3.6
+	var lo := -deck_half + (3.0 if open_lo else 0.0)
+	var hi := deck_half - (3.0 if open_hi else 0.0)
 	# The stair against the wall past one end: one with no way in by it if
 	# there is one; else the deck shortens so the stair's foot stays clear.
 	var up := 1.0
@@ -775,9 +848,9 @@ func _gallery(w: Dictionary) -> void:
 		up = -1.0
 	if (up > 0.0 and open_hi) or (up < 0.0 and open_lo):
 		if up > 0.0:
-			hi = minf(hi, STAIR_CLEAR - STAIR_RUN)
+			hi = minf(hi, stair_clear - STAIR_RUN)
 		else:
-			lo = maxf(lo, -STAIR_CLEAR + STAIR_RUN)
+			lo = maxf(lo, -stair_clear + STAIR_RUN)
 	var n := maxi(roundi((hi - lo) / BAY), 1)
 	var sx := (hi - lo) / (float(n) * BAY)
 	var stretch := Basis.from_scale(Vector3(sx, 1.0, 1.0))
@@ -846,6 +919,133 @@ func _gallery(w: Dictionary) -> void:
 			continue
 		var x := lo + (float(i) + 0.5) * span + _rng.randf_range(-0.6, 0.6)
 		var xf := global_transform * g * Transform3D(Basis(), Vector3(x, DECK_Y + RAIL_Y + 0.05, FRONT + 0.07))
+		if _rng.randf() < 0.3:
+			ruins.hang_cloth(xf, _rng.randf_range(0.8, 1.0), _rng.randf_range(1.6, 2.1),
+				[Color(0.3, 0.035, 0.03), Color(0.24, 0.03, 0.035)][_rng.randi_range(0, 1)])
+		else:
+			ruins.hang_cloth(xf, _rng.randf_range(0.5, 0.9), _rng.randf_range(0.8, 1.5),
+				Color(0.3, 0.27, 0.21) * _rng.randf_range(0.8, 1.15), true)
+		_count("rags")
+
+
+## The upstairs of a small post (note 183; the user: "scoutposts should be
+## smaller than they are now, with an upstairs"): a timber floor LOFT_DEPTH deep
+## along wall `w`, from the side wall at one end to the head of the stair at the
+## other, on the balcony kit's own pieces -- its deck bays in LOFT_ROWS rows,
+## stretched to fit, posts with knee braces under the front, a railing along
+## the front and across the stair's end beside the stair's head. Solid, walked. The chest stands up there (`_place_chest`),
+## with a crate or two and most of the loot; rags over the rail.
+func _loft(w: Dictionary) -> void:
+	var d: Vector3 = w["d"]
+	var a: Vector3 = w["a"]
+	# The floor's own frame: x along the wall, z out of it into the hall.
+	var g := Transform3D(Basis(a, Vector3.UP, -d), d * _wall)
+	var cells: Array = w["cells"]
+	var open_lo: bool = (built.cells[cells[0]["key"]].open & _side(-a)) != 0
+	var open_hi: bool = (built.cells[cells[cells.size() - 1]["key"]].open & _side(a)) != 0
+	# The stair against the wall at one end: one with no way in by it.
+	var up := 1.0
+	if open_hi and not open_lo:
+		up = -1.0
+	elif not open_hi and not open_lo and _rng.randf() < 0.5:
+		up = -1.0
+	# `near` the stair's head, `far` the other end: into the side wall, or
+	# stopping a bay short of a corner someone comes in through.
+	var near := up * (_wall - 3.5)
+	if (up > 0.0 and open_hi) or (up < 0.0 and open_lo):
+		near = up * (_wall - 3.6 - STAIR_RUN)
+	var far_open: bool = open_lo if up > 0.0 else open_hi
+	var far := -up * ((_cell * 0.5) if far_open else (_wall - 0.04))
+	var lo := minf(near, far)
+	var hi := maxf(near, far)
+	var n := maxi(roundi((hi - lo) / BAY), 1)
+	var sx := (hi - lo) / (float(n) * BAY)
+	var sz := LOFT_DEPTH / (float(LOFT_ROWS) * DECK_DEPTH)
+	var row := DECK_DEPTH * sz
+	var front := float(LOFT_ROWS - 1) * row + FRONT * sz
+	var stretch := Basis.from_scale(Vector3(sx, 1.0, sz))
+	for r in LOFT_ROWS:
+		for i in n:
+			var x := lo + (float(i) + 0.5) * BAY * sx
+			_kit("deck_bay", g * Transform3D(stretch, Vector3(x, DECK_Y, float(r) * row)))
+	for i in n:
+		var x := lo + (float(i) + 0.5) * BAY * sx
+		_kit("rail_bay", g * Transform3D(Basis.from_scale(Vector3(sx, 1.0, 1.0)), Vector3(x, DECK_Y, front)))
+	# Posts under the front at every join (the kit's post runs up through the
+	# deck as the railing's newel, so none stand under the middle).
+	for i in n + 1:
+		var x := lo + float(i) * BAY * sx
+		var at_wall: bool = not far_open and absf(x - far) < 0.1
+		var piece := "post"
+		var b := Basis()
+		if i == 0:
+			piece = "post_end"
+		elif i == n:
+			piece = "post_end"
+			b = Basis.from_scale(Vector3(-1.0, 1.0, 1.0))
+		if at_wall:
+			continue
+		_kit(piece, g * Transform3D(b, Vector3(x, 0.0, front)))
+		_solid_box(g * Transform3D(Basis(), Vector3(x, 1.0, front)), Vector3(0.26, 2.0, 0.26))
+	var mid := (hi + lo) * 0.5
+	var span_len := hi - lo
+	_solid_box(g * Transform3D(Basis(), Vector3(mid, DECK_Y - 0.06, LOFT_DEPTH * 0.5)), Vector3(span_len, 0.12, LOFT_DEPTH))
+	_solid_box(g * Transform3D(Basis(), Vector3(mid, DECK_Y + 0.55, front)), Vector3(span_len, 1.1, 0.12))
+	# The railing across the stair's end, from beside the stair's head to the
+	# front; and across the far end where it stops short of the side wall.
+	var gap := STAIR_Z + STAIR_W + 0.12
+	var end_len := front - gap
+	_kit("rail_bay", g * Transform3D(Basis(Vector3.UP, PI * 0.5) * Basis.from_scale(Vector3(end_len / BAY, 1.0, 1.0)),
+		Vector3(near, DECK_Y, gap + end_len * 0.5)))
+	_solid_box(g * Transform3D(Basis(), Vector3(near, DECK_Y + 0.55, gap + end_len * 0.5)), Vector3(0.12, 1.1, end_len))
+	if far_open:
+		_kit("rail_bay", g * Transform3D(Basis(Vector3.UP, PI * 0.5) * Basis.from_scale(Vector3(front / BAY, 1.0, 1.0)),
+			Vector3(far, DECK_Y, front * 0.5)))
+		_solid_box(g * Transform3D(Basis(), Vector3(far, DECK_Y + 0.55, front * 0.5)), Vector3(0.12, 1.1, front))
+	# The stair, rising along the wall to the near end, and its ramp.
+	var foot := near + up * STAIR_RUN
+	for c in cells:
+		var along: float = c["along"]
+		if along + 3.0 > minf(foot, near) and along - 3.0 < maxf(foot, near):
+			_stair_cells[c["key"]] = true
+	_kit("stair", g * Transform3D(Basis.from_scale(Vector3(up, 1.0, 1.0)), Vector3(foot, 0.0, STAIR_Z)))
+	var wedge := ConvexPolygonShape3D.new()
+	var z0 := STAIR_Z
+	var z1 := STAIR_Z + STAIR_W
+	wedge.points = PackedVector3Array([
+		Vector3(foot, 0.0, z0), Vector3(foot, 0.0, z1), Vector3(near, 0.0, z0), Vector3(near, 0.0, z1),
+		Vector3(near, DECK_Y, z0), Vector3(near, DECK_Y, z1)])
+	var ramp := CollisionShape3D.new()
+	ramp.name = "Stair"
+	ramp.shape = wedge
+	ramp.transform = g
+	_body.add_child(ramp)
+	_stairs.append({"foot": g * Vector3(foot - up * 0.6, 0.0, (z0 + z1) * 0.5),
+		"top": g * Vector3(near - up * 1.2, DECK_Y, 0.9), "far": g * Vector3(far + up * 1.0, DECK_Y, 0.9)})
+	_has_loft = true
+	_count("upper floors")
+	# The chest up there against the wall, towards the far end; the loot round it.
+	var chest_x := far + up * (1.5 if not far_open else 1.1)
+	_loft_chest = Transform3D(Basis.looking_at(d, Vector3.UP), g * Vector3(chest_x, DECK_Y, 0.75))
+	for i in 5:
+		var x := lerpf(near - up * 1.6, far + up * 3.0, (float(i) + 0.5) / 5.0)
+		_loot_spots.append(g * Vector3(x, DECK_Y + 0.25, _rng.randf_range(1.5, front - 0.7)))
+	if ruins == null:
+		return
+	# A crate or two by the chest and out by the rail.
+	for k in _rng.randi_range(1, 2):
+		var c := Crate.make(_rng.randi_range(0, Crate.SIZES.size() - 1),
+			global_transform * g * Transform3D(Basis(Vector3.UP, _rng.randf_range(-0.3, 0.3)),
+				Vector3(far + up * (3.0 + 1.3 * float(k)), DECK_Y, 0.6 if k == 0 else front - 0.75)),
+			hash(room["centre"]) + _stairs.size() + k * 7)
+		ruins.add_child(c)
+	# Rags and banners over the rail.
+	var span := span_len / float(n)
+	for i in n:
+		if _rng.randf() > 0.6:
+			continue
+		var x := lo + (float(i) + 0.5) * span + _rng.randf_range(-0.6, 0.6)
+		var xf := global_transform * g * Transform3D(Basis(), Vector3(x, DECK_Y + RAIL_Y + 0.05, front + 0.07))
 		if _rng.randf() < 0.3:
 			ruins.hang_cloth(xf, _rng.randf_range(0.8, 1.0), _rng.randf_range(1.6, 2.1),
 				[Color(0.3, 0.035, 0.03), Color(0.24, 0.03, 0.035)][_rng.randi_range(0, 1)])
@@ -954,6 +1154,11 @@ func _dress() -> void:
 				_count("floor roots")
 	ruins._root_mesh(room["centre"], strands, live)
 
+	if _small:
+		_dress_small_floor()
+		_blocks()
+		solid.append_array(ruins.hall_end(first))
+		return
 	# The open floor: the photo's places on the first hall, dealt out on the rest.
 	var spots: Array = [Vector3(_cell, 0, _cell), Vector3(-_cell, 0, _cell), Vector3(_cell, 0, -_cell), Vector3(-_cell, 0, -_cell)]
 	if not identical:
@@ -968,6 +1173,42 @@ func _dress() -> void:
 	# A few fallen blocks.
 	_blocks()
 	solid.append_array(ruins.hall_end(first))
+
+
+## A small post's open floor (note 183): the fire basket in one of the two
+## corners away from the upper floor and the cart or the pile of stores in the
+## other -- never in a corner someone comes in through -- hooks from the vault
+## over the side away from the stair, one grate before the beacon.
+func _dress_small_floor() -> void:
+	var ld := Vector3.FORWARD
+	var la := Vector3.RIGHT
+	if _loft_wall >= 0:
+		ld = _walls[_loft_wall]["d"]
+		la = _walls[_loft_wall]["a"]
+	var spots: Array = []
+	for s: float in [-1.0, 1.0]:
+		var at := -ld * (_ring - 0.7) + la * (s * (_ring - 0.9))
+		var key := _key(at)
+		var way_in := false
+		for w in _walls:
+			for c in w["cells"]:
+				if c["key"] == key and (c["entrance"] or _stair_cells.has(key)):
+					way_in = true
+		if not way_in:
+			spots.append(at)
+	if not identical:
+		_shuffle(spots)
+	if spots.size() > 0:
+		_fire_basket(spots[0])
+	if spots.size() > 1:
+		if _rng.randf() < 0.5:
+			_cart(spots[1])
+		else:
+			_pile(spots[1])
+	_grate(-ld * 3.4 + la * _rng.randf_range(-0.5, 0.5))
+	for i in _rng.randi_range(1, 2):
+		var p := global_transform * (-ld * _rng.randf_range(1.5, 4.5) + la * _rng.randf_range(-4.5, 4.5))
+		ruins._chain(Vector3(p.x, 4.95, p.z), _rng.randf_range(1.0, 1.8))
 
 
 func _fire_basket(at: Vector3) -> void:
@@ -1036,10 +1277,10 @@ func _blocks() -> void:
 			continue
 		var d: Vector3 = w["d"]
 		var a: Vector3 = w["a"]
-		var along := _cell * (0.5 if _rng.randf() < 0.5 else -0.5) * (3.0 if _rng.randf() < 0.5 else 1.0)
+		var along := _cell * (0.5 if _rng.randf() < 0.5 else -0.5) * (3.0 if _rng.randf() < 0.5 and _h > 1 else 1.0)
 		var off := along + _rng.randf_range(1.3, 1.7) * signf(_rng.randf() - 0.5)
 		# Never in a way in or before the winch.
-		var k: int = clampi(roundi(off / _cell), -2, 2) + ((w["cells"].size() - 1) >> 1)
+		var k: int = clampi(roundi(off / _cell), -_h, _h) + ((w["cells"].size() - 1) >> 1)
 		var c: Dictionary = w["cells"][k]
 		if c["entrance"] or int(w["winch"]) == k or _stair_cells.has(c["key"]):
 			continue
@@ -1081,9 +1322,11 @@ func _scatter_loot() -> void:
 		var a: Vector3 = w["a"]
 		for i in w["cells"].size():
 			var c: Dictionary = w["cells"][i]
-			if c["corner"] or c["entrance"] or int(w["winch"]) == i or _stair_cells.has(c["key"]):
+			# A small post has few cells to a wall: its corners take loot too.
+			if (c["corner"] and not _small) or c["entrance"] or int(w["winch"]) == i or _stair_cells.has(c["key"]):
 				continue
-			ground.append(d * (_ring - 1.0) + a * (float(c["along"]) + _rng.randf_range(-1.0, 1.0)) + Vector3(0.0, 0.25, 0.0))
+			var along: float = float(c["along"]) * (0.8 if c["corner"] else 1.0)
+			ground.append(d * (_ring - 1.0) + a * (along + _rng.randf_range(-1.0, 1.0)) + Vector3(0.0, 0.25, 0.0))
 	_shuffle(ground)
 	var high := _loot_spots.duplicate()
 	_shuffle(high)
@@ -1091,10 +1334,12 @@ func _scatter_loot() -> void:
 	if _rng.randf() < 0.25:
 		items.append([&"robot_rat", 1])
 	var drops = load("res://scripts/item_drop.gd")
+	# Up on the balconies the potion and a pile of coins; upstairs in a small
+	# post a small potion too.
+	var upstairs := 3 if _has_loft else 2
 	for i in items.size():
 		var at := Vector3.INF
-		# The first two -- the potion and a pile of coins -- up on a balcony.
-		if i < 2 and not high.is_empty():
+		if i < upstairs and not high.is_empty():
 			at = high.pop_back()
 		elif i == 2 and _table_spot != Vector3.INF:
 			at = _table_spot

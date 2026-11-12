@@ -788,3 +788,33 @@ normal 4096, ORM 2048. `DECK_Y`, `BAY`, `FRONT`, `RUN`, `STAIR_W` must match
 `scripts/scoutpost.gd`, which reads the pieces by name. As with the cell kit, set
 the three maps' `.import` to VRAM compressed (the normal as a normal map) after a
 fresh import.
+
+---
+
+# The dungeon's architecture kit (2026-11-12, Blender, note 183)
+
+```
+blender -b --python tools/dungeon_kit_textures.py                 # the three materials' maps (numpy, no bake)
+blender -b --python tools/build_dungeon_kit.py                    # models/dungeon/dungeon_kit.glb
+blender -b --python tools/build_dungeon_kit.py -- --preview=<dir> # pictures instead: bays as the game lays them, a void test, each piece
+godot --headless --import --path .
+```
+
+No source and no bake. `build_dungeon_kit.py` lays every piece out of separate
+stones on a surface (a plane, the vault's pointed barrel, an arch's intrados);
+`scripts/brick_level.gd` reads the pieces by name and uses them in place of the
+Tripo brick kit's wherever both have one. The glb carries NO textures: three
+materials by name (`dk_stone`, `dk_wood`, `dk_iron`), which brick_level builds
+from `models/dungeon/dk_*_{albedo,normal,orm}.jpg`. Vertex colour is each
+stone's shade and the dirt.
+
+- The measures at the top of the script (`WALL_FACE`, `SPRING`, `CROWN`,
+  `ARCH_A` / `ARCH_SPRING` / `ARCH_B`, `DOOR_HEAD`, `TORCH_HEAD`, `MANHOLE_R`)
+  are the game's: change one and brick_level.gd, module_level.gd (doors, cages,
+  skylights) and build_cell_kit.py (the gates hang in the arch) change with it.
+- `--preview` renders a `void_*.png` set with a magenta world: any magenta
+  inside the masonry is a hole. Run it after touching `stone()` or a surface.
+- The nine maps' `.import` files are committed VRAM compressed with mipmaps
+  (the normals as normal maps). A fresh import leaves them lossless: check
+  `"vram_texture": true`.
+- `-- --tripo-kit` runs the game on the old Tripo stone, for an A/B.
