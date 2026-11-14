@@ -1337,16 +1337,21 @@ func save_state() -> Dictionary:
 	# Note 182: the scoutposts cleared of their scouts, and their chests opened.
 	var posts_cleared: Array[int] = []
 	var chests_open: Array[int] = []
+	# Note 187: and wound open, which keeps their gates up.
+	var posts_wound: Array[int] = []
 	for i in _scoutposts.size():
 		var post := _scoutposts[i]
 		if not is_instance_valid(post):
 			continue
 		if post.get("cleared") == true:
 			posts_cleared.append(i)
+		if post.get("wound") == true:
+			posts_wound.append(i)
 		var chest = post.get("chest")
 		if chest != null and is_instance_valid(chest) and chest.get("opened_already") == true:
 			chests_open.append(i)
 	data["scoutposts_cleared"] = posts_cleared
+	data["scoutposts_wound"] = posts_wound
 	data["scoutpost_chests"] = chests_open
 	var map = _explore_map_node()
 	if map != null:
@@ -1425,6 +1430,9 @@ func restore_world(data: Dictionary) -> void:
 	for i in data.get("scoutposts_cleared", []):
 		if int(i) < _scoutposts.size():
 			_scoutposts[int(i)].set("cleared", true)
+	for i in data.get("scoutposts_wound", []):
+		if int(i) < _scoutposts.size():
+			_scoutposts[int(i)].set("wound", true)
 	for i in data.get("scoutpost_chests", []):
 		if int(i) < _scoutposts.size() and _scoutposts[int(i)].get("chest") != null:
 			_scoutposts[int(i)].get("chest").call("open_now")
@@ -2199,6 +2207,17 @@ func _spawn_scoutpost_scouts() -> void:
 			var s := _spawn_post_scout(at)
 			if s != null:
 				hall.call("add_guard", s)
+
+
+## Note 187: a player risen at a scoutpost's beacon is shut in there again, and
+## winds its wheel to get out, however it was left. Rising in a post can only be
+## at its beacon.
+func _shut_risen_in(player: Node3D) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	for post in _scoutposts:
+		if is_instance_valid(post) and post.call("_inside", player):
+			post.call("shut_in")
 
 
 ## True for tiles in any beacon hall's block.
@@ -4816,10 +4835,13 @@ func _on_player_respawned(player: Node3D = null) -> void:
 			if p != player and p.get("_dead") != true:
 				standing = true
 		_place_one(player)
+		_shut_risen_in(player)
 		if standing:
 			return
 	else:
 		_place_player()
+		for p in Coop.all():
+			_shut_risen_in(p)
 	var map = _explore_map_node()
 	if map != null and map.has_method("restore"):
 		map.restore(_map_snapshot)

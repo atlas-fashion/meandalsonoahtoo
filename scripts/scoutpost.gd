@@ -28,10 +28,11 @@ extends Node3D
 ## any of its scouts lives (note 182: "the player has to clear the scoutpost");
 ## then hold E on the bronze winch's gear wheel (wheel_room.gd's, `make_winch`)
 ## and they wind up together; let go and they sink back, a hit breaks the grip.
-## Wound up they stay up until everyone has left; with nobody alive inside a
-## shut one opens itself again. Once cleared it never shuts again. Its beacon
-## (maze.gd `_add_beacon`) stands in the middle. A chest against a wall
-## (loot_chest.gd, note 182). Saved: the loot taken, the chest opened, cleared.
+## Wound up they stay up for good (`wound`, note 187); with nobody alive inside a
+## shut one opens itself again. Once cleared it never shuts on walking in again.
+## Rising at its beacon (maze.gd `_add_beacon`, in the middle) shuts it and the
+## wheel must be wound again (`shut_in`, note 187). A chest against a wall
+## (loot_chest.gd, note 182). Saved: the loot taken, the chest opened, cleared, wound.
 ##
 ## Frame: origin the middle of the block on the floor, +Z towards its first way in.
 
@@ -132,6 +133,10 @@ var loot_taken: Array = []
 ## of them has been killed -- then the wheel turns and the gates never drop again.
 var guards: Array = []
 var cleared := false
+## Note 187: the wheel has been wound all the way, so the gates stay up for good --
+## until a player rises at this post's beacon (`shut_in`), when they must wind it
+## again. Saved (maze.gd "scoutposts_wound").
+var wound := false
 var chest: Node3D
 ## Note 183: the room's half in cells; a small post (3 x 3 cells) has one upper
 ## floor (`_loft`) where the big hall had balconies. The wall it is on (-1:
@@ -525,6 +530,20 @@ func arm() -> void:
 	pass
 
 
+## Note 187 (the user: the door stays open once the wheel is done, and "closes
+## again only when the player respawns at that scoutpost's beacon"): a player
+## has just risen at its beacon. The gates crash down as on walking in (the usual
+## `_process` drop, the player being inside), and the wheel has to be wound again
+## -- it turns at once on a cleared post, its scouts staying dead.
+func shut_in() -> void:
+	wound = false
+	if _locked:
+		return
+	_armed = true
+	_drop_in = -1.0
+	print("[scoutposts] %s shut: risen at its beacon" % name)
+
+
 func _inside(p: Node3D) -> bool:
 	var l := to_local(p.global_position)
 	var reach := _wall - TRIGGER_IN
@@ -568,8 +587,8 @@ func _process(delta: float) -> void:
 	var anyone := players.any(func(p) -> bool: return _inside(p))
 	if not _locked:
 		if not anyone:
-			# Cleared, it stays open for good.
-			_armed = not cleared
+			# Cleared, or wound open (note 187), it stays open for good.
+			_armed = not (cleared or wound)
 			_drop_in = -1.0
 		elif _armed and _lift >= 1.0 and _wheel != null:
 			if _drop_in < 0.0:
@@ -687,6 +706,10 @@ func _landed() -> void:
 
 
 func _unlock() -> void:
+	# Wound by a hand on the wheel, not opened by itself with nobody inside.
+	if _holder != null:
+		wound = true
+		print("[scoutposts] %s wound open" % name)
 	_locked = false
 	_armed = false
 	_empty_for = 0.0
