@@ -44,6 +44,9 @@ const ENV_KEYS := ["sky", "background_mode", "background_energy_multiplier", "am
 	"tonemap_exposure"]
 
 signal finished
+## Never emitted: a scene stopped mid-way (left for the title, or the whole intro
+## skipped) waits on it until this node is freed, which drops the wait silently.
+signal _stopped
 
 var maze: Node3D
 var world: Node3D
@@ -72,18 +75,21 @@ var _shot_to := Transform3D()
 var _shot_t := 0.0
 var _shot_len := 1.0
 var _shooting := false
+## The pause menu's "Skip the intro" (`skip_all`, note 185) was taken.
+var _aborted := false
 
 
 ## A new game from the title gets the intro. `-- --intro` forces it (testing),
 ## `-- --no-intro` leaves it out; the sandbox, a loaded save and the harnesses
-## (slot -1) never get it.
+## (slot -1) never get it, nor a new game begun with the title's "Skip the
+## intro" ticked (`Saves.skip_intro`, note 185).
 static func wanted(save: Dictionary) -> bool:
 	var args := OS.get_cmdline_user_args()
 	if "--no-intro" in args or Sandbox.active or save.has("seed"):
 		return false
 	if "--intro" in args:
 		return true
-	return Saves.slot >= 0
+	return Saves.slot >= 0 and not Saves.skip_intro
 
 
 static func begin(maze_: Node3D) -> Node:
@@ -91,6 +97,8 @@ static func begin(maze_: Node3D) -> Node:
 	i.set_script(load("res://scripts/intro.gd"))
 	i.name = "Intro"
 	i.set("maze", maze_)
+	# The pause menu finds it here for "Skip the intro".
+	i.add_to_group(&"intro")
 	# Beside the maze, not in it: the maze is hidden while this runs.
 	maze_.get_parent().add_child(i)
 	i.call("_run")
@@ -136,9 +144,48 @@ func _run() -> void:
 	if _skip_label != null:
 		_skip_label.queue_free()
 		_skip_label = null
+	if _aborted:
+		return
 	await _arrive()
+	if _aborted:
+		return
 	await _search()
+	if _aborted:
+		return
 	await _taken()
+	if _aborted:
+		return
+	_finish()
+
+
+## The pause menu's "Skip the intro" (note 185): the rest of it is left out from
+## wherever it has got to -- the story, the walk up, the lessons, the altar --
+## and they wake on the cell floor exactly as at its end (`_finish`). Every scene
+## under way stops at its next frame (`_frame` waits on `_stopped`), and `_run`
+## goes no further.
+func can_skip() -> bool:
+	return not _aborted and world != null and is_inside_tree()
+
+
+func skip_all() -> void:
+	if not can_skip():
+		return
+	_aborted = true
+	_in_story = false
+	_shooting = false
+	print("[intro] skipped: straight into the cell")
+	if lessons != null and is_instance_valid(lessons):
+		lessons.call("close")
+	_end_subs()
+	for b in _bags:
+		if is_instance_valid(b):
+			b.queue_free()
+	_bags.clear()
+	for p in players:
+		if is_instance_valid(p):
+			p.set("_shake", 0.0)
+	_black.color = Color.BLACK
+	_card.modulate.a = 0.0
 	_finish()
 
 
@@ -170,8 +217,8 @@ func _process(delta: float) -> void:
 ## will never come.
 func _frame(physics := false) -> void:
 	await (get_tree().physics_frame if physics else get_tree().process_frame)
-	if not is_inside_tree():
-		await finished
+	if not is_inside_tree() or _aborted:
+		await _stopped
 
 
 ## Left for the title: what the intro put on the root would stay over the title.
@@ -303,7 +350,8 @@ func _make_black() -> void:
 	_skip_label.add_theme_font_size_override("font_size", 15)
 	_skip_label.add_theme_color_override("font_color", Color(0.75, 0.72, 0.66))
 	var pad := not players.is_empty() and Coop.on_pad(players[0])
-	_skip_label.text = "Hold  A  to skip" if pad else "Hold  SPACE  to skip"
+	# The story only; the pause menu skips the whole intro (note 185).
+	_skip_label.text = "Hold  A  to skip the story" if pad else "Hold  SPACE  to skip the story"
 	_skip_label.modulate.a = 0.55
 	_black_layer.add_child(_skip_label)
 
@@ -328,7 +376,7 @@ func _card_text(text: String, hold: float) -> void:
 
 ## A line spoken (or narrated, speaker ""), typed out. Skippable.
 func _say(speaker: String, text: String, per_char := 0.04, hold := 1.5) -> void:
-	if _in_story and _skip:
+	if (_in_story and _skip) or _aborted:
 		return
 	if _sub == null or not is_instance_valid(_sub):
 		_sub = Subtitles.open(self)
@@ -747,14 +795,18 @@ func _finish() -> void:
 	for hud in _huds_hidden:
 		if is_instance_valid(hud):
 			hud.visible = true
-	world.queue_free()
+	if world != null:
+		world.queue_free()
 	world = null
 	maze.set("intro_running", false)
 	# The wake holds its own black (hud.gd), so ours can go.
 	for p in players:
-		if p.has_method("wake_up"):
+		if is_instance_valid(p) and p.has_method("wake_up"):
 			p.call("wake_up")
-	await _frame()
+	# Not `_frame`: a skipped intro (note 185) stops every `_frame` for good.
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
 	_black_layer.queue_free()
 	Saves.request("new game")
 	print("[intro] done: into the cell")

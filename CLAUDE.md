@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 184), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 185), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -642,6 +642,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 182 | 2026-11-11 | The maze remade: rooms ranked by the walk from the cell (`module_level._assign_room_roles`, `room_walks`), the first a scoutpost, the second the proel swordsmen's prison, 8 scoutposts to 5 prisons; the start beacon gold (`_claim_start_beacon`); scoutposts shut until their scouts are dead, a Tripo chest (`loot_chest.gd`); criers and scouts only until a prison opens, the halls filling with each (`population_share`, `_fill_halls`), enforcer-led groups; corridor props out (`ruin_props`), breakable barrels, fainter dust | [docs/notes/182-the-maze-remade-scoutposts-first.md](docs/notes/182-the-maze-remade-scoutposts-first.md) |
 | 183 | 2026-11-12 | The architecture remodelled in Blender (`tools/build_dungeon_kit.py` -> `models/dungeon/dungeon_kit.glb`: 32 pieces laid stone by stone on surfaces, three tiling materials made in numpy, vertex-colour dirt; same names and sizes as the Tripo kit, which keeps what the new one has no piece for): three wall coursings and two with stones fallen out, a pointed barrel with ribbed groins and bosses, arches with voussoirs, the door's pointed arch, flagstones, rubble, a broken column, vault shoring, raised portcullises; one variant set to a chunk, variants cast as one; scoutposts shrunk in place to 3 x 3 cells with a timber upper floor (`_shrink_room`, `_loft`); 0 void pixels in 432 views; corridors as fast, rooms 2-3.5 ms less GPU | [docs/notes/183-the-architecture-remodelled-in-blender.md](docs/notes/183-the-architecture-remodelled-in-blender.md) |
 | 184 | 2026-11-14 | The last Tripo pieces remade with ForgeGUI (Meshy, PBR) and fitted onto their names and sizes (`tools/build_forge_kit.py` -> `models/forge/forge_kit.glb`, `brick_level._load_forge_kit`): the wooden door's leaf, the prison's dome, frieze and gates, the burial walls, the morgue slab, the manhole cover, the wall torch; the exits' door built from the Blender arch and the new leaf; `-- --no-forge` for an A/B | [docs/notes/184-forgegui-kit.md](docs/notes/184-forgegui-kit.md) |
+| 185 | 2026-11-14 | Skip the intro: a "Skip the intro (wake in the cell)" tick when naming a new game (`Saves.skip_intro`, remembered in user://title.cfg), and "Skip the intro" in the pause menu while it runs (intro.gd `skip_all`: every scene stops, `_finish` as at its end); the story's hold-jump now says it skips the story | [docs/notes/185-skip-the-intro.md](docs/notes/185-skip-the-intro.md) |
 
 ## Notes by source file
 
@@ -695,7 +696,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/scoutpost.gd` (was `hall_room.gd`): 180, 181, 182, 183
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
-- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167, 172
+- `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167, 172, 185
 - `scripts/inventory.gd`: 6.19, 25, 77, 83, 84, 102, 111, 130, 172
 - `scripts/inventory_screen.gd`: 6.19, 30, 60, 77, 78, 79, 84, 117, 130, 144, 160, 161, 162, 164, 167, 172
 - `scripts/item_drop.gd`: 6.19, 16, 51, 79, 126, 130
@@ -714,7 +715,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad.gd`: 26, 30, 44, 79, 80
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
-- `scripts/pause_menu.gd`: 19
+- `scripts/pause_menu.gd`: 19, 185
 - `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168, 170, 171, 172, 173, 174, 175
 - `scripts/player_motion.gd`, `models/anims/*.glb`: 167, 168, 171, 172, 175
 - `scripts/portcullis.gd`: 6.18
@@ -728,7 +729,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/rat_model.gd`: 77
 - `scripts/respawn_anchor.gd`: 8b, 32, 79, 154, 179
 - `scripts/robot_rat.gd`: 77
-- `scripts/save_system.gd`: 19, 60, 79, 131
+- `scripts/save_system.gd`: 19, 60, 79, 131, 185
 - `scripts/sandbox.gd`: 60, 68, 152
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130, 152, 161, 172
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
@@ -757,7 +758,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/stalker.gd`: 11, 16, 22, 60, 79, 161, 165
 - `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 149, 167
 - `scripts/sword_wave.gd`: 160, 172
-- `scripts/title_screen.gd`: 19, 60, 76, 79, 80
+- `scripts/title_screen.gd`: 19, 60, 76, 79, 80, 185
 - `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
 - `scripts/wood_door.gd`: 6.18, 79
 - `scripts/workbench.gd`: 32, 77, 79, 172

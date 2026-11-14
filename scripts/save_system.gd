@@ -47,6 +47,9 @@ var pending := {}
 var play_time := 0.0
 ## The name the player gave this game.
 var game_name := ""
+## The new game being started leaves out the intro and wakes in the cell (the
+## title's "Skip the intro", note 185). Read by intro.gd `wanted`.
+var skip_intro := false
 ## Seconds since the game was last saved (shown when leaving without saving).
 var since_saved := 0.0
 const NAME_MAX := 24
@@ -90,10 +93,11 @@ func erase(i: int) -> void:
 
 ## Starts the game in slot `i`: carries on from its save, or -- if it is empty
 ## -- starts a new game there called `new_name`.
-func start(i: int, new_name := "") -> void:
+func start(i: int, new_name := "", no_intro := false) -> void:
 	# A real game: no sandbox switches carried in.
 	Sandbox.reset()
 	slot = i
+	skip_intro = no_intro
 	pending = read(i)
 	var meta: Dictionary = pending.get("meta", {})
 	play_time = float(meta.get("play_time", 0.0))
@@ -118,6 +122,7 @@ func exit_to_title() -> void:
 	# Co-op ends at the title (coop.gd); it is chosen again from there.
 	Coop.stop()
 	slot = -1
+	skip_intro = false
 	pending = {}
 	get_tree().paused = false
 	Engine.time_scale = 1.0

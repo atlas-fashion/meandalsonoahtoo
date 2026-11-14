@@ -18,6 +18,7 @@ var _save_button: Button
 var _resume_button: Button
 var _leave_first: Button
 var _was_captured := true
+var _skip_intro_button: Button
 
 
 func _ready() -> void:
@@ -55,8 +56,24 @@ func _open() -> void:
 	# the benchmark, --skip-title).
 	_save_button.disabled = Saves.slot < 0
 	_save_button.tooltip_text = "" if Saves.slot >= 0 else "This game was started without a save slot."
+	_skip_intro_button.visible = _intro() != null
 	_show_page(false)
 	_settings.sync()
+
+
+## The intro under way and still skippable, or null.
+func _intro() -> Node:
+	var intro := get_tree().get_first_node_in_group(&"intro")
+	if intro != null and intro.has_method("can_skip") and bool(intro.call("can_skip")):
+		return intro
+	return null
+
+
+func _skip_intro() -> void:
+	var intro := _intro()
+	_close()
+	if intro != null:
+		intro.call("skip_all")
 
 
 func _close() -> void:
@@ -137,6 +154,10 @@ func _build() -> void:
 	menu.add_child(_resume_button)
 	_save_button = SettingsPanel.menu_button("Save game", _save)
 	menu.add_child(_save_button)
+	# Only while the intro runs (note 185): the rest of it left out, straight
+	# into the cell.
+	_skip_intro_button = SettingsPanel.menu_button("Skip the intro", _skip_intro)
+	menu.add_child(_skip_intro_button)
 	menu.add_child(SettingsPanel.menu_button("Settings", func() -> void: _show_page(true)))
 	menu.add_child(SettingsPanel.menu_button("Exit to title", _exit_to_title))
 	menu.add_child(SettingsPanel.menu_button("Quit to desktop", _quit))

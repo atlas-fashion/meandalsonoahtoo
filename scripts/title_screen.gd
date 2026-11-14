@@ -43,6 +43,10 @@ var _coop: Control
 var _coop_status: Label
 var _screen_button: Button
 var _slots_head: Label
+var _skip_intro: CheckButton
+
+## Where the "Skip the intro" tick is remembered between runs (note 185).
+const PREFS_PATH := "user://title.cfg"
 
 
 func _ready() -> void:
@@ -300,6 +304,15 @@ func _build() -> void:
 	Pad.attach_keyboard(_name_edit)
 	nbox.add_child(_name_edit)
 	nbox.add_child(SettingsPanel.spacer(6))
+	# Skip the intro (note 185): the new game starts on the cell floor, as it did
+	# before the intro existed. Remembered for the next new game.
+	_skip_intro = CheckButton.new()
+	_skip_intro.text = "Skip the intro (wake in the cell)"
+	_skip_intro.add_theme_font_size_override("font_size", 16)
+	_skip_intro.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_skip_intro.button_pressed = _load_skip_intro()
+	nbox.add_child(_skip_intro)
+	nbox.add_child(SettingsPanel.spacer(6))
 	var nrow := HBoxContainer.new()
 	nrow.add_child(SettingsPanel.menu_button("Back", func() -> void: _show(&"slots"), 150))
 	nrow.add_child(SettingsPanel.menu_button("Begin", _begin_named, 150))
@@ -422,8 +435,27 @@ func _ask_name(i: int) -> void:
 
 
 func _play(i: int, new_name := "") -> void:
+	# Only a new game has an intro to skip; a loaded one never plays it.
+	var no_intro := false
+	if not Saves.exists(i) and _skip_intro != null:
+		no_intro = _skip_intro.button_pressed
+		_store_skip_intro(no_intro)
 	await _descend()
-	Saves.start(i, new_name)
+	Saves.start(i, new_name, no_intro)
+
+
+func _load_skip_intro() -> bool:
+	var cfg := ConfigFile.new()
+	if cfg.load(PREFS_PATH) != OK:
+		return false
+	return bool(cfg.get_value("new_game", "skip_intro", false))
+
+
+func _store_skip_intro(on: bool) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(PREFS_PATH)
+	cfg.set_value("new_game", "skip_intro", on)
+	cfg.save(PREFS_PATH)
 
 
 ## The SANDBOX (sandbox.gd): the same descent, into an empty level and a flat
