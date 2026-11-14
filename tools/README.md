@@ -818,3 +818,26 @@ stone's shade and the dirt.
   (the normals as normal maps). A fresh import leaves them lossless: check
   `"vram_texture": true`.
 - `-- --tripo-kit` runs the game on the old Tripo stone, for an A/B.
+
+# The ForgeGUI kit (2026-11-14, note 184)
+
+```
+blender -b --factory-startup --python tools/build_forge_kit.py   # models/forge/forge_kit.glb
+godot --headless --import --path .
+```
+
+The sources are ForgeGUI generations (Meshy, PBR), kept as they came back in
+`models/source/forge/`. The script only fits them: each to the Tripo piece's
+box (the `PIECES` table, Godot axes, measured off `models/brick/brick_kit.glb`),
+decimated to its triangle budget, its maps shrunk, the gate mirrored for its
+right leaf, the dome turned inside out, the torch fitted by `fit_torch` so its
+head sits where torch.gd puts the flame. `scripts/brick_level.gd` loads the glb
+after the Blender kit and lets it win by name.
+
+- Godot extracts the maps next to the glb (`forge_kit_forge_<piece>_*.jpg`). A
+  fresh import leaves them lossless: their `.import` files are committed VRAM
+  compressed (`compress/mode=2`, the normals `compress/normal_map=1`,
+  `detect_3d/compress_to=0`); put that back after a rebuild renames a map.
+- A new generation goes in `models/source/forge/` under the piece's source
+  name and the script is re-run; check its front faces Blender -Y.
+- `-- --no-forge` runs the game without it, for an A/B.

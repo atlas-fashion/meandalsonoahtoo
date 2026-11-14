@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 183), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 184), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -297,6 +297,12 @@ separate stones in Blender; its three tiling materials' maps (`models/dungeon/dk
 are from `tools/dungeon_kit_textures.py`. Rebuild, never hand-edit; the pieces keep the
 Tripo brick kit's names, frames and measures, and `scripts/brick_level.gd` reads them
 by name. See note 183 and `tools/README.md`.
+
+`models/forge/forge_kit.glb` (the wooden door's leaf, the prison's dome, frieze and gates,
+the burial walls, the morgue slab, the manhole cover, the wall torch) is a build artifact
+from `tools/build_forge_kit.py`, which fits ForgeGUI generations (`models/source/forge/`)
+onto the Tripo pieces' names, frames and sizes; `brick_level.gd` lets it win over both
+other kits by name. Rebuild, never hand-edit. See note 184 and `tools/README.md`.
 
 `models/kit/module_*.glb` are build artifacts from `tools/build_modules.py`,
 cut from the raw `models/kit/mod_*.glb` Tripo returned. Never hand-edit them;
@@ -635,6 +641,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 181 | 2026-11-11 | Scoutposts (the halls renamed, `scoutpost.gd`): 3 scouts in each keeping to it (no patrol), loot lying about (a health potion and coins up on the balcony, small potions, coins, a gold crystal, saved once taken), a walkable balcony up a stair modelled and baked in Blender (`tools/build_scoutpost_kit.py` -> `models/scoutpost_kit.glb`) | [docs/notes/181-scoutposts.md](docs/notes/181-scoutposts.md) |
 | 182 | 2026-11-11 | The maze remade: rooms ranked by the walk from the cell (`module_level._assign_room_roles`, `room_walks`), the first a scoutpost, the second the proel swordsmen's prison, 8 scoutposts to 5 prisons; the start beacon gold (`_claim_start_beacon`); scoutposts shut until their scouts are dead, a Tripo chest (`loot_chest.gd`); criers and scouts only until a prison opens, the halls filling with each (`population_share`, `_fill_halls`), enforcer-led groups; corridor props out (`ruin_props`), breakable barrels, fainter dust | [docs/notes/182-the-maze-remade-scoutposts-first.md](docs/notes/182-the-maze-remade-scoutposts-first.md) |
 | 183 | 2026-11-12 | The architecture remodelled in Blender (`tools/build_dungeon_kit.py` -> `models/dungeon/dungeon_kit.glb`: 32 pieces laid stone by stone on surfaces, three tiling materials made in numpy, vertex-colour dirt; same names and sizes as the Tripo kit, which keeps what the new one has no piece for): three wall coursings and two with stones fallen out, a pointed barrel with ribbed groins and bosses, arches with voussoirs, the door's pointed arch, flagstones, rubble, a broken column, vault shoring, raised portcullises; one variant set to a chunk, variants cast as one; scoutposts shrunk in place to 3 x 3 cells with a timber upper floor (`_shrink_room`, `_loft`); 0 void pixels in 432 views; corridors as fast, rooms 2-3.5 ms less GPU | [docs/notes/183-the-architecture-remodelled-in-blender.md](docs/notes/183-the-architecture-remodelled-in-blender.md) |
+| 184 | 2026-11-14 | The last Tripo pieces remade with ForgeGUI (Meshy, PBR) and fitted onto their names and sizes (`tools/build_forge_kit.py` -> `models/forge/forge_kit.glb`, `brick_level._load_forge_kit`): the wooden door's leaf, the prison's dome, frieze and gates, the burial walls, the morgue slab, the manhole cover, the wall torch; the exits' door built from the Blender arch and the new leaf; `-- --no-forge` for an A/B | [docs/notes/184-forgegui-kit.md](docs/notes/184-forgegui-kit.md) |
 
 ## Notes by source file
 
@@ -656,7 +663,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
-- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159, 176, 183
+- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159, 176, 183, 184
 - `scripts/chest.gd`: 18, 79, 182
 - `scripts/loot_chest.gd`: 182
 - `scripts/consumable_type.gd`: 130
@@ -696,7 +703,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/item_slot.gd`: 6.19, 30, 172
 - `scripts/jail_cell.gd`: 12, 153, 154, 177
 - `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
-- `scripts/manhole.gd`: 50, 51, 79, 121
+- `scripts/manhole.gd`: 50, 51, 79, 121, 184
 - `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179, 180, 181, 182
 - `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178, 180, 182
 - `scripts/maze_graph.gd`: 6.16
@@ -782,6 +789,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66
 - `tools/build_dungeon_kit.py`, `tools/dungeon_kit_textures.py`, `tools/dungeon_kit_preview.py`, `models/dungeon/`: 183
+- `tools/build_forge_kit.py`, `models/forge/`, `models/source/forge/`: 184
 - `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19
 - `tools/build_modules.py`: 6.05, 6.18

@@ -114,7 +114,9 @@ func _dress(cell_centre: Vector3) -> void:
 		c.height = 0.08
 		cover_mesh.mesh = c
 		cover_mesh.position.y = 0.04
-	cover_mesh.material_override = _cover_material()
+	# The ForgeGUI cover (note 184) wears its own cast iron.
+	if kit == null or not BrickLevel.is_forge("manhole_cover"):
+		cover_mesh.material_override = _cover_material()
 	_cover.add_child(cover_mesh)
 	_cover_home = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.018, 0.0))
 	_cover.transform = _cover_home
