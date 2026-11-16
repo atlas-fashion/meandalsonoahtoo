@@ -615,6 +615,32 @@ The five extracted maps keep VRAM compression in their committed `.import` files
 After a change, check that those files still say `"vram_texture": true`; if one
 says false, delete its files in `.godot/imported/` and import again.
 
+Since note 188 the game draws the ForgeGUI scout below; this one is what
+`-- --old-scout` puts back.
+
+---
+
+# The ForgeGUI scout (2026-11-15, ForgeGUI + Blender, note 188)
+
+```
+blender -b --factory-startup -P tools/build_scout_forge.py                     # fit, weights, export (15 s)
+blender -b --factory-startup -P tools/build_scout_forge.py -- --preview <dir>  # Cycles renders at the rig's rest, no export
+godot --headless --import --path .
+```
+
+Reads `models/source/scout_forge/body_v1_rigged.glb` (ForgeGUI's body, rigged by
+ForgeGUI) and `spear_v1.glb`; `body_v1.glb` is the same body before rigging,
+kept as the original. Writes `models/scout_forge.glb` and
+`scripts/scout_forge_binds.gd` (each bone's map from the generation's pose to
+the rig's rest). Both are build artifacts: change the constants at the top of
+the script (`SCALE`, `COWL`, `LENS`, `ALBEDO_GAMMA`, `METAL_SCALE`) and rebuild.
+
+The rig is `scripts/scout_body.gd`'s: `BONES`, the strand formulas and the
+spear's measures are copied from it, as in `build_scout.py`. Change them in both.
+
+The six extracted maps keep VRAM compression in their committed `.import` files
+(`compress/mode=2`, `compress/normal_map=1` on the two normal maps).
+
 ---
 
 # The Proel swordsman (2026-10-30, Blender, notes 135, 136, 139; its files keep the name sword_skeleton)

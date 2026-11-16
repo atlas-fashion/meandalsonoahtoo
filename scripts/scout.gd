@@ -7,8 +7,9 @@ extends "res://scripts/enemy.gd"
 ## knocks the player down." And: "Make all animations very realistic."
 ##
 ## A hunched robot soldier in rusted riveted plate with a ragged mantle and a
-## barbed spear (models/scout.glb, made in Blender by tools/build_scout.py;
-## scout_body.gd: all its animation, procedural).
+## barbed spear (models/scout_forge.glb since note 188, ForgeGUI's, fitted by
+## tools/build_scout_forge.py; before it models/scout.glb, made in Blender by
+## tools/build_scout.py; scout_body.gd: all its animation, procedural).
 ## 160 health (an enforcer has 240; 110 before note 129); its blows are
 ## lighter than an enforcer's.
 ##

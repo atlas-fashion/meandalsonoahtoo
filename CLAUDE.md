@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 187), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 188), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -258,6 +258,11 @@ hand-edit; rebuild it whenever the gate module is rebuilt.
 which models it from nothing in Blender. Rebuild, never hand-edit; its bones must
 stay exactly `BONES` in `scripts/scout_body.gd`. See note 134.
 
+`models/scout_forge.glb` (the scout as drawn since note 188) and `scripts/scout_forge_binds.gd`
+are build artifacts from `tools/build_scout_forge.py`, which fits ForgeGUI's body and spear
+(`models/source/scout_forge/`) onto the scout's own rig. Rebuild, never hand-edit; `-- --old-scout`
+draws `models/scout.glb` for an A/B. See note 188 and `tools/README.md`.
+
 `models/sword_skeleton.glb` (the Proel swordsman) is a build artifact from
 `tools/build_sword_skeleton.py` then `tools/anim_sword_skeleton.py`, which cut down
 and rig the user's Tripo golem (`models/source/sword_skeleton/`) and animate it in
@@ -388,7 +393,7 @@ five 0-byte `.gd` files at the repo root (`bomber`, `bone_cage`, `chest`,
   `convoy.gd`, `collector.gd` (rounds up loose skeletons, note 120), `scout.gd` (the spearman
   robot that roams hunting the player; its body, rig and every animation are
   procedural in `scout_body.gd`: planted-foot gait, IK, springs, mantle cloth;
-  its model is `models/scout.glb`, note 134;
+  its model is `models/scout_forge.glb`, ForgeGUI's, note 188 (before it `models/scout.glb`, note 134);
   note 127); helpers `patrol.gd`, `skeleton_eyes.gd`, `skeleton_sword.gd`,
   `enemy_health_bar.gd`, `death_burst.gd`, `item_drop.gd`, `shield_hitbox.gd`
   (bone hitboxes: both enforcers' shields, the decrepit's left foot; hit windows; notes 68-69). Clip changes on the
@@ -432,7 +437,9 @@ the sandbox, note 60);
 --preset=<name> --size=WxH --nocull --flat`; `maze.gd` reads `--no-enemies`
 and `--modules`; `brick_level.gd` reads `--brick-skip=a,b`. Harnesses are
 `extends SceneTree` scripts run with `--script res://tools/<x>.gd` (see
-section 4 for the headless traps). Asset build pipelines (Blender headless,
+section 4 for the headless traps). **A windowed test run must not show on the
+user's screen, take focus or play sound** (he plays other games meanwhile): run it
+through `tools/hidden_run.ps1` with `--audio-driver Dummy` (note 188). Asset build pipelines (Blender headless,
 then `godot --headless --import --path .`) are documented in
 `tools/README.md`; read it before touching any generated model. The enforcers'
 attack timings are markers on their clips in `tools/timing_preview/*.tscn`, and
@@ -644,6 +651,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 184 | 2026-11-14 | The last Tripo pieces remade with ForgeGUI (Meshy, PBR) and fitted onto their names and sizes (`tools/build_forge_kit.py` -> `models/forge/forge_kit.glb`, `brick_level._load_forge_kit`): the wooden door's leaf, the prison's dome, frieze and gates, the burial walls, the morgue slab, the manhole cover, the wall torch; the exits' door built from the Blender arch and the new leaf; `-- --no-forge` for an A/B | [docs/notes/184-forgegui-kit.md](docs/notes/184-forgegui-kit.md) |
 | 185 | 2026-11-14 | Skip the intro: a "Skip the intro (wake in the cell)" tick when naming a new game (`Saves.skip_intro`, remembered in user://title.cfg), and "Skip the intro" in the pause menu while it runs (intro.gd `skip_all`: every scene stops, `_finish` as at its end); the story's hold-jump now says it skips the story | [docs/notes/185-skip-the-intro.md](docs/notes/185-skip-the-intro.md) |
 | 187 | 2026-11-14 | A scoutpost's door stays open once its wheel is wound (`wound`, saved "scoutposts_wound"), even uncleared; rising at its beacon shuts it again and the wheel must be wound again (`shut_in`, maze.gd `_shut_risen_in` from `_on_player_respawned`); the stairs walked in all 8 posts (deck in 1.30 s) | [docs/notes/187-scoutpost-door-stays-open.md](docs/notes/187-scoutpost-door-stays-open.md) |
+| 188 | 2026-11-15 | The scout's look remade with ForgeGUI (dark riveted iron, brass goggles, a torn hessian cowl, a barbed spear) and fitted onto the scout's own rig by `tools/build_scout_forge.py` -> `models/scout_forge.glb`, `scripts/scout_forge_binds.gd`: each bone's map from the generation's pose to the rig's rest goes into its bind, so every animation drives it unchanged; the cowl's hem on the mantle's strands; lighter albedo and less metal so it reads in the dungeon; `-- --old-scout` for an A/B; `tools/hidden_run.ps1` runs windowed tests on a hidden desktop (no window, focus or sound on the user's screen); frame time not measured | [docs/notes/188-the-scout-remade-with-forgegui.md](docs/notes/188-the-scout-remade-with-forgegui.md) |
 
 ## Notes by source file
 
@@ -734,8 +742,10 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox.gd`: 60, 68, 152
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130, 152, 161, 172
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
-- `scripts/scout.gd`: 127, 128, 129, 134
-- `scripts/scout_body.gd`: 127, 128, 129, 134
+- `scripts/scout.gd`: 127, 128, 129, 134, 188
+- `scripts/scout_body.gd`: 127, 128, 129, 134, 188
+- `scripts/scout_forge_binds.gd`, `tools/build_scout_forge.py`, `models/scout_forge.glb`, `models/source/scout_forge/`: 188
+- `tools/hidden_run.ps1`: 188
 - `scripts/settings_panel.gd`: 19, 46, 80, 112, 155, 159, 164, 168, 176
 - `scripts/sewer.gd`: 50, 55, 56, 57, 79, 112, 121
 - `scripts/split_screen.gd`: 79, 80, 82

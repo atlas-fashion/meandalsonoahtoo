@@ -15,6 +15,11 @@ extends Node3D
 ## skin); the mantle's hanging part is skinned to seven two-bone strands. That
 ## build's bones must stay exactly the rig laid out here in BONES.
 ##
+## Since note 188 the look drawn is ForgeGUI's (MODEL below): dark riveted
+## iron, brass goggles, a grated mouth, a torn hessian cowl, a barbed spear --
+## one skinned mesh of two surfaces (the body, the glow) on the same 31 bones,
+## its cowl's hem on the same seven strands. Nothing below this line changed.
+##
 ## ANIMATED PROCEDURALLY, every frame (`_process`), nothing baked:
 ##   * the FEET are planted in the world and step: a foot lifts when it has
 ##     fallen a stride behind where it should be (or turned too far), swings
@@ -44,7 +49,12 @@ extends Node3D
 ## The scout (scout.gd) only says what is going on: how fast it moves, how
 ## alert it is, which move it is in and how far through, what to look at.
 
-const MODEL := "res://models/scout.glb"
+## Since note 188 the look is ForgeGUI's (models/scout_forge.glb, fitted onto
+## this rig by tools/build_scout_forge.py, its per-bone maps in
+## scripts/scout_forge_binds.gd); `-- --old-scout` puts the Blender one back.
+const MODEL := "res://models/scout_forge.glb"
+const OLD_MODEL := "res://models/scout.glb"
+const FORGE_BINDS := "res://scripts/scout_forge_binds.gd"
 
 enum { HIPS, SPINE, CHEST, NECK, HEAD, UARM_R, FARM_R, HAND_R, UARM_L, FARM_L, HAND_L,
 	THIGH_R, SHIN_R, FOOT_R, THIGH_L, SHIN_L, FOOT_L, CLOAK0 }
@@ -1162,14 +1172,18 @@ static func _cloak_hang(th: float, f: float, length: float) -> Vector3:
 	return _cloak_edge(th) + Vector3(sin(th) * 0.045 * f, -length * f, cos(th) * 0.06 * f)
 
 
-## The Blender model: its body and spear meshes, and which surface glows.
+## The model: its body and spear meshes, and which surface glows.
 static func _load_model() -> void:
-	var root := (load(MODEL) as PackedScene).instantiate()
+	var old := OS.get_cmdline_user_args().has("--old-scout")
+	var root := (load(OLD_MODEL if old else MODEL) as PackedScene).instantiate()
+	# The ForgeGUI body is skinned in its own pose: each bone's map from that
+	# pose to this rig's rest goes into its bind (note 188).
+	var maps: Dictionary = {} if old else (load(FORGE_BINDS) as GDScript).get_script_constant_map()["MAPS"]
 	for node in root.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
 		if mi.skin != null:
 			_mesh = mi.mesh
-			_skin = _binds(mi.skin)
+			_skin = _binds(mi.skin, maps)
 		else:
 			_spear_mesh = mi.mesh
 	root.free()
@@ -1187,8 +1201,9 @@ static func _load_model() -> void:
 
 ## The model's bind order with this rig's rests. The exporter hangs a bone chain
 ## off a root turned to Y-up, so its own binds are not this rig's (every rest
-## orientation the identity).
-static func _binds(from: Skin) -> Skin:
+## orientation the identity). `maps`: a bone's map from the mesh as modelled to
+## its rest (the ForgeGUI body's pose, note 188); none, the mesh is at rest.
+static func _binds(from: Skin, maps: Dictionary = {}) -> Skin:
 	var rest := {}
 	for i in _bone_count():
 		var def: Array = _bone_def(i)
@@ -1196,5 +1211,6 @@ static func _binds(from: Skin) -> Skin:
 	var out := Skin.new()
 	for i in from.get_bind_count():
 		var bone := String(from.get_bind_name(i))
-		out.add_named_bind(bone, Transform3D(Basis.IDENTITY, rest[bone]).affine_inverse())
+		var to_rest: Transform3D = maps.get(bone, Transform3D.IDENTITY)
+		out.add_named_bind(bone, Transform3D(Basis.IDENTITY, rest[bone]).affine_inverse() * to_rest)
 	return out
