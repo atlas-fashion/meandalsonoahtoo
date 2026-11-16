@@ -61,6 +61,12 @@ const ENF := preload("res://scripts/enforcer.gd")
 const BODY := preload("res://scripts/scout_body.gd")
 
 const HUNT_SPEED := 5.5
+## Further apart than this in height, they are on the other floor of a scoutpost
+## (its upper floor is 2.4 m up): it takes the path, not the flat line.
+const OTHER_FLOOR := 1.5
+## On a navigation link (a stair) it heads for the far end for at most this long
+## before it asks for a path again (`_on_link_reached`).
+const LINK_COMMIT := 4.0
 ## Coming in the last few metres: measured, not a charge.
 const CLOSE_SPEED := 3.2
 ## Patrolling (patrol.gd walks it at PACE 1.25 of this).
@@ -180,6 +186,9 @@ var _last_seen := Vector3.ZERO
 var _last_heading := Vector3.ZERO
 var _search_until := 0.0
 var _search_goal := Vector3.ZERO
+## The far end of the navigation link it is on (INF: none), and until when.
+var _link_exit := Vector3.INF
+var _link_until := 0.0
 var _search_phase := 0
 var _search_look_until := 0.0
 var _search_legs := 0
@@ -328,6 +337,8 @@ func _ready() -> void:
 	_state_proxy.material_override = StandardMaterial3D.new()
 	mesh = _state_proxy
 	super()
+	if agent != null:
+		agent.link_reached.connect(_on_link_reached)
 	name = "Scout"
 	# Not one of the skeletons: the shields guard and the crossbows hide behind
 	# those (prosthetic.gd, archer.gd).
@@ -461,9 +472,13 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		_progress_at = now + 2.5
 		_progress_from = global_position
 	var dy := absf(player.global_position.y - global_position.y)
+	# On the other floor of a scoutpost (the user, 2026-11-16: "let the scouts go
+	# upstairs"): `gap` is flat, so from under them it read as close and the scout
+	# circled below. It takes the path instead -- up or down the stair's link.
+	var other_floor := dy > OTHER_FLOOR
 	# Reading them (note 129): a swing coming at it close in is stepped out of;
 	# an opening is punished at once; a raised guard is circled.
-	if _swing_began and gap < 2.3 and randf() < EVADE_CHANCE:
+	if not other_floor and _swing_began and gap < 2.3 and randf() < EVADE_CHANCE:
 		_evade(flat, now)
 	if now < _evade_until:
 		velocity.x = move_toward(velocity.x, _evade_dir.x * EVADE_SPEED, acceleration * 2.0 * delta)
@@ -481,7 +496,7 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		flanks += 1
 	elif not front:
 		_flank_until = -1.0
-	var flanking := front and now < _flank_until
+	var flanking := front and now < _flank_until and not other_floor
 	var pick := Move.NONE
 	if not flanking and now >= _close_ready and gap <= STAB_GAP and dy < 1.2 and _clear_to(player, 1.1):
 		pick = _pick_close(now) if gap <= CLOSE_GAP else Move.TRISTAB
@@ -504,11 +519,11 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		var t := Vector3(r.z, 0.0, -r.x) * (1.0 if side >= 0.0 else -1.0)
 		want = t * FLANK_SPEED + (-r) * clampf(gap - 1.7, -1.0, 1.0) * 1.5
 		_face(flat)
-	elif gap > CLOSE_GAP + 0.6 or (now >= _close_ready and gap > CLOSE_GAP * 0.8):
+	elif other_floor or gap > CLOSE_GAP + 0.6 or (now >= _close_ready and gap > CLOSE_GAP * 0.8):
 		var dir := _path_dir(now, player.global_position)
-		var speed := HUNT_SPEED if gap > 4.0 else lerpf(CLOSE_SPEED, HUNT_SPEED, clampf((gap - 1.5) / 2.5, 0.0, 1.0))
+		var speed := HUNT_SPEED if (gap > 4.0 or other_floor) else lerpf(CLOSE_SPEED, HUNT_SPEED, clampf((gap - 1.5) / 2.5, 0.0, 1.0))
 		want = dir * speed
-		_face(dir if gap > 4.0 else flat)
+		_face(dir if (gap > 4.0 or other_floor) else flat)
 	else:
 		# Waiting for its opening: circling them, keeping its distance.
 		if now >= _circle_flip:
@@ -606,7 +621,26 @@ func _give_up(now: float) -> void:
 	_look_phase = 0.0
 
 
+## A navigation link reached (a scoutpost's stair, scoutpost.gd `_stair_link`):
+## it goes on to the far end before it asks for a path again. Asked from the
+## stair's middle, which has no navmesh, the path began at the nearest floor --
+## back at the link's start -- and the scout turned round there and stuck.
+func _on_link_reached(details: Dictionary) -> void:
+	var exit = details.get("link_exit_position")
+	if exit is Vector3:
+		_link_exit = exit
+		_link_until = _now() + LINK_COMMIT
+
+
 func _path_dir(now: float, goal: Vector3) -> Vector3:
+	if _link_exit != Vector3.INF:
+		var to_exit := _link_exit - global_position
+		var flat_exit := Vector3(to_exit.x, 0.0, to_exit.z)
+		if (flat_exit.length() < 0.45 and absf(to_exit.y) < 0.8) or now >= _link_until:
+			_link_exit = Vector3.INF
+			_next_repath = 0.0
+		elif flat_exit.length_squared() > 0.0001:
+			return flat_exit.normalized()
 	var to := goal - global_position
 	to.y = 0.0
 	var dir := to.normalized() if to.length_squared() > 0.0001 else Vector3.ZERO

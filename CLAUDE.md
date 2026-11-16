@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 188), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 189), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -652,6 +652,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 185 | 2026-11-14 | Skip the intro: a "Skip the intro (wake in the cell)" tick when naming a new game (`Saves.skip_intro`, remembered in user://title.cfg), and "Skip the intro" in the pause menu while it runs (intro.gd `skip_all`: every scene stops, `_finish` as at its end); the story's hold-jump now says it skips the story | [docs/notes/185-skip-the-intro.md](docs/notes/185-skip-the-intro.md) |
 | 187 | 2026-11-14 | A scoutpost's door stays open once its wheel is wound (`wound`, saved "scoutposts_wound"), even uncleared; rising at its beacon shuts it again and the wheel must be wound again (`shut_in`, maze.gd `_shut_risen_in` from `_on_player_respawned`); the stairs walked in all 8 posts (deck in 1.30 s). Second part (2026-11-15): scoutposts 2 x 2 cells, 9.8 m inside (module_level `_shrink_room_two`, `room["even"]`, `room_lo` / `room_hi`), a timber floor over the whole room at 2.4 m with an opening over the stair and a railed well for the beacon (scoutpost.gd `_build_compact`), 2.2 m of floor before the first step; stair and beacon placed so no way in opens onto either; enemies cannot path upstairs (not fixed), frame time not measured | [docs/notes/187-scoutpost-door-stays-open.md](docs/notes/187-scoutpost-door-stays-open.md) |
 | 188 | 2026-11-15 | The scout's look remade with ForgeGUI (dark riveted iron, brass goggles, a torn hessian cowl, a barbed spear) and fitted onto the scout's own rig by `tools/build_scout_forge.py` -> `models/scout_forge.glb`, `scripts/scout_forge_binds.gd`: each bone's map from the generation's pose to the rig's rest goes into its bind, so every animation drives it unchanged; the cowl's hem on the mantle's strands; lighter albedo and less metal so it reads in the dungeon; `-- --old-scout` for an A/B; `tools/hidden_run.ps1` runs windowed tests on a hidden desktop (no window, focus or sound on the user's screen); frame time not measured | [docs/notes/188-the-scout-remade-with-forgegui.md](docs/notes/188-the-scout-remade-with-forgegui.md) |
+| 189 | 2026-11-16 | Scouts climb the scoutpost stairs: a two-way NavigationLink3D up each 2 x 2 post's stair (scoutpost.gd `_stair_link`; the 1.1 m stair has no navmesh), the wall cell by its foot kept clear of props (`STAIR_FOOT_CLEAR`); scout.gd takes the path when the player is on the other floor (`OTHER_FLOOR` 1.5, it circled below) and keeps on to a link's far end (`_on_link_reached`, `LINK_COMMIT`), or it turned round mid-stair; up 3.2-5.2 s, down 2.6-5.6 s in all 8 posts; other enemy kinds not done | [docs/notes/189-scouts-climb-the-scoutpost-stairs.md](docs/notes/189-scouts-climb-the-scoutpost-stairs.md) |
 
 ## Notes by source file
 
@@ -702,7 +703,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/hiding_spot.gd`: 11, 26, 28, 35, 79
 - `scripts/holding_cell.gd`: 153, 154, 177, 179, 180, 181
 - `scripts/wheel_room.gd`: 179, 180, 181
-- `scripts/scoutpost.gd` (was `hall_room.gd`): 180, 181, 182, 183, 187
+- `scripts/scoutpost.gd` (was `hall_room.gd`): 180, 181, 182, 183, 187, 189
 - `scripts/hud.gd`: 6.19, 24, 79, 84, 154, 161
 - `scripts/interact.gd`: 6.18, 79, 154
 - `scripts/intro.gd`, `scripts/intro_figure.gd`, `scripts/intro_flora.gd`, `scripts/intro_lessons.gd`, `scripts/intro_post.gd`, `scripts/intro_sentinel.gd`, `scripts/intro_world.gd`: 131, 132, 133, 160, 161, 162, 164, 167, 172, 185
@@ -742,7 +743,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox.gd`: 60, 68, 152
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130, 152, 161, 172
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
-- `scripts/scout.gd`: 127, 128, 129, 134, 188
+- `scripts/scout.gd`: 127, 128, 129, 134, 188, 189
 - `scripts/scout_body.gd`: 127, 128, 129, 134, 188
 - `scripts/scout_forge_binds.gd`, `tools/build_scout_forge.py`, `models/scout_forge.glb`, `models/source/scout_forge/`: 188
 - `tools/hidden_run.ps1`: 188

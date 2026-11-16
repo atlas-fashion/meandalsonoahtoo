@@ -145,7 +145,8 @@ navmesh maps headless.
   find the most reachable polygons". By the code the same held for note 181's
   balconies and note 183's upstairs (the same stair); neither was run to check.
   With the floor over the whole room this is now a place to stand out of the
-  scouts' reach. Left for the user to decide.
+  scouts' reach. Left for the user to decide. (The user: "let the scouts go
+  upstairs" -- done in note 189.)
 - **Frame time not measured**: other threads' Godot runs and the user's own game
   were on the GPU throughout. Each post now has 46-54 deck bays, each a
   MeshInstance3D of its own.

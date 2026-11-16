@@ -155,6 +155,8 @@ var _guard_spots: Array[Vector3] = []
 var _ground_spots: Array[Vector3] = []
 ## Openings in the upper floor, rects in the hall's x / z.
 var _holes: Array[Rect2] = []
+## Where the stair's link starts, before its first step (hall frame; INF: none).
+var _stair_foot := Vector3.INF
 
 
 ## How many of a wall's two corners have a way in on the other wall.
@@ -1475,6 +1477,9 @@ const BEACON_OFF := 2.55
 const STAIR_HOLE := 1.55
 ## The bronze gear door cut down to go under the upper floor (2.6 -> 2.2 m).
 const WINCH_UNDER := 0.85
+## No props on a wall cell whose middle is nearer than this to the stair's foot
+## (the spot before its first step, `_stair_foot`).
+const STAIR_FOOT_CLEAR := 3.2
 ## The torches under the upper floor hang this high: at 1.5 the flame reached the
 ## boards over it (seen in a shot).
 const LOW_TORCH_Y := 1.25
@@ -1573,6 +1578,12 @@ func _build_compact(torch_energy: float) -> void:
 		"far": g * Vector3(top + r * 2.6, FLOOR_Y, (z0 + z1) * 0.5),
 		"across": -sd * 3.6 + sa * (-side_s * 2.6) + Vector3(0.0, FLOOR_Y, 0.0)})
 	_count("upper floors")
+	# The user, 2026-11-16: "let the scouts go upstairs". The stair is 1.1 m wide
+	# and the navmesh's agents 0.5 m in radius, so the bake leaves nothing on it;
+	# a link from before its first step to past its head joins the two floors, and
+	# whatever paths over it walks up the ramp's collision as the player does.
+	_stair_foot = _stairs[0]["foot"]
+	_stair_link(_stairs[0]["foot"], _stairs[0]["top"])
 
 	_build_piers(1)
 	_upper_floor()
@@ -1689,6 +1700,19 @@ func _build_compact(torch_energy: float) -> void:
 		", ".join(counts.keys().map(func(c): return "%s %d" % [c, counts[c]]))])
 
 
+## A two-way navigation link from `from` to `to` (hall frame, on the floors): the
+## navmesh's way up a stair it cannot bake onto. Its ends join the polygons
+## within the map's link connection radius (1 m by default).
+func _stair_link(from: Vector3, to: Vector3) -> void:
+	var link := NavigationLink3D.new()
+	link.name = "StairLink"
+	link.bidirectional = true
+	link.start_position = from
+	link.end_position = to
+	add_child(link)
+	_count("stair links")
+
+
 ## Whether `p` (hall frame) is within `margin` of an opening in the upper floor.
 func _in_hole(p: Vector3, margin: float) -> bool:
 	for h in _holes:
@@ -1801,12 +1825,16 @@ func _dress_compact(stair_wall: int, winch_wall: int, side_s: float, order: Arra
 				continue
 			if i == stair_wall:
 				continue
+			# The side wall's cell by the stair's foot keeps its floor clear (note
+			# 189): with props there the stair link joined nothing below in 2 posts
+			# of 8; with none it joins in all 8.
+			var by_stair := (c["local"] as Vector3).distance_to(_stair_foot) < STAIR_FOOT_CLEAR
 			var is_winch: bool = i == winch_wall and int(w["winch"]) == j
 			if i == heavy and not is_winch:
 				ruins._wall_roots(key, side, _rng.randi_range(10, 16), 1, strands, live)
 			elif not is_winch and _rng.randf() < 0.5:
 				ruins._wall_roots(key, side, _rng.randi_range(3, 7), 0, strands, live)
-			if is_winch:
+			if is_winch or by_stair:
 				continue
 			var by_beacon := (c["local"] as Vector3).distance_to(_beacon_at) < 1.5
 			if not by_beacon:
