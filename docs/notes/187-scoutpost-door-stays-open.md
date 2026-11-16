@@ -156,9 +156,21 @@ navmesh maps headless.
   1.25 it ends about 0.13 m under them if the quad is centred there; in the one
   frame taken its tip still comes close. A caged lantern would suit a timber
   ceiling better.
-- **The same engine error from `sewer_lizard.gd` `_wander`** in 2 runs of 7 (2
-  lines each), none in the others. sewer_lizard.gd, sewer.gd and enemy.gd are
-  unchanged; whether the new layout has a part in it is not known.
+- **The same engine error from `sewer_lizard.gd` `_wander`** in 3 of the 7
+  rendered runs (2 lines each), in none of the 3 headless ones. sewer_lizard.gd,
+  sewer.gd and enemy.gd are unchanged; whether the new layout has a part in it
+  is not known.
+- **Under `--headless` only, one error as the level builds**: "The source mesh
+  must have its skin registered with a valid skeleton"
+  (`bake_mesh_from_current_skeleton_pose`), from ruin_dressing.gd `_seated_mesh`
+  <- `_seated_dead` <- `_shackles` <- scoutpost.gd `_dress_compact`. Once in each
+  of the 3 headless runs, in none of the 7 rendered ones, same seed. The dummy
+  renderer has no skin to bake, so the seated dead comes back null there.
+  ruin_dressing.gd is unchanged, and the 3 x 3 `_dress` and the corridors make
+  the same call; no headless run of the 3 x 3 was made to see it there. The
+  first error summaries of this work missed it: they matched "SCRIPT ERROR" and
+  one known message, not every line that begins with ERROR. Another thread's
+  run turned it up.
 - **Not tried with a save made before this**: the corridors round each post
   changed with the room.
 
