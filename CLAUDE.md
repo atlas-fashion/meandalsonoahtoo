@@ -650,6 +650,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 183 | 2026-11-12 | The architecture remodelled in Blender (`tools/build_dungeon_kit.py` -> `models/dungeon/dungeon_kit.glb`: 32 pieces laid stone by stone on surfaces, three tiling materials made in numpy, vertex-colour dirt; same names and sizes as the Tripo kit, which keeps what the new one has no piece for): three wall coursings and two with stones fallen out, a pointed barrel with ribbed groins and bosses, arches with voussoirs, the door's pointed arch, flagstones, rubble, a broken column, vault shoring, raised portcullises; one variant set to a chunk, variants cast as one; scoutposts shrunk in place to 3 x 3 cells with a timber upper floor (`_shrink_room`, `_loft`); 0 void pixels in 432 views; corridors as fast, rooms 2-3.5 ms less GPU | [docs/notes/183-the-architecture-remodelled-in-blender.md](docs/notes/183-the-architecture-remodelled-in-blender.md) |
 | 184 | 2026-11-14 | The last Tripo pieces remade with ForgeGUI (Meshy, PBR) and fitted onto their names and sizes (`tools/build_forge_kit.py` -> `models/forge/forge_kit.glb`, `brick_level._load_forge_kit`): the wooden door's leaf, the prison's dome, frieze and gates, the burial walls, the morgue slab, the manhole cover, the wall torch; the exits' door built from the Blender arch and the new leaf; `-- --no-forge` for an A/B | [docs/notes/184-forgegui-kit.md](docs/notes/184-forgegui-kit.md) |
 | 185 | 2026-11-14 | Skip the intro: a "Skip the intro (wake in the cell)" tick when naming a new game (`Saves.skip_intro`, remembered in user://title.cfg), and "Skip the intro" in the pause menu while it runs (intro.gd `skip_all`: every scene stops, `_finish` as at its end); the story's hold-jump now says it skips the story | [docs/notes/185-skip-the-intro.md](docs/notes/185-skip-the-intro.md) |
+| 186 | 2026-11-16 | One leg of every arch drew as a black, door-high hole (the -x jamb of `arch`, `arch_b` and `door_arch` laid facing into its own leg, `tools/build_dungeon_kit.py` `build_arch_like`; measured 0 -> 4.1 m2 facing the doorway): the black holes in the maze's walls and the missing part of the arch at the prison and holding cell gates; the walls' fallen-stone holes now a 1.5-4.5 cm patch of rough core a raking torch still lights; darker (`STONE_DARKEN` 0.8, `module_torch_energy` 1.1 -> 0.6: corridors from 3-5x the Tripo stone's screen brightness back to about its level, rooms a third darker); a soft flicker (frame-to-frame change 6.4% -> 1.0%, slower, shallow gutters); frame time not measured | [docs/notes/186-arch-legs-darker-softer-flicker.md](docs/notes/186-arch-legs-darker-softer-flicker.md) |
 | 187 | 2026-11-14 | A scoutpost's door stays open once its wheel is wound (`wound`, saved "scoutposts_wound"), even uncleared; rising at its beacon shuts it again and the wheel must be wound again (`shut_in`, maze.gd `_shut_risen_in` from `_on_player_respawned`); the stairs walked in all 8 posts (deck in 1.30 s). Second part (2026-11-15): scoutposts 2 x 2 cells, 9.8 m inside (module_level `_shrink_room_two`, `room["even"]`, `room_lo` / `room_hi`), a timber floor over the whole room at 2.4 m with an opening over the stair and a railed well for the beacon (scoutpost.gd `_build_compact`), 2.2 m of floor before the first step; stair and beacon placed so no way in opens onto either; enemies cannot path upstairs (not fixed), frame time not measured | [docs/notes/187-scoutpost-door-stays-open.md](docs/notes/187-scoutpost-door-stays-open.md) |
 | 188 | 2026-11-15 | The scout's look remade with ForgeGUI (dark riveted iron, brass goggles, a torn hessian cowl, a barbed spear) and fitted onto the scout's own rig by `tools/build_scout_forge.py` -> `models/scout_forge.glb`, `scripts/scout_forge_binds.gd`: each bone's map from the generation's pose to the rig's rest goes into its bind, so every animation drives it unchanged; the cowl's hem on the mantle's strands; lighter albedo and less metal so it reads in the dungeon; `-- --old-scout` for an A/B; `tools/hidden_run.ps1` runs windowed tests on a hidden desktop (no window, focus or sound on the user's screen); frame time not measured | [docs/notes/188-the-scout-remade-with-forgegui.md](docs/notes/188-the-scout-remade-with-forgegui.md) |
 | 189 | 2026-11-16 | Scouts climb the scoutpost stairs: a two-way NavigationLink3D up each 2 x 2 post's stair (scoutpost.gd `_stair_link`; the 1.1 m stair has no navmesh), the wall cell by its foot kept clear of props (`STAIR_FOOT_CLEAR`); scout.gd takes the path when the player is on the other floor (`OTHER_FLOOR` 1.5, it circled below) and keeps on to a link's far end (`_on_link_reached`, `LINK_COMMIT`), or it turned round mid-stair; up 3.2-5.2 s, down 2.6-5.6 s in all 8 posts; other enemy kinds not done | [docs/notes/189-scouts-climb-the-scoutpost-stairs.md](docs/notes/189-scouts-climb-the-scoutpost-stairs.md) |
@@ -659,6 +660,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 Which notes name each file (section numbers; `8b` = the second section 8).
 Not exhaustive -- also grep `docs/notes/` as described above.
 
+- `scenes/chandelier.tscn`: 186
 - `scenes/cell_door.tscn`: 12
 - `scenes/crier.tscn`: 43
 - `scenes/enemy.tscn`: 20, 22
@@ -674,7 +676,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/boss_abduction.gd`: 128
 - `scripts/bone_cage.gd`: 6.18, 6.19, 28, 79
 - `scripts/boss_hall.gd`: 7
-- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159, 176, 183, 184
+- `scripts/brick_level.gd`: 27, 96, 102, 114, 121, 159, 176, 183, 184, 186
 - `scripts/chest.gd`: 18, 79, 182
 - `scripts/loot_chest.gd`: 182
 - `scripts/consumable_type.gd`: 130
@@ -715,7 +717,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/jail_cell.gd`: 12, 153, 154, 177
 - `scripts/keybinds.gd`, `scripts/keybinds_panel.gd`: 164
 - `scripts/manhole.gd`: 50, 51, 79, 121, 184
-- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179, 180, 181, 182, 187
+- `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179, 180, 181, 182, 186, 187
 - `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178, 180, 182
 - `scripts/maze_graph.gd`: 6.16
 - `scripts/mimic.gd`: 8, 60, 79
@@ -771,7 +773,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 149, 167
 - `scripts/sword_wave.gd`: 160, 172
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80, 185
-- `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80
+- `scripts/torch.gd`: 6.18, 16, 24, 29, 35, 41, 50, 79, 80, 186
 - `scripts/wood_door.gd`: 6.18, 79
 - `scripts/workbench.gd`: 32, 77, 79, 172
 - `shaders/berserk_ground.gdshader`: 84
@@ -801,7 +803,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `tools/build_brick_kit.py`: 27, 28
 - `tools/timing_preview/timing_preview.gd`: 63, 64, 65, 66, 68, 69, 72, 74, 75
 - `tools/build_decrepit.py`: 56, 57, 59, 66
-- `tools/build_dungeon_kit.py`, `tools/dungeon_kit_textures.py`, `tools/dungeon_kit_preview.py`, `models/dungeon/`: 183
+- `tools/build_dungeon_kit.py`, `tools/dungeon_kit_textures.py`, `tools/dungeon_kit_preview.py`, `models/dungeon/`: 183, 186
 - `tools/build_forge_kit.py`, `models/forge/`, `models/source/forge/`: 184
 - `tools/build_enforcer.py`: 48, 51, 53, 73, 75
 - `tools/build_gate_door.py`: 6.19

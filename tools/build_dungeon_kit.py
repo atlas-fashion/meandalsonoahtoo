@@ -795,7 +795,7 @@ def wall_shade(p):
 
 
 def lay_wall(acc, surf, rng, u0, u1, heights, missing=None, proud_of=None, lmin=0.55, lmax=1.15,
-             shade=wall_shade, pit_depth=0.24, v0=0.0, keep=None, warp=None):
+             shade=wall_shade, pit_depth=0.03, v0=0.0, keep=None, warp=None):
     """Courses of stones on `surf` from u0 to u1, bottom up from v0. `missing(u,
     v)` leaves a stone out and lines the hole it leaves; `proud_of(course)`
     stands a whole course out; `keep(u0, u1, v0, v1)` drops stones nobody sees."""
@@ -832,7 +832,14 @@ def _pit(acc, surf, rng, a, b, v0, v1, gone, depth, shade):
     of the hole wherever a stone still stands next to it."""
     core = depth * rng.uniform(0.8, 1.1)
     n = 2 if (b - a) > 0.6 else 1
-    dark = lambda p: shade(p) * 0.55
+    # Lit as stone, not as a shadow (note 186): at 0.55, 0.42 and 0.12, 0.24 m
+    # deep (pit_depth), the hole sat in the torch's shadow with only the base
+    # light on it and read as a flat black hole in the wall. Every torch hangs
+    # on a wall, so its light rakes along the walls: even 7 cm deep the hole
+    # was all shadow. Now 1.5-4.5 cm: the face fallen away, the rough core
+    # stones standing just behind the wall's face, where a raking torch still
+    # reaches them.
+    dark = lambda p: shade(p) * 0.9
     for i in range(n):
         ua = a + (b - a) * i / n
         ub = a + (b - a) * (i + 1) / n
@@ -840,12 +847,12 @@ def _pit(acc, surf, rng, a, b, v0, v1, gone, depth, shade):
         if rng.random() < 0.5 and (v1 - v0) > 0.3:
             cuts.insert(1, v0 + (v1 - v0) * rng.uniform(0.4, 0.6))
         for va, vb in zip(cuts, cuts[1:]):
-            stone(acc, surf, ua, ub, va, vb, rng, proud=-core + rng.uniform(-0.03, 0.04), depth=0.05, rough=0.02,
+            stone(acc, surf, ua, ub, va, vb, rng, proud=-core + rng.uniform(-0.012, 0.012), depth=0.05, rough=0.02,
                   chip=0.7, shade=dark, gap=0.02, grid=0.18, back=False)
 
     def is_gone(u, v):
         return any(g[0] < u < g[1] and g[2] < v < g[3] for g in gone)
-    front, deep = -0.04, -depth * 1.1 - 0.2
+    front, deep = -0.01, -depth * 1.1 - 0.06
     e = 0.03
     sides = (((a, v0), (b, v0), (0, -e)), ((b, v0), (b, v1), (e, 0)), ((b, v1), (a, v1), (0, e)), ((a, v1), (a, v0), (-e, 0)))
     mid = surf.at((a + b) / 2, (v0 + v1) / 2, (front + deep) / 2)
@@ -861,10 +868,10 @@ def _pit(acc, surf, rng, a, b, v0, v1, gone, depth, shade):
             pts = [surf.at(pa[0], pa[1], front), surf.at(pb[0], pb[1], front), surf.at(pb[0], pb[1], deep), surf.at(pa[0], pa[1], deep)]
             c = sum(pts, Vector()) / 4.0
             s = shade(c)
-            quad(acc, pts, mid - c, "stone", (0.42 * s, 0.4 * s, 0.38 * s), rng)
+            quad(acc, pts, mid - c, "stone", (0.72 * s, 0.69 * s, 0.65 * s), rng)
     # And the back of the hole, behind the core.
     pts = [surf.at(a, v0, deep + 0.01), surf.at(b, v0, deep + 0.01), surf.at(b, v1, deep + 0.01), surf.at(a, v1, deep + 0.01)]
-    quad(acc, pts, surf.at((a + b) / 2, (v0 + v1) / 2, 0.0) - pts[0], "stone", 0.12, rng)
+    quad(acc, pts, surf.at((a + b) / 2, (v0 + v1) / 2, 0.0) - pts[0], "stone", 0.4, rng)
 
 
 def wall_heights(rng, total=WALL_HEIGHT):
@@ -1165,15 +1172,21 @@ def build_arch_like(name, seed, half, spring, head, outer, top, z0, z1, ring_w, 
             xs = [a * s, b * s, (a + b) * 0.5 * s]
             return not all(inside(x, yy) for x in xs for yy in (v0, v1))
         lay_wall(acc, surf, rng, -outer, outer, sp, v0=spring, shade=shade, keep=keep, warp=wp, lmin=0.6, lmax=1.2)
-    # Jambs: the same courses, through the thickness.
+    # Jambs: the same courses, through the thickness. A Plane faces u x v, and
+    # each jamb must face INTO the doorway: -x on the +x leg (u along +z), +x on
+    # the -x leg (u along -z). With u along +z on both (until note 186) the -x
+    # leg's stones faced into their own leg and were culled from the doorway:
+    # one leg of every arch in the level was a black, door-high hole.
     for s in (-1.0, 1.0):
-        surf = Plane((s * half, 0, 0), (0, 0, 1), (0, 1, 0))
+        surf = Plane((s * half, 0, 0), (0, 0, s), (0, 1, 0))
         y = 0.0
         for ci, h in enumerate(hs):
             proud = 0.05 if ci in (0, len(hs) - 1) else 0.0
             cuts = [z0 - proud, z1 + proud]
             if ci % 2 == 1 and (z1 - z0) > 0.9:
                 cuts.insert(1, (z0 + z1) / 2 + rng.uniform(-0.15, 0.15))
+            if s < 0.0:
+                cuts = [-c for c in reversed(cuts)]
             for a, b in zip(cuts, cuts[1:]):
                 stone(acc, surf, a, b, y, y + h, rng, proud=proud, shade=shade, bevel=0.03 if proud else bz,
                       open=("u" if a == cuts[0] else "") + ("U" if b == cuts[-1] else ""))

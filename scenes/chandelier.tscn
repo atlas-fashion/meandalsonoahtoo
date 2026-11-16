@@ -35,11 +35,11 @@ emission_energy_multiplier = 2.4
 [node name="Chandelier" type="Node3D"]
 script = ExtResource("1_torch")
 base_energy = 0.85
-flicker_amount = 0.5
-flicker_speed = 1.9
+flicker_amount = 0.35
+flicker_speed = 0.5
 light_range = 13.0
-gutter_chance = 0.55
-gutter_depth = 0.65
+gutter_chance = 0.1
+gutter_depth = 0.25
 
 [node name="Chain" type="MeshInstance3D" parent="."]
 cast_shadow = 0

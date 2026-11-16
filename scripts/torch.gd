@@ -8,20 +8,22 @@ extends Node3D
 
 @export var base_energy := 1.35
 ## How far the energy swings either side of base, as a fraction of it.
-## 0.62 since 2026-10-10 ("increase the firelight effect"; was 0.4).
-@export_range(0.0, 1.0) var flicker_amount := 0.62
-@export var flicker_speed := 2.6
+## 0.62 since 2026-10-10 ("increase the firelight effect"; was 0.4); 0.4 since
+## 2026-11-14 ("make the flicker softer and easier on the eyes", note 186).
+@export_range(0.0, 1.0) var flicker_amount := 0.4
+## 2.6 until note 186: slower now, a breathing glow rather than a stutter.
+@export var flicker_speed := 0.6
 @export var light_range := 10.0
 ## Extra distance past the light's reach before flicker updates stop entirely.
 @export var cull_margin := 14.0
 ## Chance per second of a deeper momentary guttering.
-@export var gutter_chance := 0.6
-@export var gutter_depth := 0.6
+@export var gutter_chance := 0.12
+@export var gutter_depth := 0.22
 ## The light sways with the flame by up to this much (metres), so its pool on
 ## the stone shifts as real firelight does, and runs hotter (yellow) as it
 ## flares and redder as it gutters by up to `colour_swing`.
-@export var sway := 0.07
-@export var colour_swing := 0.35
+@export var sway := 0.04
+@export var colour_swing := 0.25
 ## The glow round the flame, drawn this much larger than the scene's card.
 const HALO_SCALE := 1.6
 const HOT := Color(1.0, 0.8, 0.55)
@@ -30,9 +32,12 @@ const EMBER := Color(1.0, 0.52, 0.27)
 ## fastest octave runs past the frame rate, so the light jumped by 16% of its
 ## brightness frame to frame on average and by over 15% on 45% of frames --
 ## measured, and it read as jarring. Smoothed, the swells and dips survive.
-const FLICKER_SMOOTH := 0.03
-## A gutter sinks in over this long instead of in one frame.
-const GUTTER_IN := 0.12
+## 0.14 since note 186 (was 0.03): no frame-to-frame jump the eye picks out.
+const FLICKER_SMOOTH := 0.14
+## A gutter sinks in over this long instead of in one frame (0.12 until note 186).
+const GUTTER_IN := 0.4
+## ...and recovers at this much a second (2.5 until note 186).
+const GUTTER_OUT := 0.7
 var _light_home := Vector3.ZERO
 ## Wear the brick kit's Tripo torch (its ring bracket, wooden handle and wrapped
 ## head, cut from the torch pillar: "torch_mount") instead of this scene's old
@@ -123,7 +128,9 @@ func _ready() -> void:
 	_cull_phase = int(randi() % CULL_PERIOD)
 	_noise.seed = randi()
 	_noise.frequency = 0.5
-	_noise.fractal_octaves = 3
+	# Two octaves (three until note 186): the third only added a shimmer the
+	# low-pass then had to fight.
+	_noise.fractal_octaves = 2
 	# A random starting offset, so even identical seeds would drift apart.
 	_time = randf() * 500.0
 
@@ -306,7 +313,7 @@ func _process(delta: float) -> void:
 		_gutter = move_toward(_gutter, gutter_depth, delta * gutter_depth / GUTTER_IN)
 		_gutter_falling = _gutter < gutter_depth
 	elif _gutter > 0.0:
-		_gutter = maxf(_gutter - delta * 2.5, 0.0)
+		_gutter = maxf(_gutter - delta * GUTTER_OUT, 0.0)
 	elif randf() < gutter_chance * delta:
 		_gutter_falling = true
 

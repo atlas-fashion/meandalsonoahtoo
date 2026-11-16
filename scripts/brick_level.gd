@@ -50,7 +50,12 @@ const FORGE_KIT := "res://models/forge/forge_kit.glb"
 ## Its stone pieces: metal 0 (stone is not metal, CLAUDE.md section 4) and the
 ## albedo leaned cool like the Blender kit's stone, since every light is fire.
 const FORGE_STONE := ["prison_frieze", "prison_dome", "wall_loculi", "morgue_slab"]
-const FORGE_STONE_CAST := Color(0.86, 0.93, 1.06)
+## The Blender and ForgeGUI stone came out lighter than the Tripo stone the
+## level was lit for: "make the overall level darker now that the stone texture
+## is lighter" (note 186). One factor on both kits' stone albedo.
+const STONE_DARKEN := 0.8
+## Darkened by STONE_DARKEN since note 186, as the Blender stone is.
+const FORGE_STONE_CAST := Color(0.86, 0.93, 1.06) * STONE_DARKEN
 ## The exits' door ("door", a MultiMesh piece) is built from the Blender kit's
 ## door arch with the ForgeGUI leaf in it, the arch's front brought out to the
 ## Tripo door's (z 0.47 against the arch's 0.033) and the leaf where
@@ -61,8 +66,8 @@ const FORGE_LEAF_FIT := Vector3(1.05, 1.03, 1.0)
 ## Each material's albedo: every light here is a fire, so the stone leans cool
 ## (as STONE_CAST does for the Tripo pieces). "floor" is the stone again, wetter.
 const DK_ALBEDO := {
-	"stone": Color(0.86, 0.93, 1.06),
-	"floor": Color(0.80, 0.88, 1.02),
+	"stone": Color(0.86, 0.93, 1.06) * STONE_DARKEN,
+	"floor": Color(0.80, 0.88, 1.02) * STONE_DARKEN,
 	"wood": Color(1.0, 0.96, 0.92),
 	"iron": Color(1.0, 1.0, 1.0),
 }

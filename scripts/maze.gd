@@ -564,7 +564,9 @@ var _full_graph = null
 ## realistic and immersive"): about half the old brightness beside a torch.
 ## 1.1 since 2026-10-14: the light went from orange to amber (less red), which
 ## carries ~20% more luminance at the same energy.
-@export var module_torch_energy := 1.1
+## 0.6 since 2026-11-15 (note 186): "darken the torchlight", with the Blender
+## and ForgeGUI stone lighter than the Tripo stone it replaced.
+@export var module_torch_energy := 0.6
 ## The base light: where no torch reaches, the player can BARELY see. ACES
 ## crushes low ambient to black -- 0.3 (and 0.12 before it) measured 0.0005
 ## with every torch off, i.e. there was no base light at all. 1.1 reads about
