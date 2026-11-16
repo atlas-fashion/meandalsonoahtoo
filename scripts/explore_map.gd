@@ -1278,11 +1278,12 @@ func _reveal_cell(pos: Vector2i) -> void:
 
 
 func _reveal_room(room: Dictionary) -> void:
-	var c: Vector2i = room["centre"]
-	var h: int = room["half"]
-	for dx in range(-h, h + 1):
-		for dy in range(-h, h + 1):
-			var p := c + Vector2i(dx, dy)
+	# Note 187: a 2 x 2 scoutpost is not centred on a cell (`room_lo` .. `room_hi`).
+	var lo: Vector2i = _built.room_lo(room)
+	var hi: Vector2i = _built.room_hi(room)
+	for x in range(lo.x, hi.x + 1):
+		for y in range(lo.y, hi.y + 1):
+			var p := Vector2i(x, y)
 			if _built.cells.has(p):
 				_reveal_cell(p)
 
@@ -1497,11 +1498,9 @@ func _paint_floor(img: Image, cell) -> void:
 ## edge at each of the room's own doorways, matching the bar a corridor cell
 ## draws on its side of the same opening.
 func _paint_room_floor(img: Image, room: Dictionary) -> void:
-	var c: Vector2i = room["centre"]
-	var h: int = room["half"]
 	var pad := WALL_PAD
-	var top_left := _cell_origin_px(c - Vector2i(h, h))
-	var bottom_right := _cell_origin_px(c + Vector2i(h, h)) + Vector2i(PPC, PPC)
+	var top_left := _cell_origin_px(_built.room_lo(room))
+	var bottom_right := _cell_origin_px(_built.room_hi(room)) + Vector2i(PPC, PPC)
 	img.fill_rect(Rect2i(
 		top_left.x + pad, top_left.y + pad,
 		(bottom_right.x - top_left.x) - pad * 2,

@@ -146,6 +146,15 @@ var _small := false
 var _loft_wall := -1
 var _loft_chest := Transform3D()
 var _has_loft := false
+## Note 187: a post of two cells by two (module_level `_shrink_room_two`): an upper
+## floor over the whole room (`_build_compact`), the beacon in a well through it.
+var _compact := false
+var _beacon_at := Vector3.ZERO
+var _beacon_yaw := 0.0
+var _guard_spots: Array[Vector3] = []
+var _ground_spots: Array[Vector3] = []
+## Openings in the upper floor, rects in the hall's x / z.
+var _holes: Array[Rect2] = []
 
 
 ## How many of a wall's two corners have a way in on the other wall.
@@ -177,7 +186,21 @@ static func build(parent: Node3D, level, room_: Dictionary, owner_maze: Node, ru
 
 ## Where maze.gd stands the beacon: the middle of the hall.
 func beacon_spot() -> Vector3:
-	return Vector3.ZERO
+	return _beacon_at
+
+
+## Which way the beacon faces (the player rises 1.6 m in front of it): along the
+## room in a 2 x 2 post (note 187), else as built.
+func beacon_yaw() -> float:
+	return _beacon_yaw
+
+
+## Where maze.gd stands this post's scouts (world), or [] for its own spots.
+func guard_spots() -> Array:
+	var out: Array = []
+	for p in _guard_spots:
+		out.append(to_global(p))
+	return out
 
 
 func _count(what: String, n := 1) -> void:
@@ -199,7 +222,8 @@ func _build(torch_energy: float) -> void:
 	var h: int = room["half"]
 	_h = h
 	_small = h <= 1
-	_ring = float(h) * _cell
+	_compact = room.has("even")
+	_ring = (0.5 if _compact else float(h)) * _cell
 	_wall = _ring + BrickLevel.WALL_FACE
 	_body = StaticBody3D.new()
 	_body.name = "HallCollision"
@@ -214,16 +238,21 @@ func _build(torch_energy: float) -> void:
 		var a := Vector3(-d.z, 0.0, d.x)
 		var cells: Array = []
 		var closed := true
-		for k in range(-h, h + 1):
-			var local := d * _ring + a * (float(k) * _cell)
+		var ks: Array = [-0.5, 0.5] if _compact else range(-h, h + 1)
+		for kk in ks:
+			var k := float(kk)
+			var local := d * _ring + a * (k * _cell)
 			var key := _key(local)
 			var side := _side(d)
 			var entrance: bool = built.cells.has(key) and (built.cells[key].open & side) != 0
 			closed = closed and not entrance
-			cells.append({"key": key, "side": side, "along": float(k) * _cell, "entrance": entrance,
-				"corner": absi(k) == h, "local": local})
+			cells.append({"key": key, "side": side, "along": k * _cell, "entrance": entrance,
+				"corner": _compact or absi(int(k)) == h, "local": local})
 		_walls.append({"d": d, "a": a, "cells": cells, "closed": closed, "gallery": false,
 			"heavy": false, "winch": -1})
+	if _compact:
+		_build_compact(torch_energy)
+		return
 
 	# Roles. The photo, seen from the way in: the roots and a gallery on the
 	# left, a gallery along the back, the winch on the right.
@@ -303,8 +332,9 @@ func _build(torch_energy: float) -> void:
 
 ## The grid cell under a point in the hall's frame.
 func _key(local: Vector3) -> Vector2i:
-	var w := global_basis * local
-	return Vector2i(room["centre"]) + Vector2i(roundi(w.x / _cell), roundi(w.z / _cell))
+	# From the grid's own origin: a 2 x 2 post's middle is not on a cell (note 187).
+	var w := global_transform * local - (built.origin as Vector3)
+	return Vector2i(roundi(w.x / _cell), roundi(w.z / _cell))
 
 
 ## The grid side a direction in the hall's frame points to.
@@ -337,6 +367,10 @@ func _build_piers(h: int) -> void:
 	var verts: Array[float] = []
 	for k in range(-h, h):
 		verts.append((float(k) + 0.5) * _cell)
+	# Note 187: a 2 x 2 post's one inner vertex is its middle, the pier whole there
+	# (it carries the upper floor).
+	if _compact:
+		verts = [0.0]
 	var mid := pilaster_in + PIER_HALF
 	var piers: Array = []
 	for vx in verts:
@@ -363,7 +397,7 @@ func _build_piers(h: int) -> void:
 	for i in piers.size():
 		var pier: Array = piers[i]
 		var c: Vector3 = pier[0]
-		var slim: bool = i < verts.size() * verts.size() and pillar != null \
+		var slim: bool = i < verts.size() * verts.size() and pillar != null and not _compact \
 			and not level.under_boss_hall(built, to_global(c), 2.0)
 		var lift := SHAFT_TOP if slim else 0.0
 		cores.append(Transform3D(Basis(), c + Vector3(0.0, lift + PIER_TOP * 0.5, 0.0)))
@@ -515,7 +549,10 @@ func _build_winch(w: Dictionary) -> void:
 	add_child(frame)
 	# Its +Z out of the wall into the hall.
 	frame.transform = Transform3D(Basis.looking_at(d, Vector3.UP), c["local"] + d * (BrickLevel.WALL_FACE - 0.12))
-	var parts := WheelRoom.make_winch(frame, Vector3(0.0, WHEEL_Y, 0.0))
+	# Under a 2 x 2 post's upper floor (note 187) the gear door is cut down to go under it.
+	if _compact:
+		frame.scale = Vector3.ONE * WINCH_UNDER
+	var parts := WheelRoom.make_winch(frame, Vector3(0.0, WHEEL_Y / (WINCH_UNDER if _compact else 1.0), 0.0))
 	_wheel = parts[0]
 	_wheel_spin = parts[1]
 	_prompt = Interact.prompt("Hold E   Turn the wheel", Vector3(0.0, 0.2, 0.35))
@@ -1340,7 +1377,9 @@ const LOOT := [[&"health_potion", 1], [&"coins", 0], [&"small_health_potion", 1]
 
 func _scatter_loot() -> void:
 	var ground: Array[Vector3] = []
-	for w in _walls:
+	# A 2 x 2 post (note 187) lays out its own spots on the floor.
+	ground.append_array(_ground_spots)
+	for w in ([] if _compact else _walls):
 		var d: Vector3 = w["d"]
 		var a: Vector3 = w["a"]
 		for i in w["cells"].size():
@@ -1407,3 +1446,419 @@ static func _draw_to(node: Node3D) -> void:
 			continue
 		gi.visibility_range_end = DRAWN_TO + (20.0 if gi is MultiMeshInstance3D else 0.0)
 		gi.visibility_range_end_margin = 4.0
+
+
+# --- A post of two cells by two (note 187) ------------------------------------------------
+##
+## The user, 2026-11-14: "Make scoutposts smaller, and have the upstairs span the
+## whole room, with a hole for the stairs. Make sure the stairs are accesable by
+## the player; last time you made the stairs lead into a wall." (note 183's stair
+## began against the side wall: its first step touched it, so it could only be
+## stepped onto from the side.) The room is 9.8 m inside, a whole pier in its
+## middle carrying a timber floor over all of it at FLOOR_Y, the stair up one
+## closed wall with FOOT_CLEAR of floor before its first step and the floor going
+## on past its head; an opening over the stair, railed along its open sides; the
+## beacon stands in a railed well through the floor (it is 3.3 m tall); a railing
+## across each archway up there. The winch, the stores, the fire basket and the
+## scouts are below; the chest and most of the loot up there.
+
+## The upper floor's top. Under it 2.28 m clear: the navmesh's agents are 2.0 tall,
+## the player 1.8.
+const FLOOR_Y := 2.4
+## The stair's foot this far from the side wall: room to walk round onto it.
+const FOOT_CLEAR := 2.2
+## The beacon's well through the upper floor (half its side), and how far out
+## from the middle the beacon stands along each axis.
+const WELL_HALF := 1.25
+const BEACON_OFF := 2.55
+## The opening over the stair, out from its wall.
+const STAIR_HOLE := 1.55
+## The bronze gear door cut down to go under the upper floor (2.6 -> 2.2 m).
+const WINCH_UNDER := 0.85
+## The torches under the upper floor hang this high: at 1.5 the flame reached the
+## boards over it (seen in a shot).
+const LOW_TORCH_Y := 1.25
+## The kit's measures (models/scoutpost_kit.glb): a deck bay's length, where its
+## planks start out from its origin and how deep they run; a rail bay's length.
+const BAY_X := 3.027
+const BAY_Z0 := 0.0515
+const BAY_Z := 1.713
+const RAIL_LEN := 2.78
+
+
+func _build_compact(torch_energy: float) -> void:
+	var order: Array = [0, 1, 2, 3]
+	_shuffle(order)
+	# The stair's wall, which way it rises along it (`r`) and which side of the
+	# room the beacon stands on (`side_s`), chosen together so that no way in is
+	# under the stair, none opens onto the beacon's quarter (its well's posts and
+	# the beacon fill it: the first layout put a doorway straight onto it in 3
+	# posts of 8, and the navmesh had no way from that doorway into the room) and
+	# none onto the stair's foot. The least bad, should every choice have a fault.
+	var stair_wall := -1
+	var r := 1.0
+	var side_s := 1.0
+	var least := INF
+	var turns: Array = [[1.0, 1.0], [1.0, -1.0], [-1.0, 1.0], [-1.0, -1.0]]
+	_shuffle(turns)
+	for i in order:
+		var wd: Vector3 = _walls[i]["d"]
+		var wa: Vector3 = _walls[i]["a"]
+		for turn: Array in turns:
+			var cost := 0.0
+			for j in _walls.size():
+				for c in _walls[j]["cells"]:
+					if not c["entrance"]:
+						continue
+					var deep: float = (c["local"] as Vector3).dot(wd)
+					var along: float = signf((c["local"] as Vector3).dot(wa))
+					if j == i:
+						# On the stair's own wall: under the stair, or beside its head.
+						cost += 1000.0 if along == -float(turn[0]) else 50.0
+					elif deep < 0.0 and along == float(turn[1]):
+						cost += 20.0
+					elif deep > 0.0 and along == -float(turn[0]):
+						cost += 5.0
+			if cost < least:
+				least = cost
+				stair_wall = i
+				r = turn[0]
+				side_s = turn[1]
+	var sw: Dictionary = _walls[stair_wall]
+	sw["gallery"] = true
+	_loft_wall = stair_wall
+	_has_loft = true
+	var sd: Vector3 = sw["d"]
+	var sa: Vector3 = sw["a"]
+	for c in sw["cells"]:
+		_stair_cells[c["key"]] = true
+
+	# The beacon on the side away from the stair, in the quarter chosen above,
+	# facing along the room so the risen stand clear of the pier.
+	_beacon_at = -sd * BEACON_OFF + sa * (side_s * BEACON_OFF)
+	var face := -sa * side_s
+	_beacon_yaw = atan2(face.x, face.z)
+	_holes.append(Rect2(Vector2(_beacon_at.x, _beacon_at.z) - Vector2.ONE * WELL_HALF, Vector2.ONE * WELL_HALF * 2.0))
+	# The scouts in the other three quarters.
+	for qd: float in [1.0, -1.0]:
+		for qa: float in [1.0, -1.0]:
+			if qd < 0.0 and qa == side_s:
+				continue
+			_guard_spots.append(sd * (qd * 2.6) + sa * (qa * 2.6) + Vector3(0.0, 0.3, 0.0))
+
+	# The stair, its first step FOOT_CLEAR from the side wall, rising along the wall
+	# to its head, past which the floor goes on.
+	var k := FLOOR_Y / DECK_Y
+	var foot := -r * (_wall - FOOT_CLEAR)
+	var top := foot + r * STAIR_RUN * k
+	var g := Transform3D(Basis(sa, Vector3.UP, -sd), sd * _wall)
+	_kit("stair", g * Transform3D(Basis.from_scale(Vector3(-r * k, k, 1.0)), Vector3(foot, 0.0, STAIR_Z)))
+	var z0 := STAIR_Z
+	var z1 := STAIR_Z + STAIR_W
+	var wedge := ConvexPolygonShape3D.new()
+	wedge.points = PackedVector3Array([
+		Vector3(foot, 0.0, z0), Vector3(foot, 0.0, z1), Vector3(top, 0.0, z0), Vector3(top, 0.0, z1),
+		Vector3(top, FLOOR_Y, z0), Vector3(top, FLOOR_Y, z1)])
+	var ramp := CollisionShape3D.new()
+	ramp.name = "Stair"
+	ramp.shape = wedge
+	ramp.transform = g
+	_body.add_child(ramp)
+	var h0 := g * Vector3(minf(foot, top), 0.0, 0.0)
+	var h1 := g * Vector3(maxf(foot, top), 0.0, STAIR_HOLE)
+	_holes.append(Rect2(Vector2(minf(h0.x, h1.x), minf(h0.z, h1.z)), Vector2(absf(h1.x - h0.x), absf(h1.z - h0.z))))
+	# For tests: before the first step, on the floor past the head, and across the room up there.
+	_stairs.append({"foot": g * Vector3(foot - r * 0.9, 0.0, (z0 + z1) * 0.5),
+		"top": g * Vector3(top + r * 0.8, FLOOR_Y, (z0 + z1) * 0.5),
+		"far": g * Vector3(top + r * 2.6, FLOOR_Y, (z0 + z1) * 0.5),
+		"across": -sd * 3.6 + sa * (-side_s * 2.6) + Vector3(0.0, FLOOR_Y, 0.0)})
+	_count("upper floors")
+
+	_build_piers(1)
+	_upper_floor()
+	# Railings: along the stair's opening and across its foot (its head is the
+	# way up), round the beacon's well, across every archway up there.
+	_rail(g * Vector3(foot, 0.0, STAIR_HOLE), g * Vector3(top, 0.0, STAIR_HOLE))
+	_rail(g * Vector3(foot, 0.0, 0.06), g * Vector3(foot, 0.0, STAIR_HOLE))
+	_post(g * Vector3(foot, 0.0, STAIR_HOLE + 0.14), sa * r)
+	_post(g * Vector3(top, 0.0, STAIR_HOLE + 0.14), sa * r)
+	var well: Array[Vector3] = []
+	for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+		well.append(_beacon_at + Vector3(corner.x, 0.0, corner.y) * WELL_HALF)
+	for i in 4:
+		_rail(well[i], well[(i + 1) % 4])
+		var out := (well[i] - _beacon_at).normalized() * 0.2
+		_post(well[i] + out, (well[(i + 1) % 4] - well[i]).normalized())
+	for w in _walls:
+		for c in w["cells"]:
+			if c["entrance"]:
+				var d: Vector3 = w["d"]
+				var a: Vector3 = w["a"]
+				var base := d * (_wall - 0.08) + a * float(c["along"])
+				_rail(base - a * 1.8, base + a * 1.8)
+
+	# Light: torches on the pilasters, low under the floor on the side walls, up
+	# over it on the stair's wall and the one across.
+	if torch_energy > 0.0:
+		var level = load("res://scripts/module_level.gd")
+		var scene: PackedScene = load(level.TORCH_SCENE)
+		var pil := _wall - PILASTER_PROUD
+		for i in _walls.size():
+			var d: Vector3 = _walls[i]["d"]
+			var high := absf(d.dot(sd)) > 0.5
+			level._hang_torch(self, scene, d * (pil - 0.02) + Vector3(0.0, FLOOR_Y + 1.55 if high else LOW_TORCH_Y, 0.0),
+				d, torch_energy, 13.0)
+			_count("torches")
+
+	_build_gates()
+	# The winch under the floor, on the wall cell furthest from the beacon.
+	var winch_wall := -1
+	var winch_far := -1.0
+	for i in _walls.size():
+		if i == stair_wall:
+			continue
+		var w: Dictionary = _walls[i]
+		for j in w["cells"].size():
+			var c: Dictionary = w["cells"][j]
+			if c["entrance"]:
+				continue
+			var spot: Vector3 = (c["local"] as Vector3) + (w["d"] as Vector3) * BrickLevel.WALL_FACE
+			if spot.distance_to(_beacon_at) > winch_far:
+				winch_far = spot.distance_to(_beacon_at)
+				winch_wall = i
+				for w2 in _walls:
+					w2["winch"] = -1
+				w["winch"] = j
+	if winch_wall >= 0:
+		_build_winch(_walls[winch_wall])
+
+	# The chest up there against a wall, as far from the stair's head as it can.
+	var best_spot := Vector3.INF
+	var best_d := Vector3.FORWARD
+	var head := g * Vector3(top, 0.0, STAIR_HOLE * 0.5)
+	for i in _walls.size():
+		if i == stair_wall:
+			continue
+		var w: Dictionary = _walls[i]
+		var d: Vector3 = w["d"]
+		for c in w["cells"]:
+			if c["entrance"]:
+				continue
+			var at: Vector3 = (c["local"] as Vector3) + d * (BrickLevel.WALL_FACE - PILASTER_PROUD - CHEST_OFF)
+			if _in_hole(at, 0.9):
+				continue
+			if best_spot == Vector3.INF or at.distance_to(head) > best_spot.distance_to(head):
+				best_spot = at
+				best_d = d
+	if best_spot != Vector3.INF:
+		_loft_chest = Transform3D(Basis.looking_at(best_d, Vector3.UP), best_spot + Vector3(0.0, FLOOR_Y, 0.0))
+	_place_chest(winch_wall)
+
+	# Loot: up there clear of the openings, the pier and the chest; below along the walls.
+	var chest_at := _loft_chest.origin
+	var tries := 0
+	while _loot_spots.size() < 5 and tries < 80:
+		tries += 1
+		var p := Vector3(_rng.randf_range(-_wall + 0.8, _wall - 0.8), FLOOR_Y + 0.25, _rng.randf_range(-_wall + 0.8, _wall - 0.8))
+		if _in_hole(p, 0.6) or (absf(p.x) < PIER_HALF + 0.6 and absf(p.z) < PIER_HALF + 0.6) \
+				or Vector2(p.x - chest_at.x, p.z - chest_at.z).length() < 1.4:
+			continue
+		_loot_spots.append(p)
+	for i in _walls.size():
+		if i == stair_wall:
+			continue
+		var w: Dictionary = _walls[i]
+		var d: Vector3 = w["d"]
+		var a: Vector3 = w["a"]
+		for j in w["cells"].size():
+			var c: Dictionary = w["cells"][j]
+			if c["entrance"] or int(w["winch"]) == j:
+				continue
+			var p := d * (_wall - 1.0) + a * (float(c["along"]) + _rng.randf_range(-0.8, 0.8)) + Vector3(0.0, 0.25, 0.0)
+			if p.distance_to(_beacon_at) < 1.9:
+				continue
+			_ground_spots.append(p)
+
+	_dress_compact(stair_wall, winch_wall, side_s, order)
+	_commit_wood()
+	_scatter_loot()
+	_draw_to(self)
+	print("[scoutposts] scoutpost at %v (2 x 2): %d ways in, stair on the %s wall, winch %s; %s" % [room["centre"],
+		_gates.size(), ["left", "right", "back", "front"][stair_wall],
+		"on the %s wall" % ["left", "right", "back", "front"][winch_wall] if winch_wall >= 0 else "NONE",
+		", ".join(counts.keys().map(func(c): return "%s %d" % [c, counts[c]]))])
+
+
+## Whether `p` (hall frame) is within `margin` of an opening in the upper floor.
+func _in_hole(p: Vector3, margin: float) -> bool:
+	for h in _holes:
+		if h.grow(margin).has_point(Vector2(p.x, p.z)):
+			return true
+	return false
+
+
+## The upper floor: the kit's deck bays, stretched to a grid whose lines run along
+## every edge of the openings and the pier, so each bay is wholly floor or wholly
+## opening; a slab of collision under each.
+func _upper_floor() -> void:
+	var blocked: Array[Rect2] = _holes.duplicate()
+	blocked.append(Rect2(-PIER_HALF, -PIER_HALF, PIER_HALF * 2.0, PIER_HALF * 2.0))
+	var xs: Array[float] = [-_wall, _wall]
+	var zs: Array[float] = [-_wall, _wall]
+	for b in blocked:
+		xs.append_array([b.position.x, b.end.x])
+		zs.append_array([b.position.y, b.end.y])
+	xs = _breaks(xs, BAY_X)
+	zs = _breaks(zs, BAY_Z)
+	var n := 0
+	for i in xs.size() - 1:
+		for j in zs.size() - 1:
+			var rect := Rect2(xs[i], zs[j], xs[i + 1] - xs[i], zs[j + 1] - zs[j])
+			var mid := rect.get_center()
+			if blocked.any(func(b: Rect2) -> bool: return b.has_point(mid)):
+				continue
+			var sx := rect.size.x / BAY_X
+			var sz := rect.size.y / BAY_Z
+			_kit("deck_bay", Transform3D(Basis.from_scale(Vector3(sx, 1.0, sz)),
+				Vector3(mid.x, FLOOR_Y, rect.position.y - BAY_Z0 * sz)))
+			_solid_box(Transform3D(Basis(), Vector3(mid.x, FLOOR_Y - 0.06, mid.y)), Vector3(rect.size.x, 0.12, rect.size.y))
+			n += 1
+	_count("floor bays", n)
+
+
+## Grid lines inside the room: sorted, the ones within 2 cm of another dropped,
+## and every gap longer than `most` cut evenly.
+func _breaks(lines: Array[float], most: float) -> Array[float]:
+	var sorted: Array[float] = []
+	for v in lines:
+		sorted.append(clampf(v, -_wall, _wall))
+	sorted.sort()
+	var kept: Array[float] = []
+	for v in sorted:
+		if kept.is_empty() or v - kept[kept.size() - 1] > 0.02:
+			kept.append(v)
+	var out: Array[float] = []
+	for i in kept.size() - 1:
+		var span := kept[i + 1] - kept[i]
+		var parts := maxi(ceili(span / most), 1)
+		for p in parts:
+			out.append(kept[i] + span * float(p) / float(parts))
+	out.append(kept[kept.size() - 1])
+	return out
+
+
+## A railing from `a` to `b` (hall frame, on the floor's plan) up on the upper floor,
+## the kit's rail bay stretched to fit, and a solid fence along it.
+func _rail(a: Vector3, b: Vector3) -> void:
+	var along := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	var length := along.length()
+	if length < 0.2:
+		return
+	var x := along / length
+	var z := x.cross(Vector3.UP)
+	var mid := Vector3((a.x + b.x) * 0.5, FLOOR_Y, (a.z + b.z) * 0.5)
+	_kit("rail_bay", Transform3D(Basis(x * (length / RAIL_LEN), Vector3.UP, z), mid))
+	_solid_box(Transform3D(Basis(x, Vector3.UP, z), mid + Vector3(0.0, 0.55, 0.0)), Vector3(length, 1.1, 0.12))
+
+
+## A post under the upper floor at `at` (hall frame), its knee brace out along
+## `brace`, up through the floor as the railing's newel.
+func _post(at: Vector3, brace: Vector3) -> void:
+	var x := Vector3(brace.x, 0.0, brace.z).normalized()
+	var z := x.cross(Vector3.UP)
+	_kit("post_end", Transform3D(Basis(x, Vector3.UP * (FLOOR_Y / DECK_Y), z), Vector3(at.x, 0.0, at.z)))
+	_solid_box(Transform3D(Basis(), Vector3(at.x, FLOOR_Y * 0.5, at.z)), Vector3(0.26, FLOOR_Y, 0.26))
+
+
+## A 2 x 2 post's dressing: roots up one wall and over the archways, stores,
+## candles, shackles and rubble along the walls below (none on the stair's wall,
+## none hung from the vault: the floor is in the way), roots across the floor,
+## the fire basket in a corner, a grate; up there a crate or two by the chest.
+func _dress_compact(stair_wall: int, winch_wall: int, side_s: float, order: Array) -> void:
+	if ruins == null:
+		return
+	var first: int = ruins.hall_begin(hash(room["centre"]))
+	var strands: Array = []
+	var live: Array = []
+	var heavy := -1
+	for i in order:
+		if i != stair_wall and i != winch_wall:
+			heavy = i
+			break
+	for i in _walls.size():
+		var w: Dictionary = _walls[i]
+		for j in w["cells"].size():
+			var c: Dictionary = w["cells"][j]
+			var key: Vector2i = c["key"]
+			var side: int = c["side"]
+			if c["entrance"]:
+				if _rng.randf() < (0.9 if i == heavy else 0.45):
+					var arch: Dictionary = ruins._arch_frame(key, side)
+					if not arch.is_empty():
+						var relief = ruins._relief_arch_pos if arch["sign"] > 0.0 else ruins._relief_arch_neg
+						for s in Roots.arch_strands(ruins._rng, relief, _rng.randi_range(1, 3), arch["sign"]):
+							strands.append(s.transformed(arch["xf"]))
+				continue
+			if i == stair_wall:
+				continue
+			var is_winch: bool = i == winch_wall and int(w["winch"]) == j
+			if i == heavy and not is_winch:
+				ruins._wall_roots(key, side, _rng.randi_range(10, 16), 1, strands, live)
+			elif not is_winch and _rng.randf() < 0.5:
+				ruins._wall_roots(key, side, _rng.randi_range(3, 7), 0, strands, live)
+			if is_winch:
+				continue
+			var by_beacon := (c["local"] as Vector3).distance_to(_beacon_at) < 1.5
+			if not by_beacon:
+				if _rng.randf() < 0.6:
+					ruins._crates(key, side, _rng.randi_range(1, 2))
+				elif _rng.randf() < 0.5:
+					ruins._barrels(key, side, _rng.randi_range(2, 3))
+			if _rng.randf() < 0.45:
+				var x: float = ruins._spot(key, side, 0.4)
+				if not is_nan(x):
+					ruins._candles(ruins._against(key, side, x, 0.3), _rng.randi_range(3, 6), _rng.randf() < 0.5)
+			if _rng.randf() < 0.25:
+				var x: float = ruins._spot(key, side, 0.35)
+				if not is_nan(x):
+					ruins._shackles(key, side, x)
+			var walls: Array[int] = [side]
+			ruins._rubble(key, walls, 1.0)
+	if heavy >= 0:
+		var d: Vector3 = _walls[heavy]["d"]
+		var a: Vector3 = _walls[heavy]["a"]
+		for along: float in [-3.0, 3.0]:
+			var from := d * (_wall - 0.05) + a * (along + _rng.randf_range(-1.0, 1.0))
+			var dir := (-d + a * _rng.randf_range(-0.1, 0.1)).normalized()
+			strands.append(ruins.floor_strand(to_global(from), global_basis * dir, _rng.randf_range(2.0, 3.2),
+				_rng.randf_range(0.06, 0.1)))
+			_count("floor roots")
+	ruins._root_mesh(room["centre"], strands, live)
+	# The fire basket in the corner across the room from the beacon, on the far
+	# side from the stair, if no way in comes through that corner's cell.
+	var sd: Vector3 = _walls[stair_wall]["d"]
+	var sa: Vector3 = _walls[stair_wall]["a"]
+	var corner := -sd * (_wall - 0.9) + sa * (-side_s * (_wall - 0.9))
+	var corner_key := _key(corner)
+	var open_corner := false
+	for w in _walls:
+		for c in w["cells"]:
+			if c["key"] == corner_key and c["entrance"]:
+				open_corner = true
+	if not open_corner:
+		_fire_basket(corner)
+	_grate(-sd * 2.2 + sa * (-side_s * 2.2))
+	# Up there: a crate or two by the chest, candles beside it.
+	if chest != null:
+		var base := _loft_chest
+		for k2 in _rng.randi_range(1, 2):
+			var off := base.basis.x * ((1.2 + 0.9 * float(k2)) * (1.0 if _rng.randf() < 0.5 else -1.0))
+			var at := base.origin + off
+			if _in_hole(at, 0.5) or absf(at.x) > _wall - 0.4 or absf(at.z) > _wall - 0.4:
+				continue
+			var c := Crate.make(_rng.randi_range(0, Crate.SIZES.size() - 1),
+				global_transform * Transform3D(Basis(Vector3.UP, _rng.randf_range(-0.3, 0.3)) * base.basis, at),
+				hash(room["centre"]) + k2 * 7)
+			ruins.add_child(c)
+		ruins._candles(global_transform * Transform3D(base.basis, base.origin + base.basis.x * 0.95), _rng.randi_range(2, 4), true)
+	solid.append_array(ruins.hall_end(first))

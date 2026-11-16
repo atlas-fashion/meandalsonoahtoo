@@ -1820,6 +1820,10 @@ func _add_beacon(cell: Node3D) -> void:
 	# has its winch: its beacon stands in the middle (note 179).
 	anchor.position = cell.call("beacon_spot") if cell.has_method("beacon_spot") \
 		else Vector3(0.0, 0.0, -HOLDING_CELL.BEACON_BACK)
+	# Note 187: a 2 x 2 scoutpost's beacon faces along the room, so the player
+	# rises on its floor and not in its middle pier.
+	if cell.has_method("beacon_yaw"):
+		anchor.rotation.y = float(cell.call("beacon_yaw"))
 	anchor.connect(&"attuned", _on_anchor_attuned)
 	cell.set("beacon", anchor)
 	_anchors.append(anchor)
@@ -2197,6 +2201,14 @@ func _spawn_scoutpost_scouts() -> void:
 		# about a cell round the beacon, keeping to the hall (no patrol: it walks
 		# its patch, `wander_radius` round where it stood up).
 		var spots: Array = [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]
+		# Note 187: a 2 x 2 post says where, on its floor round its middle pier.
+		var own: Array = hall.call("guard_spots") if hall.has_method("guard_spots") else []
+		if not own.is_empty():
+			for k in mini(scoutpost_scouts, own.size()):
+				var s := _spawn_post_scout(own[k])
+				if s != null:
+					hall.call("add_guard", s)
+			continue
 		for k in range(spots.size() - 1, 0, -1):
 			var j := _scout_rng.randi_range(0, k)
 			var tmp = spots[k]
@@ -2224,7 +2236,9 @@ func _shut_risen_in(player: Node3D) -> void:
 func is_in_scoutpost(tile: Vector2i) -> bool:
 	for room in _scoutpost_rooms:
 		var mid := world_to_tile(_module_level.room_world(room))
-		var half := int(floor((float(room["half"]) + 0.5) * module_cell / tile_size))
+		# Note 187: a 2 x 2 post reaches a whole cell each way from its middle.
+		var reach := 1.0 if room.has("even") else float(room["half"]) + 0.5
+		var half := int(floor(reach * module_cell / tile_size))
 		if absi(tile.x - mid.x) <= half and absi(tile.y - mid.y) <= half:
 			return true
 	return false

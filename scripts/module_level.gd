@@ -347,7 +347,29 @@ class Built extends RefCounted:
 
 	## World-space centre of a room's courtyard.
 	func room_world(room: Dictionary) -> Vector3:
-		return to_world(room["centre"])
+		var at := to_world(room["centre"])
+		# Note 187: a scoutpost of two cells by two has its middle on the corner
+		# its four cells share, `even` the quadrant off its centre cell.
+		if room.has("even"):
+			var q: Vector2i = room["even"]
+			at += Vector3(float(q.x), 0.0, float(q.y)) * (cell_size * 0.5)
+		return at
+
+	## The grid cells at a room's corners, low and high (note 187: a 2 x 2
+	## scoutpost is not centred on a cell).
+	func room_lo(room: Dictionary) -> Vector2i:
+		var c: Vector2i = room["centre"]
+		if room.has("even"):
+			var q: Vector2i = room["even"]
+			return c + Vector2i(mini(q.x, 0), mini(q.y, 0))
+		return c - Vector2i(int(room["half"]), int(room["half"]))
+
+	func room_hi(room: Dictionary) -> Vector2i:
+		var c: Vector2i = room["centre"]
+		if room.has("even"):
+			var q: Vector2i = room["even"]
+			return c + Vector2i(maxi(q.x, 0), maxi(q.y, 0))
+		return c + Vector2i(int(room["half"]), int(room["half"]))
 
 	## Half the width of a room's open courtyard, in metres.
 	func court_half_span(room: Dictionary) -> float:
@@ -527,7 +549,10 @@ static func _assign_room_roles(out: Built, prisons: int, enclose: bool) -> void:
 			continue
 		room["kind"] = "scoutpost"
 		if enclose:
-			_shrink_room(out, room, SCOUTPOST_HALF)
+			if SCOUTPOST_TWO:
+				_shrink_room_two(out, room)
+			else:
+				_shrink_room(out, room, SCOUTPOST_HALF)
 		_enclose_hall(out, room, enclose)
 
 
@@ -541,6 +566,116 @@ static func _assign_room_roles(out: Built, prisons: int, enclose: bool) -> void:
 ## its wall and then in. The rest of the ring is rock again. The room's
 ## "entrances" become the new hall's.
 const SCOUTPOST_HALF := 1
+## Note 187 (the user, 2026-11-14: "Make scoutposts smaller, and have the upstairs
+## span the whole room, with a hole for the stairs"): two cells by two, 12 m
+## square, 9.8 m inside (`_shrink_room_two`). false puts back note 183's 3 x 3.
+const SCOUTPOST_TWO := true
+
+
+## Note 187: the carve's 5 x 5 block shrunk to 2 x 2 cells -- its centre cell and
+## the three in whichever quadrant (`room["even"]`) needs the shortest passages
+## from the old ways in. Each old way in is led on to the new room by the
+## shortest walk through the rest of the old block, kept as plain corridor; the
+## rest of the block is rock again, so the maze round it is the maze it was.
+## room["half"] stays 1: the 3 x 3 round the centre cell holds the room (the
+## distance tests read it so); its cells are `room_lo` .. `room_hi`.
+static func _shrink_room_two(out: Built, room: Dictionary) -> void:
+	var c: Vector2i = room["centre"]
+	var old: int = room["half"]
+	if old != 2:
+		_shrink_room(out, room, SCOUTPOST_HALF)
+		return
+	var best := {}
+	for q: Vector2i in [Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]:
+		var block := {}
+		for dx: int in [0, q.x]:
+			for dy: int in [0, q.y]:
+				block[c + Vector2i(dx, dy)] = true
+		var paths: Array = []
+		var total := 0
+		for way in room["entrances"]:
+			var path := _stub_path(c, old, block, way["cell"])
+			if path.is_empty():
+				total = -1
+				break
+			paths.append(path)
+			total += path.size()
+		if total >= 0 and (best.is_empty() or total < int(best["total"])):
+			best = {"q": q, "block": block, "paths": paths, "total": total}
+	if best.is_empty():
+		_shrink_room(out, room, SCOUTPOST_HALF)
+		return
+	var block: Dictionary = best["block"]
+	var stubs := {}
+	var ways: Array = []
+	var entrances: Array = room["entrances"]
+	for k in entrances.size():
+		var path: Array = best["paths"][k]
+		var p0: Vector2i = path[0]
+		stubs[p0] = int(stubs.get(p0, 0)) | int(entrances[k]["side"])
+		for i in range(1, path.size()):
+			var a: Vector2i = path[i - 1]
+			var b: Vector2i = path[i]
+			stubs[a] = int(stubs.get(a, 0)) | _side_of(b - a)
+			stubs[b] = int(stubs.get(b, 0)) | _side_of(a - b)
+		var last: Vector2i = path[path.size() - 1]
+		for s in ModuleMaze.ORDER:
+			var inner: Vector2i = last + ModuleMaze.DIRS[s]
+			if not block.has(inner):
+				continue
+			stubs[last] = int(stubs.get(last, 0)) | s
+			var in_side := _side_of(last - inner)
+			if not ways.any(func(w: Dictionary) -> bool: return w["cell"] == inner and w["side"] == in_side):
+				ways.append({"cell": inner, "side": in_side})
+			break
+	for dx in range(-old, old + 1):
+		for dy in range(-old, old + 1):
+			var p := c + Vector2i(dx, dy)
+			var cell: ModuleMaze.Cell = out.cells[p]
+			if block.has(p):
+				cell.open = 0
+				for s in ModuleMaze.ORDER:
+					if block.has(p + ModuleMaze.DIRS[s]):
+						cell.open |= s
+				cell.court = false
+			elif stubs.has(p):
+				cell.open = int(stubs[p])
+				cell.room = -1
+				cell.court = false
+				cell.hall = false
+				ModuleMaze._classify(cell)
+			else:
+				out.cells.erase(p)
+	for way in ways:
+		(out.cells[way["cell"]] as ModuleMaze.Cell).open |= int(way["side"])
+	room["half"] = 1
+	room["even"] = best["q"]
+	room["entrances"] = ways
+
+
+## The shortest walk from `from` (a cell of the old block's ring) through the old
+## block round `c`, outside `block`, to a cell beside `block`: [from .. that cell],
+## or [] if there is none.
+static func _stub_path(c: Vector2i, old: int, block: Dictionary, from: Vector2i) -> Array:
+	var came := {from: from}
+	var queue: Array[Vector2i] = [from]
+	var head := 0
+	while head < queue.size():
+		var at: Vector2i = queue[head]
+		head += 1
+		for s in ModuleMaze.ORDER:
+			if block.has(at + ModuleMaze.DIRS[s]):
+				var path: Array = [at]
+				while path[0] != from:
+					path.push_front(came[path[0]])
+				return path
+		for s in ModuleMaze.ORDER:
+			var n: Vector2i = at + ModuleMaze.DIRS[s]
+			if came.has(n) or block.has(n) or absi(n.x - c.x) > old or absi(n.y - c.y) > old:
+				continue
+			came[n] = at
+			queue.append(n)
+	return []
 
 
 static func _shrink_room(out: Built, room: Dictionary, new_half: int) -> void:
@@ -883,11 +1018,11 @@ static func _pick_surgery_hatch(out: Built, room: Dictionary) -> void:
 static func _enclose_hall(out: Built, room: Dictionary, enclose: bool) -> void:
 	if not enclose:
 		return
-	var c: Vector2i = room["centre"]
-	var h: int = room["half"]
-	for dx in range(-h, h + 1):
-		for dy in range(-h, h + 1):
-			var cell: ModuleMaze.Cell = out.cells[c + Vector2i(dx, dy)]
+	var lo := out.room_lo(room)
+	var hi := out.room_hi(room)
+	for x in range(lo.x, hi.x + 1):
+		for y in range(lo.y, hi.y + 1):
+			var cell: ModuleMaze.Cell = out.cells[Vector2i(x, y)]
 			cell.court = false
 			cell.hall = true
 			ModuleMaze._classify(cell)
