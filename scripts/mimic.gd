@@ -1,5 +1,9 @@
 extends CharacterBody3D
 
+## How much of the player's blows' shove it takes (combat/knockback.gd `shove`,
+## note 191): a chest does not slide.
+var knockback_taken := 0.0
+
 ## A chest that is not a chest. It sits on its pedestal looking exactly like the
 ## others until someone climbs up to open it, then bucks them off and comes down
 ## after them.

@@ -1,5 +1,9 @@
 extends CharacterBody3D
 
+## How much of the player's blows' shove it takes (combat/knockback.gd `shove`,
+## note 191): a boss: a quarter of the shove, as its own `apply_knockback`.
+var knockback_taken := 0.25
+
 ## THE SURGEON as a boss (2026-10-25; the frame of the fight note 105; his body,
 ## the claw on his back and his three moves note 109).
 ##

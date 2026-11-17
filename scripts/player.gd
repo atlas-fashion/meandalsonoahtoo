@@ -60,7 +60,8 @@ const AXE_SCENE := preload("res://scenes/weapons/axe.tscn")
 @export_range(0.0, 2.0, 0.05) var weapon_motion_strength := 0.8
 ## How hard a blow from something that is not a Weapon shoves the player, m/s
 ## (every enemy here: `take_damage`), unless the attacker sets `blow_knockback`.
-@export var blow_knockback := 3.0
+## 5 (note 191; the template's 3 slid 0.35 m and went unnoticed): ~0.6 m.
+@export var blow_knockback := 5.0
 ## Movement damping is multiplied by this while a swing runs, so a stroke reads
 ## as committed.
 @export var attack_damp_scale := 2.4
@@ -795,7 +796,11 @@ func _hit_target(target: Node, amount: float, id: StringName) -> int:
 		body.call("take_damage", amount, away)
 	var swing := w.current_swing()
 	if is_instance_valid(body) and swing != null:
-		knock(body, push_dir * w.last_hit_knockback, swing.stun_time, swing.stagger_chance)
+		# A stagger throws it (its own slide); any other blow still shoves it
+		# along the blade's way without stopping it (note 191).
+		var impulse := push_dir * w.last_hit_knockback
+		if not knock(body, impulse, swing.stun_time, swing.stagger_chance) and is_instance_valid(body):
+			Knockback.shove(body, impulse)
 	return Weapon.HitResult.HIT
 
 

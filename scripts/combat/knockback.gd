@@ -17,6 +17,47 @@ extends Node
 
 ## Current slide velocity (horizontal, metres per second).
 var velocity := Vector3.ZERO
+## Moves the parent body itself (move_and_collide each physics tick) instead of the
+## body adding step() to its own velocity: this game's enemies, whose own movement
+## knows nothing of it (note 191, `shove`). The player adds it itself (false).
+var drive := false
+
+
+## Every blow of the player's shoves `body` along `push_velocity` (note 191; the
+## template: "enemies are shoved even while attacking through the hit"), without
+## interrupting what it is doing. Its Knockback is made on the first blow, driving
+## it. How much it takes: its `knockback_taken` if it has one (0 = immovable), else
+## 1 - its `knockback_resistance`.
+static func shove(body: Node, push_velocity: Vector3) -> void:
+	var character := body as CharacterBody3D
+	if character == null or not is_instance_valid(character):
+		return
+	var kb := character.get_node_or_null("Knockback") as Knockback
+	if kb == null:
+		kb = Knockback.new()
+		kb.name = "Knockback"
+		kb.drive = true
+		var share = character.get("knockback_taken")
+		if share == null:
+			var resist = character.get("knockback_resistance")
+			share = 1.0 - float(resist) if resist != null else 1.0
+		kb.taken = clampf(float(share), 0.0, 3.0)
+		character.add_child(kb)
+	if kb.drive:
+		kb.push(push_velocity)
+
+
+func _physics_process(delta: float) -> void:
+	if not drive or velocity == Vector3.ZERO:
+		return
+	var body := get_parent() as CharacterBody3D
+	if body == null:
+		return
+	# Nothing slides once dead, caged or carried.
+	if body.get("_dying") == true or body.get("caged") == true or body.get("hauled_by") != null:
+		clear()
+		return
+	body.move_and_collide(step(delta) * delta)
 
 
 ## Shoves the body with the knockback of the strike `weapon` is landing right now (read

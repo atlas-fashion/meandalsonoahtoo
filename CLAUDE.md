@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 190), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 191), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -655,6 +655,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 188 | 2026-11-15 | The scout's look remade with ForgeGUI (dark riveted iron, brass goggles, a torn hessian cowl, a barbed spear) and fitted onto the scout's own rig by `tools/build_scout_forge.py` -> `models/scout_forge.glb`, `scripts/scout_forge_binds.gd`: each bone's map from the generation's pose to the rig's rest goes into its bind, so every animation drives it unchanged; the cowl's hem on the mantle's strands; lighter albedo and less metal so it reads in the dungeon; `-- --old-scout` for an A/B; `tools/hidden_run.ps1` runs windowed tests on a hidden desktop (no window, focus or sound on the user's screen); frame time not measured | [docs/notes/188-the-scout-remade-with-forgegui.md](docs/notes/188-the-scout-remade-with-forgegui.md) |
 | 189 | 2026-11-16 | Scouts climb the scoutpost stairs: a two-way NavigationLink3D up each 2 x 2 post's stair (scoutpost.gd `_stair_link`; the 1.1 m stair has no navmesh), the wall cell by its foot kept clear of props (`STAIR_FOOT_CLEAR`); scout.gd takes the path when the player is on the other floor (`OTHER_FLOOR` 1.5, it circled below) and keeps on to a link's far end (`_on_link_reached`, `LINK_COMMIT`), or it turned round mid-stair; up 3.2-5.2 s, down 2.6-5.6 s in all 8 posts; other enemy kinds not done | [docs/notes/189-scouts-climb-the-scoutpost-stairs.md](docs/notes/189-scouts-climb-the-scoutpost-stairs.md) |
 | 190 | 2026-11-16 | The timing-combat template (C:\DEV\godot\timing-combat) replaces every player attack and the guard: Weapon scenes (scenes/weapons/sword, spear, axe; scripts/combat/weapon.gd, swing.gd) own poses, swings, the chain window and a swept hit box; the sword's heavy (Q) and wave (F) are specials on its Weapon, the spear jab-jab-lunge; the guard's rules (guard.gd): parried if pressed while the attack winds up (its parry cue; enemy.gd `_enter_windup` now cues) and still held, else blocked (30%), no direction, no reflect; knockback on the player, lock-on (middle click / L3, lock_on.gd); the axe's throw and berserk, the spear's sweep and throw removed; the arm always follows the weapon | [docs/notes/190-the-timing-combat-template-replaces-the-combat.md](docs/notes/190-the-timing-combat-template-replaces-the-combat.md) |
+| 191 | 2026-11-16 | Every blow shoves: the player's hits that do not stagger now shove the enemy along the blade (combat/knockback.gd `shove`, a driving Knockback child moving the body by move_and_collide; `knockback_taken` / `knockback_resistance`), never interrupting it -- before, only the 40% staggers moved anything; `blow_knockback` 3 -> 5 (the player slides ~0.6 m) | [docs/notes/191-every-blow-shoves.md](docs/notes/191-every-blow-shoves.md) |
 
 ## Notes by source file
 
@@ -672,7 +673,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scenes/torch.tscn`: 6.15, 6.18, 7, 19, 24, 27, 46
 - `scenes/weapons/sword.tscn`, `scenes/weapons/spear.tscn`, `scenes/weapons/axe.tscn`: 190
 - `scripts/archer.gd`: 20, 77, 92, 93
-- `scripts/combat/weapon.gd`, `scripts/combat/swing.gd`, `scripts/combat/guard.gd`, `scripts/combat/knockback.gd`, `scripts/combat/lock_on.gd`, `scripts/combat/lock_on_reticle.gd`: 190
+- `scripts/combat/weapon.gd`, `scripts/combat/swing.gd`, `scripts/combat/guard.gd`, `scripts/combat/knockback.gd`, `scripts/combat/lock_on.gd`, `scripts/combat/lock_on_reticle.gd`: 190, 191
 - `scripts/arrow.gd`: 20, 79, 93
 - `scripts/attack_icons.gd`: 24, 77, 79, 84, 160, 162, 164, 167
 - `scripts/axe.gd`: 84, 85, 86, 87, 88, 89, 90, 91, 143, 144, 157, 161, 190
@@ -723,7 +724,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/maze.gd`: 6.18, 8b, 19, 22, 44, 56, 58, 60, 77, 79, 93, 94, 97, 112, 120, 121, 122, 123, 124, 125, 127, 128, 131, 135, 153, 154, 159, 176, 178, 179, 180, 181, 182, 186, 187
 - `scripts/ruin_dressing.gd`, `scripts/ruin_roots.gd`, `scripts/living_root.gd`, `scripts/breakable_crate.gd`, `shaders/root_bark.gdshader`, `shaders/root_tip.gdshader`, `shaders/root_common.gdshaderinc`, `shaders/ruin_banner.gdshader`, `scripts/vermin.gd`: 176, 178, 180, 182
 - `scripts/maze_graph.gd`: 6.16
-- `scripts/mimic.gd`: 8, 60, 79, 190
+- `scripts/mimic.gd`: 8, 60, 79, 190, 191
 - `scripts/module_level.gd`: 6.00, 6.12, 6.19, 8b, 94, 96, 97, 102, 112, 122, 154, 180, 181, 182, 183, 187
 - `scripts/module_maze.gd`: 6.00, 6.07, 8b, 27
 - `scripts/morgue.gd`: 17, 79, 94
@@ -731,7 +732,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/pad_keyboard_input.gd`: 26
 - `scripts/patrol.gd`: 24, 125, 126, 127
 - `scripts/pause_menu.gd`: 19, 185
-- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168, 170, 171, 172, 173, 174, 175, 190
+- `scripts/player.gd`: 6.19, 17, 32, 44, 48, 50, 60, 62, 75, 77, 78, 79, 84, 87, 91, 92, 96, 106, 111, 113, 130, 140, 143, 144, 145, 151, 152, 155, 156, 157, 160, 161, 162, 163, 164, 165, 167, 168, 170, 171, 172, 173, 174, 175, 190, 191
 - `scripts/player_motion.gd`, `models/anims/*.glb`: 167, 168, 171, 172, 175
 - `scripts/portcullis.gd`: 6.18
 - `scripts/prosthetic.gd`: 93, 135, 137, 138, 139, 141, 142, 146, 148, 149, 150, 151, 167
@@ -769,10 +770,10 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/surgery_vat.gd`: 102, 103, 104, 105, 106, 111, 120
 - `scripts/surgery_piece.gd`: 104, 110
 - `scripts/subtitles.gd`: 109
-- `scripts/surgeon_boss.gd`: 105, 109, 110, 111, 119
+- `scripts/surgeon_boss.gd`: 105, 109, 110, 111, 119, 191
 - `scripts/surgery_control.gd`: 99, 100, 101, 102, 104, 105, 106, 108, 109, 110, 111, 128
 - `scripts/surgical_table.gd`: 94, 95, 96, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111
-- `scripts/stalker.gd`: 11, 16, 22, 60, 79, 161, 165
+- `scripts/stalker.gd`: 11, 16, 22, 60, 79, 161, 165, 191
 - `scripts/sword_skeleton.gd`, `scripts/sword_skeleton_blade.gd`, `scripts/sword_skeleton_react.gd`: 135, 136, 137, 138, 139, 140, 141, 142, 146, 149, 167
 - `scripts/sword_wave.gd`: 160, 172
 - `scripts/title_screen.gd`: 19, 60, 76, 79, 80, 185

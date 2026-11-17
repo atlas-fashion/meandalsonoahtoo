@@ -1,5 +1,9 @@
 extends CharacterBody3D
 
+## How much of the player's blows' shove it takes (combat/knockback.gd `shove`,
+## note 191): the Remnant is not moved by blows.
+var knockback_taken := 0.0
+
 ## THE REMNANT (2026-10-08; first called the Shade): one huge ghost that stalks
 ## the corridors.
 ##
