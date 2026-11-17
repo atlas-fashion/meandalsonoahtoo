@@ -1,0 +1,90 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon.gd" id="1_w43rl"]
+[ext_resource type="Script" path="res://scripts/combat/swing.gd" id="2_5wbh6"]
+
+[sub_resource type="Curve" id="Curve_oxs5o"]
+_data = [Vector2(0, 0), 0.0, 2.0, 0, 0, Vector2(0.78, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Resource" id="Resource_tb54k"]
+script = ExtResource("2_5wbh6")
+display_name = "Chop"
+windup_pose = &"Raised"
+strike_poses = Array[StringName]([&"Level", &"Down"])
+windup_share = 0.47
+active_share = 0.13
+recovery_share = 0.4
+windup_curve = SubResource("Curve_oxs5o")
+camera_windup = Vector3(4, 0, -1.5)
+camera_strike = Vector3(-6, 0, 1)
+stun_time = 0.3
+stagger_chance = 0.6
+
+[sub_resource type="BoxMesh" id="BoxMesh_8dowj"]
+size = Vector3(0.04, 0.04, 0.75)
+
+[sub_resource type="BoxMesh" id="BoxMesh_5e7b6"]
+size = Vector3(0.02, 0.3, 0.22)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_rxuo5"]
+size = Vector3(0.5, 0.5, 1.3)
+
+[node name="Axe" type="Node3D" unique_id=1515792477 node_paths=PackedStringArray("grip", "poses", "hitbox")]
+script = ExtResource("1_w43rl")
+display_name = "Axe"
+hits_per_second = 1.33
+damage = 60.0
+knockback = 5.0
+swings = Array[ExtResource("2_5wbh6")]([SubResource("Resource_tb54k")])
+hit_length = 1.3
+hit_width = 0.5
+hit_thickness = 0.5
+grip = NodePath("Grip")
+poses = NodePath("Poses")
+hitbox = NodePath("Grip/Hitbox")
+
+[node name="Poses" type="Node3D" parent="." unique_id=259009965]
+
+[node name="Rest" type="Marker3D" parent="Poses" unique_id=1090512182]
+transform = Transform3D(0.32572034, 0.94142824, -0.0872872, -0.48043752, 0.08529357, -0.8728715, -0.81430084, 0.32624808, 0.48007935, 0.3, -0.42, -0.42)
+gizmo_extents = 0.05
+
+[node name="Raised" type="Marker3D" parent="Poses" unique_id=1011986475]
+transform = Transform3D(0.9926425, -0.08941608, -0.08164341, -0.12093106, -0.69845474, -0.7053628, 0.006046556, 0.7100463, -0.70412904, 0.16806105, 0.14243495, -0.05798915)
+gizmo_extents = 0.05
+
+[node name="Level" type="Marker3D" parent="Poses" unique_id=366890781]
+transform = Transform3D(0.9926425, 0.10041035, -0.06766569, -0.12093106, 0.8500535, -0.51262546, 0.006046552, 0.51703656, 0.855942, 0.15712811, 0.029760025, -0.5166632)
+gizmo_extents = 0.05
+
+[node name="Down" type="Marker3D" parent="Poses" unique_id=547924986]
+transform = Transform3D(0.9926425, 0.084076375, 0.08713235, -0.12093106, 0.6524701, 0.74810326, 0.006046552, -0.75313616, 0.657837, 0.11033326, -0.35471353, -0.5239797)
+gizmo_extents = 0.05
+
+[node name="Grip" type="Node3D" parent="." unique_id=970298421]
+transform = Transform3D(0.32572034, 0.94142824, -0.0872872, -0.48043752, 0.08529357, -0.8728715, -0.81430084, 0.32624808, 0.48007935, 0.3, -0.42, -0.42)
+
+[node name="Model" type="Node3D" parent="Grip" unique_id=1280221174]
+
+[node name="HaftPreview" type="MeshInstance3D" parent="Grip/Model" unique_id=689729268]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.3)
+mesh = SubResource("BoxMesh_8dowj")
+
+[node name="HeadPreview" type="MeshInstance3D" parent="Grip/Model" unique_id=1486443778]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.12, -0.58)
+mesh = SubResource("BoxMesh_5e7b6")
+
+[node name="Hitbox" type="Area3D" parent="Grip" unique_id=750787159]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, -0.3)
+collision_layer = 0
+collision_mask = 4
+monitorable = false
+
+[node name="Shape" type="CollisionShape3D" parent="Grip/Hitbox" unique_id=1887101978]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.65)
+shape = SubResource("BoxShape3D_rxuo5")
+
+[node name="PreviewCamera" type="Camera3D" parent="." unique_id=572313379]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.11)
+near = 0.03

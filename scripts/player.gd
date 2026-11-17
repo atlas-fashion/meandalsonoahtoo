@@ -33,34 +33,37 @@ const SCENE_WALK_SPEED := 3.3
 ## never flips over.
 @export var min_pitch := -89.0
 @export var max_pitch := 89.0
-## Lower than it was: the swings are much faster now, so damage per second is
-## up even though each individual cut lands for less.
-@export var attack_damage := 20.0
-
-## How long every weapon's attacks take, as a multiple of the timelines written
-## in this file, spear.gd and axe.gd (note 144): 1.25 is 25% longer, so 20%
-## slower. The one number to turn. Swings, wind-ups, the beat between blows, the
-## dash (its speed falls to match, the same ground covered), the slam's dive and
-## its getting up all follow it; the long recharges (spear throw, slam, berserk)
+## How long every weapon's attacks take, as a multiple of the timings in the
+## weapon scenes (note 144; note 190: each Weapon's `time_scale`): 1.25 is 25%
+## longer, so 20% slower. The one number to turn. Every swing follows it, and the
+## slam's dive and its getting up; the long recharges (the wave slash, the slam)
 ## and things in flight do not.
 @export var attack_time_scale := 1.25
 
-## A shove on every sword hit, so a connecting swing visibly moves what it hits.
-@export var attack_push := 5.5
-@export var attack_stun := 0.15
-
-## Forward shove on every swing. Added straight to velocity -- the movement
-## damping already bleeds a surge off at `acceleration`, so it needs no clock of
-## its own and reads as a committed step rather than a dash.
-@export var attack_lunge := 4.6
-## Movement damping is multiplied by this while a swing runs, so the lunge bleeds
-## off inside the stroke. These two are solved together: at normal damping the
-## surge outlasts the whole swing and hides the slow-down, and at heavy damping
-## the surge dies instantly and the step disappears. This pair gives roughly a
-## third of a metre of travel with the last third of the stroke visibly slower.
+## --- Combat: the timing-combat template (note 190) ---------------------------
+## Every attack is a Weapon scene (scenes/weapons/, scripts/combat/weapon.gd):
+## poses, swings, timing, damage, knockback and the hit box all live there. The
+## guard and parry rules are `guard` (scripts/combat/guard.gd), the slide a blow
+## gives the body `knockback`, the lock-on `lock_on`.
+const SWORD_SCENE := preload("res://scenes/weapons/sword.tscn")
+const SPEAR_SCENE := preload("res://scenes/weapons/spear.tscn")
+const AXE_SCENE := preload("res://scenes/weapons/axe.tscn")
+## Camera jolt when hit, in degrees (pitch, yaw, roll). Yaw and roll get a random sign.
+@export var hit_camera_kick := Vector3(3, 1.5, 3)
+## Camera jolt when blocking a blow.
+@export var block_camera_kick := Vector3(1.5, 0, 1)
+## Camera jolt when parrying a blow: a short, sharp snap.
+@export var parry_camera_kick := Vector3(-1, 0, -2)
+## How quickly a kick settles back to zero.
+@export var kick_recovery_speed := 10.0
+## Scales every swing's camera motion (the Swings' Camera group), as a player setting.
+@export_range(0.0, 2.0, 0.05) var weapon_motion_strength := 0.8
+## How hard a blow from something that is not a Weapon shoves the player, m/s
+## (every enemy here: `take_damage`), unless the attacker sets `blow_knockback`.
+@export var blow_knockback := 3.0
+## Movement damping is multiplied by this while a swing runs, so a stroke reads
+## as committed.
 @export var attack_damp_scale := 2.4
-## How much of your walking speed you keep while a swing is running.
-@export var attack_move_scale := 0.6
 ## Degrees the view kicks up on a swing, and how far it rolls with the stroke.
 @export var attack_view_kick := 1.5
 @export var attack_view_roll := 1.1
@@ -72,11 +75,6 @@ const SCENE_WALK_SPEED := 3.3
 ## Extra kick when a swing actually connects, so a hit reads differently from a
 ## miss. Costs nothing -- it is the existing camera, not a screen effect.
 @export var attack_hit_kick := 0.55
-
-## Half the thickness of the slab the blade sweeps out for its hit test. The
-## blade itself is a few millimetres; a little more makes a cut that grazes a
-## limb count, without hitting what the blade did not pass through.
-@export var blade_hit_thickness := 0.06
 
 @export_group("Sweep trail")
 ## A thin white ribbon left by the sword's TIP while it cuts. Purely visual:
@@ -95,8 +93,6 @@ const SCENE_WALK_SPEED := 3.3
 ## Cross-fade into and out of a swing. Kept short on purpose -- a swing that
 ## eases in reads as mushy and makes the hit window feel disconnected from it.
 @export var attack_blend := 0.07
-## Ground speed above which the run clip takes over from idle.
-@export var run_anim_speed := 1.6
 
 ## Walls block the swing, so you cannot cleave through a corner of the maze.
 @export var require_line_of_sight := true
@@ -134,10 +130,6 @@ const SCENE_WALK_SPEED := 3.3
 @export_range(0.0, 1.0) var dash_weapon_dip := 0.14
 ## Of full colour while the invulnerable frames last, so they can be seen.
 @export_range(0.0, 1.0) var dash_saturation := 0.35
-## Berserk's pace, m/s (axe.gd): ghost mode's 2.5 x the old walk (notes 91, 161),
-## and how much harder it steers there.
-@export var berserk_speed := 10.625
-@export var berserk_acceleration_scale := 2.0
 ## The dash goes straight through anything alive. Walls and floors still stop it.
 @export var dodge_phases_through_enemies := true
 ## How far around you the dash looks for things to pass through, checked every
@@ -322,58 +314,31 @@ const SCENE_WALK_SPEED := 3.3
 
 @export_group("Block and parry")
 ## Hold right click ("block") with any weapon in hand (`Inventory.is_weapon`):
-## the guard comes up across the body, the player slows, and a hit from the front does
-## `block_damage_taken` of its damage. A hit landing within `parry_window` of
-## the block going up is PARRIED instead: `parry_damage_taken` of it (none), the
-## attacker takes `parry_reflect` of its own blow back and is thrown back and
-## staggered, with a purple flash and a beat of hit-stop.
-@export_range(0.0, 1.0) var block_damage_taken := 0.1
-@export var parry_window := 0.5
-@export_range(0.0, 1.0) var parry_damage_taken := 0.0
-@export_range(0.0, 2.0) var parry_reflect := 0.5
+## the guard is up (the knight's left arm, first_person_arms.gd). The rules are
+## the timing-combat template's (note 190, scripts/combat/guard.gd): pressed while
+## an attack winds up (its parry cue open) and still held as it lands, PARRIED --
+## no damage, and the attacker is thrown back and staggered (`parry_push`,
+## `parry_stun`; a proel reels on its feet) with a purple flash and a beat of
+## hit-stop; up any other way, BLOCKED (the guard's `block_damage_multiplier`).
+## Raising it cuts off the swing in progress; nothing swings while it is up.
 @export var parry_push := 14.0
 @export var parry_stun := 0.9
-## Half-angle of the front the sword covers, degrees. A blow from behind or
-## from the side lands in full.
-@export var block_arc := 75.0
-@export var block_move_scale := 0.55
 @export var parry_color := Color(0.66, 0.28, 1.0)
 @export var block_spark_color := Color(1.0, 0.82, 0.55)
 
 @export_group("Wave slash")
-## F with the sword, the ult (note 162; note 160 had it on Q at 80): a long
-## wind-up with the blade hauled up over the right shoulder, the player all but
-## planted (`wave_move_scale` of walking pace), then one heavy diagonal cut that
-## throws a slow gold wave straight ahead (sword_wave.gd). The WAVE does the
-## damage -- `wave_damage` to everything it passes through, once each -- not the
-## blade. Once every `slam_cooldown` (the slam's 20 s, which it replaced on F):
-## pressed before then, nothing.
+## F with the sword, the ult (note 162; note 190: the sword Weapon's "Wave"
+## swing): a long wind-up with the blade hauled up overhead, the player all but
+## planted, then one diagonal cut that throws a slow gold wave straight ahead
+## (sword_wave.gd) the instant its strike begins. The WAVE does the damage --
+## `wave_damage` to everything it passes through, once each -- not the blade.
+## Once every `slam_cooldown` (20 s): pressed before then, nothing.
 @export var wave_damage := 130.0
-
-@export_group("Heavy swipe")
-## Q with the sword (note 162): the blade cocked back over the right shoulder and
-## held -- a plain delay, the player slowed to `heavy_move_scale` -- then one
-## wide, flat cut right to left through the crosshair that bites for
-## `heavy_damage`, with a lurch into it and a harder shove and stun than a cut.
-## A blow taken in the wind-up cuts it off.
-@export var heavy_damage := 45.0
-@export_range(0.0, 1.0) var heavy_move_scale := 0.35
-@export var heavy_push := 9.0
-@export var heavy_stun := 0.45
-@export_range(0.0, 1.0) var heavy_stagger_chance := 1.0
-@export var heavy_lunge := 5.5
-@export_range(0.0, 1.0) var wave_move_scale := 0.15
 ## The wave: metres a second, how far it goes, and its shove and stun.
 @export var wave_speed := 7.0
 @export var wave_reach := 30.0
 @export var wave_push := 9.0
 @export var wave_stun := 0.5
-## The camera's effort through it (`_wave_effort`): the lean back into the
-## wind-up and over into the cut (degrees), the crouch (metres) and the field of
-## view drawn in through the wind-up (degrees).
-@export var wave_effort_roll := 7.0
-@export var wave_effort_drop := 0.08
-@export var wave_effort_fov := 5.0
 
 @export_group("Lunge look")
 ## The lunge's look (the spear's dash): white speed lines rushing outward (the
@@ -420,9 +385,6 @@ const SCENE_WALK_SPEED := 3.3
 ## a wall in front of it covers it. (It was 0.12, the first-person sword pulled
 ## in front of everything, when that sword was a model of its own.)
 @export_range(0.05, 1.0) var sword_draw_depth := 1.0
-## How far the sword's blow reaches, in blade lengths from the guard (note 168):
-## the blade is SWORD_LENGTH, the bite this many times further.
-@export var sword_hit_reach := 2.15
 ## Where a put-away sword goes, relative to its pivot in the view: this far
 ## down and back, tipped this many radians back over the hand.
 @export var sword_duck_drop := 0.95
@@ -633,140 +595,321 @@ func begin_cutscene(hurts := false) -> void:
 	velocity.z = 0.0
 
 
-## --- The spear -------------------------------------------------------------------
+## --- Combat: the weapons, the guard, the lock-on (note 190) --------------------
 ##
-## scripts/spear.gd does its own fighting; the player routes the keys to it
-## while it is in hand (`_spear_free`) and moves the body for its dash.
+## The timing-combat template (C:\DEV\godot\timing-combat) replaced every attack
+## and the guard. Each weapon is a Weapon scene under the Head (`weapons`, by item
+## id; scenes/weapons/): it owns its poses, its swings, their timing, damage and
+## knockback, and sweeps its hit box along the swing itself. The player only
+## presses: `request_attack` (LMB), a special by name (Q the sword's heavy swipe,
+## F its wave slash), `interrupt` (a blow, the guard going up). What the eye sees
+## is still the knight's: the sword in its hand (`sword_pivot`) and the spear and
+## the axe (spear.gd, axe.gd) are put on the Weapon's grip every frame, and the
+## arm follows them (first_person_arms.gd).
 
 var spear: Node3D
-var _spear_dash_until := 0.0
-var _spear_dash_vel := Vector3.ZERO
-
-
-## Nothing in the way of using the spear right now.
-func _spear_free() -> bool:
-	return not _blocking and not _dashing and not is_drinking() and not _slamming and not hands_busy \
-		and not _dead and _now() >= _slam_recover_until and not is_flinching()
-
-
-## Carried forward at `vel` for `time` s, steering locked, with the lunge's
-## speed lines and widened view.
-func begin_spear_dash(vel: Vector3, time: float) -> void:
-	_spear_dash_vel = vel
-	_spear_dash_until = _now() + time
-	_lunge_age = 0.0
-
-
-func is_spear_dashing() -> bool:
-	return _now() < _spear_dash_until
-
-
-## --- The axe (2026-10-20) ---------------------------------------------------------
-##
-## scripts/axe.gd does its own fighting, as the spear does; the player routes
-## the keys to it (free when `_spear_free` is), holds the body still for the
-## berserk roar and the throw's wind-up, slows it while the axe is in hand and
-## speeds it up while berserk.
-
 var axe: Node3D
+## Item id -> its Weapon.
+var weapons := {}
+var guard: Guard
+var knockback: Knockback
+var lock_on: LockOn
+## The camera kick (degrees: pitch, yaw, roll), settling back on its own.
+var _kick := Vector3.ZERO
+## The weapon's camera motion and the kick this frame, radians (pitch, yaw, roll).
+var _weapon_view := Vector3.ZERO
+## A special pressed while a swing was still going, and until when it waits.
+var _special_queued := &""
+var _special_until := 0.0
+## A weapon-wheel slot chosen mid-swing: taken up as the swing ends (the
+## template's switch waits for the weapon to be idle).
+var _pending_slot := -1
+## The Weapon's grip frame on the sword's pivot (the fist on the hilt, the blade
+## down -Z, its edge +X), from the measured blade (`_measure_grip`).
+var _grip_on_pivot := Transform3D.IDENTITY
+## How long a special pressed mid-swing waits for it to end.
+const SPECIAL_BUFFER := 0.35
 
 
-## The berserk roar and the throw's wind-up: planted where it stands (axe.gd
-## `ROAR_TIME`, `THROW_WINDUP`).
-func _axe_planted() -> bool:
-	return axe != null and (axe.is_roaring() or axe.is_winding_up())
+func _make_combat() -> void:
+	guard = Guard.new()
+	guard.name = "Guard"
+	guard.wielder = self
+	add_child(guard)
+	knockback = Knockback.new()
+	knockback.name = "Knockback"
+	add_child(knockback)
+	for entry in [[&"sword", SWORD_SCENE], [&"spear", SPEAR_SCENE], [&"axe", AXE_SCENE]]:
+		var w: Weapon = (entry[1] as PackedScene).instantiate()
+		w.name = "%sWeapon" % String(entry[0]).capitalize()
+		# Before everything else each frame: the hand is put on the grip after.
+		w.process_priority = -10
+		head.add_child(w)
+		# The knight holds the real thing; the scene's own model is the editor's.
+		var model := w.grip.get_node_or_null("Model") if w.grip != null else null
+		if model != null:
+			model.queue_free()
+		w.wielder = self
+		w.sight_from = camera
+		w.sight_mask = geometry_mask
+		w.time_scale = attack_time_scale
+		w.hit_handler = _hit_target.bind(entry[0])
+		w.swing_started.connect(_on_swing_started)
+		w.hit_window_opened.connect(_on_strike.bind(w))
+		w.target_hit.connect(_on_target_hit)
+		weapons[entry[0]] = w
+		_set_weapon_active(w, false)
+	lock_on = LockOn.new()
+	lock_on.name = "LockOn"
+	lock_on.body = self
+	lock_on.camera = camera
+	lock_on.pitch_owner = self
+	lock_on.sight_mask = geometry_mask
+	add_child(lock_on)
+	lock_on.reticle = LockOnReticle.new()
+	lock_on.reticle.name = "LockOnReticle"
 
 
-## Walking pace multiplier: axe.gd `CARRY_SPEED` with the axe in hand; while
-## berserk, `berserk_speed` (ghost mode's old pace) instead, the axe's weight
-## and all, walking or sprinting (notes 91, 161).
-func _axe_speed() -> float:
-	if axe == null:
-		return 1.0
-	var carry: float = axe.CARRY_SPEED if held_item() == &"axe" and not axe.is_away() else 1.0
-	return lerpf(carry, berserk_speed / maxf(_pace(), 0.1), axe.berserk_amount())
+## The weapon in hand, or null (nothing that fights is in hand).
+func current_weapon() -> Weapon:
+	return weapons.get(held_item()) as Weapon
 
 
-## Thrown and not yet caught: the player has no weapon at all.
-func axe_away() -> bool:
-	return axe != null and axe.is_away()
+## The swing in progress with the weapon in hand, by name in lower case
+## (&"forehand", &"heavy", &"wave", &"jaba", &"lunge", &"chop"...), or &"".
+func current_move() -> StringName:
+	var w := current_weapon()
+	var s := w.active_swing() if w != null else null
+	return StringName(s.display_name.to_lower()) if s != null else &""
 
 
-## The spear's ordinary stab is put behind the shoulder: the player walks at
-## `spear_stab_move_scale` while one is out, and the view drives into it -- a
-## push forward, a dip, a nod, the shoulders rolling to alternate sides, the view
-## drawn in -- with a strain that builds as the stabs keep coming
-## (`_stab_effort`, composed in `_update_head` / `_update_dash_view`).
-@export_range(0.0, 1.0) var spear_stab_move_scale := 0.45
-@export var spear_effort_push := 0.07
-@export var spear_effort_drop := 0.03
-@export var spear_effort_pitch := 1.6
-@export var spear_effort_roll := 2.4
-@export var spear_effort_fov := 2.6
-var _stab_strain := 0.0
-var _stab_k := 0.0
-var _stab_fov := 0.0
+## What weapon `id`'s swing `swing_name` deals, upgrades and all (the inventory's card).
+func swing_damage(id: StringName, swing_name: String) -> float:
+	var w: Weapon = weapons.get(id)
+	if w == null:
+		return 0.0
+	var i := w.swing_named(swing_name)
+	var mult: float = w.swings[i].damage_multiplier if i >= 0 else 1.0
+	return w.damage * mult * weapon_damage_scale(id)
 
 
-## spear.gd, as each stab is driven out.
-func spear_stabbed() -> void:
-	_stab_strain = minf(_stab_strain + 0.28, 1.0)
+func _set_weapon_active(w: Weapon, active: bool) -> void:
+	w.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
 
 
-func _spear_stabbing() -> bool:
-	return spear != null and spear.has_method("stab_time") and float(spear.call("stab_time")) >= 0.0
+## Each frame: only the weapon in hand ticks; a switch made mid-swing is taken
+## once it is idle; a held special starts; the kick settles; the lock-on aims.
+func _update_weapons(delta: float) -> void:
+	var held := current_weapon()
+	if hands_busy or _dead or is_hidden():
+		held = null
+	for id in weapons:
+		var w: Weapon = weapons[id]
+		var on := w == held
+		if (w.process_mode != Node.PROCESS_MODE_DISABLED) != on:
+			if not on:
+				w.reset()
+			_set_weapon_active(w, on)
+		w.time_scale = attack_time_scale
+		w.damage_scale = weapon_damage_scale(id)
+	_attacking = held != null and not held.is_idle()
+	# The Weapons' hit boxes drawn with the sandbox's "Show hitboxes" (never in a
+	# real game), as the shields' are.
+	Weapon.show_hitboxes = Sandbox.active and Sandbox.show_hitboxes
+	if _pending_slot >= 0 and (held == null or held.is_idle()):
+		var slot := _pending_slot
+		_pending_slot = -1
+		_select_now(slot)
+	if _special_queued != &"":
+		if held == null or _now() > _special_until:
+			_special_queued = &""
+		elif held.is_idle():
+			var s := _special_queued
+			_special_queued = &""
+			_start_special(s)
+	_kick = _kick.lerp(Vector3.ZERO, 1.0 - exp(-kick_recovery_speed * delta))
+	var cam := held.camera_offset() if held != null else Vector3.ZERO
+	_weapon_view = (cam * weapon_motion_strength + _kick) * (PI / 180.0)
+	_trail_on = held != null and held_item() == &"sword" and held.phase == Weapon.Phase.ACTIVE
+	# The lock-on: the reticle on this player's own half of the screen.
+	if lock_on.reticle.get_parent() == null:
+		var layer := CanvasLayer.new()
+		layer.name = "LockOnHUD"
+		add_child(layer)
+		layer.add_child(lock_on.reticle)
+	if lock_on.is_locked() and (_dead or in_cutscene or remote_view or is_hidden() or climbing):
+		lock_on.release()
+	var stick := 0.0
+	if not ui_open and not wheel_open:
+		stick = Coop.vector(self, &"look_left", &"look_right", &"look_up", &"look_down").x
+	lock_on.camera = Coop.view_camera(self) if Coop.active else camera
+	lock_on.update(delta, stick)
 
 
-## The spear's Q sweep is under way (note 167): planted into it like the heavy swipe.
-func _spear_sweeping() -> bool:
-	if spear == null or held_item() != &"spear" or not spear.has_method("motion"):
-		return false
-	var m: Array = spear.call("motion")
-	return not m.is_empty() and m[0] == &"sweep"
+## The sword in the knight's hand where its Weapon's grip is, drawn back out of
+## the left arm's way while the guard is up (GUARD_DRAW, as always). Not while a
+## scene poses it (`_pose_kind`: a haft strike, the cage stab, the slam).
+func _pose_held_sword() -> void:
+	var w: Weapon = weapons.get(&"sword")
+	if w == null or w.grip == null or _pose_kind != &"":
+		return
+	var g := w.grip.transform
+	var k := guard_amount()
+	if k > 0.0:
+		g = Transform3D(g.basis, g.origin + GUARD_DRAW * k)
+	sword_pivot.transform = g * _grip_on_pivot.affine_inverse()
 
 
-## (roll deg, pitch deg, drop m, fov deg) for the spear's stab; `_stab_k` is
-## left as the drive, 0..1, for the push forward.
-func _stab_effort() -> Vector4:
-	_stab_k = 0.0
-	if spear == null or not spear.has_method("stab_time"):
-		return Vector4.ZERO
-	var t: float = spear.call("stab_time")
-	if t < 0.0 and _stab_strain <= 0.0:
-		return Vector4.ZERO
-	if t >= 0.0:
-		var out: float = spear.get("STAB_OUT")
-		var back: float = spear.get("STAB_BACK")
-		if t < out:
-			var r := t / out
-			_stab_k = 1.0 - (1.0 - r) * (1.0 - r)
-		else:
-			_stab_k = 1.0 - smoothstep(out, back, t)
-	var side: float = spear.get("stab_side")
-	var k := _stab_k
-	var e := Vector4(spear_effort_roll * side * k, -spear_effort_pitch * k, spear_effort_drop * k,
-		-spear_effort_fov * k)
-	# Kept at it, the arms start to shake.
-	if _stab_strain > 0.0:
-		var n := float(Time.get_ticks_msec()) / 1000.0 * 45.0
-		var s := _stab_strain * _stab_strain
-		e.x += _bob_noise.get_noise_2d(n, 131.0) * 1.1 * s
-		e.y += _bob_noise.get_noise_2d(n, 157.0) * 0.6 * s
-		e.z += absf(_bob_noise.get_noise_2d(n, 173.0)) * 0.008 * s
-	return e
+## The grip frame on the sword's pivot: where the fist closes (`_sword_grip`), the
+## blade's way out of it (-Z) and its edge (+X).
+func _measure_grip() -> void:
+	var width := _blade_frame.x
+	var along := _blade_frame.y
+	var normal := _blade_frame.z
+	_grip_on_pivot = Transform3D(Basis(width, normal, -along), _sword_grip())
+
+
+## A Weapon's blow on something with no take_hit() -- every enemy here: its
+## `take_damage` (from the player's side), and at the swing's `stagger_chance` a
+## `knock` along the way the blade was going, as hard as the weapon's knockback
+## (enemies keep their poise otherwise). A weak point (`strike`) is worth many
+## times a cut. Returns a Weapon.HitResult, or -1 to pass it over.
+func _hit_target(target: Node, amount: float, id: StringName) -> int:
+	var w: Weapon = weapons.get(id)
+	var body := target as Node3D
+	if w == null or body == null or body.has_method("swat"):
+		return -1
+	if not body.has_method("take_damage") and not body.has_method("strike") \
+			and not body.has_method("apply_knockback"):
+		return -1
+	var away := body.global_position - global_position
+	away.y = 0.0
+	away = away.normalized() if away.length_squared() > 0.0001 else -global_basis.z
+	var travel := w.last_hit_direction
+	travel.y = 0.0
+	var push_dir := travel.normalized() if travel.length() > 0.2 else away
+	if body.has_method("strike"):
+		body.call("strike", away)
+		return Weapon.HitResult.HIT
+	if body.has_method("take_damage"):
+		body.call("take_damage", amount, away)
+	var swing := w.current_swing()
+	if is_instance_valid(body) and swing != null:
+		knock(body, push_dir * w.last_hit_knockback, swing.stun_time, swing.stagger_chance)
+	return Weapon.HitResult.HIT
+
+
+func _on_target_hit(target: Node, _amount: float, _result: int) -> void:
+	# A connecting swing punches the view harder than a miss; capped, so cutting
+	# through a pack does not slam it per body.
+	_swing_kick = minf(_swing_kick + attack_hit_kick, 1.5)
+	if target is Node3D:
+		hit_landed.emit(target)
+
+
+func _on_swing_started(_swing: Swing, index: int) -> void:
+	# Alternating strokes roll the view opposite ways.
+	_swing_roll = 1.0 if index % 2 == 0 else -1.0
+
+
+## A strike begins (the hit window opens): the view punches with it; the wave
+## slash throws its wave; a lunge (the heavy swipe, the spear's third) shows its
+## speed lines.
+func _on_strike(swing: Swing, _index: int, w: Weapon) -> void:
+	if _dead or w != current_weapon():
+		return
+	_swing_kick = maxf(_swing_kick, 1.0)
+	if swing.display_name == "Wave":
+		_fire_wave()
+	elif swing.lunge_distance >= 0.5:
+		_lunge_age = 0.0
+		_shake = maxf(_shake, 0.12)
+
+
+## LMB: the weapon in hand's next swing (Weapon.request_attack). Nothing swings
+## with the guard up (the template's rule); a click in a dash's burst is swung as
+## it ends.
+func _weapon_attack() -> void:
+	var w := current_weapon()
+	if w == null or not _can_swing():
+		return
+	if _dashing:
+		_dash_attack_queued = true
+		return
+	w.request_attack()
+
+
+## The old name (tools/benchmark.gd).
+func _start_attack() -> void:
+	_weapon_attack()
+
+
+## Nothing in the way of a swing starting.
+func _can_swing() -> bool:
+	return not _blocking and not is_drinking() and not is_flinching() and not _slamming \
+		and _now() >= _slam_recover_until and _pose_kind == &"" and not hands_busy and not _dead \
+		and not in_cutscene and latched_to == null and not remote_view
+
+
+## Q / F with the sword: its heavy swipe / its wave slash, specials on its Weapon
+## (`combo_length` 2) started only from idle. Pressed while a swing runs, held and
+## started the moment it ends. The wave once every `slam_cooldown`.
+func _start_special(swing_name: StringName) -> void:
+	var w := current_weapon()
+	if w == null or not _can_swing() or _dashing:
+		return
+	if swing_name == &"Wave" and _now() < _slam_ready_at:
+		return
+	var index := w.swing_named(String(swing_name))
+	if index < 0:
+		return
+	if not w.is_idle():
+		_special_queued = swing_name
+		_special_until = _now() + w.time_left() + SPECIAL_BUFFER
+		return
+	w.start_attack_at(index)
+
+
+## Every weapon's swing stopped where it is (a blow, a death, a scene).
+func _interrupt_weapons() -> void:
+	_special_queued = &""
+	for id in weapons:
+		(weapons[id] as Weapon).interrupt()
+
+
+## The walk through a swing: the weapon's `move_multiplier` (its swing's share of
+## it); the axe's weight with it in hand.
+func _attack_move_scale() -> float:
+	var w := current_weapon()
+	var scale := w.move_multiplier() if w != null else 1.0
+	if held_item() == &"axe" and axe != null:
+		scale *= float(axe.get("CARRY_SPEED"))
+	return scale
+
+
+func _attack_slows() -> bool:
+	return _attacking
+
+
+## Kept for spear.gd's scene poses and old callers: nothing in the way of the
+## weapon in hand.
+func _spear_free() -> bool:
+	return _can_swing() and not _dashing
+
+
+## The spear in hand doing anything (`spear.busy`).
+func is_spear_dashing() -> bool:
+	return false
 
 
 ## --- Staggering -------------------------------------------------------------------
 ##
 ## Whether a blow STAGGERS what it hits is a roll, per hit, at the stroke's own
-## chance. A stagger throws the body back and cancels whatever it was doing -- a
-## wind-up, a swing already coming, a bow being drawn, a beam -- so it has to
-## start its attack over (enemy.gd `_staggered`). A blow that does not stagger
-## still hurts but neither moves nor interrupts it.
-##
-## Sword: cut `slash_stagger_chance`, the wave slash's wave and slam always.
-## Spear (spear.gd): stab 10%, dash and the thrown spear's blast always.
-@export_range(0.0, 1.0) var slash_stagger_chance := 0.4
+## chance (each Swing's `stagger_chance`; note 190). A stagger throws the body back
+## and cancels whatever it was doing -- a wind-up, a swing already coming, a bow
+## being drawn, a beam -- so it has to start its attack over (enemy.gd
+## `_staggered`). A blow that does not stagger still hurts but neither moves nor
+## interrupts it: the enemies' poise.
 @export_range(0.0, 1.0) var wave_stagger_chance := 1.0
 @export_range(0.0, 1.0) var slam_stagger_chance := 1.0
 ## The shortest a stagger lasts, whatever the stroke's own stun.
@@ -1044,29 +1187,11 @@ func _scene_walk(delta: float) -> void:
 ## building the material at runtime would stall the first slam.
 @onready var slam_ring: MeshInstance3D = $SlamRing
 
-## Attacks alternate between these two so repeated clicks read as a combo.
-const ATTACKS: Array[StringName] = [&"slash", &"chop"]
-## The clips chosen by how you are moving rather than by what you pressed. All
-## three loop, so `animation_finished` only ever fires for an attack.
-const LOCOMOTION: Array[StringName] = [&"idle", &"run", &"jump"]
-
+## A swing is under way with the weapon in hand (note 190; scouts and proels
+## read it to dodge). Set each frame by `_update_weapons`.
 var _attacking := false
-var _next_attack := 0
-## A cut clicked for while the last still bites: held, as the axe's and the spear's
-## are, and begun the moment the blade stops biting (`_take_queued_attack`, note 151).
-var _attack_queued := false
-## The move a clip move took over from while it still showed (note 175): its
-## kind, its pose second (running on under the new one) and the weight it had.
-## The new move cross-fades in over it (`motion_weight`, `body_motion_from`), so
-## the body, the blade and the view go straight from one stroke into the next
-## instead of home to the guard first. Cleared when the fade is done.
-var _from_kind := &""
-var _from_t := 0.0
-var _from_w := 0.0
-## True only during the active frames of a swing.
+## The slam's (kept, unbound): true while its strike can hit.
 var _hit_window_open := false
-## Bodies already hit by the current swing, so one swing deals damage once.
-var _hit_this_swing: Array[Node3D] = []
 
 var health := 0.0
 var _invulnerable_until := 0.0
@@ -1129,8 +1254,6 @@ var _dash_lateral := 0.0
 var _base_fov := 75.0
 ## Decaying 0..1 driving the swing's view punch.
 var _swing_kick := 0.0
-## This slash's cut has begun: its view kick and lunge are spent (`_strike_cut`).
-var _cut_struck := true
 ## +1 or -1, so alternating strokes roll the view opposite ways.
 var _swing_roll := 1.0
 ## Decaying 0..1 driving the landing dip -- the same pattern as _swing_kick
@@ -1157,7 +1280,6 @@ var _blade_base := Vector3.ZERO
 var _blade_tip := Vector3(0, 1, 0)
 ## The butt of the grip, which a haft strike leads with.
 var _blade_pommel := Vector3.ZERO
-var _blade_prev: Array = []
 ## The blade's (width, hilt-to-tip, normal) in the pivot's frame.
 var _blade_frame := Basis.IDENTITY
 ## The pose being played on the sword pivot in code, its clock (-1 = none) and
@@ -1216,8 +1338,6 @@ var _slam_started_at := 0.0
 ## This slam began on the ground: no dive, the sword is raised and brought down.
 var _slam_grounded := false
 var _slam_ready_at := 0.0
-## Damage the stroke in progress deals (a cut's; the wave slash's wave carries its own).
-var _stroke_damage := 0.0
 ## Guarding: whether the block is up, when it went up (wall clock, for the
 ## parry window), and the decaying 0..1 shove a guarded blow gives the sword.
 var _blocking := false
@@ -1262,22 +1382,25 @@ func _ready() -> void:
 		_measure_sword()
 		_real_size_sword()
 		_draw_sword_on_top()
+		_measure_grip()
 		# After every node's _process, so the put-away motion is built on the
 		# pivot pose actually drawn this frame.
 		RenderingServer.frame_pre_draw.connect(_late_sword_update)
 	_held_potion = Node3D.new()
 	_held_potion.set_script(load("res://scripts/held_potion.gd"))
 	head.add_child(_held_potion)
-	# The second weapon (scripts/spear.gd): its own model and attacks.
+	# The weapons (note 190): Weapon scenes under the Head, the guard, the
+	# knockback, the lock-on.
+	_make_combat()
+	# The spear's and the axe's models, put on their Weapons' grips (spear.gd, axe.gd).
 	spear = Node3D.new()
 	spear.set_script(load("res://scripts/spear.gd"))
 	head.add_child(spear)
-	spear.setup(self)
-	# The third (scripts/axe.gd): slash, throw, berserk.
+	spear.setup(self, weapons[&"spear"])
 	axe = Node3D.new()
 	axe.set_script(load("res://scripts/axe.gd"))
 	head.add_child(axe)
-	axe.setup(self)
+	axe.setup(self, weapons[&"axe"])
 	# Rats: the live ones thrown, the robot one set down and driven.
 	rats = Node3D.new()
 	rats.set_script(load("res://scripts/rat_control.gd"))
@@ -1294,8 +1417,7 @@ func _ready() -> void:
 	arms.set_script(load("res://scripts/first_person_arms.gd"))
 	arms.call("setup", self)
 	head.add_child(arms)
-	# Every attack clip baked now, with the level, not on the first swing of each
-	# (3-7 ms apiece, note 167).
+	# The stance and parry clips baked now, with the level (note 167).
 	PlayerMotion.warm.call_deferred()
 
 
@@ -1311,8 +1433,6 @@ func _ready() -> void:
 	_hide_slam_ring()
 	_build_slam_marker()
 
-	anim.animation_finished.connect(_on_animation_finished)
-	_setup_blending()
 	_silence_viewmodel_shadows(head)
 	if sweep_trail != null:
 		_sweep_mesh = ImmediateMesh.new()
@@ -1320,7 +1440,8 @@ func _ready() -> void:
 		# Top level: the ribbon is laid in world space, where the tip has been.
 		sweep_trail.top_level = true
 		sweep_trail.visible = false
-	anim.play(&"idle")
+	# The old idle/run clips posed the sword's pivot; its Weapon does now (note 190).
+	anim.stop()
 	Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 	_base_fov = camera.fov
 	_look_pitch = head.rotation.x
@@ -1340,6 +1461,7 @@ func _ready() -> void:
 ## Camera flourishes run here rather than in _physics_process: they are purely
 ## visual, and at 60 Hz physics a fast punch like this would visibly step.
 func _process(delta: float) -> void:
+	_update_weapons(delta)
 	_pad_look(delta)
 	_update_cine()
 	_update_scene_camera()
@@ -1358,6 +1480,7 @@ func _process(delta: float) -> void:
 	_update_head(delta)
 	_update_third_person(delta)
 	_update_pose(delta)
+	_pose_held_sword()
 	if _parry_t >= 0.0:
 		_parry_t += delta
 		if _parry_t >= PlayerMotion.length(&"parry"):
@@ -1376,8 +1499,8 @@ func _update_dash_view(delta: float) -> void:
 	# The base is the player's Field of view setting.
 	_base_fov = Graphics.field_of_view
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
-			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind not in [&"wave", &"heavy"] \
-			and _remnant_hunt <= 0.0 and _stab_fov == 0.0 and _sprint_k <= 0.0005:
+			and _scene_zoom == 0.0 and _lunge_age < 0.0 \
+			and _remnant_hunt <= 0.0 and _sprint_k <= 0.0005:
 		if camera.fov != _base_fov:
 			camera.fov = _base_fov
 		return
@@ -1394,11 +1517,11 @@ func _update_dash_view(delta: float) -> void:
 	# both instead of whichever ran last.
 	camera.fov = _base_fov + dash_fov_kick * dash - attack_fov_kick * swing \
 		+ jump_fov_kick * sin(PI * (1.0 - _jump_kick)) - haft_zoom * _cine_z - _scene_zoom \
-		+ lunge_fov_kick * lunge_intensity() + _wave_effort().w + _remnant_fov() + _stab_fov \
+		+ lunge_fov_kick * lunge_intensity() + _remnant_fov() \
 		+ sprint_fov_kick * _sprint_k
 	if _dash_view <= 0.0 and _swing_kick <= 0.0 and _jump_kick <= 0.0 and _cine_z <= 0.0 \
-			and _scene_zoom == 0.0 and _lunge_age < 0.0 and _pose_kind not in [&"wave", &"heavy"] \
-			and _remnant_hunt <= 0.0 and _stab_fov == 0.0 and _sprint_k <= 0.0005:
+			and _scene_zoom == 0.0 and _lunge_age < 0.0 \
+			and _remnant_hunt <= 0.0 and _sprint_k <= 0.0005:
 		# Land exactly back on the authored value rather than near it.
 		camera.fov = _base_fov
 
@@ -1507,19 +1630,11 @@ func _update_head(delta: float) -> void:
 		shake_offset = Vector3(_bob_noise.get_noise_2d(t, 11.0), _bob_noise.get_noise_2d(t, 37.0), 0.0) * 0.09 * quake
 		shake_pitch = _bob_noise.get_noise_2d(t, 73.0) * deg_to_rad(5.0) * quake
 		shake_roll = _bob_noise.get_noise_2d(t, 91.0) * deg_to_rad(7.0) * quake
-	# The wave slash's effort: a lean, a nod and a crouch (its FOV is in
-	# `_update_dash_view`).
-	if _stab_strain > 0.0:
-		_stab_strain = maxf(_stab_strain - delta * 1.1 / attack_time_scale, 0.0)
-	var stab := _stab_effort()
-	_stab_fov = stab.w
-	# Everything an attack does to the view (note 172): the knight's head through
-	# the clip, the leans and crouches of the wave, the heavy and the stab, and
-	# the swing's punch -- ATTACK_CAMERA of what it was, and run through one
-	# spring (`_update_attack_view`), so nothing in it ever arrives in a frame.
-	var attack_e := (_wave_effort() + stab) * ATTACK_CAMERA
+	# Everything an attack does to the view: the swing's punch (and the parry's
+	# ride, note 172) through one spring (`_update_attack_view`); the Weapon's own
+	# camera motion and the kicks (note 190, `_weapon_view`) on top, below.
 	var swing_k := _swing_kick * _swing_kick * ATTACK_CAMERA
-	_update_attack_view(delta, attack_e, swing_k)
+	_update_attack_view(delta, Vector4.ZERO, swing_k)
 	var effort := Vector4.ZERO
 	var tremble := _remnant_tremble()
 	shake_offset += Vector3(tremble.x, tremble.y, 0.0)
@@ -1538,20 +1653,20 @@ func _update_head(delta: float) -> void:
 	# Look is added untouched, never smoothed -- lagging the crosshair behind
 	# the mouse would feel like input lag, not like weight. The attack's nod and
 	# punch (`_view_rot`, sprung) ride on top of it.
-	head.rotation.x = _look_pitch + _bob_pitch + _view_rot.x \
+	head.rotation.x = _look_pitch + _bob_pitch + _view_rot.x + _weapon_view.x \
 		- deg_to_rad(landing_view_kick) * land + deg_to_rad(jump_view_kick) * lift \
 		- deg_to_rad(7.0) * crouch + shake_pitch + _cine_aim.y * _cine_a + deg_to_rad(effort.y) \
 		- deg_to_rad(dash_pitch_degrees) * dash_body * _dash_fwd
 	head.rotation.z = _bob_roll + deg_to_rad(dash_roll_degrees) \
-		* (_dash_view * _dash_view) * _dash_lateral + _view_rot.z + shake_roll \
+		* (_dash_view * _dash_view) * _dash_lateral + _view_rot.z + _weapon_view.z + shake_roll \
 		+ deg_to_rad(haft_roll) * _cine_roll * _cine_z + deg_to_rad(_scene_roll) + deg_to_rad(effort.x)
 	# The haft strike's turn onto its target. Only ever here, on the head: the
 	# body's yaw is the player's aim and is never touched.
 	head.rotation.y = _cine_aim.x * _cine_a
 	# The view turning with the knight's body through an attack (note 172): all
 	# the way round a spin, a share of a cut's turn.
-	if absf(_view_rot.y) > 1e-5:
-		head.basis = Basis(Vector3.UP, _view_rot.y) * head.basis
+	if absf(_view_rot.y + _weapon_view.y) > 1e-5:
+		head.basis = Basis(Vector3.UP, _view_rot.y + _weapon_view.y) * head.basis
 
 
 ## Puts the sword away when something else is in hand (or the hands are busy,
@@ -1695,13 +1810,20 @@ func held_item() -> StringName:
 
 
 ## Takes the weapon in weapon-wheel slot `slot` (0-1) in hand.
+## A swing in progress plays out first (the template's switch waits for the
+## weapon to be idle, note 190): the slot is taken up as it ends.
 func select_slot(slot: int) -> void:
 	slot = clampi(slot, 0, Inventory.WEAPONS - 1)
-	if slot == selected_slot:
+	var w := current_weapon()
+	if w != null and not w.is_idle():
+		_pending_slot = slot if slot != selected_slot else -1
 		return
-	# A thrown axe leaves the hands empty until it is caught: nothing else is
-	# taken up meanwhile (axe.gd).
-	if axe_away() and selected_slot >= 0:
+	_select_now(slot)
+
+
+func _select_now(slot: int) -> void:
+	_pending_slot = -1
+	if slot == selected_slot:
 		return
 	selected_slot = slot
 	selection_changed.emit(slot)
@@ -1857,6 +1979,10 @@ func _pad_look(delta: float) -> void:
 		rotation.y = _hide_yaw + clampf(wrapf(yaw - _hide_yaw, -PI, PI), -HIDE_LOOK_YAW, HIDE_LOOK_YAW)
 		_look_pitch = clampf(_look_pitch - v.y * k * pad_pitch_share, -HIDE_LOOK_PITCH, HIDE_LOOK_PITCH)
 		return
+	# Locked on (note 190), the view keeps to the target; the stick flicks to the
+	# next one (`lock_on.update`).
+	if lock_on != null and lock_on.is_locked():
+		return
 	# On a vat, no turning (note 111).
 	if latched_to == null:
 		rotate_y(-v.x * k)
@@ -1912,6 +2038,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		# the head alone, otherwise looking up would tilt the capsule.
 		# Holding a vat (note 111: "The player shouldnt be able to turn when
 		# pushing a vat"), only the pitch: they face it, and it is what turns.
+		if lock_on != null and lock_on.is_locked():
+			# Locked on (note 190): sideways movement flicks to the next target.
+			lock_on.add_mouse_flick(event.relative.x)
+			return
 		if latched_to == null:
 			rotate_y(-event.relative.x * _look_scale())
 		# Kept in its own variable rather than read back off the node. The head
@@ -1932,21 +2062,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		# While the mouse is free, a click is the player asking for it back
 		# rather than asking to swing.
 		if Coop.aim_ready(self):
-			# The button does whatever the weapon in hand does: the sword swings,
-			# the spear stabs. (Potions are drunk from the quick-item wheel.)
-			if held_item() == &"sword":
-				# Nothing attacks in the dash's burst: a click there is swung the
-				# moment it ends (`_end_dash`).
-				if _dashing:
-					_dash_attack_queued = true
-				else:
-					_start_attack()
-			elif held_item() == &"spear":
-				if _spear_free():
-					spear.stab()
-			elif held_item() == &"axe":
-				if _spear_free():
-					axe.slash()
+			# The weapon in hand's next swing (note 190); a click in a dash's
+			# burst is swung the moment it ends (`_end_dash`). (Potions are drunk
+			# from the quick-item wheel.)
+			if current_weapon() != null:
+				_weapon_attack()
 			elif held_item() == &"robot_rat":
 				# Set down, and the view goes to its eyes (rat_control.gd).
 				if not _dashing and not is_drinking():
@@ -1955,45 +2075,36 @@ func _unhandled_input(event: InputEvent) -> void:
 			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 	elif event.is_action_pressed("thrust"):
 		_attack_key_spills_drink()
-		# Q: the heavy swipe with the sword; the delayed low sweep with the spear
-		# (note 167); the axe thrown.
-		if Coop.aim_ready(self) and held_item() == &"sword" \
-				and not _dashing:
-			_start_heavy()
-		elif Coop.aim_ready(self) and held_item() == &"spear" \
-				and _spear_free():
-			spear.sweep()
-		elif Coop.aim_ready(self) and held_item() == &"axe" \
-				and _spear_free():
-			axe.throw()
+		# Q: the sword's heavy swipe (note 162; a special on its Weapon, note
+		# 190). The spear and the axe have none now.
+		if Coop.aim_ready(self) and held_item() == &"sword" and not _dashing:
+			_start_special(&"Heavy")
 	elif event.is_action_pressed("slam"):
 		_attack_key_spills_drink()
-		# F: the ult. With the sword, the wave slash (note 162); with the spear,
-		# the throw; with the axe, berserk. The slam (`_start_slam`, a dive in the
-		# air or the blade brought down where you stand) is kept, unbound, for
-		# another weapon: `sword_slam` puts it back on the sword's F.
+		# F: the ult, the sword's wave slash (note 162; a special on its Weapon,
+		# note 190). The slam (`_start_slam`) is kept, unbound: `sword_slam` puts it
+		# back on the sword's F.
 		if Coop.aim_ready(self) and held_item() == &"sword" and not sword_slam \
 				and not _dashing:
-			_start_wave()
+			_start_special(&"Wave")
 		elif Coop.aim_ready(self) and not _dashing and not _flying \
 				and held_item() == &"sword" and sword_slam and not _slamming and _now() >= _slam_recover_until \
 				and _pose_kind != &"haft" and not is_drinking() and not is_flinching():
 			_end_block()
+			_interrupt_weapons()
 			_start_slam()
-		elif Coop.aim_ready(self) and held_item() == &"spear" \
-				and _spear_free():
-			spear.throw()
-		elif Coop.aim_ready(self) and held_item() == &"axe" \
-				and _spear_free():
-			axe.berserk()
+	elif event.is_action_pressed("lock_on"):
+		# Middle click / L3 (note 190): lock onto the enemy nearest the middle of
+		# the view, or let go.
+		if Coop.aim_ready(self):
+			lock_on.toggle()
 	elif event.is_action_pressed("block"):
-		# Right click, held: the block. With the mouse free, a click takes it
+		# Right click, held: the guard. With the mouse free, a click takes it
 		# back instead.
 		if not Coop.aim_ready(self):
 			Coop.set_mouse(self, Input.MOUSE_MODE_CAPTURED)
 			_guard_click_spent = true
 		else:
-			_note_block_press()
 			_start_block()
 	elif event.is_action_released("block"):
 		_guard_click_spent = false
@@ -2045,31 +2156,6 @@ func _physics_process(delta: float) -> void:
 	var jump_pressed := Coop.just_pressed(self, &"jump") and not ui_open and not remote_view
 	if jump_pressed and not is_on_floor() and _now() >= _coyote_until and not _swimming and not _dashing:
 		_jump_queued = true
-	# The berserk roar and the throw's wind-up: stopped dead (axe.gd).
-	if _axe_planted():
-		velocity.x = 0.0
-		velocity.z = 0.0
-		if not is_on_floor():
-			velocity += get_gravity() * delta
-		move_and_slide()
-		_update_locomotion()
-		return
-	# The spear's dash: carried straight on at its speed, no steering, until it
-	# runs out (stone stops it, as anything does).
-	if is_spear_dashing():
-		velocity.x = _spear_dash_vel.x
-		velocity.z = _spear_dash_vel.z
-		if not is_on_floor():
-			velocity += get_gravity() * delta
-		move_and_slide()
-		_update_locomotion()
-		return
-	if _spear_dash_until > 0.0:
-		# Out of the dash at walking pace, not coasting on at its speed.
-		_spear_dash_until = 0.0
-		var flat := Vector2(velocity.x, velocity.z).limit_length(_pace())
-		velocity.x = flat.x
-		velocity.z = flat.y
 	# A slam is fully committed: straight down, no steering, until it lands. On
 	# the ground it is planted where it stands while the sword goes up and over.
 	if _slamming:
@@ -2166,19 +2252,14 @@ func _physics_process(delta: float) -> void:
 
 		# Swinging slows you. Without it the faster strokes would let you cover
 		# ground at full walking pace while permanently mid-attack.
-		var walk := _pace() * _attack_move_scale() \
-			* (block_move_scale if _blocking else 1.0) \
+		var walk := _pace() * _attack_move_scale() * guard.move_multiplier() \
 			* (drink_move_scale if is_drinking() else 1.0) \
 			* (wade_speed_scale if depth > 0.3 else 1.0) * carry_speed_scale * _beam_speed_scale() \
-			* (spear_stab_move_scale if _spear_stabbing() else (heavy_move_scale if _spear_sweeping() else 1.0)) \
-			* _axe_speed() * _flinch_speed_scale()
+			* _flinch_speed_scale()
 		var target_velocity := direction * walk
 		# Damping is raised during a swing so the lunge surge is gone well before
 		# the stroke ends, leaving the back half of it visibly slower.
 		var damp := acceleration * (attack_damp_scale if _attack_slows() else 1.0)
-		# Berserk picks up speed as ghost mode did, not at walking's rate.
-		if axe != null:
-			damp *= lerpf(1.0, berserk_acceleration_scale, axe.berserk_amount())
 		if is_flinching():
 			damp *= FLINCH_PLANT
 		velocity.x = move_toward(velocity.x, target_velocity.x, damp * delta)
@@ -2209,7 +2290,7 @@ func _physics_process(delta: float) -> void:
 		if air_input != Vector2.ZERO:
 			var wish := (global_basis * Vector3(air_input.x, 0.0, air_input.y)).normalized()
 			var air_walk := _pace() * _attack_move_scale() \
-				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() * _axe_speed() \
+				* (drink_move_scale if is_drinking() else 1.0) * _beam_speed_scale() \
 				* _flinch_speed_scale()
 			var target_velocity := wish * air_walk
 			var air_damp := acceleration * air_damp_scale \
@@ -2224,17 +2305,28 @@ func _physics_process(delta: float) -> void:
 	# zero it against the floor.
 	var pre_move_fall_speed := -velocity.y
 
+	# A blow's slide (`knockback`) and a swing's lunge (the Weapon's
+	# `lunge_speed`, along the aim), added for the move and taken back after so
+	# the walk above never feels them (the template keeps the two apart too).
+	var extra := knockback.step(delta) if not _dashing else Vector3.ZERO
+	var w := current_weapon()
+	if w != null and not _dashing:
+		var ahead := aim_forward()
+		ahead.y = 0.0
+		if ahead.length_squared() > 0.0001:
+			extra += ahead.normalized() * w.lunge_speed()
+	velocity.x += extra.x
+	velocity.z += extra.z
+
 	# move_and_slide, and a slip round any corner or arch leg it would stick
 	# on (corner_slip.gd, note 92).
 	CornerSlip.slide(self)
-	_update_locomotion()
+	velocity.x -= extra.x
+	velocity.z -= extra.z
 
 	if is_on_floor() and not was_grounded:
 		_on_landed(pre_move_fall_speed)
 	_was_grounded = is_on_floor()
-
-	if _hit_window_open:
-		_resolve_hits()
 
 
 ## Noclip on or off (note 152). Solid again for any scene and for a death: those
@@ -2268,10 +2360,7 @@ func _fly(delta: float) -> void:
 	var speed := NOCLIP_SPEED * (NOCLIP_BOOST if _sprint_wanted() else 1.0)
 	velocity = velocity.move_toward(wish.limit_length() * speed, NOCLIP_ACCEL * delta)
 	move_and_slide()
-	_update_locomotion()
 	_was_grounded = is_on_floor()
-	if _hit_window_open:
-		_resolve_hits()
 
 
 ## Fires once on the physics frame a fall ends -- see `_was_grounded` for how
@@ -2316,9 +2405,10 @@ func _update_sweep_trail(delta: float) -> void:
 		# frame. The wave slash's streak is gold and wide (a third element,
 		# true), the heavy swipe's white and wider (false).
 		var at_head := head.global_transform.affine_inverse() * (sword_model.global_transform * _trail_point())
-		if _pose_kind == &"wave":
+		var move := current_move()
+		if move == &"wave":
 			_tip_trail.push_front([at_head, now, true])
-		elif _pose_kind == &"heavy":
+		elif move == &"heavy":
 			_tip_trail.push_front([at_head, now, false])
 		else:
 			_tip_trail.push_front([at_head, now])
@@ -2400,198 +2490,11 @@ func _silence_viewmodel_shadows(from: Node) -> void:
 		_silence_viewmodel_shadows(child)
 
 
-func _start_attack() -> void:
-	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
-			or _dashing or is_drinking() or is_flinching():
-		return
-	# A cut waits for the cut before it to play out whole (note 174): its clip is
-	# its cooldown. Clicked for sooner it is not dropped but held, and begun the
-	# tick the last one ends (`_take_queued_attack`, note 151), so a combo still
-	# flows, each stroke followed through.
-	if _attacking and _pose_time < _stroke_end():
-		_attack_queued = true
-		return
-	_attack_queued = false
-	_attacking = true
-	_stroke_damage = attack_damage * weapon_damage_scale(&"sword")
-	_hit_this_swing.clear()
-	_blade_prev.clear()
-	# Index 0 sweeps right to left, index 1 back from left to right.
-	_begin_pose(&"slash" if _next_attack == 0 else &"chop")
-	# Alternating strokes roll the view opposite ways, so a combo reads as two
-	# distinct cuts rather than the same one twice.
-	_swing_roll = 1.0 if _next_attack == 0 else -1.0
-	_next_attack = (_next_attack + 1) % ATTACKS.size()
-	# The view kick and the step in come with the cut, not the click: through the
-	# gather and the load the body is still (`_strike_cut`, note 164).
-	_cut_struck = false
-
-
-## The cut begins (SWING_WIND): the view kicks with it and the body steps in.
-func _strike_cut() -> void:
-	_cut_struck = true
-	_swing_kick = maxf(_swing_kick, 1.0)
-	# A swing carries you forward: one impulse, bled off by the raised damping
-	# below rather than by a clock of its own.
-	var facing := -global_basis.z
-	facing.y = 0.0
-	if facing.length_squared() > 0.0001:
-		facing = facing.normalized()
-		velocity.x += facing.x * attack_lunge
-		velocity.z += facing.z * attack_lunge
-
-
-## The held click, begun the tick the stroke ends (`_stroke_end`) -- if the sword
-## is still in hand and free, and they have not gone for the guard; otherwise
-## forgotten. Clicks held like this come exactly a stroke apart, as the axe's and
-## the spear's do. Whatever ended the stroke early forgets it too.
-func _take_queued_attack() -> void:
-	if not _attacking or held_item() != &"sword" or not _spear_free() or in_cutscene or ui_open \
-			or remote_view or wheel_open or _action_held(&"block"):
-		_attack_queued = false
-	elif _pose_time >= _stroke_end():
-		_start_attack()
-
-
-## When a cut (LMB) may begin over the stroke in progress, pose seconds (notes
-## 174, 175). Over a cut, once the stroke itself has played out, cut and
-## follow-through -- the forehand's 0.50, the backhand's 0.42 (PlayerMotion
-## `chain`, x `attack_time_scale` real) -- and the next takes over from that pose
-## (`_begin_pose`) instead of the blade going home to the guard first; unchained,
-## it still goes home over the rest of the clip. Over the heavy swipe or the wave
-## slash, once they have followed through, as before.
-func _stroke_end() -> float:
-	if _pose_kind in [&"slash", &"chop"]:
-		return PlayerMotion.chain_point(_pose_kind)
-	return _bite_end()
-
-
-## How much of clip move `kind` is laid on at `t` (coop_avatar.gd, the view):
-## its own in and out -- or, over a move it took over from (note 175), its
-## cross-fade in over that one, then its own out.
-func motion_weight(kind: StringName, t: float) -> float:
-	if _from_kind != &"" and kind == _pose_kind:
-		return PlayerMotion.chain_fade(kind, t) * PlayerMotion.weight_out(kind, t)
-	return PlayerMotion.weight(kind, t)
-
-
-## The move the one in progress is cross-fading in over, [kind, pose seconds,
-## weight], or [] (note 175; coop_avatar.gd lays it under the new one).
-func body_motion_from() -> Array:
-	if _from_kind == &"" or not PlayerMotion.has_move(_pose_kind) or _pose_time < 0.0:
-		return []
-	return [_from_kind, _from_t, _from_w]
-
-
-## When the stroke in progress stops biting -- the earliest a new one may begin.
-## The wave slash and the heavy swipe are committed until their cut has followed
-## through (WAVE_HOLD, HEAVY_HOLD); their recovery can be cut into.
-func _bite_end() -> float:
-	if _pose_kind == &"wave":
-		return WAVE_HOLD
-	if _pose_kind == &"heavy":
-		return HEAVY_HOLD
-	if _pose_kind == &"chop":
-		return CHOP_BITE.y
-	return SLASH_BITE.y
-
-
-## A committed stroke (the wave slash or the heavy swipe) is under way and has not
-## yet followed through: no dash, no guard, no other stroke but the wave over a
-## heavy swipe's wind-up. After it the player has full control again -- walk,
-## attack, block -- while the blade comes home.
-func _committed() -> bool:
-	return _pose_kind in [&"wave", &"heavy"] and _pose_time >= 0.0 and _pose_time < _bite_end()
-
-
-## An attack is slowing the player down (a cut; the wave slash and the heavy
-## swipe until they have followed through).
-func _attack_slows() -> bool:
-	return _attacking and (_pose_kind not in [&"wave", &"heavy"] or _committed())
-
-
-## Walking pace through an attack: a cut's `attack_move_scale`, all but planted
-## (`wave_move_scale`) from the wave slash's wind-up to its follow-through,
-## `heavy_move_scale` through the heavy swipe's.
-func _attack_move_scale() -> float:
-	if not _attack_slows():
-		return 1.0
-	if _pose_kind == &"wave":
-		return wave_move_scale
-	if _pose_kind == &"heavy":
-		return heavy_move_scale
-	return attack_move_scale
-
-
-## Q ("thrust" action) with the sword (note 162): the heavy swipe. The blade is
-## cocked back over the right shoulder by HEAVY_RAISE and held there, creeping
-## back, to HEAVY_WIND -- the delay -- then cut flat from right to left through
-## the crosshair, biting from HEAVY_BITE to HEAVY_HOLD for `heavy_damage`, with a
-## lurch into it as the cut starts (`_heavy_lunged`). Committed until it has
-## followed through; a blow taken in the wind-up cuts it off (`_flinch`).
-func _start_heavy() -> void:
-	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
-			or _dashing or is_drinking() or is_flinching():
-		return
-	# Over a cut in progress, as the wave does; not over a committed stroke.
-	if _committed():
-		return
-	_attack_queued = false
-	_attacking = true
-	_stroke_damage = heavy_damage * weapon_damage_scale(&"sword")
-	_trail_on = false
-	_hit_window_open = false
-	_hit_this_swing.clear()
-	_blade_prev.clear()
-	_heavy_lunged = false
-	_begin_pose(&"heavy")
-	_swing_roll = 1.0
-
-
-## Set once the heavy swipe's cut has thrown the player into it.
-var _heavy_lunged := false
-
-
-## F ("slam" action) with the sword, the ult (note 162; on Q in note 160): the
-## wave slash. WAVE_WIND of wind-up nearly planted, the blade hauled up over the
-## right shoulder and the gold building on it (`_blade_glow`), then one heavy cut
-## from high right to low left that throws the wave (`_fire_wave`, at
-## WAVE_FIRE). Once every `slam_cooldown`, on the slam's clock (`_slam_ready_at`,
-## taken when the wave is thrown, so one cut off before then costs nothing).
-## Committed until it has followed through (WAVE_HOLD); a blow taken before the
-## wave is out cuts it off (`_flinch`).
-func _start_wave() -> void:
-	if _slamming or _now() < _slam_recover_until or _pose_kind == &"haft" or _blocking \
-			or _dashing or is_drinking() or is_flinching():
-		return
-	if _now() < _slam_ready_at:
-		return
-	# F overrides a cut or a heavy swipe's wind-up in progress: dropped where it
-	# is, the wind-up begins from wherever the blade is. Only a wave slash not yet
-	# followed through refuses another.
-	if _pose_kind == &"wave" and _committed():
-		return
-	_attack_queued = false
-	_attacking = true
-	_stroke_damage = 0.0
-	_trail_on = false
-	_hit_window_open = false
-	_hit_this_swing.clear()
-	_blade_prev.clear()
-	_wave_fired = false
-	_begin_pose(&"wave")
-	# The cut runs from high right to low left: the view rolls with it.
-	_swing_roll = 1.0
-
-
-## Set once the wave is thrown, so it is thrown once a stroke.
-var _wave_fired := false
 
 
 ## The wave off the cut: from the chest, a little ahead, level along the way the
 ## player faces, tilted to the cut's diagonal (sword_wave.gd).
 func _fire_wave() -> void:
-	_wave_fired = true
 	_slam_ready_at = _now() + slam_cooldown
 	var ahead := aim_forward()
 	ahead.y = 0.0
@@ -2620,51 +2523,35 @@ func _fire_wave() -> void:
 	velocity.z += ahead.z * WAVE_LURCH
 
 
-## --- Block and parry -----------------------------------------------------------
+## --- Block and parry (note 190) ----------------------------------------------
 ##
 ## Right click ("block") held raises the knight's LEFT forearm across the front
 ## (first_person_arms.gd, note 157), the weapon drawn back in the right hand
-## (`_guard_pose`). A blow
-## from the front while it is up is BLOCKED, or PARRIED if the block went up
-## within `parry_window` of the blow landing -- see `_guard`, called from
-## `take_damage`. Pressed during an attack (a cut, a thrust, a slam or a
-## scripted pose), the guard waits: the attack plays to its end, and if the
-## button is still held then, the guard goes straight up (`_hold_guard`, polled
-## every physics tick).
+## (GUARD_DRAW). The rules are the timing-combat template's, `guard`
+## (scripts/combat/guard.gd): raising it cuts off the swing in progress and marks
+## every attack winding up that moment (its parry cue open, `parry_cue`); one of
+## those that lands while the guard is still up is PARRIED, anything else that
+## lands on it BLOCKED (`take_damage`). Holding it up early never parries: the
+## press is what is timed. It ignores the blow's direction.
 
 func _start_block() -> void:
 	if _blocking or _dead or in_cutscene or ui_open or hands_busy or latched_to != null or not Inventory.is_weapon(held_item()) \
 			or is_drinking() or _dashing:
 		return
-	if _slamming or _now() < _slam_recover_until or _pose_kind in [&"haft", &"stab", &"raise", &"slam"]:
+	if _slamming or _now() < _slam_recover_until or _pose_kind != &"":
 		return
-	# Waits out a cut; the wave slash only until it has followed through.
-	if _committed() or _pose_kind in [&"slash", &"chop"] \
-			or (_attacking and _pose_kind not in [&"wave", &"heavy"]):
-		return
-	# The spear's own attacks wait the same way, and a thrown spear takes its
-	# haft -- and the shield in it -- with it until it is caught.
-	if held_item() == &"spear" and (spear.busy() or is_spear_dashing()):
-		return
-	# The axe likewise; thrown, there is nothing in the hands to guard with.
-	if held_item() == &"axe" and axe.busy():
-		return
-	_attacking = false
-	_hit_window_open = false
+	_interrupt_weapons()
 	_trail_on = false
 	_blocking = true
 	_block_since = _now()
 	_block_item = held_item()
-	# The sword's guard is a pose on its pivot; other weapons read
-	# `is_blocking()` and pose themselves (spear.gd). The pose kind is set
-	# either way, since it is what `_check_block` and the attack code test.
-	_begin_pose(&"block")
+	guard.press()
 	guard_changed.emit(true)
 
 
-## The block button still held once whatever refused it has finished (an attack
-## playing out, a slam's recovery): up it goes. Only with the mouse captured --
-## a click that only takes the mouse back is not a block.
+## The block button still held once whatever refused it has finished (a slam's
+## recovery, a dash): up it goes. Only with the mouse captured -- a click that
+## only takes the mouse back is not a block.
 var _guard_click_spent := false
 
 
@@ -2678,8 +2565,7 @@ func _end_block() -> void:
 	if not _blocking:
 		return
 	_blocking = false
-	if _pose_kind == &"block":
-		_begin_pose(&"unblock")
+	guard.release()
 	guard_changed.emit(false)
 
 
@@ -2707,100 +2593,40 @@ func _check_block() -> void:
 	# the new one if the button is still held.
 	if not _action_held(&"block") or held_item() != _block_item \
 			or hands_busy or in_cutscene or ui_open or _dead or _slamming or _dashing \
-			or _pose_kind != &"block":
+			or _pose_kind != &"":
 		_end_block()
 
 
-## The guard is the left arm's (note 157): the sword is only drawn back and
-## down out of its way, point still up, ready to answer.
-func _guard_pose() -> Transform3D:
-	var rest := _rest_pose()
-	return Transform3D(Basis(Vector3.RIGHT, 0.12) * rest.basis, rest.origin + GUARD_DRAW)
+## Share of a blow the guard lets through (the guard's `block_damage_multiplier`).
+var block_damage_taken: float:
+	get:
+		return guard.block_damage_multiplier if guard != null else 0.3
 
 
-## 0 the blow lands in full, 1 blocked, 2 parried. Only blows from the front
-## are met by the sword; `blow` is the way the blow travels (attacker to player).
+## --- Parry cues (2026-10-17; note 190) ----------------------------------------------
 ##
-## Two rules for the parry:
-##   * an attack that CUED it (`parry_cue`, 2026-10-17): parried if block was
-##     PRESSED inside the window the cue opened -- a tap counts, held or not --
-##     and the press was not wasted (a weapon in hand, free to guard). Missed,
-##     it is a block if the guard is up, else it lands.
-##   * any other blow: parried if the guard went up within `parry_window` of
-##     it landing; blocked if up longer.
-func _guard(blow: Vector3, attacker: Node3D = null) -> int:
-	var front := true
-	var from := -blow
-	from.y = 0.0
-	if from.length_squared() > 0.0001:
-		var forward := -global_basis.z
-		forward.y = 0.0
-		front = rad_to_deg(forward.normalized().angle_to(from.normalized())) <= block_arc
-	var cue = _take_parry_cue(attacker)
-	if cue != null:
-		if front and _block_pressed_at >= float(cue[0]) and _block_pressed_at <= float(cue[1]):
-			return 2
-		return 1 if _blocking and front else 0
-	if not _blocking or not front:
-		return 0
-	return 2 if _now() - _block_since <= parry_window else 1
+## An attack marks the point in its wind-up where it gives itself away -- its cue
+## -- and calls `parry_cue(self, listen)` there: from that moment until its blow
+## (`listen` seconds at most) it is WINDING UP, and a press of block parries it
+## if the guard is still up when it lands (guard.gd `open_cue`). Each attack sets
+## its own cue and window (decrepit.gd's moves: `cue` and `listen` in `_spec`).
 
 
-## --- Parry cues (2026-10-17) -------------------------------------------------------
-##
-## An attack marks a point in itself -- its cue -- and calls `parry_cue(self,
-## listen)` there: from that moment the game listens `listen` seconds for the
-## block button. When that attacker's blow lands (`_guard`), a press inside the
-## window parries it. Each attack sets its own cue and window (decrepit.gd's
-## moves: `cue` and `listen` in `_spec`), so a slow, telegraphed blow can be
-## forgiving and a fast one tight. A press counts if it could have raised the
-## guard (a weapon in hand, not drinking, dashing, dead, in a scene or a menu,
-## knocked down or in a slam's recovery) -- mid-attack too: it is the press that is timed, not the guard.
-
-## When block was last pressed (and could have counted), `_now()` seconds.
-var _block_pressed_at := -INF
-## Open cues: attacker instance id -> [opened, closes], `_now()` seconds.
-var _parry_cues := {}
-
-
-## Called by an attack at its cue: listen for block for `listen` seconds.
+## Called by an attack at its cue.
 func parry_cue(attacker: Node3D, listen: float) -> void:
-	if attacker == null:
-		return
-	var now := _now()
-	_parry_cues[attacker.get_instance_id()] = [now, now + listen]
-	# Forgotten ones (an attack broken off before its blow) are dropped here.
-	for id in _parry_cues.keys():
-		if float(_parry_cues[id][1]) < now - 5.0:
-			_parry_cues.erase(id)
+	if attacker != null and guard != null:
+		guard.open_cue(attacker, listen)
 
 
-## The cue `attacker` opened, used up by its blow; null if it opened none.
-func _take_parry_cue(attacker: Node3D):
-	if attacker == null or not is_instance_valid(attacker):
-		return null
-	var id := attacker.get_instance_id()
-	if not _parry_cues.has(id):
-		return null
-	var cue = _parry_cues[id]
-	_parry_cues.erase(id)
-	return cue
+## The cue `attacker` opened, forgotten (an attack broken off before its blow).
+func _take_parry_cue(attacker: Node3D) -> void:
+	if attacker != null and guard != null:
+		guard.forget_cue(attacker)
 
 
-## Whether the press that just came would count toward a cued parry.
-func _note_block_press() -> void:
-	if _dead or in_cutscene or ui_open or latched_to != null or not Inventory.is_weapon(held_item()) \
-			or is_drinking() or _dashing:
-		return
-	# Down on the floor (knocked down) or in a slam's recovery: no guard to raise.
-	if _slamming or _now() < _slam_recover_until:
-		return
-	_block_pressed_at = _now()
-
-
-## `blow_damage`: what the blow would have done unguarded; a parry turns
-## `parry_reflect` of it back on the attacker.
-func _on_guarded(parry: bool, blow: Vector3, attacker: Node3D, blow_damage := 0.0) -> void:
+## A blow met by the guard: the flash, the shake, and a parried attacker thrown
+## back and staggered (the template's parry deals nothing back, note 190).
+func _on_guarded(parry: bool, blow: Vector3, attacker: Node3D) -> void:
 	_guard_kick = 1.0 if parry else 0.45
 	_shake = maxf(_shake, 0.32 if parry else 0.14)
 	var eye := camera.global_position
@@ -2829,14 +2655,6 @@ func _on_guarded(parry: bool, blow: Vector3, attacker: Node3D, blow_damage := 0.
 				attacker.call("reel_from", away)
 			else:
 				attacker.apply_knockback(away * parry_push, parry_stun)
-		# Its own blow, turned back on it. After the shove, so a blow that kills
-		# it does not shove a corpse.
-		if attacker != null and is_instance_valid(attacker) and attacker.has_method("take_damage") \
-				and blow_damage * parry_reflect > 0.0:
-			var back := attacker.global_position - global_position
-			back.y = 0.0
-			attacker.take_damage(blow_damage * parry_reflect, back.normalized() if back.length_squared() > 0.0001 else Vector3.ZERO)
-			hit_landed.emit(attacker)
 		# A beat of hit-stop sells it.
 		_slowmo(0.15, 0.09, 0.22)
 		_guard_flash(at, parry_color, true)
@@ -2985,48 +2803,23 @@ func _warm_guard_flash() -> void:
 
 ## --- The sword, posed in code -------------------------------------------------
 ##
-## Swings and the slam's strike on the ground drive Head/SwordPivot directly
-## instead of through the AnimationPlayer, which is paused meanwhile. A stroke is
-## laid out as poses in the head's frame -- where the hand is, which way the
-## blade points, which way its edge leads -- and travels the curve
-## wind-up -> middle -> follow-through, so the blade really sweeps across the
-## view. It ends exactly on the idle clip's first frame, where the player
-## resumes, so nothing snaps.
+## Every attack poses the sword through its Weapon (note 190, `_pose_held_sword`).
+## The scenes that still pose it here, on Head/SwordPivot directly: the haft
+## strike, the cage stab, the slam (kept, unbound) -- `_pose_kind` while they run.
 
-## Idle clip, frame 0: where every pose ends.
+## The old idle clip's first frame: where a scripted pose with nothing better ends.
 const REST_POS := Vector3(0.34, -0.85, -0.35)
 const REST_ROT := Vector3(-1.113895, 0.0, -0.244346)
-## The cuts (note 167): each a stretch of a Higgsfield clip played through a
-## time warp (player_motion.gd MOVES &"slash" / &"chop"); these are when its blade
-## bites, pose seconds. The forehand bites from 0.18 (0.225 s real; it was 0.156
-## in note 164) to 0.29; the backhand, which starts where the forehand ends, from
-## 0.15 to 0.26. SWING_WIND / SWING_HOLD are the forehand's, for whatever asks
-## of "a cut" in general (the trail's crosshair point). The next cut waits for a
-## cut's whole clip, not its bite (`_stroke_end`, note 174).
-const SLASH_BITE := Vector2(0.25, 0.40)
-const CHOP_BITE := Vector2(0.15, 0.31)
-const SWING_WIND := 0.25
-const SWING_HOLD := 0.40
 ## The slam's: blade down onto the floor ahead, held, then up as the player rises.
 const SLAM_STRIKE := 0.05
 const SLAM_HOLD := 0.14
 ## How far above the floor the struck tip rests.
 const SLAM_TIP_LIFT := 0.03
-## The wave slash's timeline, pose seconds (x `attack_time_scale` in real ones):
-## the clip Sword Judgment (note 167, player_motion.gd &"wave"). A crouch to
-## WAVE_RAISE, the leap with the blade wheeled up and round, the gold building on
-## it, to WAVE_WIND; the airborne cut to WAVE_CUT, the wave thrown at WAVE_FIRE;
-## landed and committed to WAVE_HOLD; then the flourish and the last sweep, which
-## another stroke may cut into, home by WAVE_END.
-const WAVE_RAISE := 0.27
-const WAVE_WIND := 0.65
-const WAVE_CUT := 0.80
-const WAVE_FIRE := 0.74
-const WAVE_HOLD := 0.92
-const WAVE_END := 3.3
-## The streak off the cut: gold, and this many times a cut's width.
+## The wave slash's streak: gold, and this many times a cut's width; the heavy
+## swipe's white, HEAVY_TRAIL_WIDTH as wide.
 const WAVE_TRAIL_COLOR := Color(1.0, 0.74, 0.28)
 const WAVE_TRAIL_WIDTH := 3.0
+const HEAVY_TRAIL_WIDTH := 1.8
 ## The wave leaves this high off the floor, this far ahead, tilted this far
 ## (radians round its way, the cut's diagonal); the cut lurches them this much.
 const WAVE_HEIGHT := 1.05
@@ -3039,40 +2832,15 @@ const SwordWave := preload("res://scripts/sword_wave.gd")
 const GUARD_DRAW := Vector3(0.1, -0.11, 0.12)
 const GUARD_UP := 0.1
 const GUARD_DOWN := 0.16
-## The poses that are attacks, on `attack_time_scale`. The guard and the scripted
-## poses (a haft strike, the cage stab) keep their own time.
-const ATTACK_POSES: Array[StringName] = [&"slash", &"chop", &"wave", &"heavy", &"raise", &"slam"]
-## The heavy swipe's timeline, pose seconds (x `attack_time_scale` in real ones):
-## the clip Charged Slash (note 167, player_motion.gd &"heavy"; the cut lands
-## 0.78 s after Q, 0.59 in note 162). A long gathering sweep over to the left by
-## HEAVY_RAISE, held there creeping to HEAVY_WIND; the explosive backhand back
-## across to HEAVY_CUT, biting from HEAVY_BITE to HEAVY_HOLD; home by HEAVY_END.
-const HEAVY_RAISE := 0.4
-const HEAVY_WIND := 0.72
-const HEAVY_BITE := 0.72
-const HEAVY_CUT := 0.9
-const HEAVY_HOLD := 0.92
-const HEAVY_END := 1.45
-## Its streak: a cut's, this many times as wide.
-const HEAVY_TRAIL_WIDTH := 1.8
+## The scripted poses on `attack_time_scale`. A haft strike and the cage stab keep
+## their own time.
+const ATTACK_POSES: Array[StringName] = [&"raise", &"slam"]
 
 func _begin_pose(kind: StringName) -> void:
 	if _stab_depth and kind != &"stab":
 		_stab_depth = false
 		_set_sword_depth(sword_draw_depth)
-	anim.pause()
-	# A clip move begun over one still showing takes over from it where it is
-	# (note 175): a stroke chained onto the last at its `chain`, the heavy or the
-	# wave over a cut, a cut over their recovery -- no snap to the guard and back.
-	var from_w := 0.0
-	if PlayerMotion.has_move(kind) and PlayerMotion.has_move(_pose_kind) and _pose_time >= 0.0:
-		from_w = motion_weight(_pose_kind, _pose_time)
-	if from_w > 0.01:
-		_from_kind = _pose_kind
-		_from_t = _pose_time
-		_from_w = from_w
-	else:
-		_from_kind = &""
+	_interrupt_weapons()
 	_pose_kind = kind
 	_pose_time = 0.0
 	_pose_from = sword_pivot.transform
@@ -3084,16 +2852,13 @@ func _end_pose() -> void:
 		_set_sword_depth(sword_draw_depth)
 	_pose_time = -1.0
 	_pose_kind = &""
-	_from_kind = &""
-	_attacking = false
 	_hit_window_open = false
 	_trail_on = false
-	sword_pivot.transform = _rest_pose()
-	# Straight onto the idle clip's first frame -- the pose just ended there --
-	# with no blend from wherever the paused clip had been.
-	anim.play(&"idle", 0.0)
-	anim.seek(0.0, true)
-	_update_locomotion()
+	# Back on the sword's Weapon, which eases its grip home from wherever.
+	var w: Weapon = weapons.get(&"sword")
+	if w != null and w.grip != null:
+		w.grip.transform = sword_pivot.transform * _grip_on_pivot
+	_pose_held_sword()
 
 
 func _update_pose(delta: float) -> void:
@@ -3101,21 +2866,11 @@ func _update_pose(delta: float) -> void:
 		return
 	var step := delta / attack_time_scale if _pose_kind in ATTACK_POSES else delta
 	_pose_time += step
-	if _from_kind != &"":
-		_from_t = minf(_from_t + step, PlayerMotion.length(_from_kind))
-		if not PlayerMotion.has_move(_pose_kind) or _pose_time >= PlayerMotion.chain_in(_pose_kind):
-			_from_kind = &""
-	if _attack_queued:
-		_take_queued_attack()
-	var length := PlayerMotion.length(_pose_kind) if PlayerMotion.has_move(_pose_kind) else 0.0
+	var length := 0.0
 	if _pose_kind == &"slam":
 		length = slam_recover_time + SLAM_STRIKE
 	elif _pose_kind == &"haft":
 		length = HAFT_END
-	elif _pose_kind == &"block":
-		length = INF
-	elif _pose_kind == &"unblock":
-		length = GUARD_DOWN
 	elif _pose_kind == &"stab":
 		length = STAB_END
 	elif _pose_kind == &"raise":
@@ -3140,40 +2895,10 @@ func _update_pose(delta: float) -> void:
 		if not _haft_landed and _pose_time >= HAFT_HIT:
 			_land_haft()
 		return
-	if _pose_kind == &"wave":
-		sword_pivot.transform = _motion_pose(&"wave", _pose_time)
-		# The blade never bites: the wave it throws is the damage.
-		_hit_window_open = false
-		# The gold streak through the cut (`_update_sweep_trail`).
-		_trail_on = _pose_time >= WAVE_WIND - 0.02 and _pose_time <= WAVE_HOLD
-		if not _wave_fired and _pose_time >= WAVE_FIRE and not _dead:
-			_fire_wave()
-		return
-	if _pose_kind == &"heavy":
-		sword_pivot.transform = _motion_pose(&"heavy", _pose_time)
-		_hit_window_open = _pose_time >= HEAVY_BITE and _pose_time <= HEAVY_HOLD
-		_trail_on = _pose_time >= HEAVY_WIND and _pose_time <= HEAVY_HOLD + 0.03
-		if not _heavy_lunged and _pose_time >= HEAVY_WIND and not _dead:
-			_heavy_lunge()
-		return
-	if _pose_kind == &"block":
-		var k := clampf(_pose_time / GUARD_UP, 0.0, 1.0)
-		sword_pivot.transform = _blend(_pose_from, _guard_pose(), 1.0 - (1.0 - k) * (1.0 - k))
-		return
-	if _pose_kind == &"unblock":
-		sword_pivot.transform = _blend(_pose_from, _rest_pose(),
-			smoothstep(0.0, 1.0, _pose_time / GUARD_DOWN))
-		return
 	if _pose_kind == &"stab":
 		sword_pivot.transform = _stab_pose(_pose_time)
 		_update_stab_events()
 		return
-	sword_pivot.transform = _motion_pose(_pose_kind, _pose_time)
-	var bite := CHOP_BITE if _pose_kind == &"chop" else SLASH_BITE
-	_hit_window_open = _pose_time >= bite.x and _pose_time <= bite.y
-	_trail_on = _pose_time >= bite.x - 0.01 and _pose_time <= bite.y + 0.03
-	if not _cut_struck and _pose_time >= bite.x and not _dead:
-		_strike_cut()
 
 
 ## --- Third person (note 170) ----------------------------------------------------
@@ -3282,48 +3007,33 @@ func _eye_offset(delta: float) -> Vector3:
 func _hands_at_work() -> bool:
 	if _pose_kind != &"" or _blocking or _attacking or _slamming:
 		return true
-	if spear != null and held_item() == &"spear" and spear.call("busy"):
-		return true
-	if axe != null and held_item() == &"axe" and axe.has_method("busy") and axe.call("busy"):
-		return true
 	return is_drinking()
 
 
-## Whether the knight holds what is in hand in its stance (note 171; the clip
-## &"stance", coop_avatar.gd): a weapon in hand and the hands not posed by
-## anything else -- the slam, the haft strike, a scene's stab, the axe's moves,
-## the spear's throw. The sword's strokes and the guard are laid over the stance.
+## Whether the knight's body stands in its stance (note 171; the clip &"stance",
+## coop_avatar.gd): a weapon in hand and the hands not posed by a scene. Since
+## note 190 the right arm is always the weapon's (first_person_arms.gd puts the
+## fist on its Weapon's grip); the stance is the body's.
 func stance_wanted() -> bool:
 	if _dead or in_cutscene or is_hidden() or hands_busy or is_drinking():
 		return false
-	match held_item():
-		&"sword":
-			return _pose_kind in [&"", &"block", &"unblock"] or PlayerMotion.has_move(_pose_kind)
-		&"spear":
-			return spear != null and spear.call("stance_ok")
-		&"axe":
-			return axe != null and not axe.call("busy")
-	return false
+	return current_weapon() != null and _pose_kind == &""
 
 
-## The clip move the body is in, [kind, pose seconds], or [] (coop_avatar.gd poses
-## the knight from it; the camera rides its head, `_ride_at`). The sword's
-## own, or the spear's (spear.gd `motion`).
+## The clip move the body is in, [kind, pose seconds], or []. No attack is a clip
+## since note 190 (every swing is its Weapon's poses); the parry's is
+## `_parry_t`'s (coop_avatar.gd).
 func body_motion() -> Array:
-	if PlayerMotion.has_move(_pose_kind) and _pose_time >= 0.0:
-		return [_pose_kind, _pose_time]
-	if spear != null and held_item() == &"spear" and spear.has_method("motion"):
-		return spear.call("motion")
 	return []
 
 
-## Where the sword's hand is asked to be through a clip move: the pose it began
-## from, eased to rest. The clip itself is the knight's arm (coop_avatar.gd,
-## first_person_arms.gd blends to it by the move's weight and puts the sword in
-## its fist), so this only matters at the move's two ends, where it blends.
-func _motion_pose(kind: StringName, t: float) -> Transform3D:
-	var k := clampf(t / maxf(float(PlayerMotion.move(kind)["in"]) * 2.0, 0.001), 0.0, 1.0)
-	return _blend(_pose_from, _rest_pose(), k * k * (3.0 - 2.0 * k))
+## No clip move hands over to another any more (note 175's cross-fade; note 190).
+func body_motion_from() -> Array:
+	return []
+
+
+func motion_weight(kind: StringName, t: float) -> float:
+	return PlayerMotion.weight(kind, t)
 
 
 ## The camera through attacks (note 172; the user: "reduce the camera movement
@@ -3351,7 +3061,7 @@ var _view_off_v := Vector3.ZERO
 ## what an attack throws or drives (the wave, the heavy's lurch, the spear's
 ## stab and throw) still goes down the crosshair's own line.
 func aim_forward() -> Vector3:
-	return Basis(Vector3.UP, -_view_rot.y) * (-camera.global_basis.z)
+	return Basis(Vector3.UP, -(_view_rot.y + _weapon_view.y)) * (-camera.global_basis.z)
 
 
 ## How much of the knight's turn through `kind` the view turns with: all of a
@@ -3400,12 +3110,7 @@ func _ride_at(kind: StringName, t: float, w: float) -> Array:
 func _ride_blend(m: Array, back: float) -> Array:
 	var kind: StringName = m[0]
 	var t := maxf(float(m[1]) - back, 0.0)
-	if _from_kind == &"" or kind != _pose_kind:
-		return _ride_at(kind, t, PlayerMotion.weight(kind, t))
-	var now := _ride_at(kind, t, PlayerMotion.weight_out(kind, t))
-	var from := _ride_at(_from_kind, maxf(_from_t - back, 0.0), _from_w)
-	var k := PlayerMotion.chain_fade(kind, t)
-	return [(from[0] as Vector3).lerp(now[0], k), (from[1] as Vector3).lerp(now[1], k)]
+	return _ride_at(kind, t, PlayerMotion.weight(kind, t))
 
 
 ## Each frame: where the attack puts the view, and the spring that carries it
@@ -3416,7 +3121,7 @@ func _update_attack_view(delta: float, effort: Vector4, swing: float) -> void:
 		return
 	var rot := Vector3(deg_to_rad(effort.y + attack_view_kick * swing), 0.0,
 		deg_to_rad(effort.x + attack_view_roll * swing * _swing_roll))
-	var off := Vector3(0.0, -effort.z, -spear_effort_push * _stab_k * ATTACK_CAMERA)
+	var off := Vector3(0.0, -effort.z, 0.0)
 	var rot_v := Vector3.ZERO
 	var off_v := Vector3.ZERO
 	var m := _ride_move()
@@ -3498,64 +3203,6 @@ func _update_lunge(delta: float) -> void:
 		_lunge_age = -1.0
 
 
-## The camera through the wave slash: (roll deg, pitch deg, drop m, fov deg).
-## The wind-up leans back and over to the right, head up a little, crouching,
-## the view drawn in tight and trembling more the longer it is held; the cut
-## throws the lean over to the left and down (the punch and the shake are
-## `_fire_wave`'s); the recovery eases it all back.
-func _wave_effort() -> Vector4:
-	if _pose_kind == &"heavy" and _pose_time >= 0.0:
-		return _heavy_effort()
-	if _pose_kind != &"wave" or _pose_time < 0.0:
-		return Vector4.ZERO
-	var t := _pose_time
-	var coil := Vector4(-wave_effort_roll * 0.7, 2.5, wave_effort_drop * 0.6, -wave_effort_fov)
-	var drive := Vector4(wave_effort_roll, -4.0, wave_effort_drop, wave_effort_fov * 0.4)
-	if t < WAVE_WIND:
-		var k := clampf(t / WAVE_RAISE, 0.0, 1.0)
-		k = 1.0 - (1.0 - k) * (1.0 - k)
-		var e := coil * k
-		var strain := clampf((t - WAVE_RAISE * 0.5) / (WAVE_WIND - WAVE_RAISE * 0.5), 0.0, 1.0)
-		var n := float(Time.get_ticks_msec()) / 1000.0 * 38.0
-		e.x += _bob_noise.get_noise_2d(n, 5.0) * 1.2 * strain * strain
-		e.y += _bob_noise.get_noise_2d(n, 23.0) * 0.6 * strain * strain
-		e.z += absf(_bob_noise.get_noise_2d(n, 41.0)) * 0.01 * strain
-		return e
-	if t < WAVE_HOLD:
-		var s := smoothstep(0.0, 1.0, (t - WAVE_WIND) / (WAVE_CUT - WAVE_WIND))
-		return coil.lerp(drive, s)
-	var r := smoothstep(0.0, 1.0, (t - WAVE_HOLD) / (WAVE_END - WAVE_HOLD))
-	return drive * (1.0 - r)
-
-
-## The camera through the heavy swipe: (roll deg, pitch deg, drop m, fov deg),
-## as the wave slash's but smaller -- a lean back to the right and a little crouch
-## through the delay, thrown over to the left on the cut, eased out after.
-func _heavy_effort() -> Vector4:
-	var t := _pose_time
-	var coil := Vector4(-4.0, 1.5, 0.04, -2.0)
-	var drive := Vector4(5.0, -2.5, 0.05, 1.0)
-	if t < HEAVY_WIND:
-		var k := clampf(t / HEAVY_RAISE, 0.0, 1.0)
-		return coil * (1.0 - (1.0 - k) * (1.0 - k))
-	if t < HEAVY_HOLD:
-		return coil.lerp(drive, smoothstep(0.0, 1.0, (t - HEAVY_WIND) / (HEAVY_CUT - HEAVY_WIND)))
-	return drive * (1.0 - smoothstep(0.0, 1.0, (t - HEAVY_HOLD) / (HEAVY_END - HEAVY_HOLD)))
-
-
-## The heavy swipe's cut begins: a lurch into it along the view's heading, the
-## view punched in and shaken.
-func _heavy_lunge() -> void:
-	_heavy_lunged = true
-	var ahead := aim_forward()
-	ahead.y = 0.0
-	if ahead.length_squared() < 1e-4:
-		ahead = -global_basis.z
-	ahead = ahead.normalized()
-	velocity.x += ahead.x * heavy_lunge
-	velocity.z += ahead.z * heavy_lunge
-	_swing_kick = maxf(_swing_kick, 1.3)
-	_shake = maxf(_shake, 0.12)
 
 
 ## The gold on the blade as the wave slash winds up: a glowing sheath along it
@@ -3567,12 +3214,16 @@ var _blade_glow: MeshInstance3D
 
 func _update_blade_glow() -> void:
 	var on := 0.0
-	if _pose_kind == &"wave" and _pose_time >= 0.0 and held_item() == &"sword":
-		var t := _pose_time
-		if t < WAVE_WIND:
-			on = smoothstep(0.1, WAVE_WIND, t)
-		elif t < WAVE_HOLD:
-			on = 1.0 - smoothstep(WAVE_FIRE, WAVE_HOLD, t)
+	var w: Weapon = weapons.get(&"sword")
+	var t := 0.0
+	if w != null and held_item() == &"sword" and current_move() == &"wave":
+		t = w.swing_progress() * w.swing_length()
+		var windup := w.current_swing().windup_time(w.cycle_duration())
+		var strike := w.current_swing().active_time(w.cycle_duration())
+		if w.phase == Weapon.Phase.WINDUP:
+			on = smoothstep(0.05, 1.0, w.phase_time / maxf(windup, 0.001))
+		elif w.phase == Weapon.Phase.ACTIVE:
+			on = 1.0 - smoothstep(0.0, 1.0, w.phase_time / maxf(strike, 0.001))
 	if on <= 0.0:
 		if _blade_glow != null and _blade_glow.visible:
 			_blade_glow.visible = false
@@ -3583,7 +3234,7 @@ func _update_blade_glow() -> void:
 		_blade_glow = _make_blade_glow()
 	_blade_glow.visible = true
 	# A pulse, quickening as it fills.
-	var pulse := 0.85 + 0.15 * sin(_pose_time * (14.0 + 22.0 * on))
+	var pulse := 0.85 + 0.15 * sin(t * (14.0 + 22.0 * on))
 	_blade_glow.set_instance_shader_parameter(&"fade", 1.0 - on * pulse)
 
 
@@ -4084,44 +3735,6 @@ func _slam_pose(t: float) -> Transform3D:
 	var span := slam_recover_time + SLAM_STRIKE
 	return _blend(strike, _rest_pose(), smoothstep(0.0, 1.0, (t - SLAM_HOLD) / (span - SLAM_HOLD)))
 
-## Every pair gets an explicit cross-fade, so no transition anywhere can snap.
-## Set here rather than authored in the scene: it is one rule, and doing it in
-## the inspector means twenty entries to keep in step by hand.
-func _setup_blending() -> void:
-	var clips: Array[StringName] = LOCOMOTION + ATTACKS
-	for from in clips:
-		for to in clips:
-			if from == to:
-				continue
-			# Into a swing is snappy; everything else eases.
-			anim.set_blend_time(from, to,
-				attack_blend if to in ATTACKS else locomotion_blend)
-
-
-## Picks the clip that matches how the player is actually moving. Called every
-## frame; `play` on the clip already running is a no-op, so this costs nothing
-## until the state genuinely changes.
-func _update_locomotion() -> void:
-	if _attacking or _slamming or _dead or _pose_time >= 0.0:
-		return
-	var want := &"idle"
-	if not is_on_floor():
-		want = &"jump"
-	elif Vector2(velocity.x, velocity.z).length() > run_anim_speed:
-		want = &"run"
-	if anim.current_animation != want:
-		anim.play(want)
-
-
-func _on_animation_finished(anim_name: StringName) -> void:
-	# The locomotion clips all loop, so this only fires for a swing. Guarded
-	# anyway, since a clip losing its loop flag would otherwise drop the player
-	# back to idle mid-run with no obvious cause.
-	if anim_name in LOCOMOTION:
-		return
-	_attacking = false
-	_hit_window_open = false
-	_update_locomotion()
 
 
 ## For the HUD's attack icons (attack_icons.gd): the weapon in hand's attacks,
@@ -4129,31 +3742,38 @@ func _on_animation_finished(anim_name: StringName) -> void:
 ## -1 seconds = not usable at all just now. Empty with no weapon in hand. Read
 ## straight off the clocks the attacks keep (`_slam_ready_at`, the stroke in
 ## progress, the spear's own), none of which a change of weapon resets.
+## The old clip player's idle/run/jump no longer pose the sword (note 190).
+func _update_locomotion() -> void:
+	pass
+
+
 func attack_cooldowns() -> Array:
 	var held := held_item()
 	var now := _now()
 	var recover := maxf(maxf(_slam_recover_until, _flinch_until) - now, 0.0)
+	var w := current_weapon()
+	# Note 190: a press continues the combo once its chain window is open; until
+	# then (and through a special) it waits for the swing to end.
+	var busy := 0.0
+	var cycle := 1.0
+	if w != null:
+		cycle = w.cycle_duration()
+		if not w.is_idle() and not w.is_chain_window_open():
+			busy = w.time_left()
 	if held == &"sword":
-		# A cut waits for a cut in progress to end (note 174; a committed stroke
-		# until it has followed through); the heavy swipe waits only for a
-		# committed stroke; the wave (F) for the slam's clock (note 162).
-		var cut := 0.0
-		if _attacking and _pose_time >= 0.0:
-			cut = maxf(_stroke_end() - _pose_time, 0.0) * attack_time_scale
-		var heavy := 0.0
-		if _committed():
-			heavy = (_bite_end() - _pose_time) * attack_time_scale
 		var ult := &"slam" if sword_slam else &"wave"
+		var heavy := w.swings[w.swing_named("Heavy")] if w != null and w.swing_named("Heavy") >= 0 else null
 		return [
 			[ult, maxf(_slam_ready_at - now, recover), slam_cooldown, "F"],
-			[&"heavy", maxf(heavy, recover), HEAVY_HOLD * attack_time_scale, "Q"],
-			[&"slash", maxf(cut, recover), PlayerMotion.chain_point(&"slash") * attack_time_scale, "LMB"],
+			[&"heavy", maxf(w.time_left() if w != null else 0.0, recover),
+				(heavy.length_multiplier if heavy != null else 1.0) * cycle, "Q"],
+			[&"slash", maxf(busy, recover), cycle, "LMB"],
 		]
 	var list: Array = []
-	if held == &"spear" and spear != null and spear.has_method("attack_cooldowns"):
-		list = spear.call("attack_cooldowns")
-	elif held == &"axe" and axe != null:
-		list = axe.call("attack_cooldowns")
+	if held == &"spear":
+		list = [[&"stab", busy, cycle, "LMB"]]
+	elif held == &"axe":
+		list = [[&"axe_slash", busy, cycle, "LMB"]]
 	elif held == &"robot_rat" and rats != null:
 		list = rats.call("attack_cooldowns")
 	for entry: Array in list:
@@ -4192,9 +3812,7 @@ func _start_slam() -> void:
 	# A swing in progress gives way to the dive; the clip takes the pivot back.
 	_pose_time = -1.0
 	_pose_kind = &""
-	_from_kind = &""
 	_trail_on = false
-	_attacking = false
 	_hit_window_open = false
 	if _slam_grounded:
 		# Up and over the head; `_land_slam` brings it down onto the floor.
@@ -4354,78 +3972,6 @@ func _hide_slam_ring() -> void:
 	slam_ring.scale = Vector3.ONE * 0.25
 
 
-## While the cut is on, everything the BLADE passes through is hit, once a
-## swing. Each physics tick the blade's sweep since the last one -- hilt and tip
-## then, hilt and tip now -- is made into a thin convex slab and queried, so a
-## fast stroke cannot step over something between frames, and nothing outside
-## the blade's real path is touched.
-func _resolve_hits() -> void:
-	if sword_model == null or held_item() != &"sword" or hands_busy:
-		_blade_prev.clear()
-		return
-	# The blade where the swing puts it. The sword passes freely through walls
-	# (it is drawn in front of them); the line-of-sight test below is what stops
-	# anything being cut THROUGH the stone.
-	var xf := sword_pivot.global_transform * _sword_rest
-	# The blade bites `sword_hit_reach` times its length from the guard (note
-	# 168): the knight's sword is its real size, the reach is the game's.
-	var base_w := xf * _blade_base
-	var now_pts := [base_w, base_w + (xf * _blade_tip - base_w) * sword_hit_reach]
-	if _blade_prev.is_empty():
-		_blade_prev = now_pts
-		return
-	var a0: Vector3 = _blade_prev[0]
-	var a1: Vector3 = _blade_prev[1]
-	var b0: Vector3 = now_pts[0]
-	var b1: Vector3 = now_pts[1]
-	_blade_prev = now_pts
-	# The slash and the chop both sweep the blade sideways: the volume
-	# is the slab between where it was last tick and where it is now.
-	var pts := PackedVector3Array()
-	var normal := (b1 - b0).cross(a1 - b1)
-	if normal.length_squared() < 1e-6:
-		normal = head.global_basis.z
-	normal = normal.normalized() * blade_hit_thickness
-	for p in [a0, a1, b0, b1]:
-		pts.append(p + normal)
-		pts.append(p - normal)
-	var slab := ConvexPolygonShape3D.new()
-	slab.points = pts
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = slab
-	query.collision_mask = hitbox.collision_mask
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
-	query.exclude = [get_rid()]
-	var eye := camera.global_position
-	for hit in get_world_3d().direct_space_state.intersect_shape(query, 24):
-		var body := hit["collider"] as Node3D
-		if body == null or body in _hit_this_swing:
-			continue
-		# Anything with swat() is passed over (nothing has one since the criers,
-		# 2026-10-14: the bombers they replaced were struck with the haft).
-		if body.has_method("swat"):
-			continue
-		if require_line_of_sight and _is_blocked(eye, body):
-			continue
-		_hit_this_swing.append(body)
-		# A connecting swing punches the view harder than a miss. Capped rather
-		# than accumulated, so cutting through a pack does not slam it per body.
-		_swing_kick = minf(_swing_kick + attack_hit_kick, 1.5)
-		var push_dir := body.global_position - global_position
-		push_dir.y = 0.0
-		push_dir = push_dir.normalized() if push_dir.length_squared() > 0.0001 else -global_basis.z
-		hit_landed.emit(body)
-		if body.has_method("strike"):
-			# A weak point: worth many times a normal hit.
-			body.strike(push_dir)
-			continue
-		if body.has_method("take_damage"):
-			body.take_damage(_stroke_damage, push_dir)
-		if _pose_kind == &"heavy":
-			knock(body, push_dir * heavy_push, heavy_stun, heavy_stagger_chance)
-		else:
-			knock(body, push_dir * attack_push, attack_stun, slash_stagger_chance)
 
 ## Horizontal half-width of a body, from its collision shape.
 func _body_radius_of(body: Node) -> float:
@@ -4489,10 +4035,18 @@ func _dash_pressed() -> bool:
 
 ## Nothing in the way of starting a dash. A flinch does not stop one: it is the
 ## way out of the next blow (note 143).
+## A special (the heavy swipe, the wave slash) still winding up or striking: no
+## dash, no drink until it has struck (as note 162 had it).
+func _special_committed() -> bool:
+	var w := current_weapon()
+	return w != null and not w.is_idle() and w.phase != Weapon.Phase.RECOVERY \
+		and current_move() in [&"heavy", &"wave"]
+
+
 func _can_dash(down: bool) -> bool:
 	return not down and not _slamming and not is_drinking() and not _swimming \
 		and not hands_busy and not _dead and not in_cutscene \
-		and not _committed() \
+		and not _special_committed() \
 		and not _pose_kind in [&"haft", &"stab", &"raise", &"slam"]
 
 
@@ -4534,8 +4088,8 @@ func _end_dash() -> void:
 	velocity.z = flat.y
 	if _dash_attack_queued:
 		_dash_attack_queued = false
-		if held_item() == &"sword" and Coop.aim_ready(self) and not ui_open:
-			_start_attack()
+		if Coop.aim_ready(self) and not ui_open:
+			_weapon_attack()
 
 
 ## Stopped by something taking the body over (a scene, a hiding place, a slam,
@@ -4909,23 +4463,40 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 	if is_dash_invulnerable():
 		_dodge_blow()
 		return
-	# The sword up in front takes the blow -- 90% of it blocked, all of it
-	# parried (and half of it turned back on the attacker). Some blows (the
-	# Remnant's) go through any guard.
-	var guard := _guard(_from_direction, attacker)
+	# The guard decides (note 190, guard.gd): PARRIED (pressed while this attack
+	# wound up, still up), BLOCKED (up any other way), or HIT. Some blows (the
+	# Remnant's) go through any guard. Each shoves the body along the blow
+	# (`knockback`): in full when it lands, less blocked, not at all parried.
+	var result := guard.resolve(attacker)
 	if attacker != null and is_instance_valid(attacker) and attacker.get("unblockable") == true:
-		guard = 0
-	match guard:
-		2:
-			_on_guarded(true, _from_direction, attacker, amount)
-			amount *= parry_damage_taken
-		1:
+		result = Weapon.HitResult.HIT
+	var shove: float = blow_knockback
+	if attacker != null and is_instance_valid(attacker) and attacker.get("blow_knockback") != null:
+		shove = float(attacker.get("blow_knockback"))
+	match result:
+		Weapon.HitResult.PARRIED:
+			_on_guarded(true, _from_direction, attacker)
+			_kick += parry_camera_kick
+			knockback.from_direction(_from_direction, shove, guard.parry_knockback_multiplier)
+			amount = 0.0
+		Weapon.HitResult.BLOCKED:
 			# Some attackers set how much of their blow a block lets through
 			# (a crier's blast: 25%).
 			var share = attacker.get("block_damage_share") if attacker != null and is_instance_valid(attacker) else null
-			amount *= float(share) if share != null else block_damage_taken
+			amount *= float(share) if share != null else guard.block_damage_multiplier
 			_on_guarded(false, _from_direction, attacker)
-	_invulnerable_until = now + (guarded_invulnerable_time if guard > 0 else invulnerable_time)
+			_kick += block_camera_kick
+			knockback.from_direction(_from_direction, shove, guard.block_knockback_multiplier)
+		_:
+			# A clean hit cuts the swing short (the template's rule: attacking
+			# into an enemy's attack is a losing trade).
+			_interrupt_weapons()
+			var sy := 1.0 if randf() < 0.5 else -1.0
+			var sr := 1.0 if randf() < 0.5 else -1.0
+			_kick += Vector3(hit_camera_kick.x, hit_camera_kick.y * sy, hit_camera_kick.z * sr)
+			knockback.from_direction(_from_direction, shove)
+	var guarded := result != Weapon.HitResult.HIT
+	_invulnerable_until = now + (guarded_invulnerable_time if guarded else invulnerable_time)
 	# The armor (workbench upgrades).
 	amount *= 1.0 - damage_negation()
 	# Sandbox: nothing hurts (the guard above still registered, for the enemy).
@@ -4937,7 +4508,7 @@ func take_damage(amount: float, _from_direction: Vector3 = Vector3.ZERO,
 	# A hit that hurts spills the drink.
 	_interrupt_drink()
 	# ...and staggers them, unless they met it (or it was their own rat's blast).
-	if guard == 0 and attacker != null:
+	if not guarded and attacker != null:
 		_flinch(_from_direction)
 
 	health = maxf(health - amount, 0.0)
@@ -4986,14 +4557,14 @@ func beam_hit(dps: float, delta: float, blow: Vector3) -> void:
 	if is_dash_invulnerable():
 		return
 	var now := _now()
-	var guarded := _guard(blow) != 0
+	var guarded := guard.is_up
 	_beam_until = now + BEAM_LINGER
 	_beam_guarded = guarded
 	var amount := dps * delta * (1.0 - damage_negation())
 	if Sandbox.player_god:
 		amount = 0.0
 	if guarded:
-		amount *= block_damage_taken
+		amount *= guard.block_damage_multiplier
 	if amount <= 0.0:
 		return
 	_beam_owed += amount
@@ -5039,7 +4610,7 @@ func _move_input() -> Vector2:
 func use_consumable(slot: int) -> bool:
 	if _dead or is_drinking() or _slamming or _pose_kind in [&"haft", &"stab"]:
 		return false
-	if _attacking and _pose_time < _bite_end():
+	if _special_committed():
 		return false
 	# A live rat (a utility quick item) is taken in hand by the tail, not drunk
 	# (rat_control.gd `take_rat`; LMB then throws it).
@@ -5217,9 +4788,9 @@ func _die() -> void:
 	# world as the death left it (the map back at its checkpoint).
 	Saves.request("death")
 	_cancel_drink()
-	if _blocking:
-		_blocking = false
-		guard_changed.emit(false)
+	_end_block()
+	_interrupt_weapons()
+	lock_on.release()
 	if _scene_walk_target != null:
 		_scene_walk_target = null
 		scene_walk_finished.emit()
@@ -5392,9 +4963,7 @@ func _respawn() -> void:
 	_slam_ready_at = 0.0
 	_beam_until = 0.0
 	_beam_owed = 0.0
-	if _blocking:
-		_blocking = false
-		guard_changed.emit(false)
+	_end_block()
 	_guard_level = 0.0
 	_guard_kick = 0.0
 	_cancel_drink()
@@ -5404,11 +4973,14 @@ func _respawn() -> void:
 	_scene_look = null
 	scene_frame(0.0, 0.0, 30.0)
 	_lunge_age = -1.0
-	_spear_dash_until = 0.0
-	if spear != null:
-		spear.reset()
-	if axe != null:
-		axe.reset()
+	for id in weapons:
+		(weapons[id] as Weapon).reset()
+	_special_queued = &""
+	_pending_slot = -1
+	guard.clear()
+	knockback.clear()
+	lock_on.release()
+	_kick = Vector3.ZERO
 	if rats != null:
 		rats.call("reset")
 	if _hidden_in != null:
@@ -5583,18 +5155,11 @@ func _flinch(blow: Vector3) -> void:
 	_shake = maxf(_shake, 0.3)
 	# Whatever was swinging stops here.
 	_hit_window_open = false
-	if _pose_kind in [&"slash", &"chop"] or (_pose_kind == &"wave" and not _wave_fired) \
-			or (_pose_kind == &"heavy" and _pose_time < HEAVY_WIND):
-		_attacking = false
-		_trail_on = false
-		_begin_pose(&"unblock")
+	_trail_on = false
+	_interrupt_weapons()
 	if _slamming:
 		_slam_armed = false
 		_paint_slam_marker()
-	if is_spear_dashing():
-		_spear_dash_until = _flinch_at
-	spear.interrupt()
-	axe.interrupt()
 
 
 func is_flinching() -> bool:

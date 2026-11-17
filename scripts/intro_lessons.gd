@@ -33,12 +33,12 @@ var LESSONS: Array[Dictionary] = [
 	{"id": &"wave", "title": "Wave slash", "kb": "[k]F[/k]: a long wind-up, then a cut that sends a gold wave down the hall. Once every 20 seconds.", "pad": "[k]LT[/k]: a long wind-up, then a cut that sends a gold wave down the hall. Once every 20 seconds."},
 	{"id": &"to_spear", "title": "Take up the spear", "kb": "Tap [k]C[/k] to swap weapons, or hold it, point at the spear, let go.", "pad": "Tap [k]R3[/k] to swap weapons, or hold it, point at the spear with the stick, let go."},
 	{"id": &"stab", "title": "Stab a post  ·  3 times", "kb": "[k]LEFT CLICK[/k] stabs.", "pad": "[k]RB[/k] stabs."},
-	{"id": &"dash", "title": "Spear sweep", "kb": "[k]Q[/k]: wound up, then swept low through the legs. It knocks them down.", "pad": "[k]RT[/k]: wound up, then swept low through the legs. It knocks them down."},
-	{"id": &"throw", "title": "Throw the spear", "kb": "[k]F[/k] hurls it. It bursts where it strikes and comes back.", "pad": "[k]LT[/k] hurls it. It bursts where it strikes and comes back."},
+	{"id": &"lunge", "title": "Spear lunge", "kb": "Keep [k]LEFT CLICK[/k] going: two jabs, then the third drives you forward in a lunge.", "pad": "Keep [k]RB[/k] going: two jabs, then the third drives you forward in a lunge."},
 	{"id": &"to_sword", "title": "Back to the sword", "kb": "Tap [k]C[/k] to swap back, or hold it, point at the sword, let go.", "pad": "Tap [k]R3[/k] to swap back, or hold it, point at the sword, let go."},
 	{"id": &"dodge", "title": "Dash  ·  2 times", "kb": "Tap [k]LEFT CTRL[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands.", "pad": "Press [k]B[/k] to dash the way you are moving. For a split second nothing can touch you: dash as a blow lands."},
 	{"id": &"block", "title": "Block  ·  2 blows", "kb": "Hold [k]RIGHT CLICK[/k] to raise your guard as its glaive comes down.", "pad": "Hold [k]LB[/k] to raise your guard as its glaive comes down."},
-	{"id": &"parry", "title": "Parry", "kb": "Tap [k]RIGHT CLICK[/k] the moment its glaive flashes. A parry throws it back.", "pad": "Tap [k]LB[/k] the moment its glaive flashes. A parry throws it back."},
+	{"id": &"lock", "title": "Lock on", "kb": "[k]MIDDLE CLICK[/k] locks your view onto the sentinel. Fight it locked on; flick the mouse to change target; click again to let go.", "pad": "[k]L3[/k] locks your view onto the sentinel. Fight it locked on; flick the stick to change target; press again to let go."},
+	{"id": &"parry", "title": "Parry", "kb": "Press [k]RIGHT CLICK[/k] as its glaive flashes and winds up, and hold it as the blow lands. A parry throws it back.", "pad": "Press [k]LB[/k] as its glaive flashes and winds up, and hold it as the blow lands. A parry throws it back."},
 	{"id": &"fell", "title": "Bring it down", "kb": "Anything you have learned.", "pad": "Anything you have learned."},
 	{"id": &"drink", "title": "Drink a potion", "kb": "Hold [k]X[/k], point at the potion, let go.", "pad": "Press the [k]D-PAD[/k] toward the potion."},
 	{"id": &"altar", "title": "The altar", "kb": "Something here answers the handle.", "pad": "Something here answers the handle."},
@@ -196,11 +196,9 @@ func _fresh_track(p: Node) -> Dictionary:
 		var h: Dictionary = post.get("hits")
 		for k in h:
 			posts_hits[k] = int(posts_hits.get(k, 0)) + int(h[k])
-	var spear = p.get("spear")
 	return {"yaw": (p as Node3D).rotation.y, "pitch": float(p.get("_look_pitch")), "looked": 0.0,
 		"air_at": -INF, "opened": false, "map_opened": false, "heavy": false, "slam": false,
-		"hits0": posts_hits, "dash0": float(spear.get("_sweep_ready_at")) if spear != null else 0.0,
-		"dashes0": int(p.get("dash_count")), "drank": false}
+		"hits0": posts_hits, "dashes0": int(p.get("dash_count")), "drank": false}
 
 
 func _setup(id: StringName) -> void:
@@ -284,22 +282,20 @@ func _done_now(p: Node, t: Dictionary, _delta: float) -> bool:
 		&"cut":
 			return _hits_since(t, &"sword") >= 3
 		&"heavy":
-			return p.get("_pose_kind") == &"heavy"
+			return p.call("current_move") == &"heavy"
 		&"wave":
-			return p.get("_pose_kind") == &"wave"
+			return p.call("current_move") == &"wave"
 		&"to_spear":
 			return p.call("held_item") == &"spear"
 		&"stab":
 			return _hits_since(t, &"spear") >= 3
-		&"dash":
-			var spear = p.get("spear")
-			return spear != null and float(spear.get("_sweep_ready_at")) > float(t["dash0"]) + 0.01
-		&"throw":
-			var spear = p.get("spear")
-			return spear != null and bool(spear.call("is_away"))
+		&"lunge":
+			return p.call("current_move") == &"lunge"
 		&"to_sword":
-			var spear = p.get("spear")
-			return p.call("held_item") == &"sword" and (spear == null or not bool(spear.call("is_away")))
+			return p.call("held_item") == &"sword"
+		&"lock":
+			var lock = p.get("lock_on")
+			return lock != null and bool(lock.call("is_locked"))
 		&"dodge":
 			return int(p.get("dash_count")) - int(t["dashes0"]) >= 2
 		&"block":

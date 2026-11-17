@@ -434,70 +434,53 @@ func _stats_for(id: StringName) -> Array:
 			return [
 				"Attack", [
 					["Level", str(player.weapon_level(&"sword"))],
-					["Cut", str(roundi(player.attack_damage * player.weapon_damage_scale(&"sword")))],
-					["Heavy swipe", str(roundi(player.heavy_damage * player.weapon_damage_scale(&"sword")))],
+					["Cut", str(roundi(player.swing_damage(&"sword", "Forehand")))],
+					["Heavy swipe", str(roundi(player.swing_damage(&"sword", "Heavy")))],
 					["Wave slash", "%d, a wave" % roundi(player.wave_damage * player.weapon_damage_scale(&"sword"))],
 					["Wave cooldown", "%d s" % roundi(player.slam_cooldown)],
 					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],
-					["Parry", "-%d%%" % roundi((1.0 - player.parry_damage_taken) * 100.0)],
-					["Parry return", "%d%%" % roundi(player.parry_reflect * 100.0)],
+					["Parry", "-100%"],
 				],
 				"Controls", [
-					["Cut", Keybinds.label(&"attack")],
+					["Cut, cut...", Keybinds.label(&"attack")],
 					["Heavy swipe", Keybinds.label(&"thrust")],
 					["Wave slash", Keybinds.label(&"slam")],
 					["Block", "hold " + Keybinds.label(&"block")],
-					["Parry", Keybinds.label(&"block") + " as it lands"],
+					["Parry", Keybinds.label(&"block") + " as it winds up"],
+					["Lock on", Keybinds.label(&"lock_on")],
 					["Dodge dash", Keybinds.label(&"dodge")],
 					["Sprint", "hold %s / full stick" % Keybinds.text(&"sprint", Keybinds.KEYBOARD)],
 					["Haft strike", Keybinds.label(&"interact")],
 				],
 			]
 		&"spear":
-			var s = player.spear
-			var k: float = player.weapon_damage_scale(&"spear")
 			return [
 				"Attack", [
 					["Level", str(player.weapon_level(&"spear"))],
-					["Jab", str(roundi(s.STAB_DAMAGE * k))],
-					["Jab rate", "%.2f s" % (s.STAB_EVERY * s.time_scale())],
-					["Lunge (every third)", str(roundi(s.LUNGE_DAMAGE * k))],
-					["Sweep", str(roundi(s.SWEEP_DAMAGE * k))],
-					["Sweep cooldown", "%.1f s" % (s.SWEEP_COOLDOWN * s.time_scale())],
-					["Swept down for", "%.1f s" % s.SWEEP_DOWN],
-					["Throw blast", str(roundi(s.BLAST_DAMAGE * k))],
-					["Blast reach", "%.1f m" % s.BLAST_RADIUS],
-					["Throw cooldown", "%d s" % roundi(s.THROW_COOLDOWN)],
+					["Jab", str(roundi(player.swing_damage(&"spear", "JabA")))],
+					["Lunge (every third)", str(roundi(player.swing_damage(&"spear", "Lunge")))],
 					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],
 				],
 				"Controls", [
 					["Jab, jab, lunge", Keybinds.label(&"attack")],
-					["Sweep", Keybinds.label(&"thrust")],
-					["Throw", Keybinds.label(&"slam")],
 					["Block", "hold " + Keybinds.label(&"block")],
+					["Parry", Keybinds.label(&"block") + " as it winds up"],
+					["Lock on", Keybinds.label(&"lock_on")],
 					["Dodge dash", Keybinds.label(&"dodge")],
 					["Sprint", "hold %s / full stick" % Keybinds.text(&"sprint", Keybinds.KEYBOARD)],
 				],
 			]
 		&"axe":
-			var a = player.axe
-			var k: float = player.weapon_damage_scale(&"axe")
 			return [
 				"Attack", [
 					["Level", str(player.weapon_level(&"axe"))],
-					["Slash", str(roundi(a.SLASH_DAMAGE * k))],
-					["Slash rate", "%.2f s" % (a.SLASH_EVERY * a.time_scale())],
-					["Throw", str(roundi(a.THROW_DAMAGE * k))],
-					["Stays in its mark", "%d s" % roundi(a.STICK_TIME)],
-					["Berserk", "%d s" % roundi(a.BERSERK_TIME)],
-					["Berserk cooldown", "%d s" % roundi(a.BERSERK_COOLDOWN)],
+					["Chop", str(roundi(player.swing_damage(&"axe", "Chop")))],
 					["Block", "-%d%%" % roundi((1.0 - player.block_damage_taken) * 100.0)],
 				],
 				"Controls", [
-					["Slash", Keybinds.label(&"attack")],
-					["Throw", Keybinds.label(&"thrust")],
-					["Berserk", Keybinds.label(&"slam")],
+					["Chop", Keybinds.label(&"attack")],
 					["Block", "hold " + Keybinds.label(&"block")],
+					["Lock on", Keybinds.label(&"lock_on")],
 					["Dodge dash", Keybinds.label(&"dodge")],
 					["Sprint", "hold %s / full stick" % Keybinds.text(&"sprint", Keybinds.KEYBOARD)],
 				],

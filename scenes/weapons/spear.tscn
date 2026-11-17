@@ -1,0 +1,115 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon.gd" id="1_osdwm"]
+[ext_resource type="Script" path="res://scripts/combat/swing.gd" id="2_pwwd2"]
+[ext_resource type="PackedScene" path="res://models/spear.glb" id="3_7iob8"]
+
+[sub_resource type="Resource" id="Resource_04ntw"]
+script = ExtResource("2_pwwd2")
+display_name = "JabA"
+windup_pose = &"Ready"
+strike_poses = Array[StringName]([&"JabA"])
+windup_share = 0.18
+active_share = 0.27
+recovery_share = 0.55
+camera_windup = Vector3(-0.4, 0, 0.8)
+camera_strike = Vector3(-1.2, 0.5, 1.6)
+stagger_chance = 0.1
+
+[sub_resource type="Resource" id="Resource_rbsqm"]
+script = ExtResource("2_pwwd2")
+display_name = "JabB"
+windup_pose = &"Ready"
+strike_poses = Array[StringName]([&"JabB"])
+windup_share = 0.18
+active_share = 0.27
+recovery_share = 0.55
+camera_windup = Vector3(-0.4, 0, -0.8)
+camera_strike = Vector3(-1.2, -0.5, -1.6)
+stagger_chance = 0.1
+
+[sub_resource type="Curve" id="Curve_5r8t3"]
+_data = [Vector2(0, 0), 0.0, 2.0, 0, 0, Vector2(0.7, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Resource" id="Resource_bvohx"]
+script = ExtResource("2_pwwd2")
+display_name = "Lunge"
+windup_pose = &"LungeBack"
+strike_poses = Array[StringName]([&"LungeOut"])
+windup_share = 0.45
+active_share = 0.15
+recovery_share = 0.4
+length_multiplier = 1.6
+windup_curve = SubResource("Curve_5r8t3")
+camera_windup = Vector3(1, -1, 1.5)
+camera_strike = Vector3(-2.5, 1, -1)
+lunge_distance = 1.1
+damage_multiplier = 1.6
+knockback_multiplier = 1.5
+stun_time = 0.4
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_3gvr4"]
+size = Vector3(0.45, 0.45, 1.35)
+
+[node name="Spear" type="Node3D" unique_id=437351454 node_paths=PackedStringArray("grip", "poses", "hitbox")]
+script = ExtResource("1_osdwm")
+display_name = "Spear"
+hits_per_second = 2.85
+knockback = 3.5
+move_speed_multiplier = 0.45
+swings = Array[ExtResource("2_pwwd2")]([SubResource("Resource_04ntw"), SubResource("Resource_rbsqm"), SubResource("Resource_bvohx")])
+return_speed = 10.0
+hit_length = 1.35
+hit_width = 0.45
+hit_thickness = 0.45
+grip = NodePath("Grip")
+poses = NodePath("Poses")
+hitbox = NodePath("Grip/Hitbox")
+
+[node name="Poses" type="Node3D" parent="." unique_id=1486444783]
+
+[node name="Rest" type="Marker3D" parent="Poses" unique_id=238368010]
+transform = Transform3D(0.96906507, 0.24641113, -0.013948863, -0.24677098, 0.9664334, -0.07148794, -0.004134774, 0.072718635, 0.9973439, 0.27, -0.36, -0.28)
+gizmo_extents = 0.05
+
+[node name="Ready" type="Marker3D" parent="Poses" unique_id=1196804]
+transform = Transform3D(0.9994141, 0.0011707683, 0.034206476, 0, 0.99941474, -0.03420648, -0.034226507, 0.034186438, 0.9988292, 0.24, -0.34, -0.16)
+gizmo_extents = 0.05
+
+[node name="JabA" type="Marker3D" parent="Poses" unique_id=1734165356]
+transform = Transform3D(0.99953055, 0.0010553239, 0.030618768, 0, 0.99940646, -0.034446113, -0.030636951, 0.03442994, 0.99893737, 0.14, -0.26, -0.78)
+gizmo_extents = 0.05
+
+[node name="JabB" type="Marker3D" parent="Poses" unique_id=1744890324]
+transform = Transform3D(0.9992668, 0.0018301854, 0.038242314, 0, 0.9988567, -0.04780289, -0.038286082, 0.047767844, 0.9981244, 0.1, -0.23, -0.78)
+gizmo_extents = 0.05
+
+[node name="LungeBack" type="Marker3D" parent="Poses" unique_id=2107770463]
+transform = Transform3D(0.99955326, 0.0012890226, 0.029859167, 0, 0.99906945, -0.04312991, -0.029886976, 0.043110643, 0.9986232, 0.3, -0.3, 0.02)
+gizmo_extents = 0.05
+
+[node name="LungeOut" type="Marker3D" parent="Poses" unique_id=1423373490]
+transform = Transform3D(0.9997178, 0.00084596087, 0.023740603, 0, 0.9993657, -0.035610903, -0.02375567, 0.035600852, 0.9990837, 0.09, -0.22, -0.95)
+gizmo_extents = 0.05
+
+[node name="Grip" type="Node3D" parent="." unique_id=721766435]
+transform = Transform3D(0.96906507, 0.24641113, -0.013948863, -0.24677098, 0.9664334, -0.07148794, -0.004134774, 0.072718635, 0.9973439, 0.27, -0.36, -0.28)
+
+[node name="Model" type="Node3D" parent="Grip" unique_id=503041353]
+
+[node name="SpearModel" type="Node3D" parent="Grip/Model" unique_id=128891801 instance=ExtResource("3_7iob8")]
+
+[node name="Hitbox" type="Area3D" parent="Grip" unique_id=1257730904]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.9)
+collision_layer = 0
+collision_mask = 4
+monitorable = false
+
+[node name="Shape" type="CollisionShape3D" parent="Grip/Hitbox" unique_id=1483519959]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.675)
+shape = SubResource("BoxShape3D_3gvr4")
+
+[node name="PreviewCamera" type="Camera3D" parent="." unique_id=987157612]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.11)
+near = 0.03

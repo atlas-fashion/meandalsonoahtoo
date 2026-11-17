@@ -37,6 +37,7 @@ const ACTIONS := [
 	[&"thrust", "Heavy attack"],
 	[&"slam", "Special attack"],
 	[&"block", "Block / parry"],
+	[&"lock_on", "Lock on"],
 	[&"interact", "Interact"],
 	[&"inventory", "Inventory"],
 	[&"toggle_map", "Map"],

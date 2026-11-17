@@ -147,6 +147,8 @@ static var _lens_mesh: Mesh
 
 
 func _ready() -> void:
+	# The lock-on's (note 190).
+	add_to_group(&"lock_on_targets")
 	health = max_health
 	_bob = randf() * TAU
 	# Placed on the face after the player has moved the camera this frame.

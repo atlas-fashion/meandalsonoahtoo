@@ -311,11 +311,10 @@ func _pose_right(held: Dictionary) -> void:
 	var turn := Basis(h, back, g) * a.fist_rest.inverse()
 	var wrist := p - turn * (a.grip - a.rest_hand.origin)
 	var q := _solve(a, shoulder, wrist, turn, back, _h2s(a).basis * POLE)
-	var w: float = _body.get("motion_w") if held["kind"] in [&"sword", &"spear", &"axe"] else 0.0
-	# The spear's thrusts lead the hand (note 172, spear.gd `lead`): the arm is
-	# put on the spear, point first down the aim, not the spear in a boxer's fist.
-	if held["kind"] == &"spear" and node != null:
-		w *= 1.0 - float(node.get("lead"))
+	# Every weapon LEADS the hand since note 190 (the timing-combat template: the
+	# Weapon scene owns the animation): the arm is put on its grip by IK, never
+	# the weapon in the stance clip's fist.
+	var w := 0.0
 	var bones := [a.upper, a.fore, a.hand]
 	for k in 3:
 		var rot: Quaternion = q[k]

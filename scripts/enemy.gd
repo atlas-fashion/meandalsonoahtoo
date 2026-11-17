@@ -1333,6 +1333,13 @@ func _enter_windup(kind: int) -> void:
 	_state_until = _now() + _windup_len
 	_apply_state_color(windup_color, windup_glow)
 	_play_state_anim(ANIM_WINDUP, _windup_len)
+	# The parry cue (player.gd `parry_cue`; note 190, the timing-combat guard):
+	# from the start of the wind-up to its blow this attack is WINDING UP, and a
+	# guard pressed meanwhile and held through the blow parries it.
+	for p in Coop.all():
+		if p != null and p.has_method("parry_cue") \
+				and (p as Node3D).global_position.distance_squared_to(global_position) < 144.0:
+			p.call("parry_cue", self, _windup_len + _attack_duration() + 0.15)
 
 
 func _enter_attack(toward: Vector3) -> void:

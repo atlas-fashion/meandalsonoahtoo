@@ -50,6 +50,8 @@ var _flare := 0.0
 func _ready() -> void:
 	collision_layer = 1 | 4
 	collision_mask = 1 | 2
+	# The lock-on's (note 190).
+	add_to_group(&"lock_on_targets")
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.42

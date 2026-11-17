@@ -124,6 +124,8 @@ var _prompt: Interact.Prompt
 
 
 func _ready() -> void:
+	# The lock-on's (note 190).
+	add_to_group(&"lock_on_targets")
 	health = max_health
 	# The chests' own prompt, at a chest's height, so nothing gives it away.
 	_prompt = Interact.prompt("E   Open", Vector3(0.0, 1.15, 0.0))

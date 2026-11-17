@@ -1,0 +1,143 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon.gd" id="1_58ehi"]
+[ext_resource type="Script" path="res://scripts/combat/swing.gd" id="2_gwb47"]
+[ext_resource type="PackedScene" path="res://models/sword.glb" id="3_11jj1"]
+
+[sub_resource type="Resource" id="Resource_dx2j5"]
+script = ExtResource("2_gwb47")
+display_name = "Forehand"
+windup_share = 0.3
+active_share = 0.2
+camera_windup = Vector3(1.5, -3, -2.5)
+camera_strike = Vector3(-2.5, 4, 3)
+
+[sub_resource type="Resource" id="Resource_xs7jb"]
+script = ExtResource("2_gwb47")
+display_name = "Backhand"
+windup_pose = &"Left"
+strike_poses = Array[StringName]([&"Right"])
+windup_share = 0.3
+active_share = 0.2
+camera_windup = Vector3(-1, 3, 2.5)
+camera_strike = Vector3(2.5, -4, -3)
+
+[sub_resource type="Curve" id="Curve_w46s4"]
+_data = [Vector2(0, 0), 0.0, 2.0, 0, 0, Vector2(0.5, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Resource" id="Resource_lax51"]
+script = ExtResource("2_gwb47")
+display_name = "Heavy"
+windup_pose = &"HeavyBack"
+strike_poses = Array[StringName]([&"HeavyMid", &"HeavyEnd"])
+windup_share = 0.62
+active_share = 0.12
+recovery_share = 0.26
+length_multiplier = 2.4
+windup_curve = SubResource("Curve_w46s4")
+camera_windup = Vector3(2, -6, -5)
+camera_strike = Vector3(-3, 7, 6)
+lunge_distance = 0.6
+move_multiplier = 0.55
+damage_multiplier = 2.25
+knockback_multiplier = 1.6
+stun_time = 0.45
+stagger_chance = 1.0
+
+[sub_resource type="Curve" id="Curve_q1t1k"]
+_data = [Vector2(0, 0), 0.0, 2.0, 0, 0, Vector2(0.45, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Resource" id="Resource_xdw8x"]
+script = ExtResource("2_gwb47")
+display_name = "Wave"
+windup_pose = &"Overhead"
+strike_poses = Array[StringName]([&"WaveMid", &"LowLeft"])
+windup_share = 0.55
+active_share = 0.12
+recovery_share = 0.33
+length_multiplier = 3.2
+windup_curve = SubResource("Curve_q1t1k")
+camera_windup = Vector3(4, -4, -7)
+camera_strike = Vector3(-5, 5, 8)
+move_multiplier = 0.2
+hits = false
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_yyhql"]
+size = Vector3(0.4, 0.3, 1.75)
+
+[node name="Sword" type="Node3D" unique_id=915552363 node_paths=PackedStringArray("grip", "poses", "hitbox")]
+script = ExtResource("1_58ehi")
+display_name = "Sword"
+combo_length = 2
+damage = 20.0
+knockback = 5.5
+move_speed_multiplier = 0.6
+swings = Array[ExtResource("2_gwb47")]([SubResource("Resource_dx2j5"), SubResource("Resource_xs7jb"), SubResource("Resource_lax51"), SubResource("Resource_xdw8x")])
+return_speed = 9.0
+hit_length = 1.75
+hit_width = 0.4
+grip = NodePath("Grip")
+poses = NodePath("Poses")
+hitbox = NodePath("Grip/Hitbox")
+
+[node name="Poses" type="Node3D" parent="." unique_id=550045590]
+
+[node name="Rest" type="Marker3D" parent="Poses" unique_id=1790799067]
+transform = Transform3D(-0.11069905, -0.6182044, 0.7781831, -0.1799641, -0.75758314, -0.62743986, 0.9774245, -0.20950201, -0.027390867, 0.379344, -0.40315, -0.636786)
+gizmo_extents = 0.05
+
+[node name="Right" type="Marker3D" parent="Poses" unique_id=1542434505]
+transform = Transform3D(0.49476367, -0.17291576, -0.8516508, -0.45315388, 0.7848855, -0.42261827, 0.74152577, 0.59502506, 0.30997542, 0.45, 0.05, -0.45999998)
+gizmo_extents = 0.05
+
+[node name="Left" type="Marker3D" parent="Poses" unique_id=581848676]
+transform = Transform3D(0.25524825, -0.24193716, 0.9361169, 0.49809736, 0.8627299, 0.087155744, -0.8287022, 0.44403097, 0.34071857, -0.35, -0.3, -0.56)
+gizmo_extents = 0.05
+
+[node name="HeavyBack" type="Marker3D" parent="Poses" unique_id=658883967]
+transform = Transform3D(0.11217561, -0.5363368, -0.83651626, -0.5566704, 0.66341394, -0.5, 0.82312495, 0.5217517, -0.22414397, 0.48, 0.1, -0.32999998)
+gizmo_extents = 0.05
+
+[node name="HeavyEnd" type="Marker3D" parent="Poses" unique_id=1437538490]
+transform = Transform3D(0.07139385, -0.049990524, 0.9961947, 0.5735765, 0.819152, 0, -0.8160349, 0.5713939, 0.087155804, -0.42, -0.22, -0.51)
+gizmo_extents = 0.05
+
+[node name="HeavyMid" type="Marker3D" parent="Poses" unique_id=544534692]
+transform = Transform3D(0.9929338, -0.08076755, 0.08694344, 0.08694344, 0.9937681, -0.06975647, -0.08076755, 0.07682271, 0.9937681, 0.05, -0.12, -0.69)
+gizmo_extents = 0.05
+
+[node name="Overhead" type="Marker3D" parent="Poses" unique_id=713425775]
+transform = Transform3D(0.96564656, -0.2572353, 0.03683367, 0.015134462, -0.08583179, -0.99619466, 0.25941792, 0.9625294, -0.07899006, 0.3, 0.28, -0.41000003)
+gizmo_extents = 0.05
+
+[node name="WaveMid" type="Marker3D" parent="Poses" unique_id=861820616]
+transform = Transform3D(0.7737889, -0.6099232, 0.17101008, 0.63302225, 0.7544065, -0.1736482, -0.023099072, 0.24262023, 0.96984625, 0.05, -0.05, -0.71000004)
+gizmo_extents = 0.05
+
+[node name="LowLeft" type="Marker3D" parent="Poses" unique_id=1050646812]
+transform = Transform3D(0.073348254, -0.7378113, 0.67101, 0.5792279, 0.5792279, 0.5735765, -0.811859, 0.34659696, 0.4698463, -0.3, -0.48, -0.56)
+gizmo_extents = 0.05
+
+[node name="Grip" type="Node3D" parent="." unique_id=1464467821]
+transform = Transform3D(-0.11069905, -0.6182044, 0.7781831, -0.1799641, -0.75758314, -0.62743986, 0.9774245, -0.20950201, -0.027390867, 0.379344, -0.40315, -0.636786)
+
+[node name="Model" type="Node3D" parent="Grip" unique_id=1674737386]
+
+[node name="SwordModel" type="Node3D" parent="Grip/Model" unique_id=1682880108 instance=ExtResource("3_11jj1")]
+transform = Transform3D(0.471698, 0, 0, 0, 0, 0.471698, 0, -0.471698, 0, 0, 0, 0.19506)
+
+[node name="Hitbox" type="Area3D" parent="Grip" unique_id=1194104273]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.14)
+collision_layer = 0
+collision_mask = 4
+monitorable = false
+
+[node name="Shape" type="CollisionShape3D" parent="Grip/Hitbox" unique_id=1126476074]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.875)
+shape = SubResource("BoxShape3D_yyhql")
+
+[node name="PreviewCamera" type="Camera3D" parent="." unique_id=1984840273]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.11)
+near = 0.03
