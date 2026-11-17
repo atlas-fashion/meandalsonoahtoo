@@ -42,7 +42,7 @@ the second section 8 (respawn anchors) is `08b-respawn-anchors.md`. Sections
 
 **Recording new work** (do this as part of every feature, as before):
 - Add a new file `docs/notes/NN-short-slug.md` with the next number (the
-  latest is 191), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
+  latest is 192), headed `## NN. Title (YYYY-MM-DD)`, in the same style:
   what was built, where (file + function), the values, what was measured, and
   the traps.
 - Add its row to the **section index** and its number to each file's line in
@@ -656,6 +656,7 @@ dragging one rewrites its constant (notes 63-64) -- bind any new timing there to
 | 189 | 2026-11-16 | Scouts climb the scoutpost stairs: a two-way NavigationLink3D up each 2 x 2 post's stair (scoutpost.gd `_stair_link`; the 1.1 m stair has no navmesh), the wall cell by its foot kept clear of props (`STAIR_FOOT_CLEAR`); scout.gd takes the path when the player is on the other floor (`OTHER_FLOOR` 1.5, it circled below) and keeps on to a link's far end (`_on_link_reached`, `LINK_COMMIT`), or it turned round mid-stair; up 3.2-5.2 s, down 2.6-5.6 s in all 8 posts; other enemy kinds not done | [docs/notes/189-scouts-climb-the-scoutpost-stairs.md](docs/notes/189-scouts-climb-the-scoutpost-stairs.md) |
 | 190 | 2026-11-16 | The timing-combat template (C:\DEV\godot\timing-combat) replaces every player attack and the guard: Weapon scenes (scenes/weapons/sword, spear, axe; scripts/combat/weapon.gd, swing.gd) own poses, swings, the chain window and a swept hit box; the sword's heavy (Q) and wave (F) are specials on its Weapon, the spear jab-jab-lunge; the guard's rules (guard.gd): parried if pressed while the attack winds up (its parry cue; enemy.gd `_enter_windup` now cues) and still held, else blocked (30%), no direction, no reflect; knockback on the player, lock-on (middle click / L3, lock_on.gd); the axe's throw and berserk, the spear's sweep and throw removed; the arm always follows the weapon | [docs/notes/190-the-timing-combat-template-replaces-the-combat.md](docs/notes/190-the-timing-combat-template-replaces-the-combat.md) |
 | 191 | 2026-11-16 | Every blow shoves: the player's hits that do not stagger now shove the enemy along the blade (combat/knockback.gd `shove`, a driving Knockback child moving the body by move_and_collide; `knockback_taken` / `knockback_resistance`), never interrupting it -- before, only the 40% staggers moved anything; `blow_knockback` 3 -> 5 (the player slides ~0.6 m) | [docs/notes/191-every-blow-shoves.md](docs/notes/191-every-blow-shoves.md) |
+| 192 | 2026-11-16 | Scouts give room to breathe: openings (the player swinging all the time under note 190) had cut every breath to nothing (0.37 s avg) and made most chains "open" ones (10 of 19 moves); scout.gd `CLOSE_PAUSE` 0.65-1.15 s, `CHAIN_PAUSE` 1.2-1.7 after a chain, an opening shaves the breath to no less than `BREATH_FLOOR` 70%, chains 0.18 / 0.45 open; it eases 0.5 m further off while it breathes, circling; now 0.7 s avg, 2-5 chains a 40 s | [docs/notes/192-scouts-give-room-to-breathe.md](docs/notes/192-scouts-give-room-to-breathe.md) |
 
 ## Notes by source file
 
@@ -749,7 +750,7 @@ Not exhaustive -- also grep `docs/notes/` as described above.
 - `scripts/sandbox.gd`: 60, 68, 152
 - `scripts/sandbox_menu.gd`: 60, 68, 77, 84, 117, 130, 152, 161, 172
 - `scripts/sandbox_world.gd`: 60, 77, 79, 93, 94, 102, 117, 127, 139, 149, 152, 154
-- `scripts/scout.gd`: 127, 128, 129, 134, 188, 189
+- `scripts/scout.gd`: 127, 128, 129, 134, 188, 189, 192
 - `scripts/scout_body.gd`: 127, 128, 129, 134, 188
 - `scripts/scout_forge_binds.gd`, `tools/build_scout_forge.py`, `models/scout_forge.glb`, `models/source/scout_forge/`: 188
 - `tools/hidden_run.ps1`: 188

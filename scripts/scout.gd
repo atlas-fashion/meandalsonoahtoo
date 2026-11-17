@@ -141,12 +141,22 @@ const SHAFT_REACH := 0.12
 
 ## Edge to edge, inside which it uses its close moves.
 const CLOSE_GAP := 1.9
-const CLOSE_PAUSE := Vector2(0.2, 0.6)
+## The breath after a move (real seconds), spent circling them before it strikes
+## again; longer after a chain (two moves back to back). Note 192, the user:
+## "Scouts need to give the player a bit of time to breathe."
+const CLOSE_PAUSE := Vector2(0.65, 1.15)
+const CHAIN_PAUSE := Vector2(1.2, 1.7)
+## After being spotted it comes in at once.
+const SPOT_PAUSE := Vector2(0.2, 0.5)
+## An opening (them down, drinking, their swing just over) cuts a breath to no
+## less than this share of it: this combat has the player swinging all the time,
+## and an opening that ended the breath outright meant no breath at all.
+const BREATH_FLOOR := 0.7
 ## Chaining (move seconds at which it may go straight into another, the chance
 ## of it, and the chance when they are open).
 const CHAIN_AT := {Move.TRISTAB: 1.42, Move.SWIPE: 1.02, Move.DASH: 1.32}
-const CHAIN_CHANCE := 0.3
-const CHAIN_CHANCE_OPEN := 0.75
+const CHAIN_CHANCE := 0.18
+const CHAIN_CHANCE_OPEN := 0.45
 ## Stepping out of a swing coming at it: how often, how long, how fast.
 const EVADE_CHANCE := 0.55
 const EVADE_TIME := 0.32
@@ -173,6 +183,8 @@ var _end_at := 0.0
 var _landed := {}
 var _guard_seen := -1
 var _close_ready := 0.0
+## Until when no opening cuts the breath short (BREATH_FLOOR).
+var _breath_floor := 0.0
 var _dash_ready := 0.0
 var _swipe_ready := 0.0
 var _roll_at := 0.0
@@ -367,8 +379,12 @@ func _physics_process(delta: float) -> void:
 			# Their swing comes in during its wind-up or its recovery: it breaks
 			# off and steps out (between its blows it is committed).
 			var to := _target.global_position - global_position
+			var struck := _move_t > _last_blow_end()
 			_end_move()
-			_close_ready = now
+			# Broken off in its wind-up it owes no breath; in its recovery it does.
+			if not struck:
+				_close_ready = now
+				_breath_floor = now
 			_evade(Vector3(to.x, 0.0, to.z), now)
 		else:
 			if not is_on_floor():
@@ -485,11 +501,11 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 		velocity.z = move_toward(velocity.z, _evade_dir.z * EVADE_SPEED, acceleration * 2.0 * delta)
 		_face(flat)
 		_slide()
-		# Straight back in as it lands.
-		_close_ready = minf(_close_ready, _evade_until)
+		# Back in as it lands (once its breath has had its floor).
+		_close_ready = maxf(minf(_close_ready, _evade_until), _breath_floor)
 		return true
 	if _opening(player, now):
-		_close_ready = minf(_close_ready, now)
+		_close_ready = maxf(minf(_close_ready, now), _breath_floor)
 	var front := _guard_front(player)
 	if front and _flank_until < 0.0:
 		_flank_until = now + FLANK_TIME
@@ -532,7 +548,10 @@ func _chase(delta: float, now: float, player: Node3D, flat: Vector3, distance: f
 			_circle_flip = now + randf_range(1.0, 2.2)
 		var n := flat.normalized() if flat.length_squared() > 0.0001 else -global_basis.z
 		var tangent := Vector3(-n.z, 0.0, n.x) * _circle_sign
-		var radial := n * clampf(gap - 1.6, -1.0, 1.0) * 1.5
+		# Fresh from a move it gives a little ground, drifting back in as its
+		# breath runs out (note 192), so it never parks in their face.
+		var keep := 1.6 + 0.5 * clampf((_close_ready - now) / 0.8, 0.0, 1.0)
+		var radial := n * clampf(gap - keep, -1.0, 1.0) * 1.5
 		want = tangent * CIRCLE_SPEED + radial
 		if want.length() > CIRCLE_SPEED * 1.4:
 			want = want.normalized() * CIRCLE_SPEED * 1.4
@@ -791,12 +810,16 @@ func _start_move(kind: int, player: Node3D, chained := false) -> void:
 
 
 func _end_move() -> void:
+	var now := _now()
+	var pause := SPOT_PAUSE if _move == Move.SPOT else (CHAIN_PAUSE if _chained else CLOSE_PAUSE)
+	var breath := randf_range(pause.x, pause.y)
+	_close_ready = now + breath
+	_breath_floor = now + (0.0 if _move == Move.SPOT else breath * BREATH_FLOOR)
 	_move = Move.NONE
 	_move_t = 0.0
 	_target = null
 	_windows.clear()
 	_cues.clear()
-	_close_ready = _now() + randf_range(CLOSE_PAUSE.x, CLOSE_PAUSE.y)
 
 
 func _run_move(delta: float, _now_t: float) -> void:
